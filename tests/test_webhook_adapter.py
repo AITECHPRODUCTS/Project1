@@ -27,7 +27,7 @@ def test_webhook_verifies_exact_raw_body_and_prefixed_signature():
 
 
 def test_webhook_secret_must_be_long_enough():
-    with pytest.raises(ValueError, match="32+ characters"):
+    with pytest.raises(ValueError, match="32\\+ characters"):
         AggregatorWebhookAdapter("example-network", "short")
 
 

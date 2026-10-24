@@ -243,6 +243,13 @@ async def require_admin(user: dict[str, Any] = Depends(require_auth)) -> dict[st
     return user
 
 
+async def require_platform_admin(user: dict[str, Any] = Depends(require_auth)) -> dict[str, Any]:
+    """Require the explicit global platform-admin flag; workspace roles never imply it."""
+    if user.get("is_admin") is not True:
+        raise HTTPException(403, "Platform Super Admin permission required")
+    return user
+
+
 @app.get("/health")
 async def health():return {"status":"ok","service":"affiliate-os-api","time":utcnow().isoformat()}
 @app.post("/api/auth/register", status_code=201)
@@ -624,6 +631,143 @@ async def cms(p:CMSPublishRequest):return await publish_article(provider=p.provi
 @api.get("/audit")
 async def audit(limit:int=Query(100,ge=1,le=500),db:AsyncSession=Depends(get_session)):
  rows=list((await db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit))).all());return {"count":len(rows),"data":[{"id":x.id,"actor":x.actor,"action":x.action,"resource_type":x.resource_type,"resource_id":x.resource_id,"outcome":x.outcome,"details":x.details_json,"created_at":x.created_at.isoformat() if x.created_at else None} for x in rows]}
+@api.get("/admin/overview")
+async def platform_admin_overview(
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    # This is an explicitly authorized cross-tenant view. It is read-only and
+    # does not claim that the queue, deployment, or providers are production-verified.
+    with workspace_scope(None):
+        users = int(await db.scalar(select(func.count(UserAccount.id))) or 0)
+        workspaces = int(await db.scalar(select(func.count(Workspace.id))) or 0)
+        memberships = int(await db.scalar(select(func.count(WorkspaceMembership.id)).where(WorkspaceMembership.is_active.is_(True))) or 0)
+        workflows = int(await db.scalar(select(func.count(WorkflowRun.id)) ) or 0)
+        audit_events = int(await db.scalar(select(func.count(AuditLog.id))) or 0)
+        workflow_rows = (await db.execute(select(WorkflowRun.status, func.count(WorkflowRun.id)).group_by(WorkflowRun.status))).all()
+    registry = build_network_registry(settings.load_yaml())
+    provider_status_counts: dict[str, int] = {}
+    for item in registry.get("items", []):
+        label = str(item.get("status") or "unknown")
+        provider_status_counts[label] = provider_status_counts.get(label, 0) + 1
+    return {
+        "access_scope": "platform_admin",
+        "read_only": True,
+        "counts": {
+            "users": users,
+            "workspaces": workspaces,
+            "active_workspace_memberships": memberships,
+            "workflow_runs_persisted": workflows,
+            "audit_events_persisted": audit_events,
+        },
+        "workflow_status_counts": {str(label or "unknown"): int(count) for label, count in workflow_rows},
+        "provider_status_counts": provider_status_counts,
+        "runtime": {
+            "environment": settings.app_env,
+            "scheduler_running": bool(scheduler.running),
+            "publishing_dry_run": bool(settings.publishing_dry_run),
+            "ad_automation_execute": bool(settings.ad_automation_execute),
+            "durable_queue_status": "not_verified_by_this_endpoint",
+        },
+        "release": {
+            "deployment_verification": "not_asserted",
+            "note": "This endpoint reports database/runtime observations only; it is not deployment or release certification.",
+        },
+    }
+
+
+@api.get("/admin/tenants")
+async def platform_admin_tenants(
+    limit: int = Query(100, ge=1, le=500),
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    with workspace_scope(None):
+        rows = list((await db.scalars(select(Workspace).order_by(Workspace.created_at.desc()).limit(limit))).all())
+        membership_rows = (await db.execute(
+            select(WorkspaceMembership.workspace_id, func.count(WorkspaceMembership.id))
+            .where(WorkspaceMembership.is_active.is_(True))
+            .group_by(WorkspaceMembership.workspace_id)
+        )).all()
+    member_counts = {str(workspace_id): int(count) for workspace_id, count in membership_rows}
+    return {
+        "count": len(rows),
+        "limit": limit,
+        "read_only": True,
+        "lifecycle_mutations_available": False,
+        "data": [
+            {
+                "id": row.id,
+                "name": row.name,
+                "slug": row.slug,
+                "owner_user_id": row.owner_user_id,
+                "active_memberships": member_counts.get(str(row.id), 0),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "lifecycle_state": "not_modeled",
+            }
+            for row in rows
+        ],
+    }
+
+
+@api.get("/admin/workflows")
+async def platform_admin_workflows(
+    limit: int = Query(100, ge=1, le=500),
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    with workspace_scope(None):
+        rows = list((await db.scalars(select(WorkflowRun).order_by(WorkflowRun.created_at.desc()).limit(limit))).all())
+    return {
+        "count": len(rows),
+        "limit": limit,
+        "read_only": True,
+        "data": [
+            {
+                "id": row.id,
+                "workspace_id": row.workspace_id,
+                "workflow_name": row.workflow_name,
+                "status": row.status,
+                "current_step": row.current_step,
+                "execution_mode": row.execution_mode,
+                "has_error": bool(row.error_message),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+            }
+            for row in rows
+        ],
+    }
+
+
+@api.get("/admin/audit")
+async def platform_admin_audit(
+    limit: int = Query(100, ge=1, le=500),
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    with workspace_scope(None):
+        rows = list((await db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit))).all())
+    return {
+        "count": len(rows),
+        "limit": limit,
+        "read_only": True,
+        "data": [
+            {
+                "id": row.id,
+                "workspace_id": row.workspace_id,
+                "actor": row.actor,
+                "action": row.action,
+                "resource_type": row.resource_type,
+                "resource_id": row.resource_id,
+                "outcome": row.outcome,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ],
+    }
+
+
 app.include_router(api)
 
 @app.get("/unsubscribe/{lead_id}")

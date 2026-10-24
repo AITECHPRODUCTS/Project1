@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
@@ -254,6 +254,57 @@ class AdCampaignPlanRequest(BaseModel):
         if "affiliate" not in lowered and "commission" not in lowered:
             raise ValueError("Affiliate promotions require a clear affiliate or commission disclosure")
         return normalized
+
+
+class AdPerformanceObservationRequest(BaseModel):
+    campaign_plan_id: str | None = Field(default=None, min_length=1, max_length=36)
+    platform: AdPlatform
+    creative_id: str = Field(min_length=1, max_length=180)
+    source_type: Literal["manual_report", "provider_export", "provider_api"] = "manual_report"
+    source_reference_url: str | None = Field(default=None, max_length=2048)
+    impressions: int = Field(default=0, ge=0, le=1_000_000_000_000)
+    clicks: int = Field(default=0, ge=0, le=1_000_000_000_000)
+    conversions: int = Field(default=0, ge=0, le=1_000_000_000_000)
+    spend_usd: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0.00"), max_digits=12, decimal_places=2)
+    commission_usd: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0.00"), max_digits=12, decimal_places=2)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    observed_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("currency")
+    @classmethod
+    def normalize_currency(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if len(normalized) != 3 or not normalized.isalpha():
+            raise ValueError("Currency must be a three-letter alphabetic code")
+        return normalized
+
+    @field_validator("source_reference_url")
+    @classmethod
+    def validate_source_reference_url(cls, value: str | None) -> str | None:
+        from urllib.parse import urlparse
+
+        if value is None or not value.strip():
+            return None
+        url = value.strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("Source reference must be an absolute HTTP(S) URL")
+        if parsed.username or parsed.password:
+            raise ValueError("Source reference URLs may not contain credentials")
+        host = parsed.hostname.lower().rstrip(".")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local/private source references are not allowed")
+        return url
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_observed_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 class ROASEvaluationRequest(BaseModel):

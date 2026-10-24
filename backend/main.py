@@ -21,11 +21,12 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdCampaignPlanRecord,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
-from backend.schemas import AdCampaignPlanRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.schemas import AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
+from backend.services.ad_performance import summarize_ad_performance
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
@@ -698,6 +699,131 @@ async def get_ad_plan(
         "publishing_authorized": False,
         "spend_authorized": False,
     }
+
+@api.post("/ads/observations", status_code=201)
+async def create_ad_observation(
+    payload: AdPerformanceObservationRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    if payload.campaign_plan_id:
+        plan = await db.scalar(
+            select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == payload.campaign_plan_id)
+        )
+        if plan is None:
+            raise HTTPException(404, "Ad plan not found in the active workspace")
+
+    row = AdPerformanceObservation(
+        campaign_plan_id=payload.campaign_plan_id,
+        platform=payload.platform,
+        creative_id=payload.creative_id.strip(),
+        source_type=payload.source_type,
+        source_reference_url=payload.source_reference_url,
+        impressions=payload.impressions,
+        clicks=payload.clicks,
+        conversions=payload.conversions,
+        spend_usd=payload.spend_usd,
+        commission_usd=payload.commission_usd,
+        currency=payload.currency,
+        evidence_status="operator_supplied_unverified",
+        observed_at=payload.observed_at or utcnow(),
+        note=payload.note,
+    )
+    db.add(row)
+    await db.flush()
+    db.add(
+        AuditLog(
+            actor=str(user.get("email") or "unknown"),
+            action="ads.performance_observation.created",
+            resource_type="ad_performance_observation",
+            resource_id=row.id,
+            outcome="stored_unverified",
+            details_json={
+                "campaign_plan_id": payload.campaign_plan_id,
+                "platform": payload.platform,
+                "creative_id": payload.creative_id.strip(),
+                "source_type": payload.source_type,
+                "evidence_status": "operator_supplied_unverified",
+                "external_actions_executed": False,
+            },
+        )
+    )
+    await db.commit()
+    await db.refresh(row)
+    return {
+        "id": row.id,
+        "campaign_plan_id": row.campaign_plan_id,
+        "platform": row.platform,
+        "creative_id": row.creative_id,
+        "source_type": row.source_type,
+        "source_reference_url": row.source_reference_url,
+        "impressions": row.impressions,
+        "clicks": row.clicks,
+        "conversions": row.conversions,
+        "spend_usd": f"{row.spend_usd:.2f}",
+        "commission_usd": f"{row.commission_usd:.2f}",
+        "currency": row.currency,
+        "evidence_status": row.evidence_status,
+        "observed_at": row.observed_at.isoformat() if row.observed_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "optimization_eligible": False,
+        "external_actions_executed": False,
+    }
+
+
+@api.get("/ads/observations")
+async def list_ad_observations(
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_session),
+):
+    rows = list((await db.scalars(
+        select(AdPerformanceObservation)
+        .order_by(AdPerformanceObservation.created_at.desc())
+        .limit(limit)
+    )).all())
+    return {
+        "count": len(rows),
+        "limit": limit,
+        "data": [
+            {
+                "id": row.id,
+                "campaign_plan_id": row.campaign_plan_id,
+                "platform": row.platform,
+                "creative_id": row.creative_id,
+                "source_type": row.source_type,
+                "impressions": row.impressions,
+                "clicks": row.clicks,
+                "conversions": row.conversions,
+                "spend_usd": f"{row.spend_usd:.2f}",
+                "commission_usd": f"{row.commission_usd:.2f}",
+                "currency": row.currency,
+                "evidence_status": row.evidence_status,
+                "observed_at": row.observed_at.isoformat() if row.observed_at else None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ],
+        "note": "Stored reports are unverified operator-supplied inputs until a trusted provider verification path is implemented.",
+    }
+
+
+@api.get("/ads/performance")
+async def get_ad_performance(
+    limit: int = Query(250, ge=1, le=1000),
+    db: AsyncSession = Depends(get_session),
+):
+    rows = list((await db.scalars(
+        select(AdPerformanceObservation)
+        .order_by(AdPerformanceObservation.observed_at.desc())
+        .limit(limit)
+    )).all())
+    return {
+        "count": len(rows),
+        "limit": limit,
+        "items": summarize_ad_performance(rows),
+        "note": "Reported KPIs are not treated as verified evidence. No campaign changes or spend actions are executed by this endpoint.",
+    }
+
 
 @api.post("/ads/evaluate")
 async def ads_evaluate(p:dict[str,Any]):

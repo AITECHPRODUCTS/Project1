@@ -290,3 +290,38 @@ class AdCampaignPlanRecord(TenantScopedMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+
+class AdPerformanceObservation(TenantScopedMixin, Base):
+    """Store reported ad metrics without implying provider verification or execution authority."""
+
+    __tablename__ = "ad_performance_observations"
+    __table_args__ = (
+        Index(
+            "ix_ad_performance_observations_workspace_plan_creative",
+            "workspace_id",
+            "campaign_plan_id",
+            "creative_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campaign_plan_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ad_campaign_plans.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    platform: Mapped[str] = mapped_column(String(40), index=True)
+    creative_id: Mapped[str] = mapped_column(String(180), index=True)
+    source_type: Mapped[str] = mapped_column(String(40), index=True)
+    source_reference_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    impressions: Mapped[int] = mapped_column(Integer, default=0)
+    clicks: Mapped[int] = mapped_column(Integer, default=0)
+    conversions: Mapped[int] = mapped_column(Integer, default=0)
+    spend_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    commission_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    evidence_status: Mapped[str] = mapped_column(String(40), default="operator_supplied_unverified", index=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+

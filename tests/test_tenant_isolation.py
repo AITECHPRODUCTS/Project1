@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from backend.database import Base
-from backend.models import Campaign, Workspace
+from backend.models import AdCampaignPlanRecord, Campaign, Workspace
 from backend.tenancy import workspace_scope
 
 
@@ -104,3 +104,69 @@ def test_registered_accounts_do_not_default_to_platform_admin():
 
     account = UserAccount(email="least-privilege@example.test", password_hash="hashed")
     assert account.is_admin is False
+
+@pytest.mark.asyncio
+async def test_ad_plan_rows_are_scoped_to_active_workspace():
+    from decimal import Decimal
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        async with sessions() as db:
+            workspace_a = await _make_workspace(db, "Ad Workspace A", "ad-tenant-test-a")
+            workspace_b = await _make_workspace(db, "Ad Workspace B", "ad-tenant-test-b")
+            await db.commit()
+            workspace_a_id, workspace_b_id = workspace_a.id, workspace_b.id
+
+        async def create_plan(workspace_id: str, plan_id: str, niche: str) -> None:
+            with workspace_scope(workspace_id):
+                async with sessions() as db:
+                    db.add(
+                        AdCampaignPlanRecord(
+                            id=plan_id,
+                            campaign_name=f"Plan {plan_id}",
+                            niche=niche,
+                            audience="independent creators",
+                            region="US",
+                            objective="leads",
+                            platforms_json=["meta"],
+                            plan_json={"plan_id": plan_id, "external_actions_executed": False},
+                            daily_budget_usd=Decimal("1.25"),
+                            status="draft",
+                        )
+                    )
+                    await db.commit()
+
+        await create_plan(workspace_a_id, "ad-plan-a", "creator-tools")
+        await create_plan(workspace_b_id, "ad-plan-b", "productivity")
+
+        with workspace_scope(workspace_a_id):
+            async with sessions() as db:
+                own = await db.scalar(
+                    select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == "ad-plan-a")
+                )
+                other = await db.scalar(
+                    select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == "ad-plan-b")
+                )
+                assert own is not None and own.workspace_id == workspace_a_id
+                assert other is None
+
+        with workspace_scope(workspace_b_id):
+            async with sessions() as db:
+                own = await db.scalar(
+                    select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == "ad-plan-b")
+                )
+                other = await db.scalar(
+                    select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == "ad-plan-a")
+                )
+                assert own is not None and own.workspace_id == workspace_b_id
+                assert other is None
+    finally:
+        await engine.dispose()
+

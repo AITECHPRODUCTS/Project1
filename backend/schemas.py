@@ -84,6 +84,13 @@ class LeadCaptureRequest(BaseModel):
     consent_source: str = Field(default="website_form", max_length=180)
     duration_days: int = Field(default=5, ge=5, le=7)
 
+    @field_validator("consent")
+    @classmethod
+    def require_explicit_consent(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("Explicit email consent is required")
+        return value
+
 
 class VideoRequest(BaseModel):
     script: str = Field(min_length=10, max_length=10000)

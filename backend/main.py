@@ -146,8 +146,16 @@ async def campaign_health_job():
    if item.fallback_destination:item.fallback_healthy=(await destination_healthy(item.fallback_destination))[0]
   await db.commit()
 async def learning_job():
- try:logger.info("Learning job: %s",await self_improver_loop(lookback_days=30))
- except Exception:logger.exception("Performance-memory job failed")
+ try:
+  async with SessionLocal() as db:
+   workspace_ids=list((await db.scalars(select(Workspace.id).where(Workspace.slug!="legacy-quarantine"))).all())
+  for workspace_id in workspace_ids:
+   with workspace_scope(workspace_id):
+    async with SessionLocal() as db:
+     result=await self_improver_loop(db,lookback_days=30)
+     logger.info("Performance-memory workspace %s: %s",workspace_id[:8],result)
+ except Exception:
+  logger.exception("Performance-memory job failed")
 async def email_job():
  try:await send_due_emails()
  except Exception:logger.exception("Email sender worker failed")
@@ -483,7 +491,10 @@ async def landing_offer(p:dict[str,Any]):return await grand_slam_offer_generator
 @api.post("/landing/value-ladder")
 async def landing_ladder(p:dict[str,Any]):return await value_ladder_architect(str(p.get("audience") or ""),p.get("product") or {},p.get("deliverable_assets"))
 @api.post("/landing/page")
-async def landing_page(p:LandingPageRequest):workspace_id = get_workspace_id()
+async def landing_page(p: LandingPageRequest):
+ workspace_id = get_workspace_id()
+ if settings.app_env == "production" and not workspace_id:
+  raise HTTPException(403, "An active workspace is required to create a public landing page")
  return HTMLResponse(squeeze_page_builder(headline=p.headline,subheadline=p.subheadline,benefit_bullets=p.benefit_bullets,form_action=p.form_action,privacy_url=p.privacy_url,affiliate_disclosure=p.affiliate_disclosure,lead_magnet=p.lead_magnet,audience=p.audience,workspace_token=issue_workspace_token(workspace_id,"lead_capture")))
 @api.post("/landing/email-drip")
 async def drip(payload:dict[str,Any]):return {"sequence":email_drip_sequence(audience=str(payload.get("audience") or ""),lead_magnet=str(payload.get("lead_magnet") or ""),affiliate_offer=payload.get("affiliate_offer") or {},duration_days=int(payload.get("duration_days",5)))}
@@ -608,6 +619,8 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
  click_id=str(p.get("click_id") or p.get("subid") or "")[:80]
  if not net or not eid:raise HTTPException(422,"Network and a unique event id required")
  if not click_id: raise HTTPException(422, "A known first-party click_id is required to resolve the workspace")
+ # Provider-signed events are resolved globally by click id before a tenant context is bound.
+ set_workspace_id(None)
  click = await db.scalar(select(ClickEvent).where(ClickEvent.click_id == click_id))
  if click is None or not click.workspace_id:
   return JSONResponse(status_code=202, content={"status":"unmatched_quarantined","stored":False,"reason":"The click id cannot be mapped to a workspace."})
@@ -627,7 +640,8 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
  return {"status":"recorded","conversion_id":row.id,"reversal":reversal,"commission_adjustment":commission}
 @app.get("/r/{campaign_id}")
 async def redirect_campaign(campaign_id:str,request:Request,db:AsyncSession=Depends(get_session)):
- campaign=await db.get(Campaign,campaign_id)
+ with workspace_scope(None):
+  campaign=await db.get(Campaign,campaign_id)
  if not campaign or not campaign.is_active:raise HTTPException(404,"Campaign not found/inactive")
  utm={k:v for k,v in request.query_params.items() if k.startswith("utm_") or k in {"gclid","fbclid","ref"}}
  if not campaign.workspace_id: raise HTTPException(404, "Campaign not found")

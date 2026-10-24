@@ -9,6 +9,7 @@ from backend.core.errors import VerificationRequiredError
 from backend.core.events import hub
 from backend.database import SessionLocal
 from backend.models import AuditLog,PausedSession,WorkflowRun
+from backend.tenancy import workspace_scope
 logger=logging.getLogger(__name__)
 StageHandler=Callable[[dict[str,Any]],Awaitable[dict[str,Any]|None]]
 @dataclass(frozen=True)
@@ -121,7 +122,9 @@ class WorkflowRunner:
    steps=self.resolver(row.workflow_name)
    if row.current_step>=len(steps):continue
    self.events[row.session_id]=asyncio.Event()
-   self.tasks[row.session_id]=asyncio.create_task(self._wait_recovered_pause(row.session_id,row.workflow_name,run["state"] or {},steps,row.current_step,run["execution_mode"],row.required_action,row.last_error))
+   # Capture tenant context in the recovered task so resumed writes remain workspace-scoped.
+    with workspace_scope(row.workspace_id):
+     self.tasks[row.session_id]=asyncio.create_task(self._wait_recovered_pause(row.session_id,row.workflow_name,run["state"] or {},steps,row.current_step,run["execution_mode"],row.required_action,row.last_error))
    count+=1
   return count
 runner=WorkflowRunner()

@@ -33,7 +33,7 @@ jobs:
         env:
           APP_ENV: test
           DATABASE_URL: sqlite+aiosqlite:///./storage/ci-test.db
-        run: mkdir -p storage && rm -f storage/ci-test.db && alembic heads && alembic upgrade head && alembic current && alembic check
+        run: mkdir -p storage && rm -f storage/ci-test.db && alembic heads && alembic upgrade head && alembic current && alembic check && alembic downgrade -1 && alembic upgrade head && alembic check
       - name: Compile Python
         run: python -m compileall -q backend ai_memory tests scripts migrations
       - name: Run tests

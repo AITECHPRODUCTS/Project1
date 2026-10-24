@@ -147,6 +147,14 @@ class UserAccount(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    def __init__(self, **kwargs: Any) -> None:
+        # SQLAlchemy column defaults are applied on INSERT/flush, not at object
+        # construction. Set the least-privilege defaults immediately so code
+        # cannot observe a newly-created account as an indeterminate admin.
+        kwargs.setdefault("is_admin", False)
+        kwargs.setdefault("is_active", True)
+        super().__init__(**kwargs)
+
 class Workspace(Base):
     __tablename__ = "workspaces"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

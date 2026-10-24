@@ -5,17 +5,22 @@ import httpx,yaml
 from backend.adapters.base import AffiliateNetworkAdapter
 from backend.adapters.openaffiliate import OpenAffiliateAdapter
 from backend.core.errors import IntegrationNotConfiguredError
+from backend.services.url_safety import validate_public_http_url
 class ConfiguredJSONAdapter(AffiliateNetworkAdapter):
  def __init__(self,network_name:str,endpoint:str,token:str,items_path:str="data"):
   if not endpoint or not token:raise IntegrationNotConfiguredError(f"{network_name} API endpoint/token not configured")
   if not endpoint.startswith("https://"):raise ValueError("Provider endpoint must use HTTPS")
   self.network_name=network_name;self.endpoint=endpoint;self.token=token;self.items_path=items_path
  async def fetch_offers(self,*,query:str|None=None,limit:int=100)->list[dict[str,Any]]:
+  normalized_limit=max(1,min(int(limit),200))
+  # Configuration is not proof that a URL is safe. Validate before opening a
+  # client so loopback, private, link-local and reserved destinations are blocked.
+  endpoint=await validate_public_http_url(self.endpoint)
   async with httpx.AsyncClient(timeout=httpx.Timeout(20,connect=5),follow_redirects=False) as c:
-   r=await c.get(self.endpoint,params={"q":query,"limit":max(1,min(limit,200))},headers={"Authorization":f"Bearer {self.token}","Accept":"application/json"});r.raise_for_status();data=r.json()
+   r=await c.get(endpoint,params={"q":query,"limit":normalized_limit},headers={"Authorization":f"Bearer {self.token}","Accept":"application/json"});r.raise_for_status();data=r.json()
   for part in self.items_path.split("."):data=data.get(part) if isinstance(data,dict) else None
   if not isinstance(data,list):raise ValueError(f"{self.network_name} response lacks configured list path {self.items_path}")
-  return [x for x in data if isinstance(x,dict)][:limit]
+  return [x for x in data if isinstance(x,dict)][:normalized_limit]
  def parse_conversion(self,payload:dict[str,Any])->dict[str,Any]:
   event=payload.get("event_id") or payload.get("transaction_id")
   if not event:raise ValueError("event_id or transaction_id is required")

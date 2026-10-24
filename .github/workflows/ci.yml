@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   # Push and PR events for the same working branch share a group; keep only one run active.
-  group: affiliate-os-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: affiliate-os-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

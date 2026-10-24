@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: affiliate-os-${{ github.workflow }}-${{ github.ref }}
+  # Push and PR events for the same working branch share a group; keep only one run active.
+  group: affiliate-os-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -42,6 +43,24 @@ jobs:
           LLM_BACKEND: offline
           DATABASE_URL: sqlite+aiosqlite:///./storage/ci-test.db
         run: pytest -q
+
+  ai-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-ai.txt
+      - name: Install CPU-only PyTorch and optional AI/RAG dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --no-cache-dir -r requirements-ai.txt
+      - name: Verify AI/RAG dependency imports
+        run: python scripts/verify_ai_profile.py
 
   frontend:
     runs-on: ubuntu-latest

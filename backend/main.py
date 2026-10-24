@@ -21,7 +21,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.models import AdCampaignPlanRecord,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.schemas import AdCampaignPlanRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
@@ -603,6 +603,20 @@ async def ads_plan(
 ):
     plan = await generate_ad_campaign_plan(payload)
     db.add(
+        AdCampaignPlanRecord(
+            id=plan["plan_id"],
+            campaign_name=plan["campaign_name"],
+            niche=payload.niche,
+            audience=payload.audience,
+            region=payload.region,
+            objective=payload.objective,
+            platforms_json=list(payload.platforms),
+            plan_json=plan,
+            daily_budget_usd=payload.daily_budget_usd,
+            status="draft",
+        )
+    )
+    db.add(
         AuditLog(
             actor=str(user.get("email") or "unknown"),
             action="ads.plan.created",
@@ -620,6 +634,70 @@ async def ads_plan(
     )
     await db.commit()
     return plan
+
+
+@api.get("/ads/plans")
+async def list_ad_plans(
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_session),
+):
+    rows = list((await db.scalars(
+        select(AdCampaignPlanRecord)
+        .order_by(AdCampaignPlanRecord.created_at.desc())
+        .limit(limit)
+    )).all())
+    return {
+        "count": len(rows),
+        "limit": limit,
+        "data": [
+            {
+                "id": row.id,
+                "campaign_name": row.campaign_name,
+                "niche": row.niche,
+                "audience": row.audience,
+                "region": row.region,
+                "objective": row.objective,
+                "platforms": list(row.platforms_json or []),
+                "daily_budget_usd": f"{row.daily_budget_usd:.2f}",
+                "status": row.status,
+                "creative_count": sum(
+                    len(item.get("creatives", []))
+                    for item in (row.plan_json or {}).get("platform_plans", [])
+                    if isinstance(item, dict)
+                ),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ],
+    }
+
+
+@api.get("/ads/plans/{plan_id}")
+async def get_ad_plan(
+    plan_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    row = await db.scalar(
+        select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == plan_id)
+    )
+    if row is None:
+        raise HTTPException(404, "Ad plan not found")
+    return {
+        "id": row.id,
+        "campaign_name": row.campaign_name,
+        "niche": row.niche,
+        "audience": row.audience,
+        "region": row.region,
+        "objective": row.objective,
+        "platforms": list(row.platforms_json or []),
+        "daily_budget_usd": f"{row.daily_budget_usd:.2f}",
+        "status": row.status,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "plan": row.plan_json,
+        "publishing_authorized": False,
+        "spend_authorized": False,
+    }
 
 @api.post("/ads/evaluate")
 async def ads_evaluate(p:dict[str,Any]):

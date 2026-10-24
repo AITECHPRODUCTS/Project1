@@ -1,8 +1,9 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.database import Base
 from backend.tenancy import TenantScopedMixin
@@ -266,3 +267,26 @@ class ResourceUsage(TenantScopedMixin, Base):
     status: Mapped[str] = mapped_column(String(40), default="reserved", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AdCampaignPlanRecord(TenantScopedMixin, Base):
+    """Persist generated ad plans as tenant-scoped, draft-only planning records."""
+
+    __tablename__ = "ad_campaign_plans"
+    __table_args__ = (
+        Index("ix_ad_campaign_plans_workspace_status", "workspace_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campaign_name: Mapped[str] = mapped_column(String(160))
+    niche: Mapped[str] = mapped_column(String(200), index=True)
+    audience: Mapped[str] = mapped_column(String(400))
+    region: Mapped[str] = mapped_column(String(120))
+    objective: Mapped[str] = mapped_column(String(40))
+    platforms_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list)
+    plan_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    daily_budget_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    status: Mapped[str] = mapped_column(String(40), default="draft", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+

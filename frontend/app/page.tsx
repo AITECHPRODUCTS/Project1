@@ -70,6 +70,7 @@ export default function HomePage(){
     <div className="flex items-center gap-2 text-indigo-700"><Sparkles size={18}/><h3 className="font-black">What this creates</h3></div>
     <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600"><li>Audience-stage hypotheses and channel-specific creative variants.</li><li>Affiliate disclosure in every drafted creative.</li><li>Equal exploratory budget allocation with exact cents.</li><li>Unknown CTR, CPC, CPA, conversion rate and ROAS remain null until verified data exists.</li></ul>
     <button type="submit" disabled={!!busy||adPlatforms.length===0} className="mt-auto flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 disabled:opacity-50">{busy==="Draft AI ad campaign plan"?<LoaderCircle size={17} className="animate-spin"/>:<Sparkles size={17}/>}Generate ad plan</button>
+    <button type="button" disabled={!!busy} onClick={()=>void operate("Saved ad plans","/api/ads/plans?limit=50",undefined,"GET")} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-bold text-indigo-700 disabled:opacity-50"><FileText size={16}/>View saved ad plans</button>
    </div>
   </form>
  </section>

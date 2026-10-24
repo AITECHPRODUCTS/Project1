@@ -123,8 +123,8 @@ class WorkflowRunner:
    if row.current_step>=len(steps):continue
    self.events[row.session_id]=asyncio.Event()
    # Capture tenant context in the recovered task so resumed writes remain workspace-scoped.
-    with workspace_scope(row.workspace_id):
-     self.tasks[row.session_id]=asyncio.create_task(self._wait_recovered_pause(row.session_id,row.workflow_name,run["state"] or {},steps,row.current_step,run["execution_mode"],row.required_action,row.last_error))
+   with workspace_scope(row.workspace_id):
+    self.tasks[row.session_id]=asyncio.create_task(self._wait_recovered_pause(row.session_id,row.workflow_name,run["state"] or {},steps,row.current_step,run["execution_mode"],row.required_action,row.last_error))
    count+=1
   return count
 runner=WorkflowRunner()

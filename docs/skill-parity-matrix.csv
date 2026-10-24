@@ -1,0 +1,54 @@
+skill_id,stage,status,evidence,gap
+analytics/ab-test-generator,S6,partial,backend/services/analytics_utils.py,No powered statistical validation or persisted assignment ledger
+analytics/conversion-tracker,S6,partial,backend/services/analytics_utils.py,Provider reconciliation and privacy review remain
+analytics/internal-linking-optimizer,S3,not_implemented,,No tested CMS crawl index
+analytics/performance-report,S6,partial,backend/main.py,No verified platform spend sync
+analytics/seo-audit,S3,not_implemented,,No crawler and technical SEO baseline
+automation/content-repurposer,S5,not_implemented,,No complete platform-native atomization pipeline
+automation/email-automation-builder,S5,partial,backend/services/email_delivery.py,No visual branching automation editor
+automation/multi-program-manager,S1,not_implemented,,Network-specific account workflow coverage missing
+automation/paid-ad-copy-writer,S5,partial,backend/services/s2_s3_content.py,No provider-native claim review
+automation/proprietary-data-generator,S8,not_implemented,,No validated proprietary dataset pipeline
+blog/affiliate-blog-builder,S3,partial,backend/services/s2_s3_content.py,No grounded publication acceptance evidence
+blog/comparison-post-writer,S3,partial,backend/services/s2_s3_content.py,Product evidence and comparative tests missing
+blog/content-decay-detector,S3,not_implemented,,No search console ingestion
+blog/content-moat-calculator,S3,not_implemented,,No freshness or competition dataset
+blog/how-to-tutorial-writer,S3,partial,backend/services/s2_s3_content.py,No end-to-end publication validation
+blog/keyword-cluster-architect,S3,partial,backend/services/s2_s3_content.py,Lexical clusters are not search-volume validated
+blog/listicle-generator,S3,partial,backend/services/s2_s3_content.py,No checked fact ledger across list entries
+content/content-pillar-atomizer,S2,not_implemented,,No full atomization workflow
+content/content-research-brief,S2,partial,backend/services/s2_s3_content.py,Source coverage and claim ledger need integration tests
+content/infographic-generator,S2,not_implemented,,No asset pipeline
+content/reddit-post-writer,S2,partial,backend/services/s2_s3_content.py,Policy review required
+content/tiktok-script-writer,S2,partial,backend/services/s2_s3_content.py,No live media rights verification
+content/twitter-thread-writer,S2,not_implemented,,X policy-compliant publish flow unverified
+content/viral-post-writer,S2,partial,backend/services/s2_s3_content.py,Viral outcomes are not predictable or guaranteed
+distribution/bio-link-deployer,S5,not_implemented,,No third-party account publisher
+distribution/email-drip-sequence,S5,partial,backend/services/email_delivery.py,Deliverability and branch logic not verified
+distribution/github-pages-deployer,S5,not_implemented,,No authorized site deployment flow
+distribution/social-media-scheduler,S5,partial,backend/services/s4_s5_landing.py,Only configured provider boundaries are supported
+landing/bonus-stack-builder,S4,partial,backend/services/s4_s5_landing.py,Deliverables need operator substantiation
+landing/grand-slam-offer,S4,partial,backend/services/s4_s5_landing.py,Claims proof review required
+landing/guarantee-generator,S4,not_implemented,,No guarantees without merchant terms
+landing/landing-page-creator,S4,partial,backend/services/s4_s5_landing.py,Not yet published to a real CMS
+landing/product-showcase-page,S4,partial,backend/services/s4_s5_landing.py,Live catalog facts not validated across networks
+landing/squeeze-page-builder,S4,partial,backend/services/s4_s5_landing.py,Production accessibility and security tests missing
+landing/value-ladder-architect,S4,partial,backend/services/s4_s5_landing.py,Deliverable assets and customer unit economics needed
+landing/webinar-registration-page,S4,not_implemented,,No webinar provider integration
+meta/category-designer,S1,not_implemented,,No category taxonomy evaluation set
+meta/compliance-checker,S5,partial,backend/core/middleware.py,No comprehensive platform policy corpus
+meta/create-skill,S8,not_implemented,,No governed skill packaging and tests
+meta/funnel-planner,S4,partial,backend/services/s4_s5_landing.py,No campaign outcome validation
+meta/self-improver,S8,partial,backend/services/s6_s8_analytics.py,Requires sufficient confirmed data
+meta/skill-finder,S1,not_implemented,,No full skill capability runtime registry
+research/affiliate-program-search,S1,partial,backend/tools/affiliate_api.py,OpenAffiliate live contract not verified
+research/commission-calculator,S1,partial,backend/services/offer_intelligence.py,No provider-specific reversal or hold models
+research/competitor-spy,S1,partial,backend/services/s1_research.py,Public pages only; no official broad search metrics
+research/content-angle-ranker,S2,not_implemented,,Needs evaluated relevance model
+research/find-and-verify-affiliate-program,S1,partial,backend/services/s1_research.py,Provider application and approval evidence incomplete
+research/monopoly-niche-finder,S1,partial,backend/services/s1_research.py,Input demand and competition must be measured
+research/niche-opportunity-finder,S1,partial,backend/services/s1_research.py,No independent demand provider
+research/purple-cow-audit,S2,not_implemented,,No discriminating-score evaluator
+research/submit-program,S1,not_implemented,,Provider application remains manual/approval-gated
+research/traffic-analyzer,S1,not_implemented,,No verified provider analytics integration
+research/trending-content-scout,S1,partial,backend/services/s1_research.py,Only authorized configured APIs can return observations

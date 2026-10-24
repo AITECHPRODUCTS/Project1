@@ -74,15 +74,20 @@ def upgrade() -> None:
     )
 
     for table in TENANT_TABLES:
-        op.add_column(
-            table,
-            sa.Column(
-                "workspace_id",
-                sa.String(length=36),
-                sa.ForeignKey("workspaces.id", ondelete="RESTRICT"),
-                nullable=True,
-            ),
-        )
+        # SQLite cannot ALTER a table to add a foreign-key constraint. Batch mode
+        # uses Alembic's copy-and-move strategy on SQLite and native ALTER on
+        # PostgreSQL, keeping the same constraint on both supported databases.
+        with op.batch_alter_table(table, recreate="auto") as batch_op:
+            batch_op.add_column(
+                sa.Column("workspace_id", sa.String(length=36), nullable=True)
+            )
+            batch_op.create_foreign_key(
+                f"fk_{table}_workspace_id_workspaces",
+                "workspaces",
+                ["workspace_id"],
+                ["id"],
+                ondelete="RESTRICT",
+            )
         op.create_index(f"ix_{table}_workspace_id", table, ["workspace_id"])
         op.execute(
             sa.text(f'UPDATE "{table}" SET workspace_id = :legacy_id WHERE workspace_id IS NULL')
@@ -162,8 +167,12 @@ def downgrade() -> None:
 
     for table in reversed(TENANT_TABLES):
         op.drop_index(f"ix_{table}_workspace_id", table_name=table)
-        with op.batch_alter_table(table) as batch:
-            batch.drop_column("workspace_id")
+        with op.batch_alter_table(table, recreate="auto") as batch_op:
+            batch_op.drop_constraint(
+                f"fk_{table}_workspace_id_workspaces",
+                type_="foreignkey",
+            )
+            batch_op.drop_column("workspace_id")
 
     op.drop_index("ix_workspace_memberships_user_id", table_name="workspace_memberships")
     op.drop_index("ix_workspace_memberships_workspace_id", table_name="workspace_memberships")

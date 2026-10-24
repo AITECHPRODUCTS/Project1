@@ -45,7 +45,7 @@ class FinancialSandboxMiddleware(BaseHTTPMiddleware):
 class CSRFMiddleware(BaseHTTPMiddleware):
     """Require a per-session CSRF header for browser-session mutation routes."""
 
-    EXEMPT_EXACT = {"/api/auth/login", "/api/public/leads/capture"}
+    EXEMPT_EXACT = {"/api/auth/login", "/api/auth/register", "/api/public/leads/capture"}
 
     async def dispatch(self, request: Request, call_next) -> Response:
         method = request.method.upper()

@@ -10,6 +10,16 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=12, max_length=1024)
+    workspace_name: str = Field(default="My workspace", min_length=2, max_length=160)
+
+
+class WorkspaceCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+
+
 class WorkflowStartRequest(BaseModel):
     workflow_name: str = Field(default="full_flywheel", max_length=180)
     execution_mode: Literal["FULL_AUTONOMOUS", "SEMI_AUTONOMOUS", "MANUAL_OVERRIDE"] | None = None
@@ -82,6 +92,7 @@ class LeadCaptureRequest(BaseModel):
     audience: str = Field(min_length=2, max_length=500)
     offer: dict[str, Any] = Field(default_factory=dict)
     consent_source: str = Field(default="website_form", max_length=180)
+    workspace_token: str | None = Field(default=None, max_length=1024)
     duration_days: int = Field(default=5, ge=5, le=7)
 
     @field_validator("consent")

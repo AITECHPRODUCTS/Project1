@@ -4,8 +4,10 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Iterator
 
+from fastapi import Request
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
 _workspace_id: ContextVar[str | None] = ContextVar("affiliate_os_workspace_id", default=None)
@@ -43,3 +45,17 @@ class TenantScopedMixin:
             index=True,
             nullable=True,
         )
+
+
+class WorkspaceContextMiddleware(BaseHTTPMiddleware):
+    """Bind the signed session's active workspace to this request and always reset it."""
+
+    async def dispatch(self, request: Request, call_next):
+        session = request.scope.get("session") or {}
+        user = session.get("user") if isinstance(session, dict) else None
+        workspace_id = user.get("workspace_id") if isinstance(user, dict) else None
+        token = set_workspace_id(str(workspace_id) if workspace_id else None)
+        try:
+            return await call_next(request)
+        finally:
+            reset_workspace_id(token)

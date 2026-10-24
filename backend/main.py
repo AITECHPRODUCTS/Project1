@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio,hashlib,hmac,json,logging,re,secrets,time
+import asyncio,base64,hashlib,hmac,json,logging,re,secrets,time
 from contextlib import asynccontextmanager
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
@@ -15,13 +15,14 @@ from sqlalchemy import func,select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
+from backend.tenancy import WorkspaceContextMiddleware, get_workspace_id, set_workspace_id, workspace_scope
 from backend.config import get_settings
 from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun
-from backend.schemas import BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.models import AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.schemas import BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.cms_publisher import publish_article
@@ -45,13 +46,98 @@ logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(name)
 logger=logging.getLogger("affiliate_os");settings=get_settings();password_hash=PasswordHash.recommended();scheduler=AsyncIOScheduler(timezone="UTC")
 
 def utcnow():return datetime.now(timezone.utc)
+def issue_workspace_token(workspace_id: str | None, purpose: str, ttl_seconds: int = 7 * 24 * 3600) -> str | None:
+    if not workspace_id:
+        return None
+    secret = settings.tracking_hmac_secret or settings.app_session_secret
+    payload = {"workspace_id": workspace_id, "purpose": purpose, "expires_at": int(time.time()) + ttl_seconds}
+    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=").decode()
+    signature = hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
+    return f"{encoded}.{signature}"
+
+
+def verify_workspace_token(token: str | None, purpose: str) -> str | None:
+    if not token or len(token) > 1024 or "." not in token:
+        return None
+    encoded, supplied = token.rsplit(".", 1)
+    secret = settings.tracking_hmac_secret or settings.app_session_secret
+    expected = hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(supplied, expected):
+        return None
+    try:
+        decoded = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        payload = json.loads(decoded)
+        workspace_id = str(payload["workspace_id"])
+        if payload.get("purpose") != purpose or int(payload.get("expires_at", 0)) < int(time.time()):
+            return None
+        return workspace_id
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return None
+
+
+def _slugify(value: str) -> str:
+    value = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return (value[:90].strip("-") or "workspace")
+
+
+async def ensure_workspace_membership(
+    db: AsyncSession,
+    account: UserAccount,
+    preferred_name: str | None = None,
+) -> WorkspaceMembership:
+    membership = await db.scalar(
+        select(WorkspaceMembership)
+        .where(WorkspaceMembership.user_id == account.id, WorkspaceMembership.is_active.is_(True))
+        .order_by(WorkspaceMembership.created_at.asc())
+    )
+    if membership is not None:
+        return membership
+    base_name = preferred_name or f"{account.email.split('@', 1)[0][:100]} workspace"
+    workspace = Workspace(
+        name=base_name[:160],
+        slug=f"{_slugify(base_name)}-{secrets.token_hex(4)}",
+        owner_user_id=account.id,
+    )
+    db.add(workspace)
+    await db.flush()
+    membership = WorkspaceMembership(
+        workspace_id=workspace.id,
+        user_id=account.id,
+        role="owner",
+        is_active=True,
+    )
+    db.add(membership)
+    await db.flush()
+    return membership
+
+
 async def bootstrap_admin():
- if not settings.initial_admin_email or not settings.initial_admin_password:
-  if settings.app_env=="production":raise RuntimeError("Production requires initial admin credentials")
-  logger.warning("No administrator configured; local-development auth bypass is available only outside production");return
- async with SessionLocal() as db:
-  account=await db.scalar(select(UserAccount).where(UserAccount.email==settings.initial_admin_email.lower()))
-  if account is None:db.add(UserAccount(email=settings.initial_admin_email.lower(),password_hash=password_hash.hash(settings.initial_admin_password),is_admin=True));await db.commit()
+    if not settings.initial_admin_email or not settings.initial_admin_password:
+        if settings.app_env == "production":
+            raise RuntimeError("Production requires initial admin credentials")
+        async with SessionLocal() as db:
+            dev_workspace = await db.scalar(select(Workspace).where(Workspace.slug == "local-development"))
+            if dev_workspace is None:
+                db.add(Workspace(name="Local development", slug="local-development", owner_user_id=None))
+                await db.commit()
+        logger.warning("No administrator configured; local-development workspace is enabled only outside production")
+        return
+    async with SessionLocal() as db:
+        account = await db.scalar(select(UserAccount).where(UserAccount.email == settings.initial_admin_email.lower()))
+        if account is None:
+            account = UserAccount(
+                email=settings.initial_admin_email.lower(),
+                password_hash=password_hash.hash(settings.initial_admin_password),
+                is_admin=True,
+                is_active=True,
+            )
+            db.add(account)
+            await db.flush()
+        else:
+            account.is_admin = True
+            account.is_active = True
+        await ensure_workspace_membership(db, account, "Platform administrator workspace")
+        await db.commit()
 async def campaign_health_job():
  async with SessionLocal() as db:
   rows=list((await db.scalars(select(Campaign).where(Campaign.is_active.is_(True)).limit(100))).all());
@@ -89,33 +175,222 @@ app=FastAPI(title=settings.app_name,version="0.1.0",description="Evidence-first 
 app.add_middleware(FinancialSandboxMiddleware)
 # SessionMiddleware must wrap CSRFMiddleware so the latter can validate the signed session cookie.
 app.add_middleware(CSRFMiddleware)
+app.add_middleware(WorkspaceContextMiddleware)
 app.add_middleware(SessionMiddleware,secret_key=settings.app_session_secret,session_cookie="affiliate_os_session",max_age=43200,same_site="lax",https_only=settings.app_env=="production")
 app.add_middleware(CORSMiddleware,allow_origins=settings.allowed_origins,allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],allow_headers=["Authorization","Content-Type","X-Affiliate-Signature","X-CSRF-Token"])
 
-async def require_auth(request:Request)->dict[str,Any]:
- if settings.app_env!="production" and not settings.initial_admin_email and not settings.api_access_token:return {"email":"local-development","is_admin":True,"user_id":"local"}
- user=request.session.get("user") if hasattr(request,"session") else None
- if user:return user
- auth=request.headers.get("authorization","")
- if settings.api_access_token and auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip(),settings.api_access_token):return {"email":"api-token","is_admin":True}
- raise HTTPException(401,"Authentication required")
-async def require_admin(user:dict[str,Any]=Depends(require_auth))->dict[str,Any]:
- if not user.get("is_admin"):raise HTTPException(403,"Administrator permission required")
- return user
+async def require_auth(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    if settings.app_env != "production" and not settings.initial_admin_email and not settings.api_access_token:
+        workspace = await db.scalar(select(Workspace).where(Workspace.slug == "local-development"))
+        user = {
+            "email": "local-development",
+            "is_admin": True,
+            "user_id": "local",
+            "workspace_id": workspace.id if workspace else None,
+            "workspace_role": "owner",
+        }
+        if user["workspace_id"]:
+            set_workspace_id(str(user["workspace_id"]))
+        return user
+
+    user = request.session.get("user") if hasattr(request, "session") else None
+    if isinstance(user, dict):
+        user = dict(user)
+        workspace_id = user.get("workspace_id")
+        user_id = user.get("user_id")
+        if settings.app_env == "production" and (not workspace_id or not user_id):
+            raise HTTPException(403, "Select an authorized workspace before using workspace data")
+        if workspace_id and user_id and user_id != "local":
+            membership = await db.scalar(
+                select(WorkspaceMembership).where(
+                    WorkspaceMembership.workspace_id == str(workspace_id),
+                    WorkspaceMembership.user_id == str(user_id),
+                    WorkspaceMembership.is_active.is_(True),
+                )
+            )
+            if membership is None:
+                request.session.clear()
+                raise HTTPException(403, "Workspace membership is no longer active")
+            user["workspace_role"] = membership.role
+            request.session["user"] = user
+            set_workspace_id(str(workspace_id))
+        return user
+
+    auth = request.headers.get("authorization", "")
+    if settings.api_access_token and auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip(), settings.api_access_token):
+        raise HTTPException(
+            403,
+            "A static API token is not workspace-scoped. Use a signed workspace session or implement a dedicated workspace API credential.",
+        )
+    raise HTTPException(401, "Authentication required")
+
+
+async def require_admin(user: dict[str, Any] = Depends(require_auth)) -> dict[str, Any]:
+    if not user.get("is_admin") and user.get("workspace_role") not in {"owner", "admin"}:
+        raise HTTPException(403, "Workspace owner/admin permission required")
+    return user
+
+
 @app.get("/health")
 async def health():return {"status":"ok","service":"affiliate-os-api","time":utcnow().isoformat()}
+@app.post("/api/auth/register", status_code=201)
+async def register(payload: RegisterRequest, request: Request, db: AsyncSession = Depends(get_session)):
+    await public_rate_limit(request)
+    email = payload.email.strip().lower()
+    minimum = 14 if settings.app_env == "production" else 12
+    if len(payload.password) < minimum:
+        raise HTTPException(422, f"Password must contain at least {minimum} characters")
+    if await db.scalar(select(UserAccount.id).where(UserAccount.email == email)):
+        raise HTTPException(409, "An account with this email already exists")
+    account = UserAccount(
+        email=email,
+        password_hash=password_hash.hash(payload.password),
+        is_admin=False,
+        is_active=True,
+    )
+    db.add(account)
+    try:
+        await db.flush()
+        membership = await ensure_workspace_membership(db, account, payload.workspace_name)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(409, "Account registration conflicted with an existing account") from exc
+    request.session.clear()
+    request.session["user"] = {
+        "email": account.email,
+        "is_admin": False,
+        "user_id": account.id,
+        "workspace_id": membership.workspace_id,
+        "workspace_role": membership.role,
+    }
+    request.session["csrf_token"] = secrets.token_urlsafe(32)
+    return {"authenticated": True, "user": request.session["user"], "csrf_token": request.session["csrf_token"]}
+
+
 @app.post("/api/auth/login")
-async def login(payload:LoginRequest,request:Request,db:AsyncSession=Depends(get_session)):
- account=await db.scalar(select(UserAccount).where(UserAccount.email==payload.email.lower(),UserAccount.is_active.is_(True)))
- if account is None or not password_hash.verify(payload.password,account.password_hash):raise HTTPException(401,"Invalid email or password")
- account.last_login_at=utcnow();await db.commit();request.session.clear();request.session["user"]={"email":account.email,"is_admin":account.is_admin,"user_id":account.id};request.session["csrf_token"]=secrets.token_urlsafe(32);return {"authenticated":True,"user":request.session["user"],"csrf_token":request.session["csrf_token"]}
+async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depends(get_session)):
+    await public_rate_limit(request)
+    account = await db.scalar(
+        select(UserAccount).where(
+            UserAccount.email == payload.email.strip().lower(),
+            UserAccount.is_active.is_(True),
+        )
+    )
+    if account is None or not password_hash.verify(payload.password, account.password_hash):
+        raise HTTPException(401, "Invalid email or password")
+    account.last_login_at = utcnow()
+    membership = await ensure_workspace_membership(db, account)
+    await db.commit()
+    request.session.clear()
+    request.session["user"] = {
+        "email": account.email,
+        "is_admin": account.is_admin,
+        "user_id": account.id,
+        "workspace_id": membership.workspace_id,
+        "workspace_role": membership.role,
+    }
+    request.session["csrf_token"] = secrets.token_urlsafe(32)
+    return {"authenticated": True, "user": request.session["user"], "csrf_token": request.session["csrf_token"]}
+
+
 @app.post("/api/auth/logout")
-async def logout(request:Request):request.session.clear();return {"authenticated":False}
+async def logout(request: Request):
+    request.session.clear()
+    return {"authenticated": False}
+
+
 @app.get("/api/auth/me")
-async def whoami(request:Request,user:dict[str,Any]=Depends(require_auth)):
- csrf_token=str(request.session.get("csrf_token") or "") if hasattr(request,"session") else ""
- return {"authenticated":True,"user":user,"csrf_token":csrf_token}
+async def whoami(request: Request, user: dict[str, Any] = Depends(require_auth)):
+    csrf_token = str(request.session.get("csrf_token") or "") if hasattr(request, "session") else ""
+    return {"authenticated": True, "user": user, "csrf_token": csrf_token}
+
 api=APIRouter(prefix="/api",dependencies=[Depends(require_auth)])
+@api.get("/workspaces")
+async def list_workspaces(user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    user_id = user.get("user_id")
+    if not user_id or user_id == "local":
+        active = await db.get(Workspace, user.get("workspace_id")) if user.get("workspace_id") else None
+        return {"active_workspace_id": active.id if active else None, "data":[{"id":active.id,"name":active.name,"slug":active.slug,"role":"owner"}] if active else []}
+    rows = (await db.execute(
+        select(Workspace, WorkspaceMembership)
+        .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.id)
+        .where(WorkspaceMembership.user_id == user_id, WorkspaceMembership.is_active.is_(True))
+        .order_by(Workspace.created_at.asc())
+    )).all()
+    return {
+        "active_workspace_id": user.get("workspace_id"),
+        "data": [{"id": workspace.id, "name": workspace.name, "slug": workspace.slug, "role": membership.role,
+                  "is_active": membership.is_active, "created_at": workspace.created_at.isoformat() if workspace.created_at else None}
+                 for workspace, membership in rows],
+    }
+
+
+@api.get("/workspaces/current")
+async def current_workspace(user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    workspace = await db.get(Workspace, workspace_id) if workspace_id else None
+    if workspace is None:
+        raise HTTPException(404, "No active workspace")
+    return {"id": workspace.id, "name": workspace.name, "slug": workspace.slug, "role": user.get("workspace_role"),
+            "is_platform_admin": bool(user.get("is_admin"))}
+
+
+@api.post("/workspaces", status_code=201)
+async def create_workspace(payload: WorkspaceCreateRequest, request: Request,
+                           user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    user_id = user.get("user_id")
+    if not user_id or user_id == "local":
+        raise HTTPException(403, "Create a registered account before adding a persistent workspace")
+    workspace = Workspace(
+        name=payload.name.strip(),
+        slug=f"{_slugify(payload.name)}-{secrets.token_hex(4)}",
+        owner_user_id=user_id,
+    )
+    db.add(workspace)
+    await db.flush()
+    membership = WorkspaceMembership(workspace_id=workspace.id, user_id=user_id, role="owner", is_active=True)
+    db.add(membership)
+    await db.commit()
+    updated_user = dict(user)
+    updated_user["workspace_id"] = workspace.id
+    updated_user["workspace_role"] = membership.role
+    request.session["user"] = updated_user
+    request.session["csrf_token"] = secrets.token_urlsafe(32)
+    return {"id": workspace.id, "name": workspace.name, "slug": workspace.slug, "role": membership.role,
+            "csrf_token": request.session["csrf_token"]}
+
+
+@api.post("/workspaces/{workspace_id}/switch")
+async def switch_workspace(workspace_id: str, request: Request,
+                           user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    user_id = user.get("user_id")
+    if not user_id or user_id == "local":
+        raise HTTPException(403, "Workspace switching requires a registered account")
+    membership = await db.scalar(
+        select(WorkspaceMembership).where(
+            WorkspaceMembership.workspace_id == workspace_id,
+            WorkspaceMembership.user_id == user_id,
+            WorkspaceMembership.is_active.is_(True),
+        )
+    )
+    if membership is None:
+        raise HTTPException(404, "Workspace not found or membership inactive")
+    workspace = await db.get(Workspace, workspace_id)
+    if workspace is None:
+        raise HTTPException(404, "Workspace not found")
+    updated_user = dict(user)
+    updated_user["workspace_id"] = workspace.id
+    updated_user["workspace_role"] = membership.role
+    request.session["user"] = updated_user
+    request.session["csrf_token"] = secrets.token_urlsafe(32)
+    return {"active_workspace_id": workspace.id, "name": workspace.name, "role": membership.role,
+            "csrf_token": request.session["csrf_token"]}
+
+
 @api.get("/integrations")
 async def integration_registry():
  return build_network_registry(settings.load_yaml())
@@ -208,7 +483,8 @@ async def landing_offer(p:dict[str,Any]):return await grand_slam_offer_generator
 @api.post("/landing/value-ladder")
 async def landing_ladder(p:dict[str,Any]):return await value_ladder_architect(str(p.get("audience") or ""),p.get("product") or {},p.get("deliverable_assets"))
 @api.post("/landing/page")
-async def landing_page(p:LandingPageRequest):return HTMLResponse(squeeze_page_builder(headline=p.headline,subheadline=p.subheadline,benefit_bullets=p.benefit_bullets,form_action=p.form_action,privacy_url=p.privacy_url,affiliate_disclosure=p.affiliate_disclosure,lead_magnet=p.lead_magnet,audience=p.audience))
+async def landing_page(p:LandingPageRequest):workspace_id = get_workspace_id()
+ return HTMLResponse(squeeze_page_builder(headline=p.headline,subheadline=p.subheadline,benefit_bullets=p.benefit_bullets,form_action=p.form_action,privacy_url=p.privacy_url,affiliate_disclosure=p.affiliate_disclosure,lead_magnet=p.lead_magnet,audience=p.audience,workspace_token=issue_workspace_token(workspace_id,"lead_capture")))
 @api.post("/landing/email-drip")
 async def drip(payload:dict[str,Any]):return {"sequence":email_drip_sequence(audience=str(payload.get("audience") or ""),lead_magnet=str(payload.get("lead_magnet") or ""),affiliate_offer=payload.get("affiliate_offer") or {},duration_days=int(payload.get("duration_days",5)))}
 @api.post("/social/publish")
@@ -238,7 +514,10 @@ async def public_lead_capture(request:Request,db:AsyncSession=Depends(get_sessio
  consent=raw.get("consent");raw["consent"]=consent is True or str(consent or "").lower() in {"1","true","yes","on"}
  try:p=LeadCaptureRequest.model_validate(raw)
  except Exception as exc:raise HTTPException(422,"Signup form contains invalid fields") from exc
- result=await create_lead(p,db)
+ workspace_id = verify_workspace_token(p.workspace_token, "lead_capture")
+ if not workspace_id: raise HTTPException(403, "A valid workspace landing token is required for public lead capture")
+ with workspace_scope(workspace_id):
+  result=await create_lead(p,db)
  if "application/json" in request.headers.get("accept",""):return result
  return HTMLResponse("<!doctype html><html><body style='font-family:system-ui;background:#f8fafc;padding:48px;color:#1e293b'><h1>You're on the list</h1><p>Your consent-based email sequence was queued.</p></body></html>",status_code=201)
 @api.get("/leads")
@@ -326,7 +605,13 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
  except json.JSONDecodeError as exc:raise HTTPException(400,"Webhook must contain valid JSON") from exc
  if not isinstance(p,dict):raise HTTPException(422,"Webhook must be a JSON object")
  net=network.strip().lower()[:100];eid=str(p.get("event_id") or p.get("transaction_id") or p.get("id") or "")[:255]
+ click_id=str(p.get("click_id") or p.get("subid") or "")[:80]
  if not net or not eid:raise HTTPException(422,"Network and a unique event id required")
+ if not click_id: raise HTTPException(422, "A known first-party click_id is required to resolve the workspace")
+ click = await db.scalar(select(ClickEvent).where(ClickEvent.click_id == click_id))
+ if click is None or not click.workspace_id:
+  return JSONResponse(status_code=202, content={"status":"unmatched_quarantined","stored":False,"reason":"The click id cannot be mapped to a workspace."})
+ set_workspace_id(click.workspace_id)
  if await db.scalar(select(Conversion.id).where(Conversion.network==net,Conversion.external_event_id==eid)):return {"status":"duplicate_ignored"}
  status=str(p.get("status") or p.get("event_type") or "pending").lower();reversal=status in {"reversed","refunded","chargeback","clawback","reversal","commission_reversal"};commission=abs(float(p.get("commission",p.get("payout",0)) or 0));revenue=abs(float(p.get("revenue",p.get("sale_amount",0)) or 0));original_id=str(p.get("original_event_id") or p.get("parent_transaction_id") or "")[:255]
  if reversal:
@@ -345,9 +630,12 @@ async def redirect_campaign(campaign_id:str,request:Request,db:AsyncSession=Depe
  campaign=await db.get(Campaign,campaign_id)
  if not campaign or not campaign.is_active:raise HTTPException(404,"Campaign not found/inactive")
  utm={k:v for k,v in request.query_params.items() if k.startswith("utm_") or k in {"gclid","fbclid","ref"}}
- result=await record_click_and_resolve(db,campaign,user_agent=request.headers.get("user-agent",""),utm=utm)
- if not result["destination"]:await db.commit();raise HTTPException(503,detail={"message":"Primary and fallback destinations unavailable; no redirect performed.","reason":result["health_error"]})
- await db.commit();url=urlparse(result["destination"]);query=dict(parse_qsl(url.query,keep_blank_values=True));query[campaign.tracking_parameter]=result["click_id"]
+ if not campaign.workspace_id: raise HTTPException(404, "Campaign not found")
+ with workspace_scope(campaign.workspace_id):
+  result=await record_click_and_resolve(db,campaign,user_agent=request.headers.get("user-agent",""),utm=utm)
+  await db.commit()
+ if not result["destination"]: raise HTTPException(503,detail={"message":"Primary and fallback destinations unavailable; no redirect performed.","reason":result["health_error"]})
+ url=urlparse(result["destination"]);query=dict(parse_qsl(url.query,keep_blank_values=True));query[campaign.tracking_parameter]=result["click_id"]
  final=urlunparse(url._replace(query=urlencode(query)));return RedirectResponse(final,status_code=302,headers={"Cache-Control":"no-store","Referrer-Policy":"strict-origin-when-cross-origin"})
 @app.websocket("/ws")
 async def websocket(ws:WebSocket):

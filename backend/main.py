@@ -22,6 +22,7 @@ from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.schemas import AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
@@ -984,32 +985,46 @@ async def unsubscribe(lead_id:str,ts:int=Query(...),sig:str=Query(...),db:AsyncS
 @app.post("/api/webhooks/conversions/{network}")
 async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends(get_session)):
  secret=settings.affiliate_webhook_secret
- if len(secret)<32:raise HTTPException(503,"Affiliate webhook secret is not configured")
- body=await request.body();expected=hmac.new(secret.encode(),body,hashlib.sha256).hexdigest()
- if not hmac.compare_digest(request.headers.get("X-Affiliate-Signature",""),expected):raise HTTPException(401,"Invalid webhook signature")
+ net=network.strip().lower()
+ if not secret or len(secret)<32:raise HTTPException(503,"Affiliate webhook secret is not configured")
+ if not net or len(net)>100:raise HTTPException(422,"Network must contain 1-100 characters")
+ body=await request.body()
+ try:adapter=AggregatorWebhookAdapter(net,secret)
+ except ValueError as exc:raise HTTPException(503,"Affiliate webhook secret is not configured") from exc
+ if not adapter.verify(body,request.headers.get("X-Affiliate-Signature","")):raise HTTPException(401,"Invalid webhook signature")
  try:p=json.loads(body)
- except json.JSONDecodeError as exc:raise HTTPException(400,"Webhook must contain valid JSON") from exc
+ except (json.JSONDecodeError,UnicodeDecodeError) as exc:raise HTTPException(400,"Webhook must contain valid JSON") from exc
  if not isinstance(p,dict):raise HTTPException(422,"Webhook must be a JSON object")
- net=network.strip().lower()[:100];eid=str(p.get("event_id") or p.get("transaction_id") or p.get("id") or "")[:255]
- click_id=str(p.get("click_id") or p.get("subid") or "")[:80]
- if not net or not eid:raise HTTPException(422,"Network and a unique event id required")
- if not click_id: raise HTTPException(422, "A known first-party click_id is required to resolve the workspace")
+ # Keep legacy provider event aliases, but validate every event through the same adapter.
+ if not (p.get("event_id") or p.get("transaction_id")) and p.get("id"):p["event_id"]=p["id"]
+ if not (p.get("status") or p.get("event_type")):p["status"]="pending"
+ elif not p.get("status"):p["status"]=p["event_type"]
+ try:event=adapter.parse_conversion(p)
+ except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+ eid=event["external_event_id"];click_id=str(event.get("click_id") or "").strip()
+ if not click_id:raise HTTPException(422,"A known first-party click_id is required to resolve the workspace")
+ if len(click_id)>80:raise HTTPException(422,"click_id must be 80 characters or fewer")
  # Provider-signed events are resolved globally by click id before a tenant context is bound.
  set_workspace_id(None)
- click = await db.scalar(select(ClickEvent).where(ClickEvent.click_id == click_id))
+ click=await db.scalar(select(ClickEvent).where(ClickEvent.click_id==click_id))
  if click is None or not click.workspace_id:
-  return JSONResponse(status_code=202, content={"status":"unmatched_quarantined","stored":False,"reason":"The click id cannot be mapped to a workspace."})
+  return JSONResponse(status_code=202,content={"status":"unmatched_quarantined","stored":False,"reason":"The click id cannot be mapped to a workspace."})
  set_workspace_id(click.workspace_id)
  if await db.scalar(select(Conversion.id).where(Conversion.network==net,Conversion.external_event_id==eid)):return {"status":"duplicate_ignored"}
- status=str(p.get("status") or p.get("event_type") or "pending").lower();reversal=status in {"reversed","refunded","chargeback","clawback","reversal","commission_reversal"};commission=abs(float(p.get("commission",p.get("payout",0)) or 0));revenue=abs(float(p.get("revenue",p.get("sale_amount",0)) or 0));original_id=str(p.get("original_event_id") or p.get("parent_transaction_id") or "")[:255]
+ status=event["status"];reversal=status in {"reversed","refunded","chargeback","clawback","reversal","commission_reversal"}
+ commission=event["commission"];revenue=event["revenue"]
+ original_id=str(p.get("original_event_id") or p.get("parent_transaction_id") or "").strip()
+ if len(original_id)>255:raise HTTPException(422,"original_event_id must be 255 characters or fewer")
  if reversal:
   parent=await db.scalar(select(Conversion).where(Conversion.network==str(p.get("original_network") or net).lower(),Conversion.external_event_id==original_id)) if original_id else None
   if parent and parent.status=="reversed":return {"status":"duplicate_reversal_ignored","original_event_id":original_id}
   if parent:commission=-abs(parent.commission);revenue=-abs(parent.revenue);parent.status="reversed";status="reversed"
   else:
    if not commission and not revenue:raise HTTPException(422,"Unmatched reversal must include commission or revenue offset")
-   commission=-commission;revenue=-revenue;status="reversal_unmatched"
- row=Conversion(network=net,external_event_id=eid,click_id=p.get("click_id") or p.get("subid"),utm_source=p.get("utm_source"),utm_medium=p.get("utm_medium"),utm_campaign=p.get("utm_campaign"),utm_content=p.get("utm_content"),hook=p.get("hook") or p.get("utm_content"),commission=commission,revenue=revenue,currency=str(p.get("currency") or "USD")[:3].upper(),status=status,event_json={**p,"reversal":reversal,"original_event_id":original_id or None});db.add(row)
+   commission=-abs(commission);revenue=-abs(revenue);status="reversal_unmatched"
+ currency=str(p.get("currency") or "USD").strip().upper()
+ if len(currency)!=3 or not currency.isalpha():raise HTTPException(422,"currency must be a three-letter code")
+ row=Conversion(network=net,external_event_id=eid,click_id=click_id,utm_source=p.get("utm_source"),utm_medium=p.get("utm_medium"),utm_campaign=p.get("utm_campaign"),utm_content=p.get("utm_content"),hook=p.get("hook") or p.get("utm_content"),commission=commission,revenue=revenue,currency=currency,status=status,event_json={**p,"reversal":reversal,"original_event_id":original_id or None});db.add(row)
  try:await db.commit()
  except IntegrityError:await db.rollback();return {"status":"duplicate_ignored"}
  return {"status":"recorded","conversion_id":row.id,"reversal":reversal,"commission_adjustment":commission}

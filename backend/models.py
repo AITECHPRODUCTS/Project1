@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.database import Base
+from backend.tenancy import TenantScopedMixin
 
 JSON_VALUE = JSON
 
@@ -36,7 +37,7 @@ class Offer(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-class Campaign(Base):
+class Campaign(TenantScopedMixin, Base):
     __tablename__ = "campaigns"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(300), index=True)
@@ -55,7 +56,7 @@ class Campaign(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-class ClickEvent(Base):
+class ClickEvent(TenantScopedMixin, Base):
     __tablename__ = "click_events"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     click_id: Mapped[str] = mapped_column(String(80), unique=True, default=lambda: uuid.uuid4().hex, index=True)
@@ -67,7 +68,7 @@ class ClickEvent(Base):
     utm_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-class Conversion(Base):
+class Conversion(TenantScopedMixin, Base):
     __tablename__ = "conversions"
     __table_args__ = (UniqueConstraint("network", "external_event_id", name="uq_conversion_network_external_event"), Index("ix_conversion_campaign_created", "click_id", "created_at"))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -87,7 +88,7 @@ class Conversion(Base):
     event_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-class WorkflowRun(Base):
+class WorkflowRun(TenantScopedMixin, Base):
     __tablename__ = "workflow_runs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     workflow_name: Mapped[str] = mapped_column(String(180), index=True)
@@ -102,7 +103,7 @@ class WorkflowRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-class PausedSession(Base):
+class PausedSession(TenantScopedMixin, Base):
     __tablename__ = "paused_sessions"
     session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workflow_name: Mapped[str] = mapped_column(String(180))
@@ -114,7 +115,7 @@ class PausedSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-class AuditLog(Base):
+class AuditLog(TenantScopedMixin, Base):
     __tablename__ = "audit_logs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     actor: Mapped[str] = mapped_column(String(320), default="system")
@@ -125,7 +126,7 @@ class AuditLog(Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-class ContentAsset(Base):
+class ContentAsset(TenantScopedMixin, Base):
     __tablename__ = "content_assets"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     asset_type: Mapped[str] = mapped_column(String(100), index=True)
@@ -141,15 +142,37 @@ class UserAccount(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(500))
-    is_admin: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-class Lead(Base):
-    __tablename__ = "leads"
+class Workspace(Base):
+    __tablename__ = "workspaces"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    slug: Mapped[str] = mapped_column(String(140), unique=True, index=True)
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("user_accounts.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class WorkspaceMembership(Base):
+    __tablename__ = "workspace_memberships"
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_workspace_membership_workspace_user"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("user_accounts.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(60), default="member")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Lead(TenantScopedMixin, Base):
+    __tablename__ = "leads"
+    __table_args__ = (Index("uq_leads_workspace_email", "workspace_id", "email", unique=True),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    email: Mapped[str] = mapped_column(String(320), index=True)
     consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consent_source: Mapped[str] = mapped_column(String(180), default="website_form")
     lead_magnet: Mapped[str] = mapped_column(String(300), default="")
@@ -159,7 +182,7 @@ class Lead(Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-class ScheduledEmail(Base):
+class ScheduledEmail(TenantScopedMixin, Base):
     __tablename__ = "scheduled_emails"
     __table_args__ = (UniqueConstraint("lead_id", "sequence_day", name="uq_scheduled_email_lead_day"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -176,10 +199,11 @@ class ScheduledEmail(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-class MailCommission(Base):
+class MailCommission(TenantScopedMixin, Base):
     __tablename__ = "mail_commissions"
+    __table_args__ = (Index("uq_mail_commissions_workspace_message", "workspace_id", "message_id", unique=True),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    message_id: Mapped[str] = mapped_column(String(500), unique=True, index=True)
+    message_id: Mapped[str] = mapped_column(String(500), index=True)
     network: Mapped[str] = mapped_column(String(150), index=True)
     commission: Mapped[float] = mapped_column(Float, default=0.0)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
@@ -189,7 +213,7 @@ class MailCommission(Base):
     evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-class PayoutThreshold(Base):
+class PayoutThreshold(TenantScopedMixin, Base):
     __tablename__ = "payout_thresholds"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     network: Mapped[str] = mapped_column(String(150), index=True)
@@ -202,7 +226,25 @@ class PayoutThreshold(Base):
     reconciliation_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-class ResourceUsage(Base):
+class PerformanceMemory(TenantScopedMixin, Base):
+    __tablename__ = "performance_memories"
+    __table_args__ = (Index("uq_performance_memory_workspace_key", "workspace_id", "memory_key", unique=True),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    memory_key: Mapped[str] = mapped_column(String(64), index=True)
+    hook: Mapped[str] = mapped_column(Text)
+    conversion_count: Mapped[int] = mapped_column(Integer, default=0)
+    click_count: Mapped[int] = mapped_column(Integer, default=0)
+    conversion_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    commission_recorded: Mapped[float] = mapped_column(Float, default=0.0)
+    source_networks: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(40), default="candidate", index=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ResourceUsage(TenantScopedMixin, Base):
     __tablename__ = "resource_usage"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     niche: Mapped[str] = mapped_column(String(200), index=True, default="general")

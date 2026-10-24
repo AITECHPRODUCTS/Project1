@@ -13,4 +13,6 @@
 | UI / responsive control center | `frontend/app/page.tsx`, `frontend/components/FlywheelVisualizer.tsx` | present, unverified | GitHub frontend typecheck/build and browser a11y/UAT |
 | Provider registry | `backend/services/integration_registry.py`, `config.yaml` | partial | Account credentials, scopes, live contract and revocation tests |
 | Platform Super Admin | `backend/main.py`, `backend/models.py` | major gap | Global admin RBAC/tenant lifecycle/quota/incident console |
+| AI ad planning / targeting | `backend/services/ad_planner.py`, `backend/schemas.py`, `POST /api/ads/plan`, `tests/test_ad_planner.py` | draft-only structured baseline implemented; model enrichment optional | UI integration, authorized ad-provider contracts, measured experiment results, account/placement verification |
+| Paid media stop-loss | `backend/services/ad_manager.py`, `POST /api/ads/evaluate` | recommendation-only | durable experiments, real provider metrics, approval-gated provider mutation contract |
 | Skill runtime parity | `docs/skill-parity-matrix.csv` | major gap | Complete every matrix row with service/API/UI/contracts/tests |

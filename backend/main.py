@@ -22,9 +22,10 @@ from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
-from backend.schemas import BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import AdCampaignPlanRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
+from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
@@ -587,6 +588,32 @@ async def funds_received(threshold_id:str,p:FundsReceivedRequest,db:AsyncSession
  row=await db.get(PayoutThreshold,threshold_id)
  if not row:raise HTTPException(404,"Threshold not found")
  row.funds_received_at=p.funds_received_at;row.reconciliation_note=p.reconciliation_note[:4000];await db.commit();return {"id":row.id,"funds_received_at":row.funds_received_at.isoformat(),"transfers_initiated":False}
+@api.post("/ads/plan", status_code=201)
+async def ads_plan(
+    payload: AdCampaignPlanRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    plan = await generate_ad_campaign_plan(payload)
+    db.add(
+        AuditLog(
+            actor=str(user.get("email") or "unknown"),
+            action="ads.plan.created",
+            resource_type="ad_plan",
+            resource_id=plan["plan_id"],
+            outcome="draft_only",
+            details_json={
+                "objective": payload.objective,
+                "platforms": list(payload.platforms),
+                "creative_count": sum(len(item["creatives"]) for item in plan["platform_plans"]),
+                "external_actions_executed": False,
+                "spend_authorized": False,
+            },
+        )
+    )
+    await db.commit()
+    return plan
+
 @api.post("/ads/evaluate")
 async def ads_evaluate(p:dict[str,Any]):
  try:d=evaluate_roas(str(p["campaign_id"]),float(p["spend"]),float(p["commission"]),float(p.get("threshold",1.2)))

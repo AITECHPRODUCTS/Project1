@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
@@ -147,6 +148,112 @@ class PayoutThresholdCreateRequest(BaseModel):
 class FundsReceivedRequest(BaseModel):
     funds_received_at: datetime
     reconciliation_note: str = Field(default="", max_length=4000)
+
+
+
+AdPlatform = Literal[
+    "google_search",
+    "google_display",
+    "meta",
+    "instagram",
+    "tiktok",
+    "youtube_shorts",
+    "pinterest",
+    "reddit",
+    "quora",
+    "x",
+    "linkedin",
+    "snapchat",
+    "native",
+]
+
+
+class AdCampaignPlanRequest(BaseModel):
+    campaign_name: str | None = Field(default=None, min_length=2, max_length=160)
+    niche: str = Field(min_length=2, max_length=200)
+    audience: str = Field(min_length=2, max_length=400)
+    region: str = Field(default="Global", min_length=2, max_length=120)
+    objective: Literal["traffic", "leads", "sales", "awareness"] = "traffic"
+    product_name: str | None = Field(default=None, min_length=2, max_length=200)
+    product_summary: str | None = Field(default=None, max_length=2000)
+    product_facts_for_review: list[str] = Field(default_factory=list, max_length=20)
+    evidence_urls: list[str] = Field(default_factory=list, max_length=10)
+    landing_page_url: str | None = Field(default=None, max_length=2048)
+    platforms: list[AdPlatform] = Field(
+        default_factory=lambda: ["meta", "google_search", "tiktok"],
+        min_length=1,
+        max_length=10,
+    )
+    variants_per_platform: int = Field(default=3, ge=1, le=5)
+    daily_budget_usd: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=Decimal("0.00"),
+        le=Decimal("1000000.00"),
+        max_digits=10,
+        decimal_places=2,
+    )
+    affiliate_disclosure: str = Field(
+        default="Disclosure: I may earn a commission from qualifying purchases.",
+        min_length=12,
+        max_length=1200,
+    )
+
+    @field_validator("platforms")
+    @classmethod
+    def deduplicate_platforms(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(value))
+
+    @field_validator("product_facts_for_review")
+    @classmethod
+    def validate_product_facts(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value if item and item.strip()]
+        if any(len(item) > 2000 for item in normalized):
+            raise ValueError("Each product fact must be at most 2000 characters")
+        return normalized
+
+    @field_validator("evidence_urls")
+    @classmethod
+    def validate_evidence_urls(cls, value: list[str]) -> list[str]:
+        from urllib.parse import urlparse
+
+        normalized: list[str] = []
+        for item in value:
+            url = item.strip()
+            parsed = urlparse(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise ValueError("Evidence URLs must be absolute HTTP(S) URLs")
+            if parsed.username or parsed.password:
+                raise ValueError("Evidence URLs may not contain credentials")
+            if parsed.hostname.lower().rstrip(".") in {"localhost", "localhost.localdomain"}:
+                raise ValueError("Localhost evidence URLs are not allowed")
+            normalized.append(url)
+        return normalized
+
+    @field_validator("landing_page_url")
+    @classmethod
+    def validate_landing_page_url(cls, value: str | None) -> str | None:
+        from urllib.parse import urlparse
+
+        if value is None or not value.strip():
+            return None
+        url = value.strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("Landing page URL must be an absolute HTTP(S) URL")
+        if parsed.username or parsed.password:
+            raise ValueError("Landing page URL may not contain credentials")
+        if parsed.hostname.lower().rstrip(".") in {"localhost", "localhost.localdomain"}:
+            raise ValueError("Localhost landing page URLs are not allowed")
+        return url
+
+    @field_validator("affiliate_disclosure")
+    @classmethod
+    def require_affiliate_disclosure(cls, value: str) -> str:
+        normalized = value.strip()
+        lowered = normalized.lower()
+        if "affiliate" not in lowered and "commission" not in lowered:
+            raise ValueError("Affiliate promotions require a clear affiliate or commission disclosure")
+        return normalized
 
 
 class ROASEvaluationRequest(BaseModel):

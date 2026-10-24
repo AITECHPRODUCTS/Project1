@@ -1,0 +1,32 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+secrets/
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+# Frontend
+node_modules/
+.next/
+out/
+dist/
+coverage/
+# Data / models / generated media
+storage/*
+!storage/.gitkeep
+chroma/
+models/
+*.mp4
+*.mov
+*.wav
+*.png
+*.jpg
+*.webp

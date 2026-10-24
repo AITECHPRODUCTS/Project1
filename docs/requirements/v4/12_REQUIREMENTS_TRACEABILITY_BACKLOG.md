@@ -1,0 +1,20 @@
+# Requirement-to-code backlog
+
+| ID | Area | Current evidence | Status | Acceptance still required |
+|---|---|---|---|---|
+| R-01 | S1 offer discovery | `backend/tools/affiliate_api.py`, `backend/services/s1_research.py` | partial | Live source/freshness, real provider contracts |
+| R-02 | S2 content intelligence | `backend/services/s2_s3_content.py`, `backend/services/llm.py` | partial | Claim ledger and grounding evaluation |
+| R-03 | S3 SEO/blog | `backend/services/s2_s3_content.py` | partial | Search Console, crawl and publish UAT |
+| R-04 | S4 landing/consent | `backend/services/s4_s5_landing.py`, `backend/services/email_delivery.py` | partial | Accessibility and full consent/unsubscribe tests |
+| R-05 | S5 distribution | `backend/services/s4_s5_landing.py`, `backend/services/cms_publisher.py` | partial | OAuth scopes, remote success and idempotency |
+| R-06 | S6 attribution/ledger | `backend/services/tracking_service.py`, `backend/models.py` | partial | Provider reconciliation and decimal append-only ledger |
+| R-07 | S7 operations/budgets | `backend/services/resource_budget.py`, `backend/core/state_machine.py` | partial | Durable worker lease and distributed budget locking |
+| R-08 | S8 learning | `backend/services/s6_s8_analytics.py`, `ai_memory/rag_chain.py` | partial | Independent evaluation and reversible promotion |
+| R-09 | Provider catalogue | `config.yaml`, `backend/services/integration_registry.py` | catalogued/partial | Per-provider live auth, scope, contract and health evidence |
+| R-10 | Autopilot truth table | `backend/services/capability_matrix.py`, `GET /api/capabilities` | implemented, not environment-verified | UI/API end-to-end and provider state sync |
+| R-11 | Responsive control center | `frontend/app/page.tsx`, `frontend/components/FlywheelVisualizer.tsx` | present, unverified | Multi-viewport browser and accessibility UAT |
+| R-12 | Production schema | `migrations/versions/0001_initial_schema.py`, CI migration gate | in test | PostgreSQL upgrade/drift/restore |
+| R-13 | Tenant SaaS | `backend/models.py`, `backend/main.py` | major gap | Workspace schema, row-level scope and cross-tenant tests |
+| R-14 | Platform Super Admin | requirements and current global admin gaps | not implemented end-to-end | Separate platform RBAC, tenant/incident/kill switch UI |
+| R-15 | All 53 skills | `../skill-parity-matrix.csv` | 24 partial, 29 not implemented | Implement and verify each skill service/API/UI/provider path |
+| R-16 | Production release | Actions + deployment docs | not release ready | All required CI, provider, security, staging and rollback gates |

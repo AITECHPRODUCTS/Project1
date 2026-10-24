@@ -27,6 +27,7 @@ from backend.services.ad_manager import evaluate_roas
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
+from backend.services.capability_matrix import build_capability_matrix
 from backend.services.offer_intelligence import compute_offer_metrics
 from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
@@ -118,6 +119,11 @@ api=APIRouter(prefix="/api",dependencies=[Depends(require_auth)])
 @api.get("/integrations")
 async def integration_registry():
  return build_network_registry(settings.load_yaml())
+@api.get("/capabilities")
+async def capabilities():
+    registry = build_network_registry(settings.load_yaml())
+    return build_capability_matrix(settings, registry)
+
 @api.get("/status")
 async def status(db:AsyncSession=Depends(get_session)):
  clicks=int(await db.scalar(select(func.count(ClickEvent.id)) ) or 0);events=int(await db.scalar(select(func.count(Conversion.id))) or 0);commission=float(await db.scalar(select(func.coalesce(func.sum(Conversion.commission),0.0))) or 0)

@@ -68,10 +68,17 @@ def analyze_content_moat(
     remaining = max(0, content_gap - foundation_pages)
     supporting_pages = ceil(remaining * 0.6)
     authority_pages = max(0, remaining - supporting_pages)
+    foundation_weeks = ceil(foundation_pages / capacity) if foundation_pages else 0
+    supporting_cumulative = foundation_pages + supporting_pages
+    supporting_weeks = max(
+        0,
+        (ceil(supporting_cumulative / capacity) if supporting_cumulative else 0) - foundation_weeks,
+    )
+    authority_weeks = max(0, weeks_to_moat - foundation_weeks - supporting_weeks)
     phases = [
-        {"phase": "Foundation", "content": "Hub page plus core spokes", "pages": foundation_pages, "weeks": ceil(foundation_pages / capacity) if foundation_pages else 0},
-        {"phase": "Supporting", "content": "Intent-specific tutorials, comparisons and long-tail spokes", "pages": supporting_pages, "weeks": ceil(supporting_pages / capacity) if supporting_pages else 0},
-        {"phase": "Authority", "content": "Original research, proprietary evidence and differentiated resources", "pages": authority_pages, "weeks": ceil(authority_pages / capacity) if authority_pages else 0},
+        {"phase": "Foundation", "content": "Hub page plus core spokes", "pages": foundation_pages, "weeks": foundation_weeks},
+        {"phase": "Supporting", "content": "Intent-specific tutorials, comparisons and long-tail spokes", "pages": supporting_pages, "weeks": supporting_weeks},
+        {"phase": "Authority", "content": "Original research, proprietary evidence and differentiated resources", "pages": authority_pages, "weeks": authority_weeks},
     ]
 
     authority_gaps: list[str] = []

@@ -31,6 +31,7 @@ def test_calculates_average_target_gap_and_timeline_from_supplied_competitors():
     assert report["weeks_to_moat"] == 15
     assert report["feasibility"] == "yellow"
     assert sum(phase["pages"] for phase in report["phase_roadmap"]) == 30
+    assert sum(phase["weeks"] for phase in report["phase_roadmap"]) == report["weeks_to_moat"]
     assert report["competitor_data_verified"] is False
     assert report["live_search_performed"] is False
     assert report["search_volume_validated"] is False

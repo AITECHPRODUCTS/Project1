@@ -23,7 +23,7 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -34,6 +34,7 @@ from backend.services.guarantee_draft import build_guarantee_draft as build_guar
 from backend.services.category_designer import design_category_taxonomy as design_category_taxonomy_service
 from backend.services.content_decay_detector import build_content_decay_report as build_content_decay_report_service
 from backend.services.content_moat_calculator import analyze_content_moat as analyze_content_moat_service
+from backend.services.traffic_analyzer import analyze_traffic_domains as analyze_traffic_domains_service
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
@@ -504,6 +505,48 @@ async def offers_sync(q:str|None=None,limit:int=Query(100,ge=1,le=200),db:AsyncS
   else:updated+=1
   row.name=item["name"];row.url=item.get("url");row.category=item.get("category");row.description=item.get("description","");row.reward_type=item.get("reward_type");row.reward_value=item.get("reward_value");row.cookie_days=item.get("cookie_days");row.traffic_score=item.get("traffic_score");row.source_stars=item.get("stars_count");row.verified=bool(item.get("verified"));raw=item.get("raw") or {};row.source_url=raw.get("source_url") if isinstance(raw,dict) else None;metrics=compute_offer_metrics({"reward_type":row.reward_type,"reward_value":row.reward_value,"gravity_score":raw.get("gravity_score",raw.get("gravity"))});row.gravity_score=metrics["gravity_score"];row.normalized_gravity=metrics["normalized_gravity"];row.epc=metrics["epc"];row.conversion_rate=metrics["conversion_rate"];row.recurring_commission=metrics["recurring_commission"];row.metadata_json={"tags":item.get("tags",[])}
  await db.commit();return {"created":created,"updated":updated,"registry_total":data.get("registry_total"),"traffic_score_note":"Unknown unless upstream actually supplies the field."}
+@api.post("/research/traffic-analyzer", status_code=201)
+async def research_traffic_analyzer(
+    payload: TrafficAnalysisRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Score and compare operator-supplied traffic metrics without claiming a live provider lookup."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before analyzing traffic")
+    try:
+        generated = analyze_traffic_domains_service(
+            domains=[domain.model_dump(mode="python") for domain in payload.domains],
+            focus=payload.focus,
+            compare=payload.compare,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    with workspace_scope(str(workspace_id)):
+        asset = ContentAsset(
+            workspace_id=str(workspace_id),
+            asset_type="traffic_analysis_draft",
+            title=f"Traffic analysis — {len(payload.domains)} supplied domain(s)",
+            body=json.dumps(generated, ensure_ascii=False, sort_keys=True),
+            status="draft",
+            source_urls=[],
+            metadata_json={
+                "traffic_analyzer_version": "1",
+                "focus": payload.focus,
+                "domains_analyzed": len(generated["domains_analyzed"]),
+                "provider_connected": False,
+                "external_search_performed": False,
+                "requires_review": True,
+                "publishing_started": False,
+            },
+        )
+        db.add(asset)
+        await db.commit()
+    return {**generated, "asset_id": asset.id}
+
+
 @api.post("/research/content-moat", status_code=201)
 async def research_content_moat(
     payload: ContentMoatRequest,

@@ -699,6 +699,85 @@ def _content_decay_origin(value: str) -> tuple[str, str, int]:
     return (scheme, (parsed.hostname or "").lower().rstrip("."), parsed.port or (443 if scheme == "https" else 80))
 
 
+class TrafficSourceBreakdown(BaseModel):
+    direct: float | None = Field(default=None, ge=0, le=100)
+    search: float | None = Field(default=None, ge=0, le=100)
+    social: float | None = Field(default=None, ge=0, le=100)
+    referral: float | None = Field(default=None, ge=0, le=100)
+    paid: float | None = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def validate_source_shares(self) -> "TrafficSourceBreakdown":
+        values = [self.direct, self.search, self.social, self.referral, self.paid]
+        supplied = [value for value in values if value is not None]
+        if len(supplied) == len(values) and not 90 <= sum(supplied) <= 110:
+            raise ValueError("Complete traffic-source shares must total 100% (allowing 10 points of rounding)")
+        if supplied and sum(supplied) > 105:
+            raise ValueError("Supplied traffic-source percentages cannot total over 105%")
+        return self
+
+
+class TrafficDomainRequest(BaseModel):
+    domain: str = Field(min_length=3, max_length=253)
+    global_rank: int | None = Field(default=None, ge=1, le=1_000_000_000_000)
+    country_rank: int | None = Field(default=None, ge=1, le=1_000_000_000_000)
+    country: str = Field(default="", max_length=100)
+    monthly_visits: int | None = Field(default=None, ge=0, le=1_000_000_000_000)
+    visits_trend: Literal["growing", "stable", "declining", "unknown"] = "unknown"
+    pages_per_visit: float | None = Field(default=None, ge=0, le=1000)
+    avg_duration_seconds: int | None = Field(default=None, ge=0, le=86_400)
+    bounce_rate: float | None = Field(default=None, ge=0, le=100)
+    traffic_sources: TrafficSourceBreakdown = Field(default_factory=TrafficSourceBreakdown)
+    provider_note: str = Field(default="", max_length=400)
+
+    @field_validator("domain")
+    @classmethod
+    def normalize_traffic_domain(cls, value: str) -> str:
+        candidate = value.strip()
+        if "://" not in candidate:
+            candidate = "https://" + candidate
+        try:
+            parsed = urlparse(candidate)
+            host = (parsed.hostname or "").lower().rstrip(".")
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("Provide a public domain without credentials or a port") from exc
+        if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password or port is not None:
+            raise ValueError("Provide a public domain without credentials or a port")
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise ValueError("Enter a domain only, without a path, query or fragment")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Private/local domains are not accepted")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private, loopback, link-local, multicast or reserved IP addresses are not accepted")
+        if "." not in host or " " in host or ".." in host or host.startswith(".") or host.endswith("."):
+            raise ValueError("Provide a fully qualified public domain")
+        return host
+
+    @field_validator("country", "provider_note")
+    @classmethod
+    def normalize_traffic_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class TrafficAnalysisRequest(BaseModel):
+    domains: list[TrafficDomainRequest] = Field(min_length=1, max_length=5)
+    focus: Literal["affiliate", "competitor", "advertiser"] = "affiliate"
+    compare: bool | None = None
+
+    @field_validator("domains")
+    @classmethod
+    def require_unique_domains(cls, value: list[TrafficDomainRequest]) -> list[TrafficDomainRequest]:
+        domains = [item.domain.casefold() for item in value]
+        if len(domains) != len(set(domains)):
+            raise ValueError("Each domain must appear only once")
+        return value
+
+
 class ContentMoatCompetitorRequest(BaseModel):
     domain: str = Field(min_length=3, max_length=253)
     pages_on_topic: int = Field(ge=0, le=100_000)

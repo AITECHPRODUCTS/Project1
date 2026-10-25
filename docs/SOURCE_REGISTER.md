@@ -17,3 +17,5 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Keep comparing prior attachments and app snapshots against the current branch and traceability backlog. Port only compatible, tested changes; do not overwrite the current app with either archive wholesale.
 
 - Content-decay and content-moat implementations map to the uploaded pack's `skills/blog/content-decay-detector/SKILL.md`, `skills/blog/content-moat-calculator/SKILL.md` and `shared/references/seo-strategy.md`. Their live-source dependencies are intentionally recorded as pending instead of implied by heuristic code.
+
+- Traffic analyzer implementation maps to the uploaded pack's `skills/research/traffic-analyzer/SKILL.md`; the score/compare path uses operator-entered observations only. SimilarWeb/API access and independent traffic-source verification are not implemented by this slice.

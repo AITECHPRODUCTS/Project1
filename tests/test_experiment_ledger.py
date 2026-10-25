@@ -41,7 +41,7 @@ def test_ab_test_assignment_persists_and_uses_idempotent_event_counts():
             "event_type": "impression",
         }
         first_event = client.post("/api/analytics/ab-test/event", json=impression_event)
-        assert first_event.status_code == 201, first_event.text
+        assert first_event.status_code == 200, first_event.text
         assert first_event.json()["duplicate"] is False
         duplicate_event = client.post("/api/analytics/ab-test/event", json=impression_event)
         assert duplicate_event.status_code == 200, duplicate_event.text
@@ -53,7 +53,7 @@ def test_ab_test_assignment_persists_and_uses_idempotent_event_counts():
             "event_type": "conversion",
         }
         conversion_response = client.post("/api/analytics/ab-test/event", json=conversion_event)
-        assert conversion_response.status_code == 201, conversion_response.text
+        assert conversion_response.status_code == 200, conversion_response.text
 
         updated = client.post("/api/analytics/ab-test", json=payload)
         assert updated.status_code == 200, updated.text

@@ -140,3 +140,60 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
         run: npm run build
+
+
+  lockfile-sync:
+    # Capture the runner-resolved lockfile once, then validate a clean npm ci install
+    # before committing the exact artifact to the one existing implementation branch.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/build/omni-affiliate-os-production'
+    needs: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Download the resolved frontend lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-package-lock
+          path: frontend
+      - name: Validate lockfile matches package manifest
+        working-directory: frontend
+        run: |
+          node - <<'NODE'
+          const pkg = require("./package.json");
+          const lock = require("./package-lock.json");
+          if (lock.lockfileVersion !== 3) throw new Error("Expected npm lockfile v3");
+          for (const section of ["dependencies", "devDependencies"]) {
+            if (JSON.stringify(pkg[section] || {}) !== JSON.stringify((lock.packages[""] || {})[section] || {})) {
+              throw new Error(`package-lock root ${section} do not match package.json`);
+            }
+          }
+          console.log(`Validated npm lockfile v${lock.lockfileVersion} with ${Object.keys(lock.packages).length - 1} dependency packages`);
+          NODE
+      - name: Verify reproducible clean install and production build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: npm ci --no-audit --no-fund && npm run typecheck && npm run build
+      - name: Commit resolved lockfile without rewriting history
+        id: commit-lockfile
+        run: |
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Frontend lockfile is already committed and unchanged."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "build: pin frontend npm lockfile"
+            git push origin HEAD:build/omni-affiliate-os-production
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "lockfile_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi

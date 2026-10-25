@@ -95,3 +95,43 @@ def test_ad_request_rejects_unsupported_platform_and_invalid_urls():
 def test_ad_request_requires_affiliate_disclosure():
     with pytest.raises(ValidationError):
         request(affiliate_disclosure="Buy today")
+
+def test_ad_plan_adds_platform_specific_targeting_hypotheses_and_guardrails():
+    plan = build_ad_campaign_plan(request(
+        platforms=["google_search", "meta", "linkedin", "reddit"],
+        daily_budget_usd=Decimal("12.01"),
+    ))
+    by_platform = {item["platform"]: item for item in plan["platform_plans"]}
+    assert set(by_platform) == {"google_search", "meta", "linkedin", "reddit"}
+    assert "query intent" in by_platform["google_search"]["targeting_plan"]["strategy"].lower()
+    assert "community" in by_platform["reddit"]["targeting_plan"]["strategy"].lower()
+    assert "professional" in by_platform["linkedin"]["targeting_plan"]["strategy"].lower()
+    for item in by_platform.values():
+        target = item["targeting_plan"]
+        assert target["framework"] == "platform_targeting_hypotheses_v1"
+        assert target["platform_feature_availability"] == "not_checked"
+        assert len(target["recommended_signals"]) >= 3
+        assert len(target["audience_tests"]) == 3
+        assert target["requires_policy_review"] is True
+        assert target["requires_measurement_review"] is True
+        assert target["external_actions_executed"] is False
+        assert target["optimization"]["auto_pause_enabled"] is False
+        assert target["optimization"]["auto_scale_enabled"] is False
+        assert all(row["spend_authorized"] is False for row in target["audience_tests"])
+        assert all(row["primary_measurement_event_hypothesis"] == "qualified_lead" for row in target["audience_tests"])
+        assert all(row["availability_status"] == "not_checked" for row in target["recommended_signals"])
+        assert any("sensitive personal traits" in item for item in target["guardrails"])
+    for item in plan["platform_plans"]:
+        target_tests = item["targeting_plan"]["audience_tests"]
+        platform_budget = Decimal(next(row["daily_budget_usd"] for row in plan["budget_plan"]["platform_allocations"] if row["platform"] == item["platform"]))
+        assert sum(Decimal(row["suggested_daily_budget_usd"]) for row in target_tests) == platform_budget
+
+
+def test_ad_targeting_budget_is_not_fabricated_when_budget_is_unset():
+    plan = build_ad_campaign_plan(request(daily_budget_usd=Decimal("0.00")))
+    for item in plan["platform_plans"]:
+        tests = item["targeting_plan"]["audience_tests"]
+        assert all(row["suggested_daily_budget_usd"] is None for row in tests)
+        assert all(row["budget_status"] == "budget_not_set" for row in tests)
+        assert all(row["spend_authorized"] is False for row in tests)
+

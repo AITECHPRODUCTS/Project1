@@ -23,3 +23,5 @@
 | Tenant-scoped conversion idempotency | `backend/models.py` (`Conversion`), migration `0005_workspace_scoped_conversion_identity`, `tests/test_tenant_isolation.py` | implementation added; hosted migration and cross-workspace regression checks pending | PostgreSQL upgrade/rollback with existing data, provider idempotency contract tests and production tenant-isolation UAT |
 
 | Human commission-evidence review | `CommissionEvidenceReviewRequest`, `PATCH /api/finance/mail-commissions/{evidence_id}/review`, `frontend/app/page.tsx`, `tests/test_finance_evidence_review.py` | implementation added with workspace-admin gate, candidate consistency checks and audit log; payout remains unconfirmed | hosted CI, authenticated browser UAT, PostgreSQL workspace-isolation test and operator workflow acceptance |
+
+| A/B experiment decision support | `backend/services/analytics_utils.py`, `POST /api/analytics/ab-test`, `tests/test_analytics_utils.py` | stable visitor assignment and deterministic posterior recommendation implemented | durable assignment/impression/conversion ledger, experiment UI, held-out evaluation and browser UAT |

@@ -1,5 +1,5 @@
 skill_id,stage,status,evidence,gap
-analytics/ab-test-generator,S6,partial,backend/services/analytics_utils.py,No powered statistical validation or persisted assignment ledger
+analytics/ab-test-generator,S6,partial,backend/services/analytics_utils.py,Deterministic assignment and Beta-Binomial posterior decision support added; durable assignment/impression ledger remains missing
 analytics/conversion-tracker,S6,partial,backend/services/analytics_utils.py,Provider reconciliation and privacy review remain
 analytics/internal-linking-optimizer,S3,not_implemented,,No tested CMS crawl index
 analytics/performance-report,S6,partial,backend/main.py,No verified platform spend sync

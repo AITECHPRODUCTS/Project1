@@ -564,7 +564,7 @@ async def track(p:dict[str,Any]):
  return conversion_tracker(str(raw))
 @api.post("/analytics/ab-test")
 async def ab_test(p:dict[str,Any]):
- try:return ab_test_generator(str(p["headline_a"]),str(p["headline_b"]),visitor_id=str(p.get("visitor_id") or "anonymous"),experiment_key=str(p.get("experiment_key") or "default"),conversions_a=int(p.get("conversions_a",0)),impressions_a=int(p.get("impressions_a",0)),conversions_b=int(p.get("conversions_b",0)),impressions_b=int(p.get("impressions_b",0)))
+ try:return ab_test_generator(str(p["headline_a"]),str(p["headline_b"]),visitor_id=str(p.get("visitor_id") or "").strip(),experiment_key=str(p.get("experiment_key") or "").strip(),conversions_a=int(p.get("conversions_a",0)),impressions_a=int(p.get("impressions_a",0)),conversions_b=int(p.get("conversions_b",0)),impressions_b=int(p.get("impressions_b",0)))
  except (KeyError,ValueError) as exc:raise HTTPException(422,str(exc)) from exc
 @api.post("/analytics/self-improve")
 async def learn(lookback_days:int=Query(30,ge=1,le=180)):return await self_improver_loop(lookback_days=lookback_days)

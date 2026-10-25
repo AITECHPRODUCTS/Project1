@@ -65,3 +65,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added a workspace-admin review endpoint for commission email evidence with candidate validation, explicit decisions, and an audit event. Accepting a conversion match does not confirm payment or initiate a transfer.
 - Added the Measurement console in the Next.js dashboard for the workspace ledger, currency-separated totals, reconciliation queue, email evidence, payout thresholds, and gated review actions.
 - Hosted frontend typecheck/build, Python tests, and AI/RAG dependency checks are required on the exact resulting commit before treating this change as validated.
+
+
+## 2026-10-25 implementation update — deterministic A/B assignment and posterior analysis
+- A visitor now receives the same variant for a given experiment regardless of aggregate conversion counts; historical performance no longer randomly changes a returning visitor's headline.
+- Added deterministic Beta-Binomial posterior probability estimation and a minimum-sample gate for recommendations. Results are explicitly decision support, not a p-value or proof of causation.
+- A durable impression/conversion assignment ledger remains pending; this slice does not claim end-to-end experiment tracking.

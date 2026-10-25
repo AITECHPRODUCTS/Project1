@@ -4,7 +4,7 @@
 |---|---|---|---|---|
 | R-01 | S1 offer discovery | `backend/tools/affiliate_api.py`, `backend/services/s1_research.py` | partial | Live source/freshness, real provider contracts |
 | R-02 | S2 content intelligence | `backend/services/s2_s3_content.py`, `backend/services/llm.py` | partial | Claim ledger and grounding evaluation |
-| R-03 | S3 SEO/blog | `backend/services/s2_s3_content.py` | partial | Search Console, crawl and publish UAT |
+| R-03 | S3 SEO/blog | `backend/services/s2_s3_content.py`, `backend/services/content_decay_detector.py`, POST /api/research/content-decay | partial | Search Console ingestion, technical crawl, competitor/SERP evidence and publish UAT |
 | R-04 | S4 landing/consent | `backend/services/s4_s5_landing.py`, `backend/services/email_delivery.py` | partial | Accessibility and full consent/unsubscribe tests |
 | R-05 | S5 distribution | `backend/services/s4_s5_landing.py`, `backend/services/cms_publisher.py` | partial | OAuth scopes, remote success and idempotency |
 | R-06 | S6 attribution/ledger | `backend/services/tracking_service.py`, `backend/models.py` | partial | Provider reconciliation and decimal append-only ledger |
@@ -16,5 +16,5 @@
 | R-12 | Production schema | `migrations/versions/0001_initial_schema.py`, CI migration gate | in test | PostgreSQL upgrade/drift/restore |
 | R-13 | Tenant SaaS | `backend/models.py`, `backend/main.py` | major gap | Workspace schema, row-level scope and cross-tenant tests |
 | R-14 | Platform Super Admin | requirements and current global admin gaps | not implemented end-to-end | Separate platform RBAC, tenant/incident/kill switch UI |
-| R-15 | All 53 skills | `../skill-parity-matrix.csv` | 43 partial, 10 not implemented | Implement and verify each skill service/API/UI/provider path |
+| R-15 | All 53 skills | `../skill-parity-matrix.csv` | 44 partial, 9 not implemented | Implement and verify each skill service/API/UI/provider path |
 | R-16 | Production release | Actions + deployment docs | not release ready | All required CI, provider, security, staging and rollback gates |

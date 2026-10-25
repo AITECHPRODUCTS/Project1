@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import ipaddress
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
 from urllib.parse import urlparse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -668,6 +668,113 @@ class CategoryDesignRequest(BaseModel):
         if len(categories) > 30 or any(len(category) > 120 for category in categories):
             raise ValueError("Supply at most 30 existing category names of up to 120 characters each")
         return categories
+
+
+def _validate_content_decay_public_url(value: str) -> str:
+    normalized = value.strip()
+    try:
+        parsed = urlparse(normalized)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Provide a valid absolute public HTTP(S) URL") from exc
+    if parsed.scheme not in {"http", "https"} or not host:
+        raise ValueError("Provide a valid absolute public HTTP(S) URL")
+    if parsed.username or parsed.password:
+        raise ValueError("URLs containing credentials are not allowed")
+    if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+        raise ValueError("Local/private hostnames are not allowed")
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    if address is not None and not address.is_global:
+        raise ValueError("Private, loopback, link-local, multicast or reserved URL hosts are not allowed")
+    return normalized
+
+
+def _content_decay_origin(value: str) -> tuple[str, str, int]:
+    parsed = urlparse(value)
+    scheme = parsed.scheme.lower()
+    return (scheme, (parsed.hostname or "").lower().rstrip("."), parsed.port or (443 if scheme == "https" else 80))
+
+
+class ContentDecayPageRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=2048)
+    title: str = Field(default="", max_length=300)
+    publish_date: date | None = None
+    last_updated: date | None = None
+    target_keyword: str = Field(default="", max_length=200)
+    previous_clicks: int | None = Field(default=None, ge=0, le=1_000_000_000_000)
+    current_clicks: int | None = Field(default=None, ge=0, le=1_000_000_000_000)
+    previous_impressions: int | None = Field(default=None, ge=0, le=1_000_000_000_000)
+    current_impressions: int | None = Field(default=None, ge=0, le=1_000_000_000_000)
+    previous_avg_position: float | None = Field(default=None, ge=1, le=10_000)
+    current_avg_position: float | None = Field(default=None, ge=1, le=10_000)
+    contains_affiliate_links: bool | None = None
+    revenue_impact: Literal["high", "medium", "low", "unknown"] = "unknown"
+    outdated_elements: list[str] = Field(default_factory=list, max_length=10)
+    competitor_refresh_observed: bool | None = None
+    competitor_note: str = Field(default="", max_length=800)
+    serp_displacement_observed: bool | None = None
+    refresh_effort_hours: float | None = Field(default=None, gt=0, le=160)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        return _validate_content_decay_public_url(value)
+
+    @field_validator("title", "target_keyword", "competitor_note")
+    @classmethod
+    def normalize_optional_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @field_validator("outdated_elements")
+    @classmethod
+    def normalize_outdated_elements(cls, value: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(" ".join(item.split()) for item in value if item and item.strip()))
+        if any(len(item) > 400 for item in normalized):
+            raise ValueError("Each outdated-content note must be at most 400 characters")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_comparison_pairs_and_dates(self) -> "ContentDecayPageRequest":
+        for label, previous, current in (
+            ("clicks", self.previous_clicks, self.current_clicks),
+            ("impressions", self.previous_impressions, self.current_impressions),
+            ("average position", self.previous_avg_position, self.current_avg_position),
+        ):
+            if (previous is None) != (current is None):
+                raise ValueError(f"Previous and current {label} values must be supplied together")
+        if self.publish_date and self.last_updated and self.last_updated < self.publish_date:
+            raise ValueError("Last-updated date cannot be earlier than publish date")
+        return self
+
+
+class ContentDecayRequest(BaseModel):
+    site_url: str = Field(min_length=8, max_length=2048)
+    timeframe: Literal["30d", "90d", "6m", "1y"] = "90d"
+    pages: list[ContentDecayPageRequest] = Field(min_length=1, max_length=30)
+
+    @field_validator("site_url")
+    @classmethod
+    def validate_site_url(cls, value: str) -> str:
+        return _validate_content_decay_public_url(value)
+
+    @field_validator("pages")
+    @classmethod
+    def reject_duplicate_urls(cls, value: list[ContentDecayPageRequest]) -> list[ContentDecayPageRequest]:
+        urls = [page.url.rstrip("/") for page in value]
+        if len(set(urls)) != len(urls):
+            raise ValueError("Each content page URL must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def enforce_site_origin(self) -> "ContentDecayRequest":
+        expected = _content_decay_origin(self.site_url)
+        if any(_content_decay_origin(page.url) != expected for page in self.pages):
+            raise ValueError("All content page URLs must share the same public origin as site_url")
+        return self
 
 
 class InternalLinkingRequest(BaseModel):

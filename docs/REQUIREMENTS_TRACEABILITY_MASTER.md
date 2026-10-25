@@ -3,7 +3,7 @@
 |---|---|---|---|
 | S1 research / offer intelligence | `backend/services/s1_research.py`, `backend/tools/affiliate_api.py`, `backend/services/offer_intelligence.py` | partial | Authorized provider contracts, demand-source quality, geo freshness |
 | S2 creative / evidence brief | `backend/services/s2_s3_content.py`, `backend/services/llm.py` | partial | Claim-by-claim evidence and generated claim evaluation |
-| S3 SEO / blogs | `backend/services/s2_s3_content.py` | partial | Search Console, technical SEO crawl and publish UAT |
+| S3 SEO / blogs | `backend/services/s2_s3_content.py`; `backend/services/content_decay_detector.py`; POST /api/research/content-decay | partial | operator-supplied decay triage exists; Search Console integration, technical SEO crawl and publish UAT remain pending |
 | S4 offers / landing / lead | `backend/services/s4_s5_landing.py`, `backend/main.py`, `backend/services/email_delivery.py` | partial | Accessibility, deployed landing and consent/unsubscribe tests |
 | S5 distribution / nurture | `backend/services/s4_s5_landing.py`, `backend/services/cms_publisher.py`, `backend/services/email_delivery.py` | partial | Real OAuth scopes, provider response verification, policy checks |
 | S6 attribution / experiment | `backend/services/analytics_utils.py`, `backend/services/tracking_service.py`, `backend/models.py` | partial | Durable experiment ledger, provider event reconciliation, privacy |
@@ -55,3 +55,4 @@
 | Merchant-terms-based guarantee drafts | backend/services/guarantee_draft.py; GuaranteeDraftRequest; POST /api/landing/guarantee-draft; frontend/app/page.tsx; tests/test_guarantee_draft.py | requires matching type/duration in supplied terms; output marks terms unverified and persists review-only workspace draft | official merchant verification, legal/policy review, terms-change monitoring and browser UAT |
 
 | Category taxonomy designer | backend/services/category_designer.py; CategoryDesignRequest; POST /api/research/category-design; frontend/app/page.tsx; tests/test_category_designer.py | deterministic taxonomy draft from supplied topics with collision-safe slugs, existing-label overlap flags, workspace persistence and JSON export | demand/search-volume validation, crawl and canonical analysis, live CMS application and browser UAT |
+| Content decay detector | backend/services/content_decay_detector.py; ContentDecayRequest; POST /api/research/content-decay; frontend/app/page.tsx; tests/test_content_decay_detector.py | compares matched-period operator-supplied metrics and explicit content signals, scores a persisted review-only refresh queue | authorized Search Console ingestion, competitor/SERP intelligence, impact evaluation and browser UAT |

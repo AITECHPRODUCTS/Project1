@@ -11,7 +11,7 @@ automation/paid-ad-copy-writer,S5,partial,backend/services/s2_s3_content.py; bac
 automation/proprietary-data-generator,S8,not_implemented,,No validated proprietary dataset pipeline
 blog/affiliate-blog-builder,S3,partial,backend/services/s2_s3_content.py,No grounded publication acceptance evidence
 blog/comparison-post-writer,S3,partial,backend/services/s2_s3_content.py,Product evidence and comparative tests missing
-blog/content-decay-detector,S3,not_implemented,,No search console ingestion
+blog/content-decay-detector,S3,partial,backend/services/content_decay_detector.py; backend/schemas.py; backend/main.py POST /api/research/content-decay; frontend/app/page.tsx; tests/test_content_decay_detector.py,"Operator-supplied matched-period metrics and content notes produce ranked refresh drafts; no Search Console ingestion, competitor crawling, or recovery forecast"
 blog/content-moat-calculator,S3,not_implemented,,No freshness or competition dataset
 blog/how-to-tutorial-writer,S3,partial,backend/services/s2_s3_content.py,No end-to-end publication validation
 blog/keyword-cluster-architect,S3,partial,backend/services/s2_s3_content.py,Lexical clusters are not search-volume validated

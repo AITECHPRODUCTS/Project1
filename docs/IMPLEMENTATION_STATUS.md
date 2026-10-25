@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 43 partial and 10 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 44 partial and 9 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -158,3 +158,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The API/UI explicitly state that search volume, user demand, taxonomy quality and canonical/navigation impact have not been evaluated; no live pages are changed or published.
 - Added service/schema/API regression tests and updated the parity, traceability and backlog records. The existing guarantee draft now stores a SHA-256 fingerprint of submitted merchant terms rather than a duplicate full-text copy.
 - Category performance evaluation, user research, live crawl/CMS application and browser UAT remain pending.
+
+
+## 2026-10-25 implementation update — content decay detector
+- Added a typed, authenticated workspace-scoped POST /api/research/content-decay workflow that compares operator-supplied previous/current click, impression and average-position data and explicit content/competitor/SERP observations.
+- The service calculates transparent decline deltas, queues evidence-backed refresh candidates using revenue impact, severity, effort and competitor-threat inputs, produces concrete review actions and an optional monthly priority schedule, and persists the report as a draft asset.
+- Added schema constraints for public same-origin page URLs, paired measurement windows, nonnegative metrics and publish/update dates. Age alone is only a preliminary freshness prompt and does not label a page as decaying.
+- No Search Console connection, live crawl, search/competitor lookup, traffic-recovery forecast or publishing action is performed; all submitted evidence is marked operator-supplied and unverified.
+- Added service, validation and API regression tests. Search Console provider ingestion, competitor/SERP evidence acquisition, end-to-end browser UAT and real post-refresh outcome evaluation remain pending.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ipaddress
+
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
@@ -397,6 +399,12 @@ class ContentAtomizeRequest(BaseModel):
             host = parsed.hostname.lower().rstrip(".")
             if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
                 raise ValueError("Local/private source references are not allowed")
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("Private, loopback, link-local, multicast or reserved source reference hosts are not allowed")
         return normalized
 
 

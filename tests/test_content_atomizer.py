@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 
+from backend.schemas import ContentAtomizeRequest
 from backend.services import content_atomizer
 
 
@@ -98,3 +100,28 @@ async def test_content_atomizer_rejects_unsupported_platform_and_short_source():
             source_body="too short",
             platforms=["linkedin"],
         )
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "javascript:alert(1)",
+        "https://user:password@example.com/source",
+        "http://127.0.0.1/metadata",
+        "http://10.1.2.3/private",
+        "http://[::1]/private",
+        "http://localhost/admin",
+        "https://internal.local/source",
+    ],
+)
+def test_content_atomizer_rejects_unsafe_source_reference_urls(source_url: str):
+    with pytest.raises(ValidationError):
+        ContentAtomizeRequest(
+            source_title="Grounding test source",
+            source_body=(
+                "This source body is long enough to satisfy the minimum length "
+                "while providing context for a content draft and evidence review."
+            ),
+            platforms=["linkedin"],
+            source_urls=[source_url],
+        )
+

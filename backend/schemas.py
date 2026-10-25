@@ -454,6 +454,58 @@ class ContentAngleRankRequest(BaseModel):
         return normalized
 
 
+class PurpleCowAlternativeRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    positioning_statement: str = Field(min_length=5, max_length=600)
+    evidence_note: str = Field(default="", max_length=800)
+
+    @field_validator("name", "positioning_statement", "evidence_note")
+    @classmethod
+    def normalize_alternative_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized and value:
+            raise ValueError("Alternative text must not be blank")
+        return normalized
+
+
+class PurpleCowAuditRequest(BaseModel):
+    offer_name: str = Field(min_length=2, max_length=200)
+    target_audience: str = Field(min_length=2, max_length=400)
+    positioning_statement: str = Field(min_length=5, max_length=600)
+    alternatives: list[PurpleCowAlternativeRequest] = Field(min_length=1, max_length=10)
+    evidence_notes: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("offer_name", "target_audience", "positioning_statement")
+    @classmethod
+    def normalize_required_positioning_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Positioning context must not be blank")
+        return normalized
+
+    @field_validator("alternatives")
+    @classmethod
+    def require_distinct_alternatives(cls, value: list[PurpleCowAlternativeRequest]) -> list[PurpleCowAlternativeRequest]:
+        seen: set[str] = set()
+        normalized: list[PurpleCowAlternativeRequest] = []
+        for item in value:
+            key = item.name.casefold().strip()
+            if key not in seen:
+                seen.add(key)
+                normalized.append(item)
+        if not normalized:
+            raise ValueError("At least one distinct alternative is required")
+        return normalized
+
+    @field_validator("evidence_notes")
+    @classmethod
+    def normalize_evidence_notes(cls, value: list[str]) -> list[str]:
+        notes = list(dict.fromkeys(item.strip() for item in value if item and item.strip()))
+        if any(len(item) > 1200 for item in notes):
+            raise ValueError("Each evidence note must be at most 1200 characters")
+        return notes
+
+
 class SEOAuditRequest(BaseModel):
     url: str = Field(min_length=8, max_length=2048)
 

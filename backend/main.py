@@ -23,7 +23,7 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -31,6 +31,7 @@ from backend.services.ad_performance import summarize_ad_performance
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
+from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
@@ -478,6 +479,23 @@ async def offers_sync(q:str|None=None,limit:int=Query(100,ge=1,le=200),db:AsyncS
   else:updated+=1
   row.name=item["name"];row.url=item.get("url");row.category=item.get("category");row.description=item.get("description","");row.reward_type=item.get("reward_type");row.reward_value=item.get("reward_value");row.cookie_days=item.get("cookie_days");row.traffic_score=item.get("traffic_score");row.source_stars=item.get("stars_count");row.verified=bool(item.get("verified"));raw=item.get("raw") or {};row.source_url=raw.get("source_url") if isinstance(raw,dict) else None;metrics=compute_offer_metrics({"reward_type":row.reward_type,"reward_value":row.reward_value,"gravity_score":raw.get("gravity_score",raw.get("gravity"))});row.gravity_score=metrics["gravity_score"];row.normalized_gravity=metrics["normalized_gravity"];row.epc=metrics["epc"];row.conversion_rate=metrics["conversion_rate"];row.recurring_commission=metrics["recurring_commission"];row.metadata_json={"tags":item.get("tags",[])}
  await db.commit();return {"created":created,"updated":updated,"registry_total":data.get("registry_total"),"traffic_score_note":"Unknown unless upstream actually supplies the field."}
+@api.post("/research/purple-cow-audit")
+async def research_purple_cow_audit(payload: PurpleCowAuditRequest, user: dict[str, Any] = Depends(require_auth)):
+    """Review a proposed position against operator-supplied alternatives only."""
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before running a differentiation audit")
+    try:
+        return audit_purple_cow_positioning_service(
+            offer_name=payload.offer_name,
+            target_audience=payload.target_audience,
+            positioning_statement=payload.positioning_statement,
+            alternatives=[item.model_dump() for item in payload.alternatives],
+            evidence_notes=payload.evidence_notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @api.post("/research/seo-audit")
 async def research_seo_audit(
     payload: SEOAuditRequest,

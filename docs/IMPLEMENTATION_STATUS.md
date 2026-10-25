@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 44 partial and 9 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 45 partial and 8 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -166,3 +166,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added schema constraints for public same-origin page URLs, paired measurement windows, nonnegative metrics and publish/update dates. Age alone is only a preliminary freshness prompt and does not label a page as decaying.
 - No Search Console connection, live crawl, search/competitor lookup, traffic-recovery forecast or publishing action is performed; all submitted evidence is marked operator-supplied and unverified.
 - Added service, validation and API regression tests. Search Console provider ingestion, competitor/SERP evidence acquisition, end-to-end browser UAT and real post-refresh outcome evaluation remain pending.
+
+
+## 2026-10-25 implementation update — content moat calculator
+- Added a typed, authenticated workspace-scoped POST /api/research/content-moat workflow that calculates a 1.5× benchmark from operator-supplied competitor topic-page counts, current page inventory and weekly publishing capacity.
+- Added transparent average/target/gap/timeline arithmetic, feasibility bands, a phased page roadmap and evidence/quality/freshness caveats. Competitor domains, quality labels and freshness notes are stored as unverified inputs; the page-count model is not a ranking prediction.
+- The report is persisted as a review-only workspace ContentAsset and can be exported as JSON from the responsive dashboard panel.
+- Added schema, service and API regression tests. Live competitor discovery, domain crawling, search-volume/demand validation and browser UAT remain pending.

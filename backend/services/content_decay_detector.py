@@ -163,7 +163,7 @@ def build_content_decay_report(
                 "data_provenance": "operator_supplied_unverified",
                 "requires_review": True,
             })
-        elif available_metric_count > 0 and not preliminary_signals:
+        elif available_metric_count >= 2 and not preliminary_signals:
             healthy.append(url)
         else:
             missing_data = []

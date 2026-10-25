@@ -15,3 +15,5 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 ## 2026-10-25 continuation note
 - The newly uploaded `affiliate-skills-main(1).zip` has been inspected and is a reference skill/specification package, not a deployable web application. The previously shared Library archive `OmniAffiliateOS_build.zip` is an earlier FastAPI/Next.js source snapshot and has been reviewed as a reference; current remote branch code remains authoritative.
 - Keep comparing prior attachments and app snapshots against the current branch and traceability backlog. Port only compatible, tested changes; do not overwrite the current app with either archive wholesale.
+
+- Content-decay and content-moat implementations map to the uploaded pack's `skills/blog/content-decay-detector/SKILL.md`, `skills/blog/content-moat-calculator/SKILL.md` and `shared/references/seo-strategy.md`. Their live-source dependencies are intentionally recorded as pending instead of implied by heuristic code.

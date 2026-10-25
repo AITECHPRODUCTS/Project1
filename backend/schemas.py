@@ -699,6 +699,71 @@ def _content_decay_origin(value: str) -> tuple[str, str, int]:
     return (scheme, (parsed.hostname or "").lower().rstrip("."), parsed.port or (443 if scheme == "https" else 80))
 
 
+class ContentMoatCompetitorRequest(BaseModel):
+    domain: str = Field(min_length=3, max_length=253)
+    pages_on_topic: int = Field(ge=0, le=100_000)
+    content_quality: Literal["thin", "average", "deep"] = "average"
+    freshness: Literal["stale", "recent", "actively_updated"] = "recent"
+    evidence_note: str = Field(default="", max_length=400)
+
+    @field_validator("domain")
+    @classmethod
+    def normalize_public_competitor_domain(cls, value: str) -> str:
+        candidate = value.strip()
+        if "://" not in candidate:
+            candidate = "https://" + candidate
+        try:
+            parsed = urlparse(candidate)
+            host = (parsed.hostname or "").lower().rstrip(".")
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("Provide a valid public competitor domain without credentials or a port") from exc
+        if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password or port is not None:
+            raise ValueError("Provide a valid public competitor domain without credentials or a port")
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise ValueError("Enter a domain only, without a path, query or fragment")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Private/local competitor domains are not accepted")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private, loopback, link-local, multicast or reserved IP addresses are not accepted")
+        if "." not in host or " " in host or ".." in host or host.startswith(".") or host.endswith("."):
+            raise ValueError("Provide a fully qualified public competitor domain")
+        return host
+
+    @field_validator("evidence_note")
+    @classmethod
+    def normalize_evidence_note(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class ContentMoatRequest(BaseModel):
+    niche: str = Field(min_length=3, max_length=200)
+    hub_keyword: str = Field(default="", max_length=200)
+    your_current_pages: int = Field(default=0, ge=0, le=100_000)
+    publishing_capacity: Literal["1/week", "2/week", "3/week", "5/week"] = "2/week"
+    competitors: list[ContentMoatCompetitorRequest] = Field(min_length=1, max_length=5)
+
+    @field_validator("niche", "hub_keyword")
+    @classmethod
+    def normalize_moat_context(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized and value:
+            raise ValueError("Context must not be blank")
+        return normalized
+
+    @field_validator("competitors")
+    @classmethod
+    def require_distinct_competitors(cls, value: list[ContentMoatCompetitorRequest]) -> list[ContentMoatCompetitorRequest]:
+        domains = [item.domain.casefold() for item in value]
+        if len(set(domains)) != len(domains):
+            raise ValueError("Each competitor domain must be unique")
+        return value
+
+
 class ContentDecayPageRequest(BaseModel):
     url: str = Field(min_length=8, max_length=2048)
     title: str = Field(default="", max_length=300)

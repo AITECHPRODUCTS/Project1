@@ -212,3 +212,18 @@ def test_content_decay_request_rejects_unpaired_metrics():
             site_url="https://example.com",
             pages=[{"url": "https://example.com/article", "previous_clicks": 100}],
         )
+
+
+def test_one_stable_metric_pair_is_not_enough_to_mark_page_healthy():
+    report = build_content_decay_report(
+        site_url="https://example.com",
+        timeframe="90d",
+        today=date(2026, 10, 25),
+        pages=[{
+            "url": "https://example.com/partial-metrics",
+            "previous_clicks": 500,
+            "current_clicks": 510,
+        }],
+    )
+    assert report["healthy_pages"] == []
+    assert report["pages_needing_more_data"][0]["url"] == "https://example.com/partial-metrics"

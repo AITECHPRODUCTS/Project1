@@ -77,6 +77,75 @@ _PLATFORM_PROFILES: dict[str, dict[str, str]] = {
     },
 }
 
+
+_TARGETING_GUIDANCE: dict[str, dict[str, Any]] = {
+ "google_search":{"strategy":"Prioritize explicit query intent and negative-keyword hygiene; eligibility needs platform review.","signals":[("Problem-solving queries","Test query themes for {niche}; validate with actual search-term reports."),("Comparison queries","Explore comparison terms for {niche} without claiming a provider is best."),("Negative-keyword candidates","Draft irrelevant-traffic exclusions and validate against real query reports.")],"tests":[("problem_intent","Problem-intent queries","Test queries for searchers trying to solve a {niche} problem."),("evaluation_intent","Evaluation-intent queries","Test comparison themes for {niche} options."),("practical_guide","Practical-guide queries","Test instructional themes for a helpful page for {audience}.")],"retargeting":"Audience overlays are not assumed available; check current account eligibility and consent."},
+ "google_display":{"strategy":"Begin with contextual topics and placement quality; review audience expansion explicitly.","signals":[("Contextual page topics","Select page topics connected to {niche}, not inferred personal traits."),("Placement quality","Build a reviewed placement allowlist and exclusions from measured quality."),("Intent segments if supported","Check account capability before proposing intent segments.")],"tests":[("contextual_topics","Contextual topic placements","Place creative beside relevant {niche} education content."),("curated_placements","Curated placement set","Test a manually reviewed publisher set."),("eligible_intent","Eligible intent segment","Test only a supported segment after eligibility review.")],"retargeting":"Do not enable remarketing until consent, opt-out and retention are verified."},
+ "meta":{"strategy":"Compare broad eligible delivery with topic-relevant interest hypotheses; custom/similar audiences are conditional.","signals":[("Broad eligible audience","Use {audience} as a brief, not inferred personal traits."),("Topic-relevant interests","Check availability of non-sensitive interests connected to {niche}."),("Consented first-party source","Consider lists/similar audiences only when source rights and consent permit.")],"tests":[("broad_eligible","Broad eligible delivery","Test creative with eligible broad audience controls."),("relevant_interest","Relevant interest cluster","Test reviewed non-sensitive interests related to {niche}."),("consented_first_party","Consented first-party test","Test a permissioned audience only if supported and eligible.")],"retargeting":"No custom audience is created; verify consent, source rights, suppression and eligibility."},
+ "instagram":{"strategy":"Pair creative-first delivery with non-sensitive topic relevance; verify account and placement eligibility.","signals":[("Creative and topic fit","Align creative with {niche} and the {audience} brief."),("Non-sensitive interests","Review interest options exposed by the authorized account."),("Permissioned engagement","Use engagement retargeting only where consent and policy allow.")],"tests":[("broad_placement","Broad eligible placement","Test vertical/feed creative against eligible broad delivery."),("topic_interest","Topic-fit interest test","Test supported non-sensitive interests aligned to {niche}."),("permissioned_engagement","Permissioned engagement","Test engagement audiences only after consent/suppression review.")],"retargeting":"Guidance only; no audience is created or uploaded."},
+ "tiktok":{"strategy":"Lead with creative and content-context tests; use only controls and events available to the account.","signals":[("Creative concept fit","Test a hook connected to {niche}; it is a hypothesis, not a targeting fact."),("Available interest categories","Review non-sensitive categories and age/region eligibility."),("Consented conversion signals","Use conversion optimization only after consent and event delivery are verified.")],"tests":[("broad_creative","Broad eligible creative","Compare vertical creative with eligible broad delivery."),("interest_category","Relevant interest test","Test an available non-sensitive interest for {niche}."),("verified_event","Verified-event test","Test conversion events only after consent and attribution checks.")],"retargeting":"Do not create/upload audiences until consent, opt-outs and eligibility are confirmed."},
+ "youtube_shorts":{"strategy":"Combine video-hook tests with relevant contexts; confirm audience tools for the account.","signals":[("Relevant video topics","Select categories related to {niche} and review placement suitability."),("Creator and placement review","Review eligible placements manually; do not infer audience demographics."),("Consented site signals","Check consent, eligibility and measurement before audience use.")],"tests":[("topic_video","Topic-context video","Test video beside relevant {niche} content."),("creator_shortlist","Creator placement shortlist","Test manually reviewed eligible placements."),("verified_measurement","Verified measurement","Use conversion goals after destination/events are validated.")],"retargeting":"Remarketing and audience expansion need eligibility and consent checks."},
+ "pinterest":{"strategy":"Use visual discovery and explicit topic/keyword intent; seasonal relevance needs evidence.","signals":[("Visual search keywords","Explore keywords around {niche} and validate query quality."),("Topic context","Use supported non-sensitive categories after availability review."),("Seasonal intent evidence","Use seasonal patterns only with current supporting observations.")],"tests":[("visual_keywords","Keyword-led discovery","Test visual creative against {niche} keyword themes."),("topic_context","Topic-context discovery","Test supported topics with the same destination and measurement window."),("practical_checklist","Practical checklist","Test a useful checklist angle for {audience}.")],"retargeting":"Activate no audience until source permission, consent and eligibility are verified."},
+ "reddit":{"strategy":"Prioritize community and topic context with transparent promotion; never infer traits from community membership.","signals":[("Relevant community context","Review community relevance and ad eligibility manually."),("Topic and keyword context","Use available topics/keywords related to {niche}."),("Policy and disclosure fit","Check placement rules and disclosure before launch.")],"tests":[("community_context","Community context","Test a transparent ad in an eligible context for {niche}."),("keyword_context","Keyword context","Compare topics/keywords without changing other conditions."),("educational_angle","Educational creative","Test a helpful educational angle for {audience}.")],"retargeting":"Availability is account- and policy-dependent; no audience is created."},
+ "quora":{"strategy":"Match copy to explicit question/topic intent; do not disguise advertising as organic advice.","signals":[("Question-intent themes","Map real questions about {niche} to useful page content."),("Topic context","Choose available non-sensitive topics relevant to the decision."),("Answer-to-page coherence","Ensure destination addresses the question and discloses affiliate relationships.")],"tests":[("question_intent","Question-intent test","Test question-led copy around a real {niche} problem."),("topic_context","Topic-context test","Test supported topics with the same disclosed destination."),("comparison_help","Comparison-help test","Test neutral comparison criteria for {audience}.")],"retargeting":"Features must be checked in the live account; none are activated."},
+ "x":{"strategy":"Use keyword/conversation context and concise creative; confirm available controls first.","signals":[("Keyword and conversation topics","Use available relevant topics related to {niche}."),("Broad eligible test","Use broad controls only when available and eligible."),("Permissioned engagement","Consider engagement audiences only where capability and consent allow.")],"tests":[("keyword_context","Keyword-context test","Test an explicit {niche} topic."),("broad_eligible","Broad eligible test","Compare broad delivery with the same creative and destination."),("educational_hook","Educational hook","Test a factual question/checklist hook for {audience}.")],"retargeting":"No user-list upload or remarketing without rights, consent and capability checks."},
+ "linkedin":{"strategy":"For professional use cases, test workflow relevance only when suitable; never use sensitive attributes.","signals":[("Professional topic context","Use professional topics/workflow language associated with {niche}."),("Industry or job function","Consider only when relevant and permitted by current rules."),("Company-level fit","Use account fit only for genuine B2B offers and authorized data use.")],"tests":[("professional_context","Professional content context","Test a practical work-related angle for {audience}."),("eligible_role_workflow","Eligible role/workflow","Test relevant permitted professional attributes, not sensitive proxies."),("broad_professional","Broad professional","Compare broad eligible professional delivery if supported.")],"retargeting":"Account-list/website audiences require permissions, consent, suppression and policy review."},
+ "snapchat":{"strategy":"Test mobile-first creative with eligible age/geo settings; do not target minors or assume inventory.","signals":[("Age and offer eligibility","Check legal age and offer restrictions before setting age controls."),("Mobile-first creative","Match vertical creative to {audience}."),("Eligible geography","Use supported regions only; supplied region {region} is unverified.")],"tests":[("broad_vertical","Broad eligible vertical creative","Test a clear vertical creative in eligible placements."),("non_sensitive_interest","Non-sensitive interest","Test supported non-sensitive interests tied to {niche}."),("region_eligible","Region-eligible test","Use only geography permitted by merchant/platform terms.")],"retargeting":"Do not build audiences until consent, age eligibility and suppression are checked."},
+ "native":{"strategy":"Use contextual publisher placements and page semantics; distinguish paid creative from editorial content.","signals":[("Publisher category context","Select approved page categories related to {niche}."),("Placement quality","Use a reviewed placement list and exclude unsafe inventory."),("Landing-page coherence","Ensure destination fulfills the ad promise and labels affiliate promotion.")],"tests":[("contextual_category","Contextual category","Test a reviewed publisher category related to {niche}."),("placement_shortlist","Placement shortlist","Compare manually curated eligible placements."),("editorial_fit","Editorial-fit creative","Test a factual angle for {audience} without implying endorsement.")],"retargeting":"Remarketing needs provider capability, consent, retention and opt-out checks."},
+}
+_OBJECTIVE_EVENT_HINT = {"traffic":"landing_page_view","leads":"qualified_lead","sales":"confirmed_conversion","awareness":"reach_or_completed_view"}
+
+def _split_targeting_budget(total: Decimal | None, parts: int) -> list[str | None]:
+    if total is None:
+        return [None] * parts
+    cents = int((total * Decimal("100")).to_integral_value())
+    quotient, remainder = divmod(cents, parts)
+    return [f"{Decimal(quotient + (1 if index < remainder else 0)) / Decimal('100'):.2f}" for index in range(parts)]
+
+def _build_targeting_plan(*, platform: str, niche: str, audience: str, region: str, objective: str, platform_daily_budget: Decimal | None) -> dict[str, Any]:
+    profile = _TARGETING_GUIDANCE[platform]
+    budgets = _split_targeting_budget(platform_daily_budget, len(profile["tests"]))
+    signals = [
+        {"name": name, "rationale": rationale.format(niche=niche, audience=audience, region=region),
+         "availability_status": "not_checked", "authorization_status": "not_verified"}
+        for name, rationale in profile["signals"]
+    ]
+    tests = []
+    for index, (test_id, name, hypothesis) in enumerate(profile["tests"]):
+        tests.append({
+            "id": test_id,
+            "name": name,
+            "hypothesis": hypothesis.format(niche=niche, audience=audience, region=region),
+            "suggested_daily_budget_usd": budgets[index],
+            "budget_status": "planning_only" if budgets[index] is not None else "budget_not_set",
+            "spend_authorized": False,
+            "primary_measurement_event_hypothesis": _OBJECTIVE_EVENT_HINT[objective],
+            "measurement_event_status": "not_configured_or_verified",
+            "decision_status": "hypothesis_requires_human_review",
+        })
+    return {
+        "framework": "platform_targeting_hypotheses_v1",
+        "strategy": profile["strategy"],
+        "platform_feature_availability": "not_checked",
+        "region_input": {"value": region, "status": "operator_supplied_not_verified"},
+        "recommended_signals": signals,
+        "audience_tests": tests,
+        "retargeting_guidance": profile["retargeting"],
+        "guardrails": [
+            "Never target sensitive personal traits, protected classes, or inferred proxies for them.",
+            "Use first-party lists only with documented purpose, lawful basis, consent where required and suppression/opt-out handling.",
+            "Verify offer geography, age eligibility, provider policy, account permissions and targeting controls before launch.",
+            "Use verified events and documented attribution windows; do not infer conversions from clicks alone.",
+            "This planner does not create audiences, upload data, launch campaigns, pause campaigns, scale spend or execute external actions.",
+        ],
+        "optimization": {"mode":"human_review_only","auto_pause_enabled":False,"auto_scale_enabled":False,
+            "stop_loss":{"status":"not_active_until_verified_events_thresholds_and_explicit_approval_exist","automatic_actions_enabled":False}},
+        "requires_policy_review": True,
+        "requires_measurement_review": True,
+        "external_actions_executed": False,
+    }
+
+
 _ANGLE_TEMPLATES = (
     {
         "key": "decision_checklist",
@@ -179,6 +248,8 @@ def build_ad_campaign_plan(payload: AdCampaignPlanRequest) -> dict[str, Any]:
         f"compare {niche} options",
         f"{niche} checklist",
     ]
+    allocations = _budget_allocations(payload.daily_budget_usd, platforms)
+    allocation_by_platform = {item["platform"]: Decimal(item["daily_budget_usd"]) for item in allocations}
     platform_plans: list[dict[str, Any]] = []
     for platform in platforms:
         profile = _PLATFORM_PROFILES[platform]
@@ -259,13 +330,17 @@ def build_ad_campaign_plan(payload: AdCampaignPlanRequest) -> dict[str, Any]:
                 "provider_write_access_verified": False,
                 "format": profile["format"],
                 "adaptation_notes": profile["adaptation"],
+                "targeting_plan": _build_targeting_plan(
+                    platform=platform, niche=niche, audience=audience, region=region,
+                    objective=payload.objective,
+                    platform_daily_budget=(allocation_by_platform[platform] if payload.daily_budget_usd > 0 else None),
+                ),
                 "keyword_seeds": seed_keywords if platform == "google_search" else [],
                 "creatives": creatives,
                 "external_actions_executed": False,
             }
         )
 
-    allocations = _budget_allocations(payload.daily_budget_usd, platforms)
     budget_status = "planning_only_budget_supplied" if payload.daily_budget_usd > 0 else "budget_not_set"
     landing_url_status = (
         "provided_not_fetched_or_verified" if payload.landing_page_url else "not_provided"

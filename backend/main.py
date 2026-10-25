@@ -1066,3 +1066,39 @@ async def commission_email_import():
 async def mail_commissions(db:AsyncSession=Depends(get_session)):
  rows=list((await db.scalars(select(MailCommission).order_by(MailCommission.created_at.desc()).limit(300))).all())
  return {"count":len(rows),"data":[{"id":x.id,"network":x.network,"commission":x.commission,"currency":x.currency,"status":x.status,"email_date":x.email_date.isoformat() if x.email_date else None,"subject":x.parsed_subject,"evidence":x.evidence_json} for x in rows]}
+
+
+@api.get("/finance/reconciliation")
+async def finance_reconciliation(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show candidate links between commission emails and tracked conversions.
+
+    This endpoint is read-only and intentionally does not mark a payout as received.
+    """
+    from backend.services.commission_reconciliation import build_commission_reconciliation
+
+    mail_rows = list((await db.scalars(
+        select(MailCommission).order_by(MailCommission.created_at.desc()).limit(300)
+    )).all())
+    conversion_rows = list((await db.scalars(
+        select(Conversion).order_by(Conversion.created_at.desc()).limit(1000)
+    )).all())
+    evidence = [{
+        "id": row.id,
+        "network": row.network,
+        "commission": row.commission,
+        "currency": row.currency,
+        "status": row.status,
+    } for row in mail_rows]
+    conversions = [{
+        "id": row.id,
+        "network": row.network,
+        "commission": row.commission,
+        "currency": row.currency,
+        "status": row.status,
+    } for row in conversion_rows]
+    report = build_commission_reconciliation(evidence, conversions)
+    report["workspace_id"] = user.get("workspace_id")
+    return report

@@ -139,21 +139,9 @@ async def test_postgres_serializes_concurrent_full_conversion_reversals(monkeypa
                 assert reversal_entry.entry_type == "reversal"
                 assert reversal_entry.evidence_status == "signed_webhook_verified"
     finally:
-        if workspace_id:
-            async with engine.begin() as connection:
-                await connection.execute(
-                    delete(ConversionLedgerEntry).where(ConversionLedgerEntry.workspace_id == workspace_id)
-                )
-                await connection.execute(
-                    delete(Conversion).where(Conversion.workspace_id == workspace_id)
-                )
-                await connection.execute(
-                    delete(ClickEvent).where(ClickEvent.workspace_id == workspace_id)
-                )
-                await connection.execute(
-                    delete(Campaign).where(Campaign.workspace_id == workspace_id)
-                )
-                await connection.execute(delete(Workspace).where(Workspace.id == workspace_id))
+        # PostgreSQL CI provisions a disposable database per run. Leave UUID-scoped
+        # fixtures intact rather than bypassing the append-only ledger trigger.
+        pass
 
 
 @pytest.mark.asyncio
@@ -211,9 +199,6 @@ async def test_postgres_conversion_ledger_rejects_direct_update_and_delete(monke
             assert persisted.status == "approved"
             assert persisted.commission_amount == Decimal("2.340000")
     finally:
-        if workspace_id:
-            async with engine.begin() as connection:
-                await connection.execute(
-                    delete(ConversionLedgerEntry).where(ConversionLedgerEntry.workspace_id == workspace_id)
-                )
-                await connection.execute(delete(Workspace).where(Workspace.id == workspace_id))
+        # PostgreSQL CI provisions a disposable database per run; immutable ledger
+        # observations are intentionally not deleted during test teardown.
+        pass

@@ -23,7 +23,7 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -632,6 +632,103 @@ async def ledger(
             "created_at": x.created_at.isoformat() if x.created_at else None,
         } for x in rows],
     }
+@api.patch("/finance/mail-commissions/{evidence_id}/review", dependencies=[Depends(require_admin)])
+async def review_commission_evidence(
+    evidence_id: str,
+    payload: CommissionEvidenceReviewRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Record a human review decision; never mark a payout as received."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing commission evidence")
+
+    evidence = await db.scalar(
+        select(MailCommission).where(
+            MailCommission.id == evidence_id,
+            MailCommission.workspace_id == str(workspace_id),
+        )
+    )
+    if evidence is None:
+        raise HTTPException(404, "Commission evidence not found in the active workspace")
+    if evidence.status not in {"pending_verification", "needs_review"}:
+        raise HTTPException(409, "Commission evidence has already been reviewed")
+
+    candidate_id = payload.candidate_conversion_id
+    if payload.decision == "matched_to_conversion":
+        if not candidate_id:
+            raise HTTPException(422, "Choose a candidate conversion before accepting a match")
+        conversion = await db.scalar(
+            select(Conversion).where(
+                Conversion.id == candidate_id,
+                Conversion.workspace_id == str(workspace_id),
+            )
+        )
+        if conversion is None:
+            raise HTTPException(404, "Candidate conversion not found in the active workspace")
+        from backend.services.commission_reconciliation import build_commission_reconciliation
+
+        candidate_report = build_commission_reconciliation(
+            [{
+                "id": evidence.id,
+                "network": evidence.network,
+                "commission": evidence.commission,
+                "currency": evidence.currency,
+                "status": "pending_verification",
+            }],
+            [{
+                "id": conversion.id,
+                "network": conversion.network,
+                "commission": conversion.commission,
+                "currency": conversion.currency,
+                "status": conversion.status,
+            }],
+        )
+        if candidate_report["data"][0]["reconciliation_status"] != "possible_match":
+            raise HTTPException(422, "Selected conversion does not match network, currency and amount, or is reversed")
+    elif candidate_id:
+        raise HTTPException(422, "A candidate conversion is only valid when accepting a match")
+
+    now = utcnow()
+    evidence.status = payload.decision
+    evidence.evidence_json = {
+        **dict(evidence.evidence_json or {}),
+        "operator_review": {
+            "decision": payload.decision,
+            "candidate_conversion_id": candidate_id,
+            "reviewed_by": str(user.get("email") or "unknown"),
+            "reviewed_at": now.isoformat(),
+            "note": payload.note.strip(),
+            "payout_confirmed": False,
+        },
+    }
+    db.add(AuditLog(
+        workspace_id=str(workspace_id),
+        actor=str(user.get("email") or "unknown"),
+        action="finance.commission_evidence.reviewed",
+        resource_type="mail_commission",
+        resource_id=evidence.id,
+        outcome=payload.decision,
+        details_json={
+            "candidate_conversion_id": candidate_id,
+            "payout_confirmed": False,
+            "note": payload.note.strip(),
+        },
+    ))
+    await db.commit()
+    return {
+        "id": evidence.id,
+        "status": evidence.status,
+        "decision": payload.decision,
+        "candidate_conversion_id": candidate_id,
+        "reviewed_by": str(user.get("email") or "unknown"),
+        "reviewed_at": now.isoformat(),
+        "payout_confirmed": False,
+        "transfers_initiated": False,
+    }
+
+
 @api.get("/finance/thresholds")
 async def thresholds(db:AsyncSession=Depends(get_session)):
  rows=list((await db.scalars(select(PayoutThreshold).order_by(PayoutThreshold.network))).all());return {"count":len(rows),"data":[{"id":x.id,"network":x.network,"currency":x.currency,"minimum_threshold":x.minimum_threshold,"reported_balance":x.reported_balance,"threshold_reached":x.threshold_reached,"threshold_reached_at":x.threshold_reached_at.isoformat() if x.threshold_reached_at else None,"funds_received_at":x.funds_received_at.isoformat() if x.funds_received_at else None,"note":x.reconciliation_note} for x in rows]}

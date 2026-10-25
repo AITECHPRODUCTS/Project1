@@ -150,6 +150,17 @@ class FundsReceivedRequest(BaseModel):
     reconciliation_note: str = Field(default="", max_length=4000)
 
 
+class CommissionEvidenceReviewRequest(BaseModel):
+    decision: Literal[
+        "matched_to_conversion",
+        "not_a_match",
+        "needs_review",
+        "rejected_as_unreliable",
+    ]
+    candidate_conversion_id: str | None = Field(default=None, min_length=1, max_length=36)
+    note: str = Field(default="", max_length=4000)
+
+
 
 AdPlatform = Literal[
     "google_search",

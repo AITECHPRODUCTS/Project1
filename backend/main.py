@@ -997,6 +997,8 @@ async def ads_plan(
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before creating an ad plan")
     plan = await generate_ad_campaign_plan(payload)
     db.add(
         AdCampaignPlanRecord(
@@ -1035,8 +1037,11 @@ async def ads_plan(
 @api.get("/ads/plans")
 async def list_ad_plans(
     limit: int = Query(50, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before listing ad plans")
     rows = list((await db.scalars(
         select(AdCampaignPlanRecord)
         .order_by(AdCampaignPlanRecord.created_at.desc())
@@ -1071,8 +1076,11 @@ async def list_ad_plans(
 @api.get("/ads/plans/{plan_id}")
 async def get_ad_plan(
     plan_id: str,
+    user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before viewing an ad plan")
     row = await db.scalar(
         select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == plan_id)
     )
@@ -1101,6 +1109,8 @@ async def create_ad_observation(
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before recording ad observations")
     if payload.campaign_plan_id:
         plan = await db.scalar(
             select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == payload.campaign_plan_id)
@@ -1169,8 +1179,11 @@ async def create_ad_observation(
 @api.get("/ads/observations")
 async def list_ad_observations(
     limit: int = Query(100, ge=1, le=500),
+    user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before listing ad observations")
     rows = list((await db.scalars(
         select(AdPerformanceObservation)
         .order_by(AdPerformanceObservation.created_at.desc())
@@ -1205,8 +1218,11 @@ async def list_ad_observations(
 @api.get("/ads/performance")
 async def get_ad_performance(
     limit: int = Query(250, ge=1, le=1000),
+    user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before reading ad performance")
     rows = list((await db.scalars(
         select(AdPerformanceObservation)
         .order_by(AdPerformanceObservation.observed_at.desc())
@@ -1221,7 +1237,12 @@ async def get_ad_performance(
 
 
 @api.post("/ads/evaluate")
-async def ads_evaluate(p:dict[str,Any]):
+async def ads_evaluate(
+    p: dict[str, Any],
+    user: dict[str, Any] = Depends(require_auth),
+):
+ if not user.get("workspace_id"):
+  raise HTTPException(403, "Select an authorized workspace before evaluating ad performance")
  try:d=evaluate_roas(str(p["campaign_id"]),float(p["spend"]),float(p["commission"]),float(p.get("threshold",1.2)))
  except (KeyError,ValueError,TypeError) as exc:raise HTTPException(422,"campaign_id, spend and commission are required numeric values") from exc
  return {"campaign_id":d.campaign_id,"roas":d.roas,"threshold":d.threshold,"pause_recommended":d.pause_recommended,"executed":False,"reason":d.reason}

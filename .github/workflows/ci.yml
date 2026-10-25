@@ -197,3 +197,28 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "lockfile_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           fi
+
+
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python dependency audit tool
+        run: python -m pip install --upgrade pip pip-audit
+      - name: Audit core runtime and test dependency graph
+        run: pip-audit -r requirements-dev.txt
+      - name: Audit optional AI and RAG dependency graph
+        run: pip-audit -r requirements-ai.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies from the committed lockfile
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Audit frontend dependency graph
+        working-directory: frontend
+        run: npm audit --audit-level=high

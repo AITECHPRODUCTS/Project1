@@ -13,7 +13,7 @@
 | R-09 | Provider catalogue | `config.yaml`, `backend/services/integration_registry.py` | catalogued/partial | Per-provider live auth, scope, contract and health evidence |
 | R-10 | Autopilot truth table | `backend/services/capability_matrix.py`, `GET /api/capabilities` | implemented, not environment-verified | UI/API end-to-end and provider state sync |
 | R-11 | Responsive control center | `frontend/app/page.tsx`, `frontend/components/FlywheelVisualizer.tsx` | present, unverified | Multi-viewport browser and accessibility UAT |
-| R-12 | Production schema | `migrations/versions/0001_initial_schema.py`, CI migration gate | in test | PostgreSQL upgrade/drift/restore |
+| R-12 | Production schema | `migrations/versions/0001_initial_schema.py`; exact-SHA CI at `e6e6eb4e552b4887da252db0df172dd25ee79561` | PostgreSQL upgrade/downgrade/drift and reversal integration pass in push/PR runs | Production backup/restore rehearsal, rollback evidence and deployed database operations |
 | R-13 | Tenant SaaS | `backend/models.py`, `backend/main.py` | major gap | Workspace schema, row-level scope and cross-tenant tests |
 | R-14 | Platform Super Admin | requirements and current global admin gaps | not implemented end-to-end | Separate platform RBAC, tenant/incident/kill switch UI |
 | R-15 | All 53 skills | `../skill-parity-matrix.csv` | 47 partial, 6 not implemented | Implement and verify each skill service/API/UI/provider path |
@@ -21,4 +21,6 @@
 
 | R-17 | Affiliate portfolio operations | `backend/services/multi_program_manager.py`, `POST /api/automation/multi-program-manager` | partial | Authorized network data and payout reconciliation, attribution quality, program-action UAT |
 
-| R-18 | P0 — pinned skill source/traceability | knowledge/affiliate-skills/upstream/SOURCE_MANIFEST.json, 53 vendored skill documents, scripts/verify_skill_registry.py, repo-guard CI | implemented source inventory; exact-SHA guard run pending for this commit; 47 partial / 6 not implemented at app-runtime level | Guard/test proof on new SHA; each skill's actual service/API/UI/provider acceptance remains independently required |
+| R-18 | P0 — pinned skill source/traceability | `knowledge/affiliate-skills/upstream/SOURCE_MANIFEST.json`; 53 vendored skill documents; `scripts/verify_skill_registry.py`; repo-guard CI on `e6e6eb4e552b4887da252db0df172dd25ee79561` | source integrity and registry/status parity guard passed on exact push/PR SHA; runtime 47 partial / 6 not implemented | Per-skill service/API/UI/provider acceptance, retrieval evaluation and provider authorization remain independently required |
+
+| R-19 | P0 — reproducible frontend dependencies | `frontend/package-lock.json` (npm lockfile v3, 141 packages); `npm ci` typecheck/build on exact SHA `e6e6eb4e552b4887da252db0df172dd25ee79561` | implemented and CI-verified on push/PR; lockfile-sync passed on push | Continue running `npm ci`; add SBOM/license/secret scans and keep dependency audit findings remediated |

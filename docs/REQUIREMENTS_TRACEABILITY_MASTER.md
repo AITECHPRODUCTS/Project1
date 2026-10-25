@@ -61,3 +61,12 @@
 | Traffic analyzer | backend/services/traffic_analyzer.py; TrafficAnalysisRequest; POST /api/research/traffic-analyzer; frontend/app/page.tsx; tests/test_traffic_analyzer.py | transparent weighted traffic and engagement score for operator-supplied metrics, with normalized missing components and review-only comparison | SimilarWeb or another authorized analytics provider, verified/dated traffic and region data, advertiser legitimacy verification and browser UAT |
 
 | Upstream skill source and registry parity | knowledge/affiliate-skills/upstream/; knowledge/affiliate-skills/upstream/SOURCE_MANIFEST.json; scripts/verify_skill_registry.py; .github/workflows/ci.yml repo-guard job | source definitions and pinned registry vendored; runtime status remains independent (47 partial, 6 not implemented) | exact-SHA repo-guard workflow, app-level end-to-end acceptance for each skill, retrieval evaluation, provider authorization, lockfile/security/UAT gates |
+
+
+## 2026-10-25 resumed checkpoint — lockfile and exact-SHA evidence
+- Current verified HEAD before the security-audit increment: `e6e6eb4e552b4887da252db0df172dd25ee79561` on the only implementation branch `build/omni-affiliate-os-production`.
+- Hosted push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213802242 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213808545 both succeeded. The push run included a passing lockfile-sync job; the PR skipped that write-capable job by design.
+- Frontend reproducibility is no longer blocked by missing lockfile: `frontend/package-lock.json` (npm lockfile v3, 141 resolved packages) is committed and regular CI runs `npm ci`, typecheck and a production build.
+- The source/parity guard still reports 53 upstream skill definitions with app-runtime status 47 partial, 6 not implemented and 0 fully end-to-end complete.
+- Next P0 gate is dependency auditing: a dedicated workflow job now runs pip-audit for the core/test and optional AI/RAG profiles and npm audit at high severity. The audit result is pending until the new workflow completes. Do not mark it passed just because the job is configured.
+- Product readiness remains NOT RELEASE READY pending audit remediation, broader tenant/RBAC and worker security, secret scanning/SBOM, browser UAT, official provider-contract tests, deployment/staging, backup/restore and rollback.

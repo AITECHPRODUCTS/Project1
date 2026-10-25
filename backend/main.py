@@ -23,12 +23,13 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
+from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
@@ -476,6 +477,23 @@ async def offers_sync(q:str|None=None,limit:int=Query(100,ge=1,le=200),db:AsyncS
   else:updated+=1
   row.name=item["name"];row.url=item.get("url");row.category=item.get("category");row.description=item.get("description","");row.reward_type=item.get("reward_type");row.reward_value=item.get("reward_value");row.cookie_days=item.get("cookie_days");row.traffic_score=item.get("traffic_score");row.source_stars=item.get("stars_count");row.verified=bool(item.get("verified"));raw=item.get("raw") or {};row.source_url=raw.get("source_url") if isinstance(raw,dict) else None;metrics=compute_offer_metrics({"reward_type":row.reward_type,"reward_value":row.reward_value,"gravity_score":raw.get("gravity_score",raw.get("gravity"))});row.gravity_score=metrics["gravity_score"];row.normalized_gravity=metrics["normalized_gravity"];row.epc=metrics["epc"];row.conversion_rate=metrics["conversion_rate"];row.recurring_commission=metrics["recurring_commission"];row.metadata_json={"tags":item.get("tags",[])}
  await db.commit();return {"created":created,"updated":updated,"registry_total":data.get("registry_total"),"traffic_score_note":"Unknown unless upstream actually supplies the field."}
+@api.post("/research/seo-audit")
+async def research_seo_audit(
+    payload: SEOAuditRequest,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    """Audit one public page without crawling, publishing or asserting ranking outcomes."""
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before running an SEO audit")
+    try:
+        return await audit_public_page_service(payload.url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Public page SEO audit failed (%s)", type(exc).__name__)
+        raise HTTPException(502, "The public page could not be safely fetched or analyzed") from exc
+
+
 @api.post("/research/niches")
 async def research_niches(p:NicheFinderRequest):return {"results":monopoly_niche_finder(p.candidates,top_n=p.top_n)}
 @api.post("/research/competitors")

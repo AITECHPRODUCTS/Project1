@@ -452,3 +452,31 @@ class ContentAngleRankRequest(BaseModel):
         if not normalized and value:
             raise ValueError("Context must not be blank")
         return normalized
+
+
+class SEOAuditRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=2048)
+
+    @field_validator("url")
+    @classmethod
+    def validate_public_http_url(cls, value: str) -> str:
+        normalized = value.strip()
+        try:
+            parsed = urlparse(normalized)
+            host = (parsed.hostname or "").lower().rstrip(".")
+        except ValueError as exc:
+            raise ValueError("Provide a valid absolute public HTTP(S) URL") from exc
+        if parsed.scheme not in {"http", "https"} or not host:
+            raise ValueError("Provide a valid absolute public HTTP(S) URL")
+        if parsed.username or parsed.password:
+            raise ValueError("URLs containing credentials are not allowed")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local/private hostnames are not allowed")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private, loopback, link-local, multicast or reserved URL hosts are not allowed")
+        return normalized
+

@@ -3,7 +3,7 @@ analytics/ab-test-generator,S6,partial,backend/services/analytics_utils.py; back
 analytics/conversion-tracker,S6,partial,backend/services/analytics_utils.py,Provider reconciliation and privacy review remain
 analytics/internal-linking-optimizer,S3,not_implemented,,No tested CMS crawl index
 analytics/performance-report,S6,partial,backend/main.py,No verified platform spend sync
-analytics/seo-audit,S3,not_implemented,,No crawler and technical SEO baseline
+analytics/seo-audit,S3,partial,backend/services/seo_audit.py; backend/schemas.py; backend/main.py POST /api/research/seo-audit; frontend/app/page.tsx; tests/test_seo_audit.py; tests/test_seo_audit_api.py,"Read-only single-page technical checklist for title/meta/headings/canonical/robots/alt text/internal links; no crawling or ranking forecast; Search Console and CMS-wide crawl remain unimplemented"
 automation/content-repurposer,S5,partial,backend/services/content_atomizer.py; POST /api/content/atomize,Platform-native draft generation and workspace-persisted assets added; scheduler/approval/publishing orchestration remains
 automation/email-automation-builder,S5,partial,backend/services/email_delivery.py,No visual branching automation editor
 automation/multi-program-manager,S1,not_implemented,,Network-specific account workflow coverage missing

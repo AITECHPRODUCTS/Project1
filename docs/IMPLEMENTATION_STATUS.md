@@ -214,3 +214,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The first PostgreSQL 16 run exposed an existing migration identifier that exceeded PostgreSQL's 63-character identifier limit: `fk_ad_performance_observations_campaign_plan_id_ad_campaign_plans`.
 - Applied the same stable short constraint name `fk_ad_perf_obs_campaign_plan` to both Alembic revision 0004 and the ORM model metadata. This preserves the FK target and ON DELETE SET NULL behavior.
 - Verification is pending on the new exact candidate SHA; do not consider the PostgreSQL gate repaired until migration, drift, rollback/upgrade and concurrent reversal test all pass.
+
+
+## 2026-10-25 PostgreSQL CI repair — Alembic revision storage width
+- The next PostgreSQL 16 run exposed a second SQLite-invisible migration defect: Alembic's default `alembic_version.version_num VARCHAR(32)` could not store the existing revision identifier `0005_workspace_scoped_conversion_identity`.
+- Revision 0005 now widens that internal bookkeeping column to VARCHAR(255) on PostgreSQL before Alembic attempts to stamp the revision. SQLite continues on its existing path because its schema does not enforce the VARCHAR length; no business table data or revision identifiers are changed.
+- Verification is pending on the new exact candidate SHA. The prior PG failure is retained as evidence; require the complete PostgreSQL migrate/drift/rollback/upgrade and concurrent-webhook test to pass before accepting this repair.

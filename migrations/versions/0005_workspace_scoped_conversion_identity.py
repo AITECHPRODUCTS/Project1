@@ -15,6 +15,15 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic creates version_num as VARCHAR(32). This project’s stable revision
+    # identifiers exceed that limit, which PostgreSQL enforces (unlike SQLite).
+    # Widen the bookkeeping column before Alembic stamps this revision.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE alembic_version "
+            "ALTER COLUMN version_num TYPE VARCHAR(255)"
+        )
     with op.batch_alter_table("conversions", recreate="auto") as batch_op:
         batch_op.drop_constraint("uq_conversion_network_external_event", type_="unique")
         batch_op.create_index(

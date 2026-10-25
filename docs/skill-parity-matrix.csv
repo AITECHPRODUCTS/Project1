@@ -7,7 +7,7 @@ analytics/seo-audit,S3,partial,backend/services/seo_audit.py; backend/schemas.py
 automation/content-repurposer,S5,partial,backend/services/content_atomizer.py; POST /api/content/atomize,Platform-native draft generation and workspace-persisted assets added; scheduler/approval/publishing orchestration remains
 automation/email-automation-builder,S5,partial,backend/services/email_delivery.py,No visual branching automation editor
 automation/multi-program-manager,S1,not_implemented,,Network-specific account workflow coverage missing
-automation/paid-ad-copy-writer,S5,partial,backend/services/s2_s3_content.py,No provider-native claim review
+automation/paid-ad-copy-writer,S5,partial,backend/services/s2_s3_content.py; backend/services/ad_planner.py; backend/schemas.py; POST /api/ads/plan; frontend/app/page.tsx; tests/test_ad_planner.py,Platform targeting hypotheses and audience test budgets are review-only; provider authorization and automatic optimization remain unimplemented
 automation/proprietary-data-generator,S8,not_implemented,,No validated proprietary dataset pipeline
 blog/affiliate-blog-builder,S3,partial,backend/services/s2_s3_content.py,No grounded publication acceptance evidence
 blog/comparison-post-writer,S3,partial,backend/services/s2_s3_content.py,Product evidence and comparative tests missing

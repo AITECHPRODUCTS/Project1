@@ -16,3 +16,7 @@ Each vertical slice includes migration/model, business service, typed API, autho
 
 ## External blocker policy
 When an API, credential, platform approval or production secret is unavailable, ship the complete safe boundary and mark the capability precisely (`not_configured`, `manual_provider_flow`, `approval_required`, `not_supported`); never fake success. This build’s chosen target is the user-directed public `AITECHPRODUCTS/Project1`, despite earlier prompts preferring a private repository; protect that public repo accordingly.
+
+## Continuous-build thumb rule — added 2026-10-25
+
+- Continue the highest-priority unblocked implementation slice without asking the user to repeat the master command or issue another instruction. Review prior chats and available attachments first, build code and regression tests on the one Project1 build branch, run hosted workflows and fix failures, then update traceability and status. A scheduled ZIP reminder does not pause implementation. On receipt of the live-application ZIP, audit it and port selected code only after compatibility, security, license and test review.

@@ -10,3 +10,6 @@
 
 ## Important limitations
 This repository does **not** yet contain a byte-for-byte mirror of every source archive, every original source-of-truth file, or all 53 upstream `SKILL.md` files. The requirement pack in `docs/requirements/v4/` is a distilled engineering contract; it must not be misrepresented as the complete raw attachment corpus. Runtime parity is recorded separately in `docs/skill-parity-matrix.csv`. No provider is production-verified just because a catalogue entry or adapter scaffold is present.
+
+## 2026-10-25 continuation note
+- The user advised that a ZIP of an already-live application will be supplied later on 2026-10-25. It is not yet available in this repository, so no claim is made that its code has been reviewed. A reminder is scheduled for 18:30 Asia/Kolkata. Continue from the available requirements and code until the file is provided; then audit and port selected code safely.

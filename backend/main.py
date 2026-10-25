@@ -664,13 +664,54 @@ async def public_lead_capture(request:Request,db:AsyncSession=Depends(get_sessio
  if "application/json" in request.headers.get("accept",""):return result
  return HTMLResponse("<!doctype html><html><body style='font-family:system-ui;background:#f8fafc;padding:48px;color:#1e293b'><h1>You're on the list</h1><p>Your consent-based email sequence was queued.</p></body></html>",status_code=201)
 @api.get("/leads")
-async def leads(db:AsyncSession=Depends(get_session)):
- rows=list((await db.scalars(select(Lead).order_by(Lead.created_at.desc()).limit(200))).all());return {"count":len(rows),"data":[{"id":x.id,"email":x.email,"lead_magnet":x.lead_magnet,"consented_at":x.consent_at.isoformat(),"unsubscribed":x.unsubscribed_at is not None,"purchased":x.purchased_at is not None} for x in rows]}
+async def leads(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing leads")
+    rows = list((await db.scalars(
+        select(Lead).where(Lead.workspace_id == str(workspace_id))
+        .order_by(Lead.created_at.desc()).limit(200)
+    )).all())
+    return {"count": len(rows), "data": [
+        {"id": x.id, "email": x.email, "lead_magnet": x.lead_magnet,
+         "consented_at": x.consent_at.isoformat(), "unsubscribed": x.unsubscribed_at is not None,
+         "purchased": x.purchased_at is not None}
+        for x in rows
+    ]}
+
+
 @api.get("/email/queue")
-async def email_queue(db:AsyncSession=Depends(get_session)):
- rows=list((await db.scalars(select(ScheduledEmail).order_by(ScheduledEmail.send_at.desc()).limit(250))).all());return {"count":len(rows),"data":[{"id":x.id,"lead_id":x.lead_id,"day":x.sequence_day,"subject":x.subject,"send_at":x.send_at.isoformat(),"status":x.status,"attempts":x.attempts,"last_error":x.last_error} for x in rows]}
-@api.post("/email/worker/run")
-async def email_worker():return await send_due_emails()
+async def email_queue(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing the email queue")
+    rows = list((await db.scalars(
+        select(ScheduledEmail).where(ScheduledEmail.workspace_id == str(workspace_id))
+        .order_by(ScheduledEmail.send_at.desc()).limit(250)
+    )).all())
+    return {"count": len(rows), "data": [
+        {"id": x.id, "lead_id": x.lead_id, "day": x.sequence_day, "subject": x.subject,
+         "send_at": x.send_at.isoformat(), "status": x.status, "attempts": x.attempts,
+         "last_error": x.last_error}
+        for x in rows
+    ]}
+
+
+@api.post("/email/worker/run", dependencies=[Depends(require_admin)])
+async def email_worker(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before running the email worker")
+    return await send_due_emails(db, workspace_id=str(workspace_id))
 @api.post("/analytics/conversions")
 async def conversion_create(p:ConversionRequest,db:AsyncSession=Depends(get_session)):
  network=p.network.lower();existing=await db.scalar(select(Conversion.id).where(Conversion.network==network,Conversion.external_event_id==p.external_event_id))
@@ -1002,16 +1043,75 @@ async def review_commission_evidence(
 
 
 @api.get("/finance/thresholds")
-async def thresholds(db:AsyncSession=Depends(get_session)):
- rows=list((await db.scalars(select(PayoutThreshold).order_by(PayoutThreshold.network))).all());return {"count":len(rows),"data":[{"id":x.id,"network":x.network,"currency":x.currency,"minimum_threshold":x.minimum_threshold,"reported_balance":x.reported_balance,"threshold_reached":x.threshold_reached,"threshold_reached_at":x.threshold_reached_at.isoformat() if x.threshold_reached_at else None,"funds_received_at":x.funds_received_at.isoformat() if x.funds_received_at else None,"note":x.reconciliation_note} for x in rows]}
-@api.post("/finance/thresholds",dependencies=[Depends(require_admin)],status_code=201)
-async def threshold_create(p:PayoutThresholdCreateRequest,db:AsyncSession=Depends(get_session)):
- row=PayoutThreshold(network=p.network,currency=p.currency,minimum_threshold=p.minimum_threshold,reported_balance=p.reported_balance,reconciliation_note=p.reconciliation_note);row.threshold_reached=row.reported_balance>=row.minimum_threshold;row.threshold_reached_at=utcnow() if row.threshold_reached else None;db.add(row);await db.commit();return {"id":row.id,"threshold_reached":row.threshold_reached,"note":"Tracking only; no payout is initiated."}
-@api.post("/finance/thresholds/{threshold_id}/funds-received",dependencies=[Depends(require_admin)])
-async def funds_received(threshold_id:str,p:FundsReceivedRequest,db:AsyncSession=Depends(get_session)):
- row=await db.get(PayoutThreshold,threshold_id)
- if not row:raise HTTPException(404,"Threshold not found")
- row.funds_received_at=p.funds_received_at;row.reconciliation_note=p.reconciliation_note[:4000];await db.commit();return {"id":row.id,"funds_received_at":row.funds_received_at.isoformat(),"transfers_initiated":False}
+async def thresholds(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing payout thresholds")
+    rows = list((await db.scalars(
+        select(PayoutThreshold)
+        .where(PayoutThreshold.workspace_id == str(workspace_id))
+        .order_by(PayoutThreshold.network)
+    )).all())
+    return {"count": len(rows), "data": [
+        {"id": x.id, "network": x.network, "currency": x.currency,
+         "minimum_threshold": x.minimum_threshold, "reported_balance": x.reported_balance,
+         "threshold_reached": x.threshold_reached,
+         "threshold_reached_at": x.threshold_reached_at.isoformat() if x.threshold_reached_at else None,
+         "funds_received_at": x.funds_received_at.isoformat() if x.funds_received_at else None,
+         "note": x.reconciliation_note}
+        for x in rows
+    ]}
+
+
+@api.post("/finance/thresholds", dependencies=[Depends(require_admin)], status_code=201)
+async def threshold_create(
+    p: PayoutThresholdCreateRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating payout thresholds")
+    row = PayoutThreshold(
+        workspace_id=str(workspace_id),
+        network=p.network,
+        currency=p.currency,
+        minimum_threshold=p.minimum_threshold,
+        reported_balance=p.reported_balance,
+        reconciliation_note=p.reconciliation_note,
+    )
+    row.threshold_reached = row.reported_balance >= row.minimum_threshold
+    row.threshold_reached_at = utcnow() if row.threshold_reached else None
+    db.add(row)
+    await db.commit()
+    return {"id": row.id, "threshold_reached": row.threshold_reached, "note": "Tracking only; no payout is initiated."}
+
+
+@api.post("/finance/thresholds/{threshold_id}/funds-received", dependencies=[Depends(require_admin)])
+async def funds_received(
+    threshold_id: str,
+    p: FundsReceivedRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before updating a payout threshold")
+    row = await db.scalar(
+        select(PayoutThreshold).where(
+            PayoutThreshold.id == threshold_id,
+            PayoutThreshold.workspace_id == str(workspace_id),
+        )
+    )
+    if not row:
+        raise HTTPException(404, "Threshold not found")
+    row.funds_received_at = p.funds_received_at
+    row.reconciliation_note = p.reconciliation_note[:4000]
+    await db.commit()
+    return {"id": row.id, "funds_received_at": row.funds_received_at.isoformat(), "transfers_initiated": False}
 @api.post("/ads/plan", status_code=201)
 async def ads_plan(
     payload: AdCampaignPlanRequest,
@@ -1270,8 +1370,24 @@ async def ads_evaluate(
 @api.post("/cms/publish",dependencies=[Depends(require_admin)])
 async def cms(p:CMSPublishRequest):return await publish_article(provider=p.provider,title=p.title,article_html=p.article_html,canonical_url=p.canonical_url,status=p.status,tags=p.tags,disclosure=p.disclosure)
 @api.get("/audit")
-async def audit(limit:int=Query(100,ge=1,le=500),db:AsyncSession=Depends(get_session)):
- rows=list((await db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit))).all());return {"count":len(rows),"data":[{"id":x.id,"actor":x.actor,"action":x.action,"resource_type":x.resource_type,"resource_id":x.resource_id,"outcome":x.outcome,"details":x.details_json,"created_at":x.created_at.isoformat() if x.created_at else None} for x in rows]}
+async def audit(
+    limit: int = Query(100, ge=1, le=500),
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing audit logs")
+    rows = list((await db.scalars(
+        select(AuditLog).where(AuditLog.workspace_id == str(workspace_id))
+        .order_by(AuditLog.created_at.desc()).limit(limit)
+    )).all())
+    return {"count": len(rows), "data": [
+        {"id": x.id, "actor": x.actor, "action": x.action, "resource_type": x.resource_type,
+         "resource_id": x.resource_id, "outcome": x.outcome, "details": x.details_json,
+         "created_at": x.created_at.isoformat() if x.created_at else None}
+        for x in rows
+    ]}
 @api.get("/admin/overview")
 async def platform_admin_overview(
     user: dict[str, Any] = Depends(require_platform_admin),
@@ -1502,9 +1618,23 @@ async def commission_email_import(user: dict[str, Any] = Depends(require_auth)):
  except Exception as exc:raise HTTPException(502,f"Mail import failed: {type(exc).__name__}: {str(exc)[:200]}") from exc
 
 @api.get("/finance/mail-commissions")
-async def mail_commissions(db:AsyncSession=Depends(get_session)):
- rows=list((await db.scalars(select(MailCommission).order_by(MailCommission.created_at.desc()).limit(300))).all())
- return {"count":len(rows),"data":[{"id":x.id,"network":x.network,"commission":x.commission,"currency":x.currency,"status":x.status,"email_date":x.email_date.isoformat() if x.email_date else None,"subject":x.parsed_subject,"evidence":x.evidence_json} for x in rows]}
+async def mail_commissions(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing commission evidence")
+    rows = list((await db.scalars(
+        select(MailCommission).where(MailCommission.workspace_id == str(workspace_id))
+        .order_by(MailCommission.created_at.desc()).limit(300)
+    )).all())
+    return {"count": len(rows), "data": [
+        {"id": x.id, "network": x.network, "commission": x.commission, "currency": x.currency,
+         "status": x.status, "email_date": x.email_date.isoformat() if x.email_date else None,
+         "subject": x.parsed_subject, "evidence": x.evidence_json}
+        for x in rows
+    ]}
 
 
 @api.get("/finance/reconciliation")

@@ -42,17 +42,23 @@ async def capture_lead_and_schedule(session:AsyncSession,*,email_address:str,con
   session.add(ScheduledEmail(lead_id=lead.id,sequence_day=day,subject=subject,body_html=body_html,body_text=body,condition_json={"requires_consent":True,"skip_if_unsubscribed":True,"skip_days_3_4_if_purchased":day>=3,"condition":item["condition"]},send_at=now+timedelta(days=day),status="scheduled"));created+=1
  await session.commit()
  return {"lead_id":lead.id,"emails_scheduled":created,"sequence_days":[x["day"] for x in sequence],"provider":generated["provider"],"delivery_configured":bool(get_settings().resend_api_key and get_settings().resend_from_email),"note":"5-day sequence queued; actual sending requires provider configuration and scheduled worker."}
-async def send_due_emails(session:AsyncSession|None=None,*,limit:int=50)->dict[str,Any]:
+async def send_due_emails(session:AsyncSession|None=None,*,limit:int=50,workspace_id:str|None=None)->dict[str,Any]:
  s=get_settings()
  if not (s.resend_api_key and s.resend_from_email):return {"sent":0,"attempted":0,"provider_configured":False,"reason":"Configure RESEND_API_KEY and RESEND_FROM_EMAIL"}
  own=session is None
  if own:session=SessionLocal()
  assert session is not None;sent=skipped=0;now=datetime.now(timezone.utc)
  try:
-  messages=list((await session.scalars(select(ScheduledEmail).where(ScheduledEmail.status.in_(["scheduled","retry"]),ScheduledEmail.send_at<=now).order_by(ScheduledEmail.send_at).limit(max(1,min(limit,200))))).all())
+  stmt=select(ScheduledEmail).where(ScheduledEmail.status.in_(["scheduled","retry"]),ScheduledEmail.send_at<=now)
+  if workspace_id is not None:
+   stmt=stmt.where(ScheduledEmail.workspace_id==str(workspace_id))
+  messages=list((await session.scalars(stmt.order_by(ScheduledEmail.send_at).limit(max(1,min(limit,200))))).all())
   async with httpx.AsyncClient(timeout=20) as client:
    for message in messages:
-    lead=await session.get(Lead,message.lead_id)
+    if workspace_id is not None:
+     lead=await session.scalar(select(Lead).where(Lead.id==message.lead_id,Lead.workspace_id==str(workspace_id)))
+    else:
+     lead=await session.get(Lead,message.lead_id)
     if not lead or lead.unsubscribed_at:message.status="suppressed";skipped+=1;continue
     if message.condition_json.get("skip_days_3_4_if_purchased") and lead.purchased_at:message.status="suppressed_purchased";skipped+=1;continue
     message.attempts+=1

@@ -115,3 +115,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - A creative-fatigue signal requires four distinct provider-verified observation dates, at least 1,000 impressions and 30 clicks in each two-day comparison window, and a 30% or greater CTR decline. This is a heuristic review flag, not proof of fatigue.
 - Regression tests cover insufficient sample, stop-loss review, scale review, fatigue detection and blocking unverified reports.
 - Trusted provider ingestion, attribution-window maturity, production instrumentation and browser UAT remain pending.
+
+## 2026-10-25 security hardening — finance, leads, email queue and audit
+- Finance threshold balances and commission-email evidence, lead PII, scheduled-email queue details, and audit-log reads now require an authenticated active workspace and explicit workspace filtering.
+- Threshold creation and funds-received annotations now bind to the active workspace; a threshold lookup cannot mutate another tenant's record.
+- The user-triggered email worker now requires a workspace owner/admin, filters queued messages by that workspace, and checks the matching lead record before sending. The internal scheduler keeps its existing system-level behavior when no workspace is supplied.
+- Added route-level regression tests for unauthenticated and no-workspace access across the eight protected endpoints.
+- Hosted tests must pass on the exact candidate SHA. Session/cookie review, production PostgreSQL cross-tenant tests, Resend/provider contract tests and live UAT remain release gates.

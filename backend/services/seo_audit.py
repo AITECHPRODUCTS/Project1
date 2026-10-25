@@ -10,7 +10,7 @@ from backend.services.url_safety import fetch_public_page
 
 
 def _clean_text(value: Any) -> str:
-    return re.sub(r"\\s+", " ", str(value or "")).strip()
+    return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
 def _tag_text(tag: Any) -> str:
@@ -116,7 +116,7 @@ async def audit_public_page(url: str) -> dict[str, Any]:
     content_copy = BeautifulSoup(str(content_root), "html.parser")
     for tag in content_copy(["script", "style", "noscript", "template"]):
         tag.decompose()
-    word_count = len(re.findall(r"\\b[\\w’'-]+\\b", content_copy.get_text(" ", strip=True)))
+    word_count = len(re.findall(r"\b[\w’'-]+\b", content_copy.get_text(" ", strip=True)))
 
     checks: list[dict[str, str]] = []
     if not page_title:

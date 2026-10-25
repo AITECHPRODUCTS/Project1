@@ -299,12 +299,18 @@ def test_conversion_webhook_reverses_original_once_under_row_lock(monkeypatch):
         assert response.json()["reversal"] is True
         assert response.json()["commission_adjustment"] == -1.25
         assert parent.status == "reversed"
-        session.add.assert_called_once()
-        reversal = session.add.call_args.args[0]
+        assert session.add.call_count == 2
+        added = [call.args[0] for call in session.add.call_args_list]
+        reversal = next(value for value in added if isinstance(value, Conversion))
+        ledger_entry = next(value for value in added if isinstance(value, ConversionLedgerEntry))
         assert reversal.status == "reversed"
         assert reversal.commission == -1.25
         assert reversal.revenue == -9.50
         assert reversal.event_json["original_event_id"] == "evt-original-1"
+        assert ledger_entry.entry_type == "reversal"
+        assert ledger_entry.commission_amount == Decimal("-1.250000")
+        assert ledger_entry.revenue_amount == Decimal("-9.500000")
+        assert ledger_entry.original_event_id == "evt-original-1"
         assert "FOR UPDATE" in str(session.scalar.await_args_list[2].args[0]).upper()
         session.commit.assert_awaited_once()
     finally:

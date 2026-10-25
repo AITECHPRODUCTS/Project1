@@ -141,7 +141,7 @@ async def test_postgres_serializes_concurrent_full_conversion_reversals(monkeypa
     finally:
         # PostgreSQL CI provisions a disposable database per run. Leave UUID-scoped
         # fixtures intact rather than bypassing the append-only ledger trigger.
-        pass
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -201,4 +201,4 @@ async def test_postgres_conversion_ledger_rejects_direct_update_and_delete(monke
     finally:
         # PostgreSQL CI provisions a disposable database per run; immutable ledger
         # observations are intentionally not deleted during test teardown.
-        pass
+        await engine.dispose()

@@ -533,6 +533,58 @@ class SEOAuditRequest(BaseModel):
         return normalized
 
 
+class InfographicRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=100)
+    subtitle: str = Field(default="", max_length=180)
+    audience: str = Field(default="", max_length=120)
+    key_points: list[str] = Field(min_length=3, max_length=6)
+    source_urls: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("title", "subtitle", "audience")
+    @classmethod
+    def normalize_infographic_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized and value:
+            raise ValueError("Text must not be blank")
+        return normalized
+
+    @field_validator("key_points")
+    @classmethod
+    def normalize_infographic_points(cls, value: list[str]) -> list[str]:
+        points = list(dict.fromkeys(" ".join(item.split()) for item in value if item and item.strip()))
+        if not 3 <= len(points) <= 6:
+            raise ValueError("Provide between three and six distinct infographic points")
+        if any(len(item) > 220 for item in points):
+            raise ValueError("Each infographic point must be at most 220 characters")
+        return points
+
+    @field_validator("source_urls")
+    @classmethod
+    def validate_infographic_source_urls(cls, value: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(item.strip() for item in value if item and item.strip()))
+        for url in normalized:
+            if len(url) > 2048:
+                raise ValueError("Each source reference URL must be at most 2048 characters")
+            try:
+                parsed = urlparse(url)
+                host = (parsed.hostname or "").lower().rstrip(".")
+            except ValueError as exc:
+                raise ValueError("Source references must be valid absolute HTTP(S) URLs") from exc
+            if parsed.scheme not in {"http", "https"} or not host:
+                raise ValueError("Source references must be valid absolute HTTP(S) URLs")
+            if parsed.username or parsed.password:
+                raise ValueError("Source reference URLs may not contain credentials")
+            if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+                raise ValueError("Local/private source reference hosts are not allowed")
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("Private, loopback, link-local, multicast or reserved source reference hosts are not allowed")
+        return normalized
+
+
 class InternalLinkingRequest(BaseModel):
     urls: list[str] = Field(min_length=2, max_length=12)
     max_suggestions_per_page: int = Field(default=5, ge=1, le=10)

@@ -23,12 +23,13 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
+from backend.services.infographic_generator import build_infographic as build_infographic_service
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
@@ -585,6 +586,50 @@ async def content_angle_rank(
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@api.post("/content/infographic", status_code=201)
+async def create_infographic(
+    payload: InfographicRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Persist a deterministic, review-only SVG infographic in the active workspace."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating an infographic")
+    try:
+        generated = build_infographic_service(
+            title=payload.title,
+            subtitle=payload.subtitle,
+            audience=payload.audience,
+            key_points=payload.key_points,
+            source_urls=payload.source_urls,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    with workspace_scope(str(workspace_id)):
+        asset = ContentAsset(
+            workspace_id=str(workspace_id),
+            asset_type="infographic_svg",
+            title=generated["title"],
+            body=generated["svg"],
+            status="draft",
+            source_urls=generated["source_urls"],
+            metadata_json={
+                "infographic_generator_version": "1",
+                "width": generated["width"],
+                "height": generated["height"],
+                "format": generated["format"],
+                "card_count": len(generated["cards"]),
+                "requires_review": True,
+                "external_image_provider_used": False,
+            },
+        )
+        db.add(asset)
+        await db.commit()
+    return {**generated, "asset_id": asset.id}
 
 
 @api.post("/content/atomize")

@@ -96,3 +96,8 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Ad Studio now captures optional product context and landing-page URL. The planner does not crawl or approve the destination.
 - Added regression tests for channel-specific guidance, audience budget conservation, unset budgets, event hypotheses and safety gates.
 - Hosted CI must pass on the resulting exact candidate SHA before this slice is considered verified. Live provider policies, verified event ingestion, stop-loss execution and browser UAT remain pending.
+
+## 2026-10-25 hardening update — ad analytics authorization
+- Closed an access-control gap in ad plan listing/detail, observations, performance summary and ROAS evaluation routes: they now require an authenticated identity with an active workspace before reading or calculating ad data. Ad plan creation and observation ingestion also reject users without a selected workspace.
+- Added `tests/test_ad_route_access.py` for both unauthenticated access and authenticated-but-no-workspace attempts across the ad routes.
+- New candidate must pass hosted CI on the exact SHA. Production session/cookie settings, PostgreSQL tenant-isolation coverage and real-provider integration still require release-stage verification.

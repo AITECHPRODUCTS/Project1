@@ -26,3 +26,6 @@ These additive rules apply to every future Project1 build session.
 
 
 15. Dependency scanning is a fix gate, not a report-only decoration. When pip-audit/npm audit report an available fixed version, adjust compatible dependency ranges, preserve app constraints, rerun the full CI matrix, and record remaining findings with evidence. Never suppress or label the scan green before exact-SHA results prove it.
+
+
+16. When upgrading an audited dependency, update conflicting plugin/test-runner constraints based on upstream compatibility evidence, then prove dependency resolution and run the entire regression matrix. A successful audit tool install alone is not a pass.

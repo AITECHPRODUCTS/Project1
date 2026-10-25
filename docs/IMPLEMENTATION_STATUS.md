@@ -264,3 +264,8 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The first exact-SHA security-audit run on `f129ecf4576f1d35229525669613ecebcf17d65b` failed on the core/test dependency graph, finding advisories against the resolved Pillow 12.3.0 and pytest 8.4.2 versions. The scanner listed Pillow 13.0.0 and pytest 9.0.3 as fixed versions. These were not ignored or allowlisted.
 - Updated the declared ranges to require `Pillow>=13.0.0,<14.0` and `pytest>=9.0.3,<10.0`. This changes version constraints only; compatibility remains unverified until the Python regression suite, optional AI/RAG imports, PostgreSQL integration, and both dependency-audit profiles pass on the new SHA.
 - npm-audit outcome was not reached in the failed core scan and must be reported from a run that gets to that step.
+
+
+## 2026-10-25 dependency resolver compatibility correction
+- After raising pytest to the scanner-listed fixed line `pytest>=9.0.3,<10.0`, the next `pip-audit` run could not resolve the graph because `requirements-dev.txt` still constrained `pytest-asyncio<1.0`. This is a resolver conflict, not evidence that the test suite itself passed or failed.
+- Updated the plugin constraint to `pytest-asyncio>=1.3.0,<2.0`; upstream release notes state 1.3.0 added pytest 9 support. Compatibility and audit status remain pending the next exact-SHA full CI run.

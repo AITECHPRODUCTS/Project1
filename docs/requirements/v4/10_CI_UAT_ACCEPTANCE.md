@@ -23,3 +23,5 @@
 ## Dependency audit findings — remediation required
 - Initial scan of candidate `f129ecf4576f1d35229525669613ecebcf17d65b` reported Pillow 12.3.0 advisories fixed in 13.0.0 and pytest 8.4.2 advisory fixed in 9.0.3. The repository now requires Pillow 13.0.0+ and pytest 9.0.3+; this is not considered resolved until the full Python regression suite and all audit profiles pass on the new exact SHA.
 - Because the first Python audit failed early, it did not complete the optional AI/RAG scan or npm audit. Those outcomes must come from a subsequent full run; do not infer a clean result.
+
+- Follow-up dependency resolver finding: the repository previously restricted pytest-asyncio to `<1.0`, which conflicts with the fixed pytest 9.0.3 range. The declared plugin range is now `>=1.3.0,<2.0`; verify installation, test compatibility and audit results on the next candidate SHA.

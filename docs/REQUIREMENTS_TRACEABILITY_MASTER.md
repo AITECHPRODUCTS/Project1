@@ -74,3 +74,7 @@
 
 ## 2026-10-25 P0 security-audit finding
 - At `f129ecf4576f1d35229525669613ecebcf17d65b`, `pip-audit -r requirements-dev.txt` found Pillow 12.3.0 vulnerabilities (scanner-listed fix 13.0.0) and pytest 8.4.2 advisory (scanner-listed fix 9.0.3). The declared bounds have been raised to these fixed versions. The next action is to re-run all backend, AI/RAG, PostgreSQL, frontend and audit gates on the resulting SHA, repair any compatibility/security failures on the same branch, and only then proceed.
+
+
+## 2026-10-25 P0 dependency-resolver repair
+- On commit `32ea455a6d32279777ac190a4f59f535864ac712`, the security-audit resolver could not satisfy `pytest>=9.0.3,<10.0` while `pytest-asyncio>=0.24,<1.0` remained in the dev manifest. Updated the plugin range to `pytest-asyncio>=1.3.0,<2.0` based on upstream's stated pytest 9 support. Next action: new exact-SHA regression, PostgreSQL, AI/RAG, npm and audit runs, and immediate repairs for any new failures.

@@ -58,3 +58,7 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 ## 2026-10-25 security-audit first result and remediation
 - The newly added `security-audit` job on `f129ecf4576f1d35229525669613ecebcf17d65b` failed on `pip-audit -r requirements-dev.txt`: Pillow 12.3.0 has advisories whose listed fix is 13.0.0; pytest 8.4.2 has a PYSEC advisory whose listed fix is 9.0.3. The optional AI/RAG profile and npm audit steps were not reached in that job.
 - Updated requirement bounds to `Pillow>=13.0.0,<14.0` and `pytest>=9.0.3,<10.0` without allowlisting the vulnerabilities. Full compatibility and scan status are pending the new exact-SHA workflow runs.
+
+
+## 2026-10-25 dependency resolver compatibility correction
+- The first fixed-range retry exposed a conflict in the manifest rather than another vulnerability: `pytest>=9.0.3` cannot resolve with `pytest-asyncio<1.0`. The requirement now allows `pytest-asyncio>=1.3.0,<2.0`, whose upstream release notes identify pytest 9 support from 1.3.0. No scan is considered passed until all exact-SHA jobs finish.

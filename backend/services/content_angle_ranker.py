@@ -11,15 +11,15 @@ _STOP_WORDS = frozenset(
 _RISK_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "guarantee_or_risk_free_language",
-        re.compile(r"\\b(?:guarantee(?:d|s)?|risk[- ]free|no risk|100%\\s+success)\\b", re.IGNORECASE),
+        re.compile(r"\b(?:guarantee(?:d|s)?|risk[- ]free|no risk|100%\s+success)\b", re.IGNORECASE),
     ),
     (
         "specific_earnings_claim",
-        re.compile(r"\\b(?:earn|make)\\s+\\$?\\d[\\d,]*(?:\\.\\d+)?", re.IGNORECASE),
+        re.compile(r"\b(?:earn|make)\s+\$?\d[\d,]*(?:\.\d+)?", re.IGNORECASE),
     ),
     (
         "absolute_or_medical_claim",
-        re.compile(r"\\b(?:cure|miracle|number one|#\\s?1)\\b", re.IGNORECASE),
+        re.compile(r"\b(?:cure|miracle|number one|#\s?1)\b", re.IGNORECASE),
     ),
 )
 

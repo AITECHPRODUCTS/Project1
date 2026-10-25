@@ -69,6 +69,46 @@ class ClickEvent(TenantScopedMixin, Base):
     utm_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+class ExperimentAssignment(TenantScopedMixin, Base):
+    __tablename__ = "experiment_assignments"
+    __table_args__ = (
+        Index(
+            "uq_experiment_assignment_workspace_key_visitor",
+            "workspace_id", "experiment_key", "visitor_id", unique=True,
+        ),
+        Index(
+            "ix_experiment_assignment_workspace_key_variant",
+            "workspace_id", "experiment_key", "variant",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    experiment_key: Mapped[str] = mapped_column(String(180))
+    visitor_id: Mapped[str] = mapped_column(String(255))
+    variant: Mapped[str] = mapped_column(String(1))
+    headline_a: Mapped[str] = mapped_column(Text)
+    headline_b: Mapped[str] = mapped_column(Text)
+    assigned_headline: Mapped[str] = mapped_column(Text)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExperimentEvent(TenantScopedMixin, Base):
+    __tablename__ = "experiment_events"
+    __table_args__ = (
+        Index("uq_experiment_event_workspace_event_id", "workspace_id", "event_id", unique=True),
+        Index(
+            "ix_experiment_event_workspace_assignment_type",
+            "workspace_id", "assignment_id", "event_type",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    assignment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("experiment_assignments.id", ondelete="CASCADE")
+    )
+    event_id: Mapped[str] = mapped_column(String(255))
+    event_type: Mapped[str] = mapped_column(String(20))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Conversion(TenantScopedMixin, Base):
     __tablename__ = "conversions"
     __table_args__ = (Index("uq_conversion_workspace_network_external_event", "workspace_id", "network", "external_event_id", unique=True), Index("ix_conversion_campaign_created", "click_id", "created_at"))

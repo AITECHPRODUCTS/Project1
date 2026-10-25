@@ -21,9 +21,9 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ConversionRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -563,9 +563,159 @@ async def track(p:dict[str,Any]):
  if not raw:raise HTTPException(422,"url or query required")
  return conversion_tracker(str(raw))
 @api.post("/analytics/ab-test")
-async def ab_test(p:dict[str,Any]):
- try:return ab_test_generator(str(p["headline_a"]),str(p["headline_b"]),visitor_id=str(p.get("visitor_id") or "").strip(),experiment_key=str(p.get("experiment_key") or "").strip(),conversions_a=int(p.get("conversions_a",0)),impressions_a=int(p.get("impressions_a",0)),conversions_b=int(p.get("conversions_b",0)),impressions_b=int(p.get("impressions_b",0)))
- except (KeyError,ValueError) as exc:raise HTTPException(422,str(exc)) from exc
+async def ab_test(
+    payload: ABTestAssignmentRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Persist one stable visitor assignment and analyze only recorded events."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before assigning an experiment variant")
+    workspace_id = str(workspace_id)
+
+    try:
+        proposed = ab_test_generator(
+            payload.headline_a,
+            payload.headline_b,
+            visitor_id=payload.visitor_id,
+            experiment_key=payload.experiment_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    assignment_query = select(ExperimentAssignment).where(
+        ExperimentAssignment.workspace_id == workspace_id,
+        ExperimentAssignment.experiment_key == payload.experiment_key,
+        ExperimentAssignment.visitor_id == payload.visitor_id,
+    )
+    assignment = await db.scalar(assignment_query)
+    if assignment and (
+        assignment.headline_a != payload.headline_a or assignment.headline_b != payload.headline_b
+    ):
+        raise HTTPException(409, "This experiment key is already bound to different headlines; use a new key")
+
+    if assignment is None:
+        assignment = ExperimentAssignment(
+            workspace_id=workspace_id,
+            experiment_key=payload.experiment_key,
+            visitor_id=payload.visitor_id,
+            variant=proposed["variant"],
+            headline_a=payload.headline_a,
+            headline_b=payload.headline_b,
+            assigned_headline=proposed["headline"],
+        )
+        db.add(assignment)
+        from sqlalchemy.exc import IntegrityError
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            assignment = await db.scalar(assignment_query)
+            if assignment is None:
+                raise HTTPException(409, "Could not safely persist experiment assignment")
+
+    assignment_id = assignment.id
+    event_totals = await db.execute(
+        select(
+            ExperimentAssignment.variant,
+            ExperimentEvent.event_type,
+            func.count(ExperimentEvent.id),
+        )
+        .join(ExperimentEvent, ExperimentEvent.assignment_id == ExperimentAssignment.id)
+        .where(
+            ExperimentAssignment.workspace_id == workspace_id,
+            ExperimentAssignment.experiment_key == payload.experiment_key,
+            ExperimentEvent.workspace_id == workspace_id,
+        )
+        .group_by(ExperimentAssignment.variant, ExperimentEvent.event_type)
+    )
+    totals = {
+        "A": {"impressions": 0, "conversions": 0},
+        "B": {"impressions": 0, "conversions": 0},
+    }
+    for variant, event_type, count in event_totals.all():
+        if variant in totals and event_type in {"impression", "conversion"}:
+            totals[variant]["impressions" if event_type == "impression" else "conversions"] = int(count)
+
+    result = ab_test_generator(
+        payload.headline_a,
+        payload.headline_b,
+        visitor_id=payload.visitor_id,
+        experiment_key=payload.experiment_key,
+        conversions_a=totals["A"]["conversions"],
+        impressions_a=totals["A"]["impressions"],
+        conversions_b=totals["B"]["conversions"],
+        impressions_b=totals["B"]["impressions"],
+    )
+    result.update({
+        "assignment_id": assignment_id,
+        "variant": assignment.variant,
+        "headline": assignment.assigned_headline,
+        "assigned_at": assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+        "counts_source": "persisted_experiment_events",
+        "event_ingest_path": "/api/analytics/ab-test/event",
+    })
+    return result
+
+
+@api.post("/analytics/ab-test/event")
+async def record_ab_test_event(
+    payload: ExperimentEventRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Record an idempotent impression/conversion event for a persisted assignment."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before recording experiment events")
+    workspace_id = str(workspace_id)
+
+    assignment = await db.scalar(
+        select(ExperimentAssignment).where(
+            ExperimentAssignment.workspace_id == workspace_id,
+            ExperimentAssignment.experiment_key == payload.experiment_key,
+            ExperimentAssignment.visitor_id == payload.visitor_id,
+        )
+    )
+    if assignment is None:
+        raise HTTPException(404, "Experiment assignment not found in the active workspace")
+
+    assignment_id = assignment.id
+    existing_query = select(ExperimentEvent).where(
+        ExperimentEvent.workspace_id == workspace_id,
+        ExperimentEvent.event_id == payload.event_id,
+    )
+    existing = await db.scalar(existing_query)
+    if existing:
+        if existing.assignment_id == assignment_id and existing.event_type == payload.event_type:
+            return {"id": existing.id, "duplicate": True, "event_type": existing.event_type}
+        raise HTTPException(409, "Event ID was already used for a different experiment event")
+
+    event = ExperimentEvent(
+        workspace_id=workspace_id,
+        assignment_id=assignment_id,
+        event_id=payload.event_id,
+        event_type=payload.event_type,
+    )
+    db.add(event)
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        existing = await db.scalar(existing_query)
+        if existing and existing.assignment_id == assignment_id and existing.event_type == payload.event_type:
+            return {"id": existing.id, "duplicate": True, "event_type": existing.event_type}
+        raise HTTPException(409, "Experiment event could not be persisted idempotently")
+    return {
+        "id": event.id,
+        "duplicate": False,
+        "event_type": event.event_type,
+        "assignment_id": assignment_id,
+        "experiment_key": payload.experiment_key,
+        "variant": assignment.variant,
+    }
 @api.post("/analytics/self-improve")
 async def learn(lookback_days:int=Query(30,ge=1,le=180)):return await self_improver_loop(lookback_days=lookback_days)
 @api.get("/resource-budget")

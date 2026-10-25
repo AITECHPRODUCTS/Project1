@@ -150,6 +150,36 @@ class FundsReceivedRequest(BaseModel):
     reconciliation_note: str = Field(default="", max_length=4000)
 
 
+class ABTestAssignmentRequest(BaseModel):
+    experiment_key: str = Field(min_length=1, max_length=180)
+    visitor_id: str = Field(min_length=1, max_length=255)
+    headline_a: str = Field(min_length=1, max_length=500)
+    headline_b: str = Field(min_length=1, max_length=500)
+
+    @field_validator("experiment_key", "visitor_id", "headline_a", "headline_b")
+    @classmethod
+    def trim_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Value must not be blank")
+        return normalized
+
+
+class ExperimentEventRequest(BaseModel):
+    experiment_key: str = Field(min_length=1, max_length=180)
+    visitor_id: str = Field(min_length=1, max_length=255)
+    event_id: str = Field(min_length=1, max_length=255)
+    event_type: Literal["impression", "conversion"]
+
+    @field_validator("experiment_key", "visitor_id", "event_id")
+    @classmethod
+    def trim_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Value must not be blank")
+        return normalized
+
+
 class CommissionEvidenceReviewRequest(BaseModel):
     decision: Literal[
         "matched_to_conversion",

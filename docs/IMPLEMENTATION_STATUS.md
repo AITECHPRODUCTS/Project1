@@ -71,3 +71,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - A visitor now receives the same variant for a given experiment regardless of aggregate conversion counts; historical performance no longer randomly changes a returning visitor's headline.
 - Added deterministic Beta-Binomial posterior probability estimation and a minimum-sample gate for recommendations. Results are explicitly decision support, not a p-value or proof of causation.
 - A durable impression/conversion assignment ledger remains pending; this slice does not claim end-to-end experiment tracking.
+
+
+## 2026-10-25 implementation update — persisted A/B experiment ledger
+- Added workspace-scoped experiment assignments with immutable headline snapshots and a unique experiment/visitor key.
+- Added idempotent impression/conversion event ingestion keyed by a workspace event ID. A/B analysis now derives counts from persisted events instead of trusting caller-supplied aggregate metrics.
+- Migration `0006_experiment_assignment_ledger` and regression tests cover stable assignment, repeated events, duplicate event IDs and workspace isolation. Experiment UI, provider-side event attestation and held-out evaluation remain pending.

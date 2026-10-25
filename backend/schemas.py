@@ -361,6 +361,44 @@ class SocialPublishRequest(BaseModel):
     publish_at: datetime | None = None
 
 
+
+class ContentAtomizeRequest(BaseModel):
+    source_title: str = Field(min_length=3, max_length=500)
+    source_body: str = Field(min_length=80, max_length=20000)
+    platforms: list[Literal["blog", "linkedin", "x", "x_thread", "reddit", "pinterest", "tiktok", "youtube_shorts", "email"]] = Field(min_length=1, max_length=9)
+    source_urls: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("source_title", "source_body")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Value must not be blank")
+        return normalized
+
+    @field_validator("platforms")
+    @classmethod
+    def require_unique_platforms(cls, value: list[str]) -> list[str]:
+        if not value or len(set(value)) != len(value):
+            raise ValueError("Choose one or more unique target platforms")
+        return value
+
+    @field_validator("source_urls")
+    @classmethod
+    def validate_source_urls(cls, value: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(url.strip() for url in value))
+        for url in normalized:
+            parsed = urlparse(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise ValueError("Source references must be absolute HTTP(S) URLs")
+            if parsed.username or parsed.password:
+                raise ValueError("Source reference URLs may not contain credentials")
+            host = parsed.hostname.lower().rstrip(".")
+            if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+                raise ValueError("Local/private source references are not allowed")
+        return normalized
+
+
 class ContentResearchBriefRequest(BaseModel):
     topic: str = Field(min_length=3, max_length=400)
     urls: list[str] = Field(min_length=1, max_length=10)

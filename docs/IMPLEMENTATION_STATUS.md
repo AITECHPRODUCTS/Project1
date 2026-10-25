@@ -82,3 +82,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 ## 2026-10-25 implementation update — A/B experiment dashboard
 - Added an Experiments navigation section with stable browser visitor ID, immutable experiment headline snapshots, persisted variant assignment, manual impression/conversion event recording, and posterior recommendation display.
 - The dashboard labels event recording as manual and does not claim that this console is a production website tracking SDK. Production site instrumentation and held-out evaluation remain gaps.
+
+
+## 2026-10-25 implementation update — platform-native content atomizer
+- Added `POST /api/content/atomize` to generate source-grounded drafts for blog, LinkedIn, X, X threads, Reddit, Pinterest, TikTok, YouTube Shorts and email.
+- LLM output is parsed defensively, source quotes are checked against supplied text, disclosure is enforced, and a deterministic fallback is used when the provider fails or returns invalid JSON.
+- Each output is persisted as a workspace-scoped draft `ContentAsset`; publishing is not started and human review is required.

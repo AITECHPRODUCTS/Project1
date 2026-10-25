@@ -23,7 +23,7 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAtomizeRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -490,6 +490,70 @@ async def keywords(payload:dict[str,Any]):
  items=payload.get("keywords")
  if not isinstance(items,list) or any(not isinstance(x,str) for x in items):raise HTTPException(422,"keywords must be a list of strings")
  return keyword_cluster_architect(items)
+
+@api.post("/content/atomize")
+async def atomize_content_route(
+    payload: ContentAtomizeRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create reviewable platform-native drafts from one source asset."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before atomizing content")
+
+    from backend.services.content_atomizer import atomize_content
+
+    try:
+        generated = await atomize_content(
+            source_title=payload.source_title,
+            source_body=payload.source_body,
+            platforms=payload.platforms,
+            source_urls=payload.source_urls,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    assets = []
+    with workspace_scope(str(workspace_id)):
+        for atom in generated["atoms"]:
+            asset = ContentAsset(
+                workspace_id=str(workspace_id),
+                asset_type=f"repurposed_{atom['platform']}",
+                title=atom["title"],
+                body=atom["content"],
+                status="draft",
+                source_urls=payload.source_urls,
+                metadata_json={
+                    "content_atomizer_version": "1",
+                    "source_title": payload.source_title,
+                    "platform": atom["platform"],
+                    "hook": atom["hook"],
+                    "cta": atom["cta"],
+                    "affiliate_disclosure": atom["affiliate_disclosure"],
+                    "source_facts": atom["source_facts"],
+                    "claims_to_verify": atom["claims_to_verify"],
+                    "provider": generated["provider"],
+                    "requires_review": True,
+                },
+            )
+            db.add(asset)
+            assets.append(asset)
+        await db.commit()
+
+    return {
+        "source_title": payload.source_title,
+        "asset_count": len(assets),
+        "asset_ids": [asset.id for asset in assets],
+        "atoms": generated["atoms"],
+        "source_urls": payload.source_urls,
+        "provider": generated["provider"],
+        "rag_sources": generated.get("rag_sources", []),
+        "requires_review": True,
+        "publishing_started": False,
+    }
+
+
 @api.post("/content/blog")
 async def blog(p:BlogRequest,db:AsyncSession=Depends(get_session)):
  result=await affiliate_blog_builder(p.topic,product=p.product,canonical_url=p.canonical_url,minimum_words=p.minimum_words)

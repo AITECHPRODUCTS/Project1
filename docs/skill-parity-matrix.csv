@@ -4,7 +4,7 @@ analytics/conversion-tracker,S6,partial,backend/services/analytics_utils.py,Prov
 analytics/internal-linking-optimizer,S3,not_implemented,,No tested CMS crawl index
 analytics/performance-report,S6,partial,backend/main.py,No verified platform spend sync
 analytics/seo-audit,S3,not_implemented,,No crawler and technical SEO baseline
-automation/content-repurposer,S5,not_implemented,,No complete platform-native atomization pipeline
+automation/content-repurposer,S5,partial,backend/services/content_atomizer.py; POST /api/content/atomize,Platform-native draft generation and workspace-persisted assets added; scheduler/approval/publishing orchestration remains
 automation/email-automation-builder,S5,partial,backend/services/email_delivery.py,No visual branching automation editor
 automation/multi-program-manager,S1,not_implemented,,Network-specific account workflow coverage missing
 automation/paid-ad-copy-writer,S5,partial,backend/services/s2_s3_content.py,No provider-native claim review
@@ -16,7 +16,7 @@ blog/content-moat-calculator,S3,not_implemented,,No freshness or competition dat
 blog/how-to-tutorial-writer,S3,partial,backend/services/s2_s3_content.py,No end-to-end publication validation
 blog/keyword-cluster-architect,S3,partial,backend/services/s2_s3_content.py,Lexical clusters are not search-volume validated
 blog/listicle-generator,S3,partial,backend/services/s2_s3_content.py,No checked fact ledger across list entries
-content/content-pillar-atomizer,S2,not_implemented,,No full atomization workflow
+content/content-pillar-atomizer,S2,partial,backend/services/content_atomizer.py; POST /api/content/atomize,Source-grounded platform atomization with deterministic fallback and review metadata; full pillar planning and production publishing remain
 content/content-research-brief,S2,partial,backend/services/s2_s3_content.py,Source coverage and claim ledger need integration tests
 content/infographic-generator,S2,not_implemented,,No asset pipeline
 content/reddit-post-writer,S2,partial,backend/services/s2_s3_content.py,Policy review required

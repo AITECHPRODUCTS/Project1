@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from backend.services import content_atomizer
+
+
+@pytest.mark.asyncio
+async def test_content_atomizer_generates_platform_specific_drafts_and_preserves_disclosure(monkeypatch):
+    source_body = (
+        "Teams can reduce manual review time by documenting repeatable steps. "
+        "A checklist helps reviewers confirm the same requirements each time. "
+        "Measure outcomes before making performance claims."
+    )
+    requested = ["linkedin", "x"]
+    atoms = [
+        {
+            "platform": platform,
+            "title": f"Source-led {platform} draft",
+            "content": f"Source-led content for {platform}.",
+            "hook": "Teams can reduce manual review time by documenting repeatable steps.",
+            "cta": "Measure outcomes before making performance claims.",
+            "source_facts": ["Teams can reduce manual review time by documenting repeatable steps."],
+            "claims_to_verify": ["Verify any time-saving claim."],
+        }
+        for platform in requested
+    ]
+
+    async def fake_complete(*args, **kwargs):
+        return {"text": json.dumps({"atoms": atoms}), "provider": "test-llm", "sources": []}
+
+    monkeypatch.setattr(content_atomizer.llm_service, "complete", fake_complete)
+    result = await content_atomizer.atomize_content(
+        source_title="Repeatable review",
+        source_body=source_body,
+        platforms=requested,
+        source_urls=["https://example.com/source"],
+    )
+
+    assert [atom["platform"] for atom in result["atoms"]] == requested
+    assert result["provider"] == "test-llm"
+    assert all("commercial relationship" in atom["content"].lower() for atom in result["atoms"])
+    assert result["atoms"][0]["source_facts"] == [
+        "Teams can reduce manual review time by documenting repeatable steps."
+    ]
+    assert result["requires_review"] is True
+    assert result["publishing_started"] is False
+
+
+@pytest.mark.asyncio
+async def test_content_atomizer_uses_deterministic_fallback_when_llm_returns_invalid_json(monkeypatch):
+    async def fake_complete(*args, **kwargs):
+        return {"text": "not valid JSON", "provider": "test-provider", "sources": []}
+
+    monkeypatch.setattr(content_atomizer.llm_service, "complete", fake_complete)
+    result = await content_atomizer.atomize_content(
+        source_title="Source title",
+        source_body="A source sentence with a measurable claim. A second source sentence gives context.",
+        platforms=["blog", "tiktok"],
+    )
+
+    assert result["provider"] == "test-provider"
+    assert len(result["atoms"]) == 2
+    assert all(atom["content"] for atom in result["atoms"])
+    assert all("Disclosure:" in atom["content"] for atom in result["atoms"])
+    assert result["requires_review"] is True
+
+
+@pytest.mark.asyncio
+async def test_content_atomizer_falls_back_when_provider_raises(monkeypatch):
+    async def failing_complete(*args, **kwargs):
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(content_atomizer.llm_service, "complete", failing_complete)
+    result = await content_atomizer.atomize_content(
+        source_title="Source title",
+        source_body="A source sentence with enough context for content generation. A second sentence adds detail.",
+        platforms=["reddit"],
+    )
+
+    assert result["provider"] == "deterministic_fallback"
+    assert result["atoms"][0]["platform"] == "reddit"
+
+
+@pytest.mark.asyncio
+async def test_content_atomizer_rejects_unsupported_platform_and_short_source():
+    with pytest.raises(ValueError, match="Unsupported"):
+        await content_atomizer.atomize_content(
+            source_title="Source title",
+            source_body="A sufficiently long source body " * 5,
+            platforms=["unknown"],
+        )
+    with pytest.raises(ValueError, match="80 characters"):
+        await content_atomizer.atomize_content(
+            source_title="Source title",
+            source_body="too short",
+            platforms=["linkedin"],
+        )

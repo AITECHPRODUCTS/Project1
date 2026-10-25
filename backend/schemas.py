@@ -585,6 +585,58 @@ class InfographicRequest(BaseModel):
         return normalized
 
 
+class GuaranteeDraftRequest(BaseModel):
+    product_name: str = Field(min_length=2, max_length=200)
+    guarantee_type: Literal["refund", "replacement", "repair", "trial", "service_credit", "other"]
+    duration_days: int = Field(ge=1, le=3650)
+    eligibility: str = Field(min_length=5, max_length=800)
+    exclusions: list[str] = Field(default_factory=list, max_length=10)
+    claim_process: str = Field(min_length=5, max_length=800)
+    merchant_terms_text: str = Field(min_length=30, max_length=6000)
+    source_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("product_name", "eligibility", "claim_process", "merchant_terms_text")
+    @classmethod
+    def normalize_guarantee_text(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("Guarantee draft fields must not be blank")
+        return normalized
+
+    @field_validator("exclusions")
+    @classmethod
+    def normalize_guarantee_exclusions(cls, value: list[str]) -> list[str]:
+        exclusions = list(dict.fromkeys(" ".join(item.split()) for item in value if item and item.strip()))
+        if any(len(item) > 500 for item in exclusions):
+            raise ValueError("Each exclusion must be at most 500 characters")
+        return exclusions
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_guarantee_source_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        normalized = value.strip()
+        try:
+            parsed = urlparse(normalized)
+            host = (parsed.hostname or "").lower().rstrip(".")
+        except ValueError as exc:
+            raise ValueError("Provide a valid absolute public HTTP(S) source URL") from exc
+        if parsed.scheme not in {"http", "https"} or not host:
+            raise ValueError("Source URL must be absolute HTTP(S)")
+        if parsed.username or parsed.password:
+            raise ValueError("Source URLs may not contain credentials")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local/private source hosts are not allowed")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private, loopback, link-local, multicast or reserved source hosts are not allowed")
+        return normalized
+
+
 class InternalLinkingRequest(BaseModel):
     urls: list[str] = Field(min_length=2, max_length=12)
     max_suggestions_per_page: int = Field(default=5, ge=1, le=10)

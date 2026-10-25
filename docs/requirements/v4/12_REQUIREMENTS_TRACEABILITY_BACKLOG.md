@@ -16,5 +16,5 @@
 | R-12 | Production schema | `migrations/versions/0001_initial_schema.py`, CI migration gate | in test | PostgreSQL upgrade/drift/restore |
 | R-13 | Tenant SaaS | `backend/models.py`, `backend/main.py` | major gap | Workspace schema, row-level scope and cross-tenant tests |
 | R-14 | Platform Super Admin | requirements and current global admin gaps | not implemented end-to-end | Separate platform RBAC, tenant/incident/kill switch UI |
-| R-15 | All 53 skills | `../skill-parity-matrix.csv` | 41 partial, 12 not implemented | Implement and verify each skill service/API/UI/provider path |
+| R-15 | All 53 skills | `../skill-parity-matrix.csv` | 42 partial, 11 not implemented | Implement and verify each skill service/API/UI/provider path |
 | R-16 | Production release | Actions + deployment docs | not release ready | All required CI, provider, security, staging and rollback gates |

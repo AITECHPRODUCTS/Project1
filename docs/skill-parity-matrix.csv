@@ -29,7 +29,7 @@ distribution/github-pages-deployer,S5,not_implemented,,No authorized site deploy
 distribution/social-media-scheduler,S5,partial,backend/services/s4_s5_landing.py,Only configured provider boundaries are supported
 landing/bonus-stack-builder,S4,partial,backend/services/s4_s5_landing.py,Deliverables need operator substantiation
 landing/grand-slam-offer,S4,partial,backend/services/s4_s5_landing.py,Claims proof review required
-landing/guarantee-generator,S4,not_implemented,,No guarantees without merchant terms
+landing/guarantee-generator,S4,partial,backend/services/guarantee_draft.py; backend/schemas.py; backend/main.py POST /api/landing/guarantee-draft; frontend/app/page.tsx; tests/test_guarantee_draft.py,Structured review-only copy requires duration and guarantee type in supplied terms and flags all terms as unverified; merchant verification and publication remain unimplemented
 landing/landing-page-creator,S4,partial,backend/services/s4_s5_landing.py,Not yet published to a real CMS
 landing/product-showcase-page,S4,partial,backend/services/s4_s5_landing.py,Live catalog facts not validated across networks
 landing/squeeze-page-builder,S4,partial,backend/services/s4_s5_landing.py,Production accessibility and security tests missing

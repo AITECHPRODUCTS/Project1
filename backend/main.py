@@ -23,13 +23,14 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
 from backend.services.infographic_generator import build_infographic as build_infographic_service
+from backend.services.guarantee_draft import build_guarantee_draft as build_guarantee_draft_service
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
@@ -705,6 +706,53 @@ async def video(p:VideoRequest):return await render_vertical_video(p.script,brol
 async def landing_offer(p:dict[str,Any]):return await grand_slam_offer_generator(p.get("product") or {},str(p.get("audience") or ""),str(p.get("main_problem") or ""))
 @api.post("/landing/value-ladder")
 async def landing_ladder(p:dict[str,Any]):return await value_ladder_architect(str(p.get("audience") or ""),p.get("product") or {},p.get("deliverable_assets"))
+@api.post("/landing/guarantee-draft", status_code=201)
+async def landing_guarantee_draft(
+    payload: GuaranteeDraftRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Save a guarantee-copy draft based on explicit operator-supplied merchant terms."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before drafting guarantee copy")
+    try:
+        generated = build_guarantee_draft_service(
+            product_name=payload.product_name,
+            guarantee_type=payload.guarantee_type,
+            duration_days=payload.duration_days,
+            eligibility=payload.eligibility,
+            exclusions=payload.exclusions,
+            claim_process=payload.claim_process,
+            merchant_terms_text=payload.merchant_terms_text,
+            source_url=payload.source_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    with workspace_scope(str(workspace_id)):
+        asset = ContentAsset(
+            workspace_id=str(workspace_id),
+            asset_type="guarantee_terms_draft",
+            title=f"{generated['product_name']} guarantee wording draft",
+            body=generated["draft_copy"],
+            status="draft",
+            source_urls=[payload.source_url] if payload.source_url else [],
+            metadata_json={
+                "guarantee_draft_version": "1",
+                "guarantee_type": generated["guarantee_type"],
+                "duration_days": generated["duration_days"],
+                "merchant_terms_status": generated["merchant_terms_status"],
+                "terms_verified": False,
+                "requires_review": True,
+                "publishing_started": False,
+            },
+        )
+        db.add(asset)
+        await db.commit()
+    return {**generated, "asset_id": asset.id}
+
+
 @api.post("/landing/page")
 async def landing_page(p: LandingPageRequest):
  workspace_id = get_workspace_id()

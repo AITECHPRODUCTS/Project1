@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 41 partial and 12 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 42 partial and 11 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -146,3 +146,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The SVG is XML-escaped, contains no embedded images, scripts or remote resources, and is persisted as a draft ContentAsset. The dashboard previews and downloads the SVG.
 - Added regression and API tests for markup escaping, layout bounds, unsafe source-reference rejection and draft persistence.
 - Licensed imagery, generated raster/image models, brand templates, accessibility/browser UAT and publication remain pending; source URLs are retained as references and not fetched.
+
+## 2026-10-25 implementation update — merchant-terms-based guarantee drafts
+- Added a typed, authenticated workspace-scoped guarantee-copy endpoint and dashboard form. The requested guarantee type and duration must appear in the operator-supplied terms text before a draft is generated.
+- Draft wording lists operator-supplied eligibility, exclusions and claim process, stores the generated copy as a reviewable ContentAsset and marks terms unverified. A supplied source URL is retained as metadata only; it is not fetched and does not prove the offer is current.
+- Added service/schema/API regression tests for invented-period/type rejection, source URL safety, missing exclusions and draft-only persistence.
+- Independent merchant verification, legal/policy review, terms change monitoring and browser UAT remain pending; no guarantee is published automatically.

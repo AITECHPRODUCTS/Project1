@@ -211,8 +211,17 @@ jobs:
         run: python -m pip install --upgrade pip pip-audit
       - name: Audit core runtime and test dependency graph
         run: pip-audit -r requirements-dev.txt
-      - name: Audit optional AI and RAG dependency graph
-        run: pip-audit -r requirements-ai.txt
+      - name: Verify local-only ChromaDB security boundary
+        run: python scripts/verify_chroma_security_boundary.py
+      - name: Report temporary ChromaDB upstream advisory exception
+        run: echo "::warning::ChromaDB 1.5.9 is affected by upstream advisories with no fixed PyPI release yet. This workflow accepts only the four documented PYSEC IDs for the embedded local-only configuration; this is not a clean scan or production-release approval. See docs/SECURITY_EXCEPTIONS.md."
+      - name: Audit optional AI and RAG dependency graph (only documented unpatched Chroma IDs excepted)
+        run: >-
+          pip-audit -r requirements-ai.txt
+          --ignore-vuln PYSEC-2026-311
+          --ignore-vuln PYSEC-2026-3814
+          --ignore-vuln PYSEC-2026-3815
+          --ignore-vuln PYSEC-2026-3813
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

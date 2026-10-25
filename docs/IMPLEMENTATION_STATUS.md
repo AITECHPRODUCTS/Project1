@@ -269,3 +269,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 ## 2026-10-25 dependency resolver compatibility correction
 - After raising pytest to the scanner-listed fixed line `pytest>=9.0.3,<10.0`, the next `pip-audit` run could not resolve the graph because `requirements-dev.txt` still constrained `pytest-asyncio<1.0`. This is a resolver conflict, not evidence that the test suite itself passed or failed.
 - Updated the plugin constraint to `pytest-asyncio>=1.3.0,<2.0`; upstream release notes state 1.3.0 added pytest 9 support. Compatibility and audit status remain pending the next exact-SHA full CI run.
+
+
+## 2026-10-25 AI/RAG security audit — unpatched ChromaDB advisories
+- The core/test `pip-audit -r requirements-dev.txt` graph passed after the Pillow/pytest/pytest-asyncio dependency updates. The optional AI/RAG graph then found fixable LangChain advisories and four ChromaDB 1.5.9 advisories for which no fixed PyPI version was available in the reviewed upstream records.
+- Raised LangChain packages to compatible fixed/current 1.x lines and moved legacy `RetrievalQA` to the `langchain-classic` compatibility package. ChromaDB remains used through local persistent storage; no standalone Chroma service or Chroma HTTP client is configured.
+- Added a static local-only guard and regression test; the AI dependency audit will except only the four exact, documented unpatched Chroma PYSEC IDs after the guard passes. This is a temporary mitigation, not a clean scan. The next exact-SHA run must pass all remaining dependency checks; npm audit outcome is still unverified.
+- See `docs/SECURITY_EXCEPTIONS.md`. Production readiness remains NOT RELEASE READY until the Chroma exception can be removed/replaced, plus outstanding secret/SBOM, UAT, provider, deployment and restore gates.

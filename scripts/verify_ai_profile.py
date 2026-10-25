@@ -5,6 +5,7 @@ import sys
 
 MODULES = (
     "langchain",
+    "langchain_classic",
     "langchain_chroma",
     "langchain_huggingface",
     "langchain_openai",

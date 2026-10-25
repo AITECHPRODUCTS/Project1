@@ -78,3 +78,8 @@
 
 ## 2026-10-25 P0 dependency-resolver repair
 - On commit `32ea455a6d32279777ac190a4f59f535864ac712`, the security-audit resolver could not satisfy `pytest>=9.0.3,<10.0` while `pytest-asyncio>=0.24,<1.0` remained in the dev manifest. Updated the plugin range to `pytest-asyncio>=1.3.0,<2.0` based on upstream's stated pytest 9 support. Next action: new exact-SHA regression, PostgreSQL, AI/RAG, npm and audit runs, and immediate repairs for any new failures.
+
+
+## 2026-10-25 AI/RAG audit findings and compensating control
+- Hosted `pip-audit -r requirements-dev.txt` passed on the fixed dependency candidate. The optional AI/RAG audit found LangChain package advisories and ChromaDB 1.5.9 IDs `PYSEC-2026-311`, `PYSEC-2026-3814`, `PYSEC-2026-3815`, and `PYSEC-2026-3813`; reviewed upstream records indicate no fixed PyPI release for those Chroma findings as of 25 October 2026.
+- The remediation upgrades LangChain to compatible 1.x releases, migrates `RetrievalQA` to `langchain-classic`, and adds a CI-enforced test that Project1 uses only local embedded Chroma persistence with no HTTP client/server or `trust_remote_code=True`. Those four exact IDs may be excepted for CI only after that guard passes. The warning/exception is not a clean scan and remains a production-release blocker until a patched Chroma version is available or the vector backend is replaced.

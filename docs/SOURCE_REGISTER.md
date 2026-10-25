@@ -62,3 +62,8 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 
 ## 2026-10-25 dependency resolver compatibility correction
 - The first fixed-range retry exposed a conflict in the manifest rather than another vulnerability: `pytest>=9.0.3` cannot resolve with `pytest-asyncio<1.0`. The requirement now allows `pytest-asyncio>=1.3.0,<2.0`, whose upstream release notes identify pytest 9 support from 1.3.0. No scan is considered passed until all exact-SHA jobs finish.
+
+
+## 2026-10-25 AI/RAG dependency audit and Chroma security boundary
+- The core/test dependency audit passed after updated Pillow/pytest ranges and the pytest-asyncio resolver fix. The first optional AI/RAG scan found fixable pre-1.0 LangChain packages plus ChromaDB 1.5.9 advisories `PYSEC-2026-311`, `PYSEC-2026-3814`, `PYSEC-2026-3815`, and `PYSEC-2026-3813`; the cited upstream records had no fixed PyPI release as of this review.
+- Requirements are moving to compatible audited LangChain 1.x releases; legacy `RetrievalQA` is switched to `langchain-classic`. A local-only Chroma boundary checker/test is added before the temporary audit exception. Only those four exact IDs may be excepted after the guard passes; the workflow emits a warning and product release remains blocked. Exact-SHA verification is pending.

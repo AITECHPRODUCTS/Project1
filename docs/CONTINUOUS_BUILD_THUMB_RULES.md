@@ -29,3 +29,6 @@ These additive rules apply to every future Project1 build session.
 
 
 16. When upgrading an audited dependency, update conflicting plugin/test-runner constraints based on upstream compatibility evidence, then prove dependency resolution and run the entire regression matrix. A successful audit tool install alone is not a pass.
+
+
+17. A dependency advisory with no upstream fix must not be silently suppressed or described as clean. Any temporary exception requires exact advisory IDs, source links, an explicit exploitability boundary, enforceable compensating controls, a regression test, an explicit CI warning, and a release blocker until the exception is removed or formally re-evaluated.

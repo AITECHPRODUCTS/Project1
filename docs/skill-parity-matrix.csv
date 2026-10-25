@@ -1,5 +1,5 @@
 skill_id,stage,status,evidence,gap
-analytics/ab-test-generator,S6,partial,backend/services/analytics_utils.py; backend/models.py; POST /api/analytics/ab-test; POST /api/analytics/ab-test/event,Stable workspace-scoped assignment and idempotent event ledger plus Beta-Binomial posterior decision support; experiment UI and held-out evaluation remain
+analytics/ab-test-generator,S6,partial,backend/services/analytics_utils.py; backend/models.py; frontend/app/page.tsx; POST /api/analytics/ab-test; POST /api/analytics/ab-test/event,Stable workspace-scoped assignment and idempotent event ledger with a manual dashboard console; production site instrumentation and held-out evaluation remain
 analytics/conversion-tracker,S6,partial,backend/services/analytics_utils.py,Provider reconciliation and privacy review remain
 analytics/internal-linking-optimizer,S3,not_implemented,,No tested CMS crawl index
 analytics/performance-report,S6,partial,backend/main.py,No verified platform spend sync

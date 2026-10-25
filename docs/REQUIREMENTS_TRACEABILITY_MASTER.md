@@ -26,4 +26,4 @@
 
 | A/B experiment decision support | `backend/services/analytics_utils.py`, `POST /api/analytics/ab-test`, `tests/test_analytics_utils.py` | stable visitor assignment and deterministic posterior recommendation implemented | durable assignment/impression/conversion ledger, experiment UI, held-out evaluation and browser UAT |
 
-| Persisted A/B experiment ledger | `ExperimentAssignment`, `ExperimentEvent`, migration `0006_experiment_assignment_ledger`, `POST /api/analytics/ab-test`, `POST /api/analytics/ab-test/event` | implementation added; analysis uses persisted event counts and idempotent event IDs | hosted CI/migration gate, experiment UI, authenticated provider event attestation and held-out evaluation |
+| Persisted A/B experiment ledger | `ExperimentAssignment`, `ExperimentEvent`, migration `0006_experiment_assignment_ledger`, `POST /api/analytics/ab-test`, `POST /api/analytics/ab-test/event`, `frontend/app/page.tsx` | workspace-scoped assignments, idempotent events, posterior analysis and manual dashboard console implemented | hosted CI/migration gate, production site instrumentation, authenticated provider event attestation and held-out evaluation |

@@ -77,3 +77,8 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added workspace-scoped experiment assignments with immutable headline snapshots and a unique experiment/visitor key.
 - Added idempotent impression/conversion event ingestion keyed by a workspace event ID. A/B analysis now derives counts from persisted events instead of trusting caller-supplied aggregate metrics.
 - Migration `0006_experiment_assignment_ledger` and regression tests cover stable assignment, repeated events, duplicate event IDs and workspace isolation. Experiment UI, provider-side event attestation and held-out evaluation remain pending.
+
+
+## 2026-10-25 implementation update — A/B experiment dashboard
+- Added an Experiments navigation section with stable browser visitor ID, immutable experiment headline snapshots, persisted variant assignment, manual impression/conversion event recording, and posterior recommendation display.
+- The dashboard labels event recording as manual and does not claim that this console is a production website tracking SDK. Production site instrumentation and held-out evaluation remain gaps.

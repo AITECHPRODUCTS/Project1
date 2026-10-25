@@ -128,7 +128,7 @@ async def test_requires_two_safely_analyzed_html_pages(monkeypatch):
 def test_request_requires_public_urls_from_a_single_origin():
     with pytest.raises(ValidationError, match="same public HTTP"):
         InternalLinkingRequest(urls=[SOURCE_URL, "https://other.example/article"])
-    with pytest.raises(ValidationError, match="Local/private"):
+    with pytest.raises(ValidationError, match="Private, loopback"):
         InternalLinkingRequest(urls=["https://example.com/a", "http://127.0.0.1/b"])
     with pytest.raises(ValidationError, match="at least two"):
         InternalLinkingRequest(urls=[SOURCE_URL, SOURCE_URL])

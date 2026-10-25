@@ -58,7 +58,7 @@ async def audit_public_page(url: str) -> dict[str, Any]:
     viewport = bool(soup.find("meta", attrs={"name": re.compile(r"^viewport$", re.IGNORECASE)}))
     robots_content = _meta_content(soup, "robots")
     googlebot_content = _meta_content(soup, "googlebot")
-    indexing_directives = " ".join((robots_content, googlebot_content)).lower().split()
+    indexing_directives = {item for item in re.split(r"[\s,]+", " ".join((robots_content, googlebot_content)).lower()) if item}
     indexing_blocked = "noindex" in indexing_directives
 
     canonical_url = ""

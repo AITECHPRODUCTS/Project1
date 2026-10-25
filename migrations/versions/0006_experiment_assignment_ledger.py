@@ -36,6 +36,11 @@ def upgrade() -> None:
         unique=True,
     )
     op.create_index(
+        "ix_experiment_assignments_workspace_id",
+        "experiment_assignments",
+        ["workspace_id"],
+    )
+    op.create_index(
         "ix_experiment_assignment_workspace_key_variant",
         "experiment_assignments",
         ["workspace_id", "experiment_key", "variant"],
@@ -68,6 +73,11 @@ def upgrade() -> None:
         unique=True,
     )
     op.create_index(
+        "ix_experiment_events_workspace_id",
+        "experiment_events",
+        ["workspace_id"],
+    )
+    op.create_index(
         "ix_experiment_event_workspace_assignment_type",
         "experiment_events",
         ["workspace_id", "assignment_id", "event_type"],
@@ -76,8 +86,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_experiment_event_workspace_assignment_type", table_name="experiment_events")
+    op.drop_index("ix_experiment_events_workspace_id", table_name="experiment_events")
     op.drop_index("uq_experiment_event_workspace_event_id", table_name="experiment_events")
     op.drop_table("experiment_events")
     op.drop_index("ix_experiment_assignment_workspace_key_variant", table_name="experiment_assignments")
     op.drop_index("uq_experiment_assignment_workspace_key_visitor", table_name="experiment_assignments")
+    op.drop_index("ix_experiment_assignments_workspace_id", table_name="experiment_assignments")
     op.drop_table("experiment_assignments")

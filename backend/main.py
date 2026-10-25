@@ -584,8 +584,54 @@ async def campaign_health(campaign_id:str,db:AsyncSession=Depends(get_session)):
  if not row:raise HTTPException(404,"Campaign not found")
  out=await choose_destination(row);row.primary_healthy=out.get("primary_healthy");row.fallback_healthy=out.get("fallback_healthy");row.health_last_checked_at=utcnow();row.health_last_error=str(out.get("health_error") or "")[:1000] or None;await db.commit();return {"campaign_id":row.id,**out,"note":"Fallback applies to this click; campaign configuration is unchanged."}
 @api.get("/finance/ledger")
-async def ledger(db:AsyncSession=Depends(get_session)):
- rows=list((await db.scalars(select(Conversion).order_by(Conversion.created_at.desc()).limit(500))).all());return {"count":len(rows),"total_commission_recorded":round(sum(float(x.commission or 0) for x in rows),2),"data":[{"id":x.id,"network":x.network,"external_event_id":x.external_event_id,"commission":x.commission,"revenue":x.revenue,"currency":x.currency,"status":x.status,"utm_campaign":x.utm_campaign,"created_at":x.created_at.isoformat() if x.created_at else None} for x in rows]}
+async def ledger(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing the commission ledger")
+
+    # The detail feed is bounded, but aggregate totals cover every conversion in
+    # the active workspace. Never add different currencies into one misleading sum.
+    workspace_filter = Conversion.workspace_id == str(workspace_id)
+    rows = list((await db.scalars(
+        select(Conversion)
+        .where(workspace_filter)
+        .order_by(Conversion.created_at.desc())
+        .limit(500)
+    )).all())
+    aggregate_result = await db.execute(
+        select(
+            Conversion.currency,
+            func.coalesce(func.sum(Conversion.commission), 0.0),
+        )
+        .where(workspace_filter)
+        .group_by(Conversion.currency)
+    )
+    totals_by_currency = {
+        str(currency or "USD").strip().upper(): round(float(total or 0), 2)
+        for currency, total in aggregate_result.all()
+    }
+    return {
+        "count": len(rows),
+        # Backwards-compatible field explicitly defined as USD; use totals_by_currency
+        # for any other currency and for a full multi-currency view.
+        "total_commission_recorded": totals_by_currency.get("USD", 0.0),
+        "total_commission_recorded_currency": "USD",
+        "totals_by_currency": totals_by_currency,
+        "data": [{
+            "id": x.id,
+            "network": x.network,
+            "external_event_id": x.external_event_id,
+            "commission": x.commission,
+            "revenue": x.revenue,
+            "currency": x.currency,
+            "status": x.status,
+            "utm_campaign": x.utm_campaign,
+            "created_at": x.created_at.isoformat() if x.created_at else None,
+        } for x in rows],
+    }
 @api.get("/finance/thresholds")
 async def thresholds(db:AsyncSession=Depends(get_session)):
  rows=list((await db.scalars(select(PayoutThreshold).order_by(PayoutThreshold.network))).all());return {"count":len(rows),"data":[{"id":x.id,"network":x.network,"currency":x.currency,"minimum_threshold":x.minimum_threshold,"reported_balance":x.reported_balance,"threshold_reached":x.threshold_reached,"threshold_reached_at":x.threshold_reached_at.isoformat() if x.threshold_reached_at else None,"funds_received_at":x.funds_received_at.isoformat() if x.funds_received_at else None,"note":x.reconciliation_note} for x in rows]}

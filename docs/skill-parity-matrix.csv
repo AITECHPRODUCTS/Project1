@@ -40,7 +40,7 @@ meta/compliance-checker,S5,partial,backend/core/middleware.py,No comprehensive p
 meta/create-skill,S8,not_implemented,,No governed skill packaging and tests
 meta/funnel-planner,S4,partial,backend/services/s4_s5_landing.py,No campaign outcome validation
 meta/self-improver,S8,partial,backend/services/s6_s8_analytics.py,Requires sufficient confirmed data
-meta/skill-finder,S1,not_implemented,,No full skill capability runtime registry
+meta/skill-finder,S1,partial,backend/services/skill_finder.py; GET /api/skills/find; frontend/app/page.tsx; Dockerfile; tests/test_skill_finder.py; tests/test_skill_finder_api.py,Searchable 53-row capability inventory with stage and status filters; status is traceability only and does not certify runtime availability
 research/affiliate-program-search,S1,partial,backend/tools/affiliate_api.py,OpenAffiliate live contract not verified
 research/commission-calculator,S1,partial,backend/services/offer_intelligence.py,No provider-specific reversal or hold models
 research/competitor-spy,S1,partial,backend/services/s1_research.py,Public pages only; no official broad search metrics

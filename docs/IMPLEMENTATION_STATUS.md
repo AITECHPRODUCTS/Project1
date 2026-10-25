@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 39 partial and 14 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 40 partial and 13 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -134,3 +134,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The score exposes lexical distinctiveness, audience-language fit, clarity, optional evidence readiness and risk penalties. Missing proof is marked as missing; supplied notes and alternative statements are not treated as verified.
 - Added a dashboard form, API and service regression tests, and updated the skill parity and requirement traceability records.
 - Market validation, primary-source evidence review, buyer interviews and browser UAT remain pending; no competitor crawl or external action is performed by this feature.
+
+## 2026-10-25 implementation update — searchable skill finder
+- Added a workspace-authenticated read-only search endpoint and dashboard panel for the 53-row skill parity inventory, with stage and implementation-status filters and relevance-ranked results.
+- The inventory CSV is copied into the Docker runtime image. Missing or malformed inventory data fails explicitly rather than returning fabricated capability results.
+- Updated the parity matrix, implementation status, requirement traceability and v4 backlog counts. The inventory is a progress ledger, not an end-to-end production readiness certificate.
+- Full upstream skill source coverage, service-level acceptance tests for each skill, provider authorization and browser UAT remain open gates.

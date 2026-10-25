@@ -23,6 +23,7 @@ COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 COPY config.yaml ./config.yaml
 COPY scripts ./scripts
+COPY docs/skill-parity-matrix.csv ./docs/skill-parity-matrix.csv
 RUN mkdir -p /app/storage/chroma /app/storage/videos && useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8000

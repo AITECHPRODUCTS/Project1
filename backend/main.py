@@ -32,6 +32,7 @@ from backend.services.content_angle_ranker import rank_content_angles as rank_co
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
+from backend.services.skill_finder import find_skills as find_skills_service
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
@@ -416,6 +417,25 @@ async def switch_workspace(workspace_id: str, request: Request,
 @api.get("/integrations")
 async def integration_registry():
  return build_network_registry(settings.load_yaml())
+@api.get("/skills/find")
+async def skills_find(
+    q: str = Query(min_length=2, max_length=120),
+    stage: str | None = Query(default=None, max_length=2),
+    status: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=10, ge=1, le=30),
+    user: dict[str, Any] = Depends(require_auth),
+):
+    """Search the repository skill inventory without claiming the skills are production-ready."""
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before searching the skill inventory")
+    try:
+        return find_skills_service(query=q, stage=stage, status=status, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(503, "Skill parity inventory is not packaged in this deployment") from exc
+
+
 @api.get("/capabilities")
 async def capabilities():
     registry = build_network_registry(settings.load_yaml())

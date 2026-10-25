@@ -108,3 +108,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Deterministic topic-overlap scoring suggests missing source-to-destination links and anchor text from the destination headings. It is review-only; no links are inserted and no ranking or traffic impact is predicted.
 - Added regression coverage for topical recommendations, skipping existing links, partial fetch failure, minimum successful page count, same-origin/private URL rejection and the API response.
 - CMS-wide crawl index, auto insertion, client-rendered page coverage and browser UAT remain pending.
+
+## 2026-10-25 implementation update — verified-data ad optimization review signals
+- Added provider-verified sample gates (minimum 1,000 impressions and 30 clicks) before ROAS-based stop-loss or scale review. Insufficient or unverified evidence cannot trigger either recommendation.
+- A scale review requires ROAS at least 1.25× the existing review threshold plus at least 10 reported conversions. Stop-loss and scale outcomes remain human review suggestions only; no provider API is called to pause or increase spend.
+- A creative-fatigue signal requires four distinct provider-verified observation dates, at least 1,000 impressions and 30 clicks in each two-day comparison window, and a 30% or greater CTR decline. This is a heuristic review flag, not proof of fatigue.
+- Regression tests cover insufficient sample, stop-loss review, scale review, fatigue detection and blocking unverified reports.
+- Trusted provider ingestion, attribution-window maturity, production instrumentation and browser UAT remain pending.

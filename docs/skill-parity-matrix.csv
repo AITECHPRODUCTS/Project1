@@ -44,7 +44,7 @@ meta/skill-finder,S1,not_implemented,,No full skill capability runtime registry
 research/affiliate-program-search,S1,partial,backend/tools/affiliate_api.py,OpenAffiliate live contract not verified
 research/commission-calculator,S1,partial,backend/services/offer_intelligence.py,No provider-specific reversal or hold models
 research/competitor-spy,S1,partial,backend/services/s1_research.py,Public pages only; no official broad search metrics
-research/content-angle-ranker,S2,partial,backend/services/content_angle_ranker.py; backend/schemas.py; backend/main.py POST /api/content/angles/rank; frontend/app/page.tsx; tests/test_content_angle_ranker.py,Transparent heuristic scoring for topic fit audience fit evidence notes specificity and risky-claim language; never predicts conversions or revenue,Needs evaluated relevance dataset and editorial/browser UAT
+research/content-angle-ranker,S2,partial,backend/services/content_angle_ranker.py; backend/schemas.py; backend/main.py POST /api/content/angles/rank; frontend/app/page.tsx; tests/test_content_angle_ranker.py,"Heuristic editorial relevance scoring and risky-claim flags implemented; needs evaluated relevance dataset and editorial/browser UAT; no conversion or revenue forecast"
 research/find-and-verify-affiliate-program,S1,partial,backend/services/s1_research.py,Provider application and approval evidence incomplete
 research/monopoly-niche-finder,S1,partial,backend/services/s1_research.py,Input demand and competition must be measured
 research/niche-opportunity-finder,S1,partial,backend/services/s1_research.py,No independent demand provider

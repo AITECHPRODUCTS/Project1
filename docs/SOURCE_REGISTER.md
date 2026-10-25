@@ -19,3 +19,5 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Content-decay and content-moat implementations map to the uploaded pack's `skills/blog/content-decay-detector/SKILL.md`, `skills/blog/content-moat-calculator/SKILL.md` and `shared/references/seo-strategy.md`. Their live-source dependencies are intentionally recorded as pending instead of implied by heuristic code.
 
 - Traffic analyzer implementation maps to the uploaded pack's `skills/research/traffic-analyzer/SKILL.md`; the score/compare path uses operator-entered observations only. SimilarWeb/API access and independent traffic-source verification are not implemented by this slice.
+
+- Multi-program portfolio manager maps to `skills/automation/multi-program-manager/SKILL.md`; this slice consumes operator-supplied metrics and is deliberately not represented as a live network integration.

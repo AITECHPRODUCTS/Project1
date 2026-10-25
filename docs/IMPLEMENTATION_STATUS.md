@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 46 partial and 7 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 47 partial and 6 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -181,3 +181,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added validation for public domain inputs, unique domains, non-negative and bounded metrics, and plausible traffic-source percentages. No SimilarWeb/API request, website crawl, external search, conversion verification or publishing occurs.
 - Added schema, service and API regression tests; also aligned content-moat phase week totals with the overall modeled publishing timeline.
 - Authorized analytics provider connection, live-source verification, location-specific estimates and browser UAT remain pending.
+
+
+## 2026-10-25 implementation update — multi-program portfolio manager
+- Added an authenticated workspace-scoped POST /api/automation/multi-program-manager endpoint. It calculates EPC, revenue share, concentration, niche overlap, recurring-revenue share, metric completeness and cautious per-program actions from explicitly supplied inputs.
+- Added goal-specific portfolio guidance, traceable recommendations and a weekly action plan whose hour allocation sums to the provided budget. Output persists as a review-only workspace ContentAsset.
+- Missing clicks/revenue remain unknown; phase-out is only a candidate when measured low-EPC evidence crosses conservative thresholds. Program status, tracking, official terms and payouts are not automatically changed or independently verified.
+- Added schema, service and API tests plus the responsive dashboard panel and JSON export. Live affiliate-network connections, payout reconciliation and browser UAT remain pending.

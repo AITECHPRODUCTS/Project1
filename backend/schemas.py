@@ -699,6 +699,61 @@ def _content_decay_origin(value: str) -> tuple[str, str, int]:
     return (scheme, (parsed.hostname or "").lower().rstrip("."), parsed.port or (443 if scheme == "https" else 80))
 
 
+class AffiliatePortfolioProgram(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    affiliate_url: str | None = Field(default=None, max_length=2048)
+    reward_type: Literal["cps_recurring", "cps_one_time", "cps_lifetime", "cpl", "cpc", "other"] = "other"
+    reward_value: str = Field(default="", max_length=160)
+    monthly_revenue: float | None = Field(default=None, ge=0, le=1_000_000_000_000)
+    monthly_clicks: int | None = Field(default=None, ge=0, le=1_000_000_000_000)
+    niche: str = Field(default="", max_length=200)
+    status: Literal["active", "paused", "new", "considering"] = "active"
+    effort_hours_week: float | None = Field(default=None, ge=0, le=168)
+
+    @field_validator("name", "reward_value", "niche")
+    @classmethod
+    def normalize_portfolio_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @field_validator("affiliate_url")
+    @classmethod
+    def validate_affiliate_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        normalized = value.strip()
+        try:
+            parsed = urlparse(normalized)
+            host = (parsed.hostname or "").lower().rstrip(".")
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("Provide a valid public HTTP(S) affiliate URL") from exc
+        if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password:
+            raise ValueError("Provide a public HTTP(S) affiliate URL without credentials")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local/private affiliate URLs are not accepted")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private, loopback, link-local, multicast or reserved affiliate URL hosts are not accepted")
+        return normalized
+
+
+class MultiProgramManagerRequest(BaseModel):
+    programs: list[AffiliatePortfolioProgram] = Field(min_length=1, max_length=30)
+    goal: Literal["maximize_revenue", "diversify", "reduce_risk", "find_gaps"] = "maximize_revenue"
+    budget_hours: float = Field(default=10, gt=0, le=80)
+
+    @field_validator("programs")
+    @classmethod
+    def require_unique_program_names(cls, value: list[AffiliatePortfolioProgram]) -> list[AffiliatePortfolioProgram]:
+        names = [" ".join(item.name.split()).casefold() for item in value]
+        if len(names) != len(set(names)):
+            raise ValueError("Each affiliate program must have a unique name")
+        return value
+
+
 class TrafficSourceBreakdown(BaseModel):
     direct: float | None = Field(default=None, ge=0, le=100)
     search: float | None = Field(default=None, ge=0, le=100)

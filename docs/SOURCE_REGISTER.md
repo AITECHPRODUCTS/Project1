@@ -33,3 +33,9 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Re-checked the current implementation branch and exact hosted Actions runs before editing. The push and pull-request runs for `da5c0c76286df5a7f4ff2fc67d10cd3f3b44fee4` both completed successfully across Python/tests, frontend build, AI/RAG dependency verification and PostgreSQL 16 migration/concurrent-reversal checks.
 - Reviewed `Pasted text(6).txt` and `Pasted markdown (2).md` requirements for secure webhooks, deduplication, reversal handling, provider-specific auth/scopes, human-reviewed financial outputs and evidence-based analytics. The existing archive inventory still contains earlier project snapshots, not a distinct newly uploaded live-app ZIP.
 - Next security increment adds independent per-network webhook secrets. It does not claim a live network connection or remove the requirement for official provider contract tests.
+
+
+## 2026-10-25 S6 ledger build
+- Conversion/commission ledger increment ports the requirement for idempotent source events, reversal tracking, explicit evidence quality, human-review-safe reporting and currency isolation into a separate append-only table.
+- Historical rows are explicitly marked `legacy_unverified`, signed provider webhook observations `signed_webhook_verified`, and compatibility API submissions `api_submitted_unverified`; no provider authorization or real payout is implied.
+- The new migration, PostgreSQL direct-SQL immutability tests, SQLite/ORM regression tests and exact-SHA GitHub Actions checks are the current acceptance gates.

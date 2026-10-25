@@ -3,8 +3,8 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import event, Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, Session, mapped_column
 from backend.database import Base
 from backend.tenancy import TenantScopedMixin
 
@@ -128,6 +128,42 @@ class Conversion(TenantScopedMixin, Base):
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     event_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+class ConversionLedgerEntry(TenantScopedMixin, Base):
+    """Append-only, currency-safe observation of a conversion or commission adjustment."""
+
+    __tablename__ = "conversion_ledger_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "network", "external_event_id",
+            name="uq_conv_ledger_ws_network_event",
+        ),
+        Index("ix_conv_ledger_ws_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    network: Mapped[str] = mapped_column(String(100), index=True)
+    external_event_id: Mapped[str] = mapped_column(String(255))
+    click_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    entry_type: Mapped[str] = mapped_column(String(40))
+    original_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    commission_amount: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    revenue_amount: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), index=True)
+    status: Mapped[str] = mapped_column(String(60), index=True)
+    evidence_status: Mapped[str] = mapped_column(String(40), index=True)
+    source_event_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+@event.listens_for(Session, "before_flush")
+def _guard_conversion_ledger_append_only(session: Session, flush_context, instances) -> None:
+    """Prevent accidental ORM edits/deletes to historical money observations."""
+    for entity in (*session.dirty, *session.deleted):
+        if isinstance(entity, ConversionLedgerEntry):
+            raise ValueError("Conversion ledger entries are append-only")
+
 
 class WorkflowRun(TenantScopedMixin, Base):
     __tablename__ = "workflow_runs"

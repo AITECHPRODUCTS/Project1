@@ -7,12 +7,14 @@ import json
 import uuid
 
 import pytest
+from decimal import Decimal
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import DBAPIError
 
 from backend import main
 from backend.database import SessionLocal, engine
-from backend.models import Campaign, ClickEvent, Conversion, Workspace
+from backend.models import Campaign, ClickEvent, Conversion, ConversionLedgerEntry, Workspace
 from backend.tenancy import workspace_scope
 
 
@@ -72,6 +74,21 @@ async def test_postgres_serializes_concurrent_full_conversion_reversals(monkeypa
                         status="approved",
                     )
                 )
+                db.add(
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id=ORIGINAL_EVENT_ID,
+                        click_id=click_id,
+                        entry_type="conversion",
+                        commission_amount=Decimal("1.250000"),
+                        revenue_amount=Decimal("9.500000"),
+                        currency="USD",
+                        status="approved",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    )
+                )
                 await db.commit()
 
         payloads = [
@@ -115,9 +132,18 @@ async def test_postgres_serializes_concurrent_full_conversion_reversals(monkeypa
                 assert reversal.commission == pytest.approx(-1.25)
                 assert reversal.revenue == pytest.approx(-9.50)
                 assert sum(row.commission for row in rows) == pytest.approx(0.0)
+                ledger_rows = list((await db.scalars(select(ConversionLedgerEntry))).all())
+                assert len(ledger_rows) == 2
+                assert sum((entry.commission_amount for entry in ledger_rows), Decimal("0")) == Decimal("0.000000")
+                reversal_entry = next(entry for entry in ledger_rows if entry.external_event_id != ORIGINAL_EVENT_ID)
+                assert reversal_entry.entry_type == "reversal"
+                assert reversal_entry.evidence_status == "signed_webhook_verified"
     finally:
         if workspace_id:
             async with engine.begin() as connection:
+                await connection.execute(
+                    delete(ConversionLedgerEntry).where(ConversionLedgerEntry.workspace_id == workspace_id)
+                )
                 await connection.execute(
                     delete(Conversion).where(Conversion.workspace_id == workspace_id)
                 )
@@ -126,5 +152,68 @@ async def test_postgres_serializes_concurrent_full_conversion_reversals(monkeypa
                 )
                 await connection.execute(
                     delete(Campaign).where(Campaign.workspace_id == workspace_id)
+                )
+                await connection.execute(delete(Workspace).where(Workspace.id == workspace_id))
+
+
+@pytest.mark.asyncio
+async def test_postgres_conversion_ledger_rejects_direct_update_and_delete(monkeypatch):
+    if not engine.url.drivername.startswith("postgresql"):
+        pytest.skip("requires the dedicated PostgreSQL integration CI job")
+
+    workspace_id: str | None = None
+    entry_id: str | None = None
+    try:
+        async with SessionLocal() as db:
+            workspace = Workspace(
+                name="Ledger immutability test",
+                slug=f"ledger-immutable-{uuid.uuid4().hex}",
+            )
+            db.add(workspace)
+            await db.commit()
+            workspace_id = workspace.id
+
+        with workspace_scope(workspace_id):
+            async with SessionLocal() as db:
+                entry = ConversionLedgerEntry(
+                    workspace_id=workspace_id,
+                    network="ledger-immutability-network",
+                    external_event_id=uuid.uuid4().hex,
+                    entry_type="conversion",
+                    commission_amount=Decimal("2.340000"),
+                    revenue_amount=Decimal("10.000000"),
+                    currency="USD",
+                    status="approved",
+                    evidence_status="signed_webhook_verified",
+                    source_event_json={"test_fixture": True},
+                )
+                db.add(entry)
+                await db.commit()
+                entry_id = entry.id
+
+        with pytest.raises(DBAPIError):
+            async with engine.begin() as connection:
+                await connection.execute(
+                    update(ConversionLedgerEntry)
+                    .where(ConversionLedgerEntry.id == entry_id)
+                    .values(status="tampered")
+                )
+
+        with pytest.raises(DBAPIError):
+            async with engine.begin() as connection:
+                await connection.execute(
+                    delete(ConversionLedgerEntry).where(ConversionLedgerEntry.id == entry_id)
+                )
+
+        async with SessionLocal() as db:
+            persisted = await db.get(ConversionLedgerEntry, entry_id)
+            assert persisted is not None
+            assert persisted.status == "approved"
+            assert persisted.commission_amount == Decimal("2.340000")
+    finally:
+        if workspace_id:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    delete(ConversionLedgerEntry).where(ConversionLedgerEntry.workspace_id == workspace_id)
                 )
                 await connection.execute(delete(Workspace).where(Workspace.id == workspace_id))

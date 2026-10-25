@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio,base64,hashlib,hmac,json,logging,re,secrets,time
 from contextlib import asynccontextmanager
 from datetime import datetime,timedelta,timezone
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qsl,urlencode,urlparse,urlunparse
 from typing import Any
@@ -21,7 +22,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
@@ -1064,7 +1065,7 @@ async def email_worker(
 async def conversion_create(p:ConversionRequest,db:AsyncSession=Depends(get_session)):
  network=p.network.lower();existing=await db.scalar(select(Conversion.id).where(Conversion.network==network,Conversion.external_event_id==p.external_event_id))
  if existing:return {"status":"duplicate_ignored","id":existing}
- utm=conversion_tracker(p.url or "");row=Conversion(network=network,external_event_id=p.external_event_id,click_id=p.click_id or utm["click_id"],utm_source=p.utm_source or utm["utm_source"],utm_medium=p.utm_medium or utm["utm_medium"],utm_campaign=p.utm_campaign or utm["utm_campaign"],utm_content=p.utm_content or utm["utm_content"],hook=p.hook or p.utm_content or utm["utm_content"],revenue=p.revenue,commission=p.commission,currency=p.currency.upper(),status=p.status.lower(),event_json=p.event_json);db.add(row)
+ utm=conversion_tracker(p.url or "");row=Conversion(network=network,external_event_id=p.external_event_id,click_id=p.click_id or utm["click_id"],utm_source=p.utm_source or utm["utm_source"],utm_medium=p.utm_medium or utm["utm_medium"],utm_campaign=p.utm_campaign or utm["utm_campaign"],utm_content=p.utm_content or utm["utm_content"],hook=p.hook or p.utm_content or utm["utm_content"],revenue=float(p.revenue),commission=float(p.commission),currency=p.currency.upper(),status=p.status.lower(),event_json=p.event_json);ledger_row=ConversionLedgerEntry(workspace_id=get_workspace_id(),network=network,external_event_id=p.external_event_id,click_id=p.click_id or utm["click_id"],entry_type="conversion",commission_amount=p.commission,revenue_amount=p.revenue,currency=p.currency.upper(),status=p.status.lower(),evidence_status="api_submitted_unverified",source_event_json=p.event_json,observed_at=utcnow());db.add(row);db.add(ledger_row)
  try:await db.commit()
  except IntegrityError:await db.rollback();return {"status":"duplicate_ignored"}
  return {"status":"recorded","id":row.id,"utm":utm}
@@ -1293,6 +1294,76 @@ async def ledger(
             "created_at": x.created_at.isoformat() if x.created_at else None,
         } for x in rows],
     }
+@api.get("/finance/conversion-ledger")
+async def conversion_ledger(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return immutable decimal observations with currency and evidence kept separate."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing the conversion ledger")
+
+    workspace_filter = ConversionLedgerEntry.workspace_id == str(workspace_id)
+    rows = list((await db.scalars(
+        select(ConversionLedgerEntry)
+        .where(workspace_filter)
+        .order_by(ConversionLedgerEntry.created_at.desc())
+        .limit(500)
+    )).all())
+    grouped = await db.execute(
+        select(
+            ConversionLedgerEntry.currency,
+            ConversionLedgerEntry.evidence_status,
+            func.count(ConversionLedgerEntry.id),
+            func.coalesce(func.sum(ConversionLedgerEntry.commission_amount), 0),
+            func.coalesce(func.sum(ConversionLedgerEntry.revenue_amount), 0),
+        )
+        .where(workspace_filter)
+        .group_by(ConversionLedgerEntry.currency, ConversionLedgerEntry.evidence_status)
+        .order_by(ConversionLedgerEntry.currency, ConversionLedgerEntry.evidence_status)
+    )
+
+    def money_text(value: Any) -> str:
+        return format(Decimal(str(value or 0)), ".6f")
+
+    totals = [
+        {
+            "currency": str(currency).strip().upper(),
+            "evidence_status": str(evidence_status),
+            "entry_count": int(entry_count),
+            "commission_total": money_text(commission_total),
+            "revenue_total": money_text(revenue_total),
+        }
+        for currency, evidence_status, entry_count, commission_total, revenue_total in grouped.all()
+    ]
+    return {
+        "returned_count": len(rows),
+        "total_entry_count": sum(item["entry_count"] for item in totals),
+        "limit": 500,
+        "read_only": True,
+        "totals_by_currency_and_evidence": totals,
+        "data": [
+            {
+                "id": entry.id,
+                "network": entry.network,
+                "external_event_id": entry.external_event_id,
+                "click_id": entry.click_id,
+                "entry_type": entry.entry_type,
+                "original_event_id": entry.original_event_id,
+                "commission_amount": money_text(entry.commission_amount),
+                "revenue_amount": money_text(entry.revenue_amount),
+                "currency": entry.currency,
+                "status": entry.status,
+                "evidence_status": entry.evidence_status,
+                "observed_at": entry.observed_at.isoformat() if entry.observed_at else None,
+                "created_at": entry.created_at.isoformat() if entry.created_at else None,
+            }
+            for entry in rows
+        ],
+    }
+
+
 @api.patch("/finance/mail-commissions/{evidence_id}/review", dependencies=[Depends(require_admin)])
 async def review_commission_evidence(
     evidence_id: str,
@@ -1962,7 +2033,7 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
    commission=-abs(commission);revenue=-abs(revenue);status="reversal_unmatched"
  currency=str(p.get("currency") or "USD").strip().upper()
  if len(currency)!=3 or not currency.isalpha():raise HTTPException(422,"currency must be a three-letter code")
- row=Conversion(workspace_id=click.workspace_id,network=net,external_event_id=eid,click_id=click_id,utm_source=p.get("utm_source"),utm_medium=p.get("utm_medium"),utm_campaign=p.get("utm_campaign"),utm_content=p.get("utm_content"),hook=p.get("hook") or p.get("utm_content"),commission=commission,revenue=revenue,currency=currency,status=status,event_json={**p,"reversal":reversal,"original_event_id":original_id or None});db.add(row)
+ row=Conversion(workspace_id=click.workspace_id,network=net,external_event_id=eid,click_id=click_id,utm_source=p.get("utm_source"),utm_medium=p.get("utm_medium"),utm_campaign=p.get("utm_campaign"),utm_content=p.get("utm_content"),hook=p.get("hook") or p.get("utm_content"),commission=commission,revenue=revenue,currency=currency,status=status,event_json={**p,"reversal":reversal,"original_event_id":original_id or None});ledger_row=ConversionLedgerEntry(workspace_id=click.workspace_id,network=net,external_event_id=eid,click_id=click_id,entry_type="reversal" if reversal else "conversion",original_event_id=original_id or None,commission_amount=Decimal(str(commission)),revenue_amount=Decimal(str(revenue)),currency=currency,status=status,evidence_status="signed_webhook_verified",source_event_json={**p,"reversal":reversal,"original_event_id":original_id or None},observed_at=datetime.now(timezone.utc));db.add(row);db.add(ledger_row)
  try:await db.commit()
  except IntegrityError as exc:
   await db.rollback()

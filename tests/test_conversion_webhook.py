@@ -13,6 +13,8 @@ from fastapi.testclient import TestClient
 from backend import main
 from backend.config import Settings
 from backend.database import get_session
+from backend.models import Conversion, ConversionLedgerEntry
+from decimal import Decimal
 import pytest
 
 
@@ -101,8 +103,10 @@ def test_conversion_webhook_persists_verified_event_for_resolved_click(monkeypat
         assert response.json()["status"] == "recorded"
         assert response.json()["reversal"] is False
         session.commit.assert_awaited_once()
-        session.add.assert_called_once()
-        row = session.add.call_args.args[0]
+        assert session.add.call_count == 2
+        added = [call.args[0] for call in session.add.call_args_list]
+        row = next(value for value in added if isinstance(value, Conversion))
+        ledger_entry = next(value for value in added if isinstance(value, ConversionLedgerEntry))
         assert row.network == "example-network"
         assert row.external_event_id == "evt-verified-1"
         assert row.click_id == "click-1"
@@ -110,6 +114,13 @@ def test_conversion_webhook_persists_verified_event_for_resolved_click(monkeypat
         assert row.commission == 1.25
         assert row.revenue == 9.5
         assert row.currency == "USD"
+        assert ledger_entry.workspace_id == "workspace-1"
+        assert ledger_entry.network == "example-network"
+        assert ledger_entry.external_event_id == "evt-verified-1"
+        assert ledger_entry.entry_type == "conversion"
+        assert ledger_entry.commission_amount == Decimal("1.250000")
+        assert ledger_entry.revenue_amount == Decimal("9.500000")
+        assert ledger_entry.evidence_status == "signed_webhook_verified"
     finally:
         main.app.dependency_overrides.pop(get_session, None)
 
@@ -419,8 +430,12 @@ def test_conversion_webhook_accepts_network_specific_secret(monkeypatch):
             )
         assert response.status_code == 200
         assert response.json()["status"] == "recorded"
-        row = session.add.call_args.args[0]
+        added = [call.args[0] for call in session.add.call_args_list]
+        row = next(value for value in added if isinstance(value, Conversion))
+        ledger_entry = next(value for value in added if isinstance(value, ConversionLedgerEntry))
         assert row.network == "example-network"
         assert row.external_event_id == "evt-network-secret"
+        assert ledger_entry.external_event_id == "evt-network-secret"
+        assert ledger_entry.evidence_status == "signed_webhook_verified"
     finally:
         main.app.dependency_overrides.pop(get_session, None)

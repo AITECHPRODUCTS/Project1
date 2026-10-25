@@ -81,8 +81,8 @@ class ConversionRequest(BaseModel):
     utm_campaign: str | None = None
     utm_content: str | None = None
     hook: str | None = None
-    revenue: float = Field(default=0, ge=0)
-    commission: float = Field(default=0, ge=0)
+    revenue: Decimal = Field(default=Decimal("0"), ge=0)
+    commission: Decimal = Field(default=Decimal("0"), ge=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
     status: str = Field(default="pending", max_length=60)
     url: str | None = None

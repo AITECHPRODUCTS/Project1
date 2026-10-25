@@ -19,6 +19,7 @@ from backend.config import get_settings
 from backend.core.errors import IntegrationNotConfiguredError
 from backend.database import SessionLocal
 from backend.models import MailCommission
+from backend.tenancy import workspace_scope
 
 # Grouping separators must be valid; otherwise a malformed value such as 1,2,3
 # can be silently misread as a financial amount.
@@ -113,7 +114,10 @@ def parse_commission_message(raw: bytes) -> dict[str, Any] | None:
     }
 
 
-async def import_commission_emails(*, mailbox: str = "INBOX", limit: int = 100) -> dict[str, Any]:
+async def import_commission_emails(*, workspace_id: str | None = None, mailbox: str = "INBOX", limit: int = 100) -> dict[str, Any]:
+    if not workspace_id:
+        raise IntegrationNotConfiguredError("An active workspace is required to import commission evidence")
+    workspace_id = str(workspace_id)
     settings = get_settings()
     allowlist = {
         value.strip().lower()
@@ -167,28 +171,42 @@ async def import_commission_emails(*, mailbox: str = "INBOX", limit: int = 100) 
 
     from sqlalchemy import select
 
-    async with SessionLocal() as db:
-        created = 0
-        for item in items:
-            existing = await db.scalar(
-                select(MailCommission.id).where(MailCommission.message_id == item["message_id"])
-            )
-            if existing:
-                continue
-            db.add(
-                MailCommission(
-                    message_id=item["message_id"],
-                    network=item["network"],
-                    commission=item["commission"],
-                    currency=item["currency"],
-                    status="pending_verification",
-                    email_date=item["email_date"],
-                    parsed_subject=item["subject"],
-                    evidence_json={key: value for key, value in item.items() if key != "body_excerpt"},
+    from sqlalchemy.exc import IntegrityError
+
+    with workspace_scope(workspace_id):
+        async with SessionLocal() as db:
+            created = 0
+            for item in items:
+                existing = await db.scalar(
+                    select(MailCommission.id).where(
+                        MailCommission.workspace_id == workspace_id,
+                        MailCommission.message_id == item["message_id"],
+                    )
                 )
-            )
-            created += 1
-        await db.commit()
+                if existing:
+                    continue
+                try:
+                    async with db.begin_nested():
+                        db.add(
+                            MailCommission(
+                                workspace_id=workspace_id,
+                                message_id=item["message_id"],
+                                network=item["network"],
+                                commission=item["commission"],
+                                currency=item["currency"],
+                                status="pending_verification",
+                                email_date=item["email_date"],
+                                parsed_subject=item["subject"],
+                                evidence_json={key: value for key, value in item.items() if key != "body_excerpt"},
+                            )
+                        )
+                        await db.flush()
+                    created += 1
+                except IntegrityError:
+                    # Another worker may have imported this exact message concurrently.
+                    # The savepoint keeps unrelated messages in the batch intact.
+                    continue
+            await db.commit()
     return {
         "messages_matched": len(items),
         "rows_created": created,

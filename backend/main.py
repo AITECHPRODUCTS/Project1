@@ -1057,9 +1057,12 @@ async def websocket(ws:WebSocket):
  except Exception:await hub.disconnect(ws)
 
 @api.post("/finance/email-import",dependencies=[Depends(require_admin)])
-async def commission_email_import():
+async def commission_email_import(user: dict[str, Any] = Depends(require_auth)):
  from backend.services.commission_mail_importer import import_commission_emails
- try:return await import_commission_emails()
+ workspace_id = user.get("workspace_id")
+ if not workspace_id:
+  raise HTTPException(403, "Select an authorized workspace before importing commission evidence")
+ try:return await import_commission_emails(workspace_id=str(workspace_id))
  except Exception as exc:raise HTTPException(502,f"Mail import failed: {type(exc).__name__}: {str(exc)[:200]}") from exc
 
 @api.get("/finance/mail-commissions")

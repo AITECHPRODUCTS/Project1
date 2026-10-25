@@ -1940,7 +1940,7 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
  original_id=str(p.get("original_event_id") or p.get("parent_transaction_id") or "").strip()
  if len(original_id)>255:raise HTTPException(422,"original_event_id must be 255 characters or fewer")
  if reversal:
-  parent=await db.scalar(select(Conversion).where(Conversion.network==str(p.get("original_network") or net).lower(),Conversion.external_event_id==original_id)) if original_id else None
+  parent=await db.scalar(select(Conversion).where(Conversion.network==str(p.get("original_network") or net).lower(),Conversion.external_event_id==original_id).with_for_update()) if original_id else None
   if parent and parent.status=="reversed":return {"status":"duplicate_reversal_ignored","original_event_id":original_id}
   if parent:commission=-abs(parent.commission);revenue=-abs(parent.revenue);parent.status="reversed";status="reversed"
   else:

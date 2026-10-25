@@ -195,3 +195,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Oversized events fail with HTTP 413 before signature parsing, database lookup or persistence. The endpoint remains provider-signature gated, and no publishing or payout behavior was enabled.
 - Added route regression tests for declared-length and streamed oversized payloads, including assertions that no database access or writes occur.
 - Verification status: implementation is committed on the existing branch; the new exact-SHA Actions jobs are the acceptance gate. PostgreSQL production ingress/proxy body limits and provider contract tests remain separate release gates.
+
+
+## 2026-10-25 implementation update — reversal concurrency protection
+- Affiliate conversion webhook reversal lookup now requests a database row lock (SELECT ... FOR UPDATE) on the original conversion before testing/updating its reversal status. On PostgreSQL this serializes competing full-reversal attempts for the same original event, preventing two distinct callback IDs from both applying the same full commission offset under normal READ COMMITTED transaction isolation.
+- Added regression tests for reversal amount/sign, source-event linkage, row-lock query construction and a second reversal against an already reversed conversion.
+- This does not claim support for partial reversals or certify PostgreSQL concurrency behavior; a real PostgreSQL integration test and append-only ledger redesign remain release gates. The existing conversion row status is still updated as a summary state while a reversal observation is recorded separately.
+- Acceptance gate: hosted Python tests/migration check, AI/RAG dependency verification and frontend typecheck/build on the exact new SHA.

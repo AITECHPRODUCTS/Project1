@@ -254,3 +254,77 @@ def test_conversion_webhook_rejects_streamed_oversize_body_without_content_lengt
         session.commit.assert_not_awaited()
     finally:
         main.app.dependency_overrides.pop(get_session, None)
+
+
+
+def test_conversion_webhook_reverses_original_once_under_row_lock(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    click = SimpleNamespace(click_id="click-refund", workspace_id="workspace-1")
+    parent = SimpleNamespace(
+        id="original-conversion", status="approved", commission=1.25, revenue=9.50
+    )
+    session, override = fake_session(click, None, parent)
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps(
+        {
+            "event_id": "evt-refund-1",
+            "click_id": "click-refund",
+            "status": "refunded",
+            "original_event_id": "evt-original-1",
+        },
+        separators=(",", ":"),
+    ).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 200
+        assert response.json()["status"] == "recorded"
+        assert response.json()["reversal"] is True
+        assert response.json()["commission_adjustment"] == -1.25
+        assert parent.status == "reversed"
+        session.add.assert_called_once()
+        reversal = session.add.call_args.args[0]
+        assert reversal.status == "reversed"
+        assert reversal.commission == -1.25
+        assert reversal.revenue == -9.50
+        assert reversal.event_json["original_event_id"] == "evt-original-1"
+        assert "FOR UPDATE" in str(session.scalar.await_args_list[2].args[0]).upper()
+        session.commit.assert_awaited_once()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+def test_conversion_webhook_ignores_second_reversal_for_already_reversed_parent(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    click = SimpleNamespace(click_id="click-refund", workspace_id="workspace-1")
+    parent = SimpleNamespace(
+        id="original-conversion", status="reversed", commission=-1.25, revenue=-9.50
+    )
+    session, override = fake_session(click, None, parent)
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps(
+        {
+            "event_id": "evt-refund-2",
+            "click_id": "click-refund",
+            "status": "chargeback",
+            "original_event_id": "evt-original-1",
+        },
+        separators=(",", ":"),
+    ).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 200
+        assert response.json()["status"] == "duplicate_reversal_ignored"
+        session.add.assert_not_called()
+        session.commit.assert_not_awaited()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)

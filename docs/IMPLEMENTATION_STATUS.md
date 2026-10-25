@@ -241,3 +241,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added a separate `Immutable evidence ledger` control beside the existing commission ledger so the original finance UI remains intact.
 - The panel reads `GET /api/finance/conversion-ledger`, displays read-only exact decimal strings and currency/evidence-separated totals, lists recent conversion/reversal observations, and visibly distinguishes signed-webhook evidence from legacy unverified and operator/API submitted observations.
 - Includes empty and read-only states, accessible table headings and evidence status text. Browser accessibility and workspace-role end-to-end UAT remain pending; this increment's CI is pending on the next SHA.
+
+
+## 2026-10-25 implementation update — blueprint v3 source parity gate
+- Reviewed the attached Full Product/Engineering/Integration/Release Blueprint v3 and recorded its SHA-256 in docs/SOURCE_REGISTER.md.
+- Vendored 53 upstream SKILL.md definitions, the upstream registry/evaluation set, source guidance/template and 12 shared references under knowledge/affiliate-skills/upstream/, pinned to Affitor/affiliate-skills commit f4cb063a0ee83b1b9e5167e396ab46cc9123dadc. The upstream README claim of 52 skills is explicitly surfaced; the registry and filesystem count is 53.
+- Added a source-manifest verifier and an independent repo-guard workflow job. These verify pinned source blobs, registry/matrix coverage and status-ledger consistency; they do not promote partial skills to implemented.
+- Current skill matrix remains 47 partial, 6 not implemented, 0 fully end-to-end complete. Latest previously verified baseline c7ee98e1... passed push/PR workflows, including PostgreSQL migration/reversal checks. The newly added guard/vendor changes need exact-SHA hosted workflow confirmation.
+- P0 work still open: generate and commit a reproducible frontend lockfile; strengthen tenant/RBAC/security tests across all active endpoints and workers; add dependency/security scans and Playwright UAT; prove provider contracts, staging/deployment, backup/restore and operational budgets. The local package registry was not reachable for lockfile generation, so CI is not yet switched to npm ci.

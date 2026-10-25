@@ -39,3 +39,10 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Conversion/commission ledger increment ports the requirement for idempotent source events, reversal tracking, explicit evidence quality, human-review-safe reporting and currency isolation into a separate append-only table.
 - Historical rows are explicitly marked `legacy_unverified`, signed provider webhook observations `signed_webhook_verified`, and compatibility API submissions `api_submitted_unverified`; no provider authorization or real payout is implied.
 - The new migration, PostgreSQL direct-SQL immutability tests, SQLite/ORM regression tests and exact-SHA GitHub Actions checks are the current acceptance gates.
+
+
+## 2026-10-25 — Full Blueprint v3 and pinned source-skill integration
+- Reviewed the attached OmniAffiliateOS_Project1_Full_Blueprint_v3(1).md in full (SHA-256 bfc07bdb85388c3a0b62aa168b167b3f378f0384abd223a55dc8d9f50bf104c1). Binding priorities include exact-SHA evidence, no branch creation, current-tree verification, tenant/security checks, provider-state truthfulness, draft-first side effects, durable workflows and production-release gates.
+- Pinned source: Affitor/affiliate-skills commit f4cb063a0ee83b1b9e5167e396ab46cc9123dadc; user archive SHA-256 dc463b31d80d6917142d99d9bc7f7b19385e8e0c74ff5c0cc57f4410ed73e1a6. The registry and skills filesystem both contain 53 definitions; upstream README says 52. Registry/filesystem are authoritative and the discrepancy is surfaced in docs/UPSTREAM_SKILL_PARITY.md.
+- Source docs/registry/evals/shared references are vendored under knowledge/affiliate-skills/upstream/ with upstream Git blob hashes in SOURCE_MANIFEST.json. They are reference doctrine, not a claim that all 53 app capabilities are implemented. Runtime status remains sourced from docs/skill-parity-matrix.csv.
+- scripts/verify_skill_registry.py and a new independent repo-guard Actions job enforce source-blob integrity, 53 source/registry/matrix parity, status-ledger consistency, duplicate detection and the documented README-count mismatch.

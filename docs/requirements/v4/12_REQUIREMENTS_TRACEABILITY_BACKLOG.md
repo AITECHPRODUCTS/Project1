@@ -20,3 +20,5 @@
 | R-16 | Production release | Actions + deployment docs | not release ready | All required CI, provider, security, staging and rollback gates |
 
 | R-17 | Affiliate portfolio operations | `backend/services/multi_program_manager.py`, `POST /api/automation/multi-program-manager` | partial | Authorized network data and payout reconciliation, attribution quality, program-action UAT |
+
+| R-18 | P0 — pinned skill source/traceability | knowledge/affiliate-skills/upstream/SOURCE_MANIFEST.json, 53 vendored skill documents, scripts/verify_skill_registry.py, repo-guard CI | implemented source inventory; exact-SHA guard run pending for this commit; 47 partial / 6 not implemented at app-runtime level | Guard/test proof on new SHA; each skill's actual service/API/UI/provider acceptance remains independently required |

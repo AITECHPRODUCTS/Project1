@@ -1024,7 +1024,7 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
    commission=-abs(commission);revenue=-abs(revenue);status="reversal_unmatched"
  currency=str(p.get("currency") or "USD").strip().upper()
  if len(currency)!=3 or not currency.isalpha():raise HTTPException(422,"currency must be a three-letter code")
- row=Conversion(network=net,external_event_id=eid,click_id=click_id,utm_source=p.get("utm_source"),utm_medium=p.get("utm_medium"),utm_campaign=p.get("utm_campaign"),utm_content=p.get("utm_content"),hook=p.get("hook") or p.get("utm_content"),commission=commission,revenue=revenue,currency=currency,status=status,event_json={**p,"reversal":reversal,"original_event_id":original_id or None});db.add(row)
+ row=Conversion(workspace_id=click.workspace_id,network=net,external_event_id=eid,click_id=click_id,utm_source=p.get("utm_source"),utm_medium=p.get("utm_medium"),utm_campaign=p.get("utm_campaign"),utm_content=p.get("utm_content"),hook=p.get("hook") or p.get("utm_content"),commission=commission,revenue=revenue,currency=currency,status=status,event_json={**p,"reversal":reversal,"original_event_id":original_id or None});db.add(row)
  try:await db.commit()
  except IntegrityError as exc:
   await db.rollback()

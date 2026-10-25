@@ -23,11 +23,12 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAtomizeRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
+from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
@@ -490,6 +491,24 @@ async def keywords(payload:dict[str,Any]):
  items=payload.get("keywords")
  if not isinstance(items,list) or any(not isinstance(x,str) for x in items):raise HTTPException(422,"keywords must be a list of strings")
  return keyword_cluster_architect(items)
+
+@api.post("/content/angles/rank")
+async def content_angle_rank(
+    payload: ContentAngleRankRequest,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    """Rank draft angles; never treats the score as a conversion or revenue forecast."""
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before ranking content angles")
+    try:
+        return rank_content_angles_service(
+            topic=payload.topic,
+            audience=payload.audience,
+            candidates=[item.model_dump() for item in payload.candidates],
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
 
 @api.post("/content/atomize")
 async def atomize_content_route(

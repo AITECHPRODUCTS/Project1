@@ -202,3 +202,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added regression tests for reversal amount/sign, source-event linkage, row-lock query construction and a second reversal against an already reversed conversion.
 - This does not claim support for partial reversals or certify PostgreSQL concurrency behavior; a real PostgreSQL integration test and append-only ledger redesign remain release gates. The existing conversion row status is still updated as a summary state while a reversal observation is recorded separately.
 - Acceptance gate: hosted Python tests/migration check, AI/RAG dependency verification and frontend typecheck/build on the exact new SHA.
+
+
+## 2026-10-25 test infrastructure — PostgreSQL integration acceptance
+- Added a dedicated GitHub Actions PostgreSQL 16 service job. It runs the actual Alembic upgrade, drift check, downgrade/upgrade cycle, and a concurrent signed-conversion reversal API test against PostgreSQL (not SQLite).
+- The integration test creates isolated test workspace/campaign/click/conversion fixtures, sends two distinct full-reversal events concurrently, asserts exactly one offset is recorded and one is ignored, verifies ledger totals/statuses, and removes its test rows.
+- This adds production-relevant database concurrency evidence; it does not itself certify production schema restore/backups, load behavior, partial reversals, external provider signatures/scopes, or deployed ingress settings. CI result for the exact candidate SHA is pending until GitHub Actions completes.

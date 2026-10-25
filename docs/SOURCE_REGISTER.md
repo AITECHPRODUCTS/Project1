@@ -21,3 +21,9 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Traffic analyzer implementation maps to the uploaded pack's `skills/research/traffic-analyzer/SKILL.md`; the score/compare path uses operator-entered observations only. SimilarWeb/API access and independent traffic-source verification are not implemented by this slice.
 
 - Multi-program portfolio manager maps to `skills/automation/multi-program-manager/SKILL.md`; this slice consumes operator-supplied metrics and is deliberately not represented as a live network integration.
+
+
+## 2026-10-25 continuation audit
+- Re-inventoried prior Library files and inspected the existing `OmniAffiliateOS_build.zip` archive (500 entries; historical FastAPI/Next.js source snapshot) plus `Project1-main(1).zip` (small CI/bootstrap reference). These are earlier project/reference snapshots, not a separate newly uploaded live-app ZIP in the current Library inventory.
+- The archived v4 requirements, integration matrix, acceptance traceability, UI/UX, security/privacy, CI/UAT and deployment-operation contracts were used alongside the current branch backlog. Continue porting only changes that can be reconciled with the current branch and tested; do not replace the current application with an archive.
+- Current session adds bounded signed-webhook input and serialized full-reversal handling with additional regression coverage. External providers, production PostgreSQL environment and deployment remain unverified until their dedicated gates pass.

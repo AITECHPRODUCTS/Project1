@@ -29,7 +29,7 @@ PATTERNS = [
         rf"commission(?:\s+earned|\s+of|\s+amount)?\s*[:=]?\s*(?:USD\s*)?\$?\s*{_AMOUNT}",
         re.I,
     ),
-    re.compile(rf"\$\s*{_AMOUNT}\s+(?:commission|earned)", re.I),
+    re.compile(rf"(?:\$|€|£)\s*{_AMOUNT}\s+(?:commission|earned)", re.I),
 ]
 
 

@@ -258,3 +258,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Runtime skill parity remains 47 partial, 6 not implemented and 0 fully end-to-end complete out of 53 tracked skills. The 53-source inventory is not an overall product completion percentage.
 - Added a dedicated `security-audit` workflow job for pip-audit across core/test and optional AI/RAG requirements, plus npm audit at the high-severity threshold. This scan is newly configured; its status is pending until the exact candidate's Actions run completes.
 - Next P0 actions: remediate any audit findings, then expand endpoint/worker tenant/RBAC coverage, add secret scanning/SBOM and Playwright accessibility/viewport UAT, and verify backup/restore, provider contracts, staging and rollback. Product remains NOT RELEASE READY.
+
+
+## 2026-10-25 dependency-audit remediation in progress
+- The first exact-SHA security-audit run on `f129ecf4576f1d35229525669613ecebcf17d65b` failed on the core/test dependency graph, finding advisories against the resolved Pillow 12.3.0 and pytest 8.4.2 versions. The scanner listed Pillow 13.0.0 and pytest 9.0.3 as fixed versions. These were not ignored or allowlisted.
+- Updated the declared ranges to require `Pillow>=13.0.0,<14.0` and `pytest>=9.0.3,<10.0`. This changes version constraints only; compatibility remains unverified until the Python regression suite, optional AI/RAG imports, PostgreSQL integration, and both dependency-audit profiles pass on the new SHA.
+- npm-audit outcome was not reached in the failed core scan and must be reported from a run that gets to that step.

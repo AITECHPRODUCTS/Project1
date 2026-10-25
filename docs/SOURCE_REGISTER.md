@@ -53,3 +53,8 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Follow-up workflow commit `e6e6eb4e552b4887da252db0df172dd25ee79561` switched the regular frontend CI install to `npm ci --no-audit --no-fund`. Exact-SHA push run [40213802242](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213802242) and PR run [40213808545](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213808545) both passed across Python, PostgreSQL, AI/RAG, frontend and repo-guard jobs. Push-only lockfile sync also passed; it did not create a second commit because the committed lockfile was unchanged.
 - Lockfile verification: npm lockfile version 3; 141 package entries, all with resolved tarball identities; root dependency and devDependency declarations match the manifest.
 - A separate pip-audit/npm-audit CI gate is now being added as the next P0 security step. Treat its results as pending until new exact-SHA runs complete. Remaining release blockers include secret/SBOM scans, broader tenant/RBAC tests, browser UAT, provider contracts, and backup/restore/staging verification.
+
+
+## 2026-10-25 security-audit first result and remediation
+- The newly added `security-audit` job on `f129ecf4576f1d35229525669613ecebcf17d65b` failed on `pip-audit -r requirements-dev.txt`: Pillow 12.3.0 has advisories whose listed fix is 13.0.0; pytest 8.4.2 has a PYSEC advisory whose listed fix is 9.0.3. The optional AI/RAG profile and npm audit steps were not reached in that job.
+- Updated requirement bounds to `Pillow>=13.0.0,<14.0` and `pytest>=9.0.3,<10.0` without allowlisting the vulnerabilities. Full compatibility and scan status are pending the new exact-SHA workflow runs.

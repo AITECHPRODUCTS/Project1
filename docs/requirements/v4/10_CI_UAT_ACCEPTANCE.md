@@ -18,3 +18,8 @@
 - Push: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213802242 (success).
 - Pull request: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213808545 (success).
 - The successful candidate's regular frontend job used `npm ci`, passed typecheck and production build, and the push-only lockfile sync job passed. Security-audit was added after this checkpoint and needs fresh exact-SHA CI evidence.
+
+
+## Dependency audit findings — remediation required
+- Initial scan of candidate `f129ecf4576f1d35229525669613ecebcf17d65b` reported Pillow 12.3.0 advisories fixed in 13.0.0 and pytest 8.4.2 advisory fixed in 9.0.3. The repository now requires Pillow 13.0.0+ and pytest 9.0.3+; this is not considered resolved until the full Python regression suite and all audit profiles pass on the new exact SHA.
+- Because the first Python audit failed early, it did not complete the optional AI/RAG scan or npm audit. Those outcomes must come from a subsequent full run; do not infer a clean result.

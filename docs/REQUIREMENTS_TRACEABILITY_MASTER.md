@@ -70,3 +70,7 @@
 - The source/parity guard still reports 53 upstream skill definitions with app-runtime status 47 partial, 6 not implemented and 0 fully end-to-end complete.
 - Next P0 gate is dependency auditing: a dedicated workflow job now runs pip-audit for the core/test and optional AI/RAG profiles and npm audit at high severity. The audit result is pending until the new workflow completes. Do not mark it passed just because the job is configured.
 - Product readiness remains NOT RELEASE READY pending audit remediation, broader tenant/RBAC and worker security, secret scanning/SBOM, browser UAT, official provider-contract tests, deployment/staging, backup/restore and rollback.
+
+
+## 2026-10-25 P0 security-audit finding
+- At `f129ecf4576f1d35229525669613ecebcf17d65b`, `pip-audit -r requirements-dev.txt` found Pillow 12.3.0 vulnerabilities (scanner-listed fix 13.0.0) and pytest 8.4.2 advisory (scanner-listed fix 9.0.3). The declared bounds have been raised to these fixed versions. The next action is to re-run all backend, AI/RAG, PostgreSQL, frontend and audit gates on the resulting SHA, repair any compatibility/security failures on the same branch, and only then proceed.

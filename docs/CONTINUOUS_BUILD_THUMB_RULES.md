@@ -23,3 +23,6 @@ These additive rules apply to every future Project1 build session.
 
 
 14. Current verified checkpoint: at HEAD `e6e6eb4e552b4887da252db0df172dd25ee79561`, push run 40213802242 and PR run 40213808545 passed, including npm ci, frontend typecheck/build, Python, PostgreSQL, AI/RAG and repo-guard; the push lockfile-sync job passed. The frontend lockfile is committed. The new security-audit job is pending exact-SHA evidence until its next hosted run completes; do not mark security scanning complete from configuration alone.
+
+
+15. Dependency scanning is a fix gate, not a report-only decoration. When pip-audit/npm audit report an available fixed version, adjust compatible dependency ranges, preserve app constraints, rerun the full CI matrix, and record remaining findings with evidence. Never suppress or label the scan green before exact-SHA results prove it.

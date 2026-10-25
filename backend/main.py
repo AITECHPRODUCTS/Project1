@@ -1882,13 +1882,37 @@ async def unsubscribe(lead_id:str,ts:int=Query(...),sig:str=Query(...),db:AsyncS
  if not hmac.compare_digest(sig,expected):raise HTTPException(403,"Invalid unsubscribe signature")
  if not await unsubscribe_lead(db,lead_id):raise HTTPException(404,"Lead not found")
  return HTMLResponse("<!doctype html><html><body style='font-family:system-ui;background:#f8fafc;color:#1e293b;padding:48px'><h1>You are unsubscribed</h1><p>No further email sequence messages will be sent.</p></body></html>")
+MAX_AFFILIATE_WEBHOOK_BODY_BYTES = 256 * 1024
+
+
+async def read_limited_webhook_body(request: Request, limit: int = MAX_AFFILIATE_WEBHOOK_BODY_BYTES) -> bytes:
+    """Read a signed provider webhook with a strict byte limit, including streamed bodies."""
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "Invalid Content-Length") from exc
+        if declared_length < 0:
+            raise HTTPException(400, "Invalid Content-Length")
+        if declared_length > limit:
+            raise HTTPException(413, "Affiliate webhook body exceeds the size limit")
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > limit:
+            raise HTTPException(413, "Affiliate webhook body exceeds the size limit")
+        body.extend(chunk)
+    return bytes(body)
+
+
 @app.post("/api/webhooks/conversions/{network}")
 async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends(get_session)):
  secret=settings.affiliate_webhook_secret
  net=network.strip().lower()
  if not secret or len(secret)<32:raise HTTPException(503,"Affiliate webhook secret is not configured")
  if not net or len(net)>100:raise HTTPException(422,"Network must contain 1-100 characters")
- body=await request.body()
+ body=await read_limited_webhook_body(request)
  try:adapter=AggregatorWebhookAdapter(net,secret)
  except ValueError as exc:raise HTTPException(503,"Affiliate webhook secret is not configured") from exc
  if not adapter.verify(body,request.headers.get("X-Affiliate-Signature","")):raise HTTPException(401,"Invalid webhook signature")

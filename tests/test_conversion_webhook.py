@@ -210,3 +210,47 @@ def test_conversion_webhook_does_not_hide_unrelated_integrity_errors(monkeypatch
         assert session.scalar.await_count == 3
     finally:
         main.app.dependency_overrides.pop(get_session, None)
+
+
+
+def test_conversion_webhook_rejects_oversized_body_before_database_access(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    session, override = fake_session()
+    main.app.dependency_overrides[get_session] = override
+    body = b"x" * (main.MAX_AFFILIATE_WEBHOOK_BODY_BYTES + 1)
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 413
+        assert response.json()["detail"] == "Affiliate webhook body exceeds the size limit"
+        session.scalar.assert_not_awaited()
+        session.add.assert_not_called()
+        session.commit.assert_not_awaited()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+def test_conversion_webhook_rejects_streamed_oversize_body_without_content_length(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    session, override = fake_session()
+    main.app.dependency_overrides[get_session] = override
+    first = b'{"event_id":"evt-streamed","click_id":"click-1"}'
+    second = b" " * main.MAX_AFFILIATE_WEBHOOK_BODY_BYTES
+    body = first + second
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=iter([first, second]),
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 413
+        session.scalar.assert_not_awaited()
+        session.add.assert_not_called()
+        session.commit.assert_not_awaited()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)

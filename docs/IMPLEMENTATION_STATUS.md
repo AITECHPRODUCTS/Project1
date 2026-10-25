@@ -188,3 +188,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added goal-specific portfolio guidance, traceable recommendations and a weekly action plan whose hour allocation sums to the provided budget. Output persists as a review-only workspace ContentAsset.
 - Missing clicks/revenue remain unknown; phase-out is only a candidate when measured low-EPC evidence crosses conservative thresholds. Program status, tracking, official terms and payouts are not automatically changed or independently verified.
 - Added schema, service and API tests plus the responsive dashboard panel and JSON export. Live affiliate-network connections, payout reconciliation and browser UAT remain pending.
+
+
+## 2026-10-25 security hardening — bounded affiliate conversion webhook bodies
+- Added a 256 KiB maximum request-body limit on the signed affiliate conversion webhook. An oversized declared Content-Length is rejected before reading the body; streamed/chunked requests are bounded while bytes are consumed so a missing/misleading length cannot bypass the guard.
+- Oversized events fail with HTTP 413 before signature parsing, database lookup or persistence. The endpoint remains provider-signature gated, and no publishing or payout behavior was enabled.
+- Added route regression tests for declared-length and streamed oversized payloads, including assertions that no database access or writes occur.
+- Verification status: implementation is committed on the existing branch; the new exact-SHA Actions jobs are the acceptance gate. PostgreSQL production ingress/proxy body limits and provider contract tests remain separate release gates.

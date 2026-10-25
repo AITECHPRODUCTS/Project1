@@ -21,7 +21,7 @@ content/content-research-brief,S2,partial,backend/services/s2_s3_content.py,Sour
 content/infographic-generator,S2,not_implemented,,No asset pipeline
 content/reddit-post-writer,S2,partial,backend/services/s2_s3_content.py,Policy review required
 content/tiktok-script-writer,S2,partial,backend/services/s2_s3_content.py,No live media rights verification
-content/twitter-thread-writer,S2,not_implemented,,X policy-compliant publish flow unverified
+content/twitter-thread-writer,S2,partial,backend/services/content_atomizer.py; POST /api/content/atomize with x_thread; frontend/app/page.tsx; tests/test_content_atomizer.py; tests/test_content_atomizer_api.py,Source-grounded numbered X drafts with 280-character per-post cap and disclosure reminder; publishing authorization and live policy checks remain unimplemented
 content/viral-post-writer,S2,partial,backend/services/s2_s3_content.py,Viral outcomes are not predictable or guaranteed
 distribution/bio-link-deployer,S5,not_implemented,,No third-party account publisher
 distribution/email-drip-sequence,S5,partial,backend/services/email_delivery.py,Deliverability and branch logic not verified

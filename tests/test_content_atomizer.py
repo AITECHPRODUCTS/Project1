@@ -125,3 +125,66 @@ def test_content_atomizer_rejects_unsafe_source_reference_urls(source_url: str):
             source_urls=[source_url],
         )
 
+@pytest.mark.asyncio
+async def test_x_thread_posts_are_numbered_disclosed_and_limited_to_280_characters(monkeypatch):
+    long_post = " ".join(["evidence"] * 90)
+
+    async def fake_complete(*args, **kwargs):
+        return {
+            "text": json.dumps({"atoms": [{
+                "platform": "x_thread",
+                "title": "Source-backed thread",
+                "content": f"1/ {long_post}\n\nDisclosure: old model-generated disclosure",
+                "hook": "Source hook",
+                "cta": "Review the source",
+                "source_facts": ["Teams need evidence"],
+                "claims_to_verify": ["Check source wording"],
+            }]}),
+            "provider": "test-llm",
+            "sources": [],
+        }
+
+    monkeypatch.setattr(content_atomizer.llm_service, "complete", fake_complete)
+    result = await content_atomizer.atomize_content(
+        source_title="Source-backed thread",
+        source_body=(
+            "Teams should keep source notes. A second fact needs review. "
+            "Use evidence before making a claim. This final sentence provides context."
+        ),
+        platforms=["x_thread"],
+    )
+    atom = result["atoms"][0]
+    posts = atom["content"].splitlines()
+
+    assert atom["platform"] == "x_thread"
+    assert len(posts) >= 3
+    assert all(len(post) <= 280 for post in posts)
+    assert [post.split("/", 1)[0] for post in posts] == [str(i) for i in range(1, len(posts) + 1)]
+    assert posts[-1].startswith(f"{len(posts)}/ Disclosure:")
+    assert result["requires_review"] is True
+    assert result["publishing_started"] is False
+
+
+@pytest.mark.asyncio
+async def test_x_thread_deterministic_fallback_is_numbered_and_disclosure_bearing(monkeypatch):
+    async def invalid_json(*args, **kwargs):
+        return {"text": "not JSON", "provider": "test-provider", "sources": []}
+
+    monkeypatch.setattr(content_atomizer.llm_service, "complete", invalid_json)
+    result = await content_atomizer.atomize_content(
+        source_title="Source-grounded topic",
+        source_body=(
+            "The first source fact explains the main topic. "
+            "A second source fact gives the next step. "
+            "A third fact provides context for readers."
+        ),
+        platforms=["x_thread"],
+    )
+    posts = result["atoms"][0]["content"].splitlines()
+
+    assert posts[0].startswith("1/ ")
+    assert posts[-1].startswith(f"{len(posts)}/ Disclosure:")
+    assert all(len(post) <= 280 for post in posts)
+    assert "Disclosure:" in posts[-1]
+    assert result["provider"] == "test-provider"
+

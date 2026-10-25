@@ -20,6 +20,29 @@ PLATFORM_GUIDANCE = {
 DISCLOSURE = "Disclose any material affiliate or commercial relationship before publication."
 
 
+def _normalize_x_thread(value: str) -> str:
+    """Return a numbered, disclosure-bearing X thread with every post within 280 chars."""
+    raw_lines = str(value or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    pieces: list[str] = []
+    for raw_line in raw_lines:
+        line = re.sub(r"^\s*(?:(?:post\s*)?\d+\s*[/.)-]\s*)", "", raw_line, flags=re.IGNORECASE).strip()
+        if not line:
+            continue
+        # Model output can append a disclosure as an unnumbered paragraph; use one
+        # controlled final disclosure post instead of allowing an over-length post.
+        line = re.sub(r"\bDisclosure\s*:\s*.*$", "", line, flags=re.IGNORECASE).strip()
+        if not line:
+            continue
+        pieces.extend(part.strip() for part in __import__("textwrap").wrap(
+            line, width=274, break_long_words=True, break_on_hyphens=False
+        ) if part.strip())
+    if not pieces:
+        pieces = ["Draft a source-grounded point and verify every claim before publication."]
+    numbered = [f"{index}/ {part}" for index, part in enumerate(pieces, start=1)]
+    numbered.append(f"{len(numbered) + 1}/ Disclosure: {DISCLOSURE}")
+    return "\n".join(numbered)
+
+
 def _source_sentences(source_body: str) -> list[str]:
     sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", source_body) if part.strip()]
     return sentences or [source_body.strip()]
@@ -134,9 +157,13 @@ async def atomize_content(
         item = generated.get(platform)
         if not item or not str(item.get("content") or "").strip():
             atom = _fallback_atom(platform, title, body)
+            if platform == "x_thread":
+                atom["content"] = _normalize_x_thread(atom["content"])
         else:
             content = str(item["content"]).strip()[:6000]
-            if DISCLOSURE.casefold() not in content.casefold():
+            if platform == "x_thread":
+                content = _normalize_x_thread(content)
+            elif DISCLOSURE.casefold() not in content.casefold():
                 content += f"\n\nDisclosure: {DISCLOSURE}"
             proposed_facts = item.get("source_facts") if isinstance(item.get("source_facts"), list) else []
             verified_quotes = [

@@ -637,6 +637,39 @@ class GuaranteeDraftRequest(BaseModel):
         return normalized
 
 
+class CategoryDesignRequest(BaseModel):
+    niche: str = Field(min_length=3, max_length=160)
+    target_audience: str = Field(min_length=2, max_length=300)
+    topic_candidates: list[str] = Field(min_length=3, max_length=15)
+    existing_categories: list[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("niche", "target_audience")
+    @classmethod
+    def normalize_category_context(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("Niche and target audience must not be blank")
+        return normalized
+
+    @field_validator("topic_candidates")
+    @classmethod
+    def normalize_topic_candidates(cls, value: list[str]) -> list[str]:
+        topics = list(dict.fromkeys(" ".join(item.split()) for item in value if item and item.strip()))
+        if not 3 <= len(topics) <= 15:
+            raise ValueError("Provide between three and fifteen distinct topic candidates")
+        if any(len(topic) > 120 for topic in topics):
+            raise ValueError("Each topic candidate must be at most 120 characters")
+        return topics
+
+    @field_validator("existing_categories")
+    @classmethod
+    def normalize_existing_categories(cls, value: list[str]) -> list[str]:
+        categories = list(dict.fromkeys(" ".join(item.split()) for item in value if item and item.strip()))
+        if len(categories) > 30 or any(len(category) > 120 for category in categories):
+            raise ValueError("Supply at most 30 existing category names of up to 120 characters each")
+        return categories
+
+
 class InternalLinkingRequest(BaseModel):
     urls: list[str] = Field(min_length=2, max_length=12)
     max_suggestions_per_page: int = Field(default=5, ge=1, le=10)

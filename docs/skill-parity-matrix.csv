@@ -35,7 +35,7 @@ landing/product-showcase-page,S4,partial,backend/services/s4_s5_landing.py,Live 
 landing/squeeze-page-builder,S4,partial,backend/services/s4_s5_landing.py,Production accessibility and security tests missing
 landing/value-ladder-architect,S4,partial,backend/services/s4_s5_landing.py,Deliverable assets and customer unit economics needed
 landing/webinar-registration-page,S4,not_implemented,,No webinar provider integration
-meta/category-designer,S1,not_implemented,,No category taxonomy evaluation set
+meta/category-designer,S1,partial,backend/services/category_designer.py; backend/schemas.py; backend/main.py POST /api/research/category-design; frontend/app/page.tsx; tests/test_category_designer.py,Taxonomy draft from supplied labels with deterministic slugs and existing-label overlap flags; search demand and taxonomy quality have not been evaluated
 meta/compliance-checker,S5,partial,backend/core/middleware.py,No comprehensive platform policy corpus
 meta/create-skill,S8,not_implemented,,No governed skill packaging and tests
 meta/funnel-planner,S4,partial,backend/services/s4_s5_landing.py,No campaign outcome validation

@@ -19,3 +19,5 @@
 | Skill runtime parity | `docs/skill-parity-matrix.csv` | major gap | Complete every matrix row with service/API/UI/contracts/tests |
 
 | Commission evidence / financial ledger | `backend/services/commission_reconciliation.py`, `backend/services/commission_mail_importer.py`, `GET /api/finance/reconciliation`, `GET /api/finance/ledger` | partial: workspace-scoped candidate matching and currency-separated totals implemented; no payout is auto-confirmed | live provider statement contracts, workspace isolation against PostgreSQL, human review UI, payout evidence verification and production UAT |
+
+| Tenant-scoped conversion idempotency | `backend/models.py` (`Conversion`), migration `0005_workspace_scoped_conversion_identity`, `tests/test_tenant_isolation.py` | implementation added; hosted migration and cross-workspace regression checks pending | PostgreSQL upgrade/rollback with existing data, provider idempotency contract tests and production tenant-isolation UAT |

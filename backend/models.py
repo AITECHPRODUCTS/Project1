@@ -71,7 +71,7 @@ class ClickEvent(TenantScopedMixin, Base):
 
 class Conversion(TenantScopedMixin, Base):
     __tablename__ = "conversions"
-    __table_args__ = (UniqueConstraint("network", "external_event_id", name="uq_conversion_network_external_event"), Index("ix_conversion_campaign_created", "click_id", "created_at"))
+    __table_args__ = (Index("uq_conversion_workspace_network_external_event", "workspace_id", "network", "external_event_id", unique=True), Index("ix_conversion_campaign_created", "click_id", "created_at"))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     network: Mapped[str] = mapped_column(String(100), index=True)
     external_event_id: Mapped[str] = mapped_column(String(255))

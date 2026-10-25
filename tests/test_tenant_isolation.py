@@ -170,3 +170,60 @@ async def test_ad_plan_rows_are_scoped_to_active_workspace():
     finally:
         await engine.dispose()
 
+
+
+@pytest.mark.asyncio
+async def test_provider_event_identity_is_unique_per_workspace_not_globally():
+    from sqlalchemy.exc import IntegrityError
+    from backend.models import Conversion
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        async with sessions() as db:
+            workspace_a = await _make_workspace(db, "Conversion Workspace A", "conversion-tenant-a")
+            workspace_b = await _make_workspace(db, "Conversion Workspace B", "conversion-tenant-b")
+            await db.commit()
+            workspace_a_id, workspace_b_id = workspace_a.id, workspace_b.id
+
+        for workspace_id in (workspace_a_id, workspace_b_id):
+            with workspace_scope(workspace_id):
+                async with sessions() as db:
+                    db.add(Conversion(
+                        network="example-network",
+                        external_event_id="provider-event-123",
+                        commission=4.25,
+                        revenue=20.0,
+                    ))
+                    await db.commit()
+
+        with workspace_scope(workspace_a_id):
+            async with sessions() as db:
+                db.add(Conversion(
+                    network="example-network",
+                    external_event_id="provider-event-123",
+                    commission=4.25,
+                    revenue=20.0,
+                ))
+                with pytest.raises(IntegrityError):
+                    await db.commit()
+                await db.rollback()
+
+        with workspace_scope(workspace_a_id):
+            async with sessions() as db:
+                rows = list((await db.scalars(select(Conversion))).all())
+                assert len(rows) == 1
+                assert rows[0].workspace_id == workspace_a_id
+        with workspace_scope(workspace_b_id):
+            async with sessions() as db:
+                rows = list((await db.scalars(select(Conversion))).all())
+                assert len(rows) == 1
+                assert rows[0].workspace_id == workspace_b_id
+    finally:
+        await engine.dispose()

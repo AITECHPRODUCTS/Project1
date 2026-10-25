@@ -1076,14 +1076,25 @@ async def finance_reconciliation(
     """Show candidate links between commission emails and tracked conversions.
 
     This endpoint is read-only and intentionally does not mark a payout as received.
+    Workspace filters are explicit here as defense in depth alongside ORM tenant scope.
     """
     from backend.services.commission_reconciliation import build_commission_reconciliation
 
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing financial reconciliation")
+
     mail_rows = list((await db.scalars(
-        select(MailCommission).order_by(MailCommission.created_at.desc()).limit(300)
+        select(MailCommission)
+        .where(MailCommission.workspace_id == str(workspace_id))
+        .order_by(MailCommission.created_at.desc())
+        .limit(300)
     )).all())
     conversion_rows = list((await db.scalars(
-        select(Conversion).order_by(Conversion.created_at.desc()).limit(1000)
+        select(Conversion)
+        .where(Conversion.workspace_id == str(workspace_id))
+        .order_by(Conversion.created_at.desc())
+        .limit(1000)
     )).all())
     evidence = [{
         "id": row.id,
@@ -1100,5 +1111,5 @@ async def finance_reconciliation(
         "status": row.status,
     } for row in conversion_rows]
     report = build_commission_reconciliation(evidence, conversions)
-    report["workspace_id"] = user.get("workspace_id")
+    report["workspace_id"] = str(workspace_id)
     return report

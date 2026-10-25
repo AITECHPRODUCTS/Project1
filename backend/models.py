@@ -346,7 +346,7 @@ class AdPerformanceObservation(TenantScopedMixin, Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     campaign_plan_id: Mapped[str | None] = mapped_column(
-        ForeignKey("ad_campaign_plans.id", ondelete="SET NULL"),
+        ForeignKey("ad_campaign_plans.id", ondelete="SET NULL", name="fk_ad_perf_obs_campaign_plan"),
         nullable=True,
         index=True,
     )

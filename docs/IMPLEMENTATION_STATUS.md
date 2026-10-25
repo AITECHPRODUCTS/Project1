@@ -208,3 +208,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added a dedicated GitHub Actions PostgreSQL 16 service job. It runs the actual Alembic upgrade, drift check, downgrade/upgrade cycle, and a concurrent signed-conversion reversal API test against PostgreSQL (not SQLite).
 - The integration test creates isolated test workspace/campaign/click/conversion fixtures, sends two distinct full-reversal events concurrently, asserts exactly one offset is recorded and one is ignored, verifies ledger totals/statuses, and removes its test rows.
 - This adds production-relevant database concurrency evidence; it does not itself certify production schema restore/backups, load behavior, partial reversals, external provider signatures/scopes, or deployed ingress settings. CI result for the exact candidate SHA is pending until GitHub Actions completes.
+
+
+## 2026-10-25 PostgreSQL CI repair — foreign-key identifier length
+- The first PostgreSQL 16 run exposed an existing migration identifier that exceeded PostgreSQL's 63-character identifier limit: `fk_ad_performance_observations_campaign_plan_id_ad_campaign_plans`.
+- Applied the same stable short constraint name `fk_ad_perf_obs_campaign_plan` to both Alembic revision 0004 and the ORM model metadata. This preserves the FK target and ON DELETE SET NULL behavior.
+- Verification is pending on the new exact candidate SHA; do not consider the PostgreSQL gate repaired until migration, drift, rollback/upgrade and concurrent reversal test all pass.

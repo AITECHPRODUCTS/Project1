@@ -44,7 +44,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["campaign_plan_id"],
             ["ad_campaign_plans.id"],
-            name="fk_ad_performance_observations_campaign_plan_id_ad_campaign_plans",
+            name="fk_ad_perf_obs_campaign_plan",
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id"),

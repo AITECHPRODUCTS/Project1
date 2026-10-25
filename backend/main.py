@@ -23,13 +23,14 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
+from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.cms_publisher import publish_article
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
@@ -492,6 +493,26 @@ async def research_seo_audit(
     except Exception as exc:
         logger.warning("Public page SEO audit failed (%s)", type(exc).__name__)
         raise HTTPException(502, "The public page could not be safely fetched or analyzed") from exc
+
+
+@api.post("/research/internal-links")
+async def research_internal_links(
+    payload: InternalLinkingRequest,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    """Suggest internal links across user-supplied pages without crawling or mutating the site."""
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before analyzing internal links")
+    try:
+        return await recommend_internal_links_service(
+            urls=payload.urls,
+            max_suggestions_per_page=payload.max_suggestions_per_page,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Internal link analysis failed (%s)", type(exc).__name__)
+        raise HTTPException(502, "The supplied public pages could not be safely analyzed") from exc
 
 
 @api.post("/research/niches")

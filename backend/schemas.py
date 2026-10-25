@@ -480,3 +480,44 @@ class SEOAuditRequest(BaseModel):
             raise ValueError("Private, loopback, link-local, multicast or reserved URL hosts are not allowed")
         return normalized
 
+
+class InternalLinkingRequest(BaseModel):
+    urls: list[str] = Field(min_length=2, max_length=12)
+    max_suggestions_per_page: int = Field(default=5, ge=1, le=10)
+
+    @field_validator("urls")
+    @classmethod
+    def validate_same_origin_public_urls(cls, value: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(item.strip() for item in value if item and item.strip()))
+        if len(normalized) < 2:
+            raise ValueError("Supply at least two distinct public page URLs")
+        if len(normalized) > 12:
+            raise ValueError("At most twelve page URLs may be analyzed at once")
+
+        origins: set[tuple[str, str, int]] = set()
+        for url in normalized:
+            if len(url) > 2048:
+                raise ValueError("Each URL must be at most 2048 characters")
+            try:
+                parsed = urlparse(url)
+                host = (parsed.hostname or "").lower().rstrip(".")
+                port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            except ValueError as exc:
+                raise ValueError("Provide valid absolute HTTP(S) URLs") from exc
+            if parsed.scheme not in {"http", "https"} or not host:
+                raise ValueError("Provide valid absolute HTTP(S) URLs")
+            if parsed.username or parsed.password:
+                raise ValueError("URLs containing credentials are not allowed")
+            if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+                raise ValueError("Local/private hostnames are not allowed")
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("Private, loopback, link-local, multicast or reserved hosts are not allowed")
+            origins.add((parsed.scheme.lower(), host, port))
+
+        if len(origins) != 1:
+            raise ValueError("All supplied pages must share the same public HTTP(S) origin")
+        return normalized

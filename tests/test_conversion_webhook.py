@@ -11,7 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from fastapi.testclient import TestClient
 
 from backend import main
+from backend.config import Settings
 from backend.database import get_session
+import pytest
 
 
 SECRET = "conversion-webhook-test-secret-with-32-plus-characters"
@@ -326,5 +328,99 @@ def test_conversion_webhook_ignores_second_reversal_for_already_reversed_parent(
         assert response.json()["status"] == "duplicate_reversal_ignored"
         session.add.assert_not_called()
         session.commit.assert_not_awaited()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+NETWORK_SECRET = "unique-network-secret-that-is-at-least-32-bytes"
+
+
+def test_settings_normalize_per_network_webhook_secret_names():
+    configured = Settings(
+        _env_file=None,
+        app_env="test",
+        affiliate_webhook_secrets={" Example-Network ": NETWORK_SECRET},
+    )
+    assert configured.affiliate_webhook_secrets == {"example-network": NETWORK_SECRET}
+
+
+def test_settings_reject_short_per_network_webhook_secrets():
+    with pytest.raises(ValueError, match="at least 32 characters"):
+        Settings(
+            _env_file=None,
+            app_env="test",
+            affiliate_webhook_secrets={"example-network": "too-short"},
+        )
+
+
+def test_conversion_webhook_per_network_secret_disables_shared_fallback(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secrets", {"example-network": NETWORK_SECRET})
+    session, override = fake_session()
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps({"event_id": "evt-wrong-network-key", "click_id": "click-1"}).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body, secret=SECRET),
+            )
+        assert response.status_code == 401
+        session.scalar.assert_not_awaited()
+        session.add.assert_not_called()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+def test_conversion_webhook_fails_closed_for_unmapped_network_when_map_is_configured(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secrets", {"example-network": NETWORK_SECRET})
+    session, override = fake_session()
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps({"event_id": "evt-unmapped-network", "click_id": "click-1"}).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/another-network",
+                content=body,
+                headers=signed_headers(body, secret=SECRET),
+            )
+        assert response.status_code == 503
+        assert "not configured for this network" in response.json()["detail"]
+        session.scalar.assert_not_awaited()
+        session.add.assert_not_called()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+def test_conversion_webhook_accepts_network_specific_secret(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secrets", {" Example-Network ": NETWORK_SECRET})
+    click = SimpleNamespace(click_id="click-network-secret", workspace_id="workspace-1")
+    session, override = fake_session(click, None)
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps(
+        {
+            "event_id": "evt-network-secret",
+            "click_id": "click-network-secret",
+            "commission": "1.25",
+            "revenue": "9.50",
+            "status": "approved",
+        },
+        separators=(",", ":"),
+    ).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/Example-Network",
+                content=body,
+                headers=signed_headers(body, secret=NETWORK_SECRET),
+            )
+        assert response.status_code == 200
+        assert response.json()["status"] == "recorded"
+        row = session.add.call_args.args[0]
+        assert row.network == "example-network"
+        assert row.external_event_id == "evt-network-secret"
     finally:
         main.app.dependency_overrides.pop(get_session, None)

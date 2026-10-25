@@ -1906,12 +1906,26 @@ async def read_limited_webhook_body(request: Request, limit: int = MAX_AFFILIATE
     return bytes(body)
 
 
+def get_affiliate_webhook_secret(network: str) -> str | None:
+    """Resolve a network-specific secret; a configured map disables shared-secret fallback."""
+    network_key = network.strip().lower()
+    configured = settings.affiliate_webhook_secrets or {}
+    if configured:
+        selected = next(
+            (secret for key, secret in configured.items() if str(key).strip().lower() == network_key),
+            None,
+        )
+        return selected if isinstance(selected, str) and len(selected) >= 32 else None
+    legacy = settings.affiliate_webhook_secret
+    return legacy if isinstance(legacy, str) and len(legacy) >= 32 else None
+
+
 @app.post("/api/webhooks/conversions/{network}")
 async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends(get_session)):
- secret=settings.affiliate_webhook_secret
  net=network.strip().lower()
- if not secret or len(secret)<32:raise HTTPException(503,"Affiliate webhook secret is not configured")
  if not net or len(net)>100:raise HTTPException(422,"Network must contain 1-100 characters")
+ secret=get_affiliate_webhook_secret(net)
+ if not secret:raise HTTPException(503,"Affiliate webhook secret is not configured for this network")
  body=await read_limited_webhook_body(request)
  try:adapter=AggregatorWebhookAdapter(net,secret)
  except ValueError as exc:raise HTTPException(503,"Affiliate webhook secret is not configured") from exc

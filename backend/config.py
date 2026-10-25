@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 import yaml
-from pydantic import model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     cms_publish_execute: bool = False
     tracking_hmac_secret: str = ""
     affiliate_webhook_secret: str = ""
+    affiliate_webhook_secrets: dict[str, str] = Field(default_factory=dict)
     mail_imap_host: str = "imap.gmail.com"
     mail_imap_port: int = 993
     mail_imap_user: str = ""
@@ -67,13 +68,32 @@ class Settings(BaseSettings):
     ghost_admin_api_key: str = ""
     config_yaml_path: str = "./config.yaml"
 
+    @field_validator("affiliate_webhook_secrets", mode="before")
+    @classmethod
+    def normalize_affiliate_webhook_secrets(cls, value):
+        if value is None or value == "":
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("AFFILIATE_WEBHOOK_SECRETS must be a JSON object mapping network names to secrets")
+        normalized: dict[str, str] = {}
+        for raw_network, raw_secret in value.items():
+            network = str(raw_network).strip().lower()
+            if not network or len(network) > 100:
+                raise ValueError("Affiliate webhook network keys must contain 1-100 characters")
+            if network in normalized:
+                raise ValueError("Affiliate webhook network keys must be unique after normalization")
+            if not isinstance(raw_secret, str) or len(raw_secret) < 32:
+                raise ValueError("Each per-network affiliate webhook secret must contain at least 32 characters")
+            normalized[network] = raw_secret
+        return normalized
+
     @model_validator(mode="after")
     def production_safety(self):
         if self.app_env == "production":
             if len(self.api_access_token) < 32 or len(self.app_session_secret) < 32 or self.app_session_secret == "development-session-secret-change-me":
                 raise ValueError("Production requires fresh 32+ character API_ACCESS_TOKEN and APP_SESSION_SECRET; development defaults are forbidden")
-            if len(self.tracking_hmac_secret) < 32 or len(self.affiliate_webhook_secret) < 32:
-                raise ValueError("Production requires fresh 32+ character tracking and webhook secrets")
+            if len(self.tracking_hmac_secret) < 32 or (not self.affiliate_webhook_secrets and len(self.affiliate_webhook_secret) < 32):
+                raise ValueError("Production requires a fresh 32+ character tracking secret and either a shared or per-network 32+ character affiliate webhook secret")
             if not self.app_public_url.startswith("https://"):
                 raise ValueError("Production APP_PUBLIC_URL must use HTTPS")
             if self.database_url.startswith("sqlite"):

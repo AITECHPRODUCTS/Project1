@@ -27,3 +27,9 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Re-inventoried prior Library files and inspected the existing `OmniAffiliateOS_build.zip` archive (500 entries; historical FastAPI/Next.js source snapshot) plus `Project1-main(1).zip` (small CI/bootstrap reference). These are earlier project/reference snapshots, not a separate newly uploaded live-app ZIP in the current Library inventory.
 - The archived v4 requirements, integration matrix, acceptance traceability, UI/UX, security/privacy, CI/UAT and deployment-operation contracts were used alongside the current branch backlog. Continue porting only changes that can be reconciled with the current branch and tested; do not replace the current application with an archive.
 - Current session adds bounded signed-webhook input and serialized full-reversal handling with additional regression coverage. External providers, production PostgreSQL environment and deployment remain unverified until their dedicated gates pass.
+
+
+## 2026-10-25 verified checkpoint continuation
+- Re-checked the current implementation branch and exact hosted Actions runs before editing. The push and pull-request runs for `da5c0c76286df5a7f4ff2fc67d10cd3f3b44fee4` both completed successfully across Python/tests, frontend build, AI/RAG dependency verification and PostgreSQL 16 migration/concurrent-reversal checks.
+- Reviewed `Pasted text(6).txt` and `Pasted markdown (2).md` requirements for secure webhooks, deduplication, reversal handling, provider-specific auth/scopes, human-reviewed financial outputs and evidence-based analytics. The existing archive inventory still contains earlier project snapshots, not a distinct newly uploaded live-app ZIP.
+- Next security increment adds independent per-network webhook secrets. It does not claim a live network connection or remove the requirement for official provider contract tests.

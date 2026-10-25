@@ -207,16 +207,23 @@ The GitHub Actions run linked from the repository is the authoritative check res
 ## 2026-10-25 test infrastructure — PostgreSQL integration acceptance
 - Added a dedicated GitHub Actions PostgreSQL 16 service job. It runs the actual Alembic upgrade, drift check, downgrade/upgrade cycle, and a concurrent signed-conversion reversal API test against PostgreSQL (not SQLite).
 - The integration test creates isolated test workspace/campaign/click/conversion fixtures, sends two distinct full-reversal events concurrently, asserts exactly one offset is recorded and one is ignored, verifies ledger totals/statuses, and removes its test rows.
-- This adds production-relevant database concurrency evidence; it does not itself certify production schema restore/backups, load behavior, partial reversals, external provider signatures/scopes, or deployed ingress settings. CI result for the exact candidate SHA is pending until GitHub Actions completes.
+- Verified on commit `da5c0c76286df5a7f4ff2fc67d10cd3f3b44fee4`: hosted PostgreSQL 16 migration/drift/rollback/upgrade and concurrent-reversal test passed (`1 passed`); SQLite/Python suite, frontend typecheck/build, and AI/RAG import job also passed in both push and pull-request runs. This does not certify production schema restore/backups, load behavior, partial reversals, external provider scopes or deployed ingress settings.
 
 
 ## 2026-10-25 PostgreSQL CI repair — foreign-key identifier length
 - The first PostgreSQL 16 run exposed an existing migration identifier that exceeded PostgreSQL's 63-character identifier limit: `fk_ad_performance_observations_campaign_plan_id_ad_campaign_plans`.
 - Applied the same stable short constraint name `fk_ad_perf_obs_campaign_plan` to both Alembic revision 0004 and the ORM model metadata. This preserves the FK target and ON DELETE SET NULL behavior.
-- Verification is pending on the new exact candidate SHA; do not consider the PostgreSQL gate repaired until migration, drift, rollback/upgrade and concurrent reversal test all pass.
+- Verified on `da5c0c76286df5a7f4ff2fc67d10cd3f3b44fee4`: the PostgreSQL 16 migration gate completed upgrade through revisions 0001–0006, reported no schema drift, completed downgrade/upgrade and passed the concurrent reversal test.
 
 
 ## 2026-10-25 PostgreSQL CI repair — Alembic revision storage width
 - The next PostgreSQL 16 run exposed a second SQLite-invisible migration defect: Alembic's default `alembic_version.version_num VARCHAR(32)` could not store the existing revision identifier `0005_workspace_scoped_conversion_identity`.
 - Revision 0005 now widens that internal bookkeeping column to VARCHAR(255) on PostgreSQL before Alembic attempts to stamp the revision. SQLite continues on its existing path because its schema does not enforce the VARCHAR length; no business table data or revision identifiers are changed.
-- Verification is pending on the new exact candidate SHA. The prior PG failure is retained as evidence; require the complete PostgreSQL migrate/drift/rollback/upgrade and concurrent-webhook test to pass before accepting this repair.
+- Verified on `da5c0c76286df5a7f4ff2fc67d10cd3f3b44fee4`: PostgreSQL accepted the revision identifiers after the bookkeeping column was widened; migration upgrade/downgrade/upgrade and schema drift checks passed. The initial failure remains in Actions history as evidence of the fixed issue.
+
+
+## 2026-10-25 continuation — per-network affiliate webhook secrets
+- Added optional `AFFILIATE_WEBHOOK_SECRETS` JSON mapping, normalized by network name (trimmed, lowercase) and validated so each mapped secret is at least 32 characters.
+- When the map is non-empty, only the secret for the route's network is accepted and a missing mapping fails closed; the legacy shared `AFFILIATE_WEBHOOK_SECRET` is used only when the map is empty. Production configuration may use either a sufficiently strong shared secret or one or more valid per-network secrets.
+- Added tests for settings normalization, weak secret rejection, rejection of a shared-secret-signed event when a per-network key exists, fail-closed behavior for unmapped networks, and successful persistence with a network-specific key.
+- Exact SHA/Actions acceptance gate is pending for this increment. The existing conversion webhook remains bounded, HMAC verified, workspace-resolved, idempotent and covered by PostgreSQL concurrent-reversal CI. Production provider-specific signing formats and account-authenticated APIs remain unverified.

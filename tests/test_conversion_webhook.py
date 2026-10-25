@@ -6,6 +6,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+from sqlalchemy.exc import IntegrityError
+
 from fastapi.testclient import TestClient
 
 from backend import main
@@ -155,5 +157,56 @@ def test_conversion_webhook_ignores_duplicate_provider_event(monkeypatch):
         assert response.json()["status"] == "duplicate_ignored"
         session.add.assert_not_called()
         session.commit.assert_not_awaited()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+
+def test_conversion_webhook_treats_commit_race_as_duplicate_only_when_row_exists(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    click = SimpleNamespace(click_id="click-1", workspace_id="workspace-1")
+    session, override = fake_session(click, None, "existing-conversion")
+    session.commit = AsyncMock(side_effect=IntegrityError("insert", {}, Exception("unique conflict")))
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps(
+        {"event_id": "evt-race", "click_id": "click-1", "commission": "1.00"},
+        separators=(",", ":"),
+    ).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 200
+        assert response.json()["status"] == "duplicate_ignored"
+        session.rollback.assert_awaited_once()
+        assert session.scalar.await_count == 3
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+def test_conversion_webhook_does_not_hide_unrelated_integrity_errors(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    click = SimpleNamespace(click_id="click-1", workspace_id="workspace-1")
+    session, override = fake_session(click, None, None)
+    session.commit = AsyncMock(side_effect=IntegrityError("insert", {}, Exception("foreign key conflict")))
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps(
+        {"event_id": "evt-integrity-error", "click_id": "click-1", "commission": "1.00"},
+        separators=(",", ":"),
+    ).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 409
+        assert "integrity conflict" in response.json()["detail"]
+        session.rollback.assert_awaited_once()
+        assert session.scalar.await_count == 3
     finally:
         main.app.dependency_overrides.pop(get_session, None)

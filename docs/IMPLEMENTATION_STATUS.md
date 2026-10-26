@@ -488,7 +488,14 @@ The GitHub Actions run linked from the repository is the authoritative check res
 
 
 
-## P0 — shared IMAP commission import authorization — candidate
+## P0 — shared IMAP commission import authorization — verified
 - Source audit at `11aa932e469b33d299b09a3dca5e5dfe56b1c821` found `/api/finance/email-import` uses global deployment-level IMAP credentials and an allowlist but only required workspace-admin permission. A workspace admin could trigger reads of the shared mailbox and import matching evidence into their selected tenant.
 - Candidate replaces workspace-admin authorization with Platform Super Admin, requires a selected workspace for accountability, and records success/failure audit metadata under that operator workspace without storing message bodies, subjects or credentials.
-- Four regressions cover workspace-admin denial before mailbox import, platform-admin-without-workspace denial, successful import/audit, and provider failure audit/502. Exact-SHA CI pending.
+- Four regressions cover workspace-admin denial before mailbox import, platform-admin-without-workspace denial, successful import/audit, and provider failure audit/502. Verified on exact SHA `0ea1735648ce408fb831abc51179544facd3ed69`. Push [40281363532](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532) and PR [40281370173](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173) both passed. Python suite: **277 passed, 2 skipped, 1 existing Starlette/httpx deprecation warning**. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG import profile, frontend typecheck/production build, dependency audit, 53-skill repository guard, and push lockfile sync passed.
+
+
+## 2026-10-26 shared IMAP commission import — verified
+- `/api/finance/email-import` requires Platform Super Admin and a selected workspace because the IMAP mailbox credentials and sender allowlist are global configuration. Workspace admins cannot trigger a shared mailbox read.
+- Success/failure metadata is audited to the selected workspace. Audit values contain provider/mailbox, matched/created counts or error type only; message bodies, subjects, credentials and raw mailbox responses are not added to the audit record.
+- Verified on exact SHA `0ea1735648ce408fb831abc51179544facd3ed69`. Push [40281363532](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532) and PR [40281370173](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173) both passed. Python suite: **277 passed, 2 skipped, 1 existing Starlette/httpx deprecation warning**. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG import profile, frontend typecheck/production build, dependency audit, 53-skill repository guard, and push lockfile sync passed.
+- Next P0: inspect remaining global provider/configuration and integration routes for authorization-role correctness, tenant ownership, audit outcomes, rate limits and safe network access. Release remains blocked by the four documented ChromaDB advisories and outstanding provider/UAT/SBOM/license/secret/deployment/backup gates.

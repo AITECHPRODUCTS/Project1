@@ -143,3 +143,9 @@
 ## 2026-10-26 shared IMAP commission import — candidate
 - The endpoint uses global IMAP credentials; workspace-admin access is too broad because it can trigger reads from the shared mailbox and tenant-bound persistence.
 - Candidate requires Platform Super Admin, selected workspace, and workspace-scoped audit of success/failure. Four tests pending exact-SHA CI.
+
+
+## 2026-10-26 shared IMAP commission import — verified
+- Implementation SHA `0ea1735648ce408fb831abc51179544facd3ed69`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173 passed.
+- Four regression tests prove the global mailbox operation is Platform Super Admin-only, requires a workspace for accountability, and audits success/failure without mailbox contents. Python 277 passed/2 skipped; other required gates all passed.
+- Next: inspect remaining global provider/configuration and integration routes for role, workspace, audit and rate-limit gates. ChromaDB advisory exceptions and release evidence remain open.

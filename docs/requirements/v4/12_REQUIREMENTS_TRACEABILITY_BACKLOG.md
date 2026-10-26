@@ -137,6 +137,13 @@
 
 
 
-## P0 — shared commission mailbox import authorization candidate
+## P0 — shared commission mailbox import authorization verified
 - The IMAP host/user/password and sender allowlist are global config. The endpoint previously relied on `require_admin`, which permits workspace admins, and would import messages from the shared mailbox into the caller-selected workspace.
-- Candidate requires Platform Super Admin plus workspace context and audits success/failure counts or error type without message contents. Four regression tests and exact-SHA CI pending.
+- Verified on exact SHA `0ea1735648ce408fb831abc51179544facd3ed69` via push [40281363532](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532) and PR [40281370173](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173); Python 277 passed/2 skipped and every required CI job passed. Platform Super Admin and selected workspace are required; success/failure audit contains counts/error type only, never mailbox content.
+
+
+## P0 — shared IMAP commission import verified (2026-10-26)
+- Exact SHA `0ea1735648ce408fb831abc51179544facd3ed69`; push [40281363532](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532) and PR [40281370173](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173) succeeded.
+- Four tests passed: workspace-admin denied before importer call, platform admin without workspace denied, successful import scoped/audited with only counts, and failure audited by error type/502 without mailbox contents in audit metadata.
+- Python 277 passed/2 skipped; full backend, PostgreSQL, AI/RAG, frontend, security audit, repository guard and push lockfile matrix passed.
+- Next: global provider/configuration access review. Production is not release-ready while ChromaDB advisories and live-provider/UAT/SBOM/license/secret/deployment/restore evidence remain unresolved.

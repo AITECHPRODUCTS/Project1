@@ -1,4 +1,5 @@
 from __future__ import annotations
+import ipaddress
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -19,6 +20,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./storage/affiliate_os.db"
     redis_url: str = "redis://localhost:6379/0"
     cors_origins: str = "http://localhost:3000"
+    # Uvicorn forwarded-header trust; loopback-only unless exact proxy IP/CIDRs are known.
+    forwarded_allow_ips: str = "127.0.0.1"
     execution_mode: Literal["FULL_AUTONOMOUS", "SEMI_AUTONOMOUS", "MANUAL_OVERRIDE"] = "SEMI_AUTONOMOUS"
     llm_backend: Literal["offline", "openai_compatible", "local_transformers"] = "offline"
     openai_api_key: str = ""
@@ -67,6 +70,25 @@ class Settings(BaseSettings):
     ghost_site_url: str = ""
     ghost_admin_api_key: str = ""
     config_yaml_path: str = "./config.yaml"
+
+    @field_validator("forwarded_allow_ips", mode="before")
+    @classmethod
+    def validate_forwarded_allow_ips(cls, value):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("FORWARDED_ALLOW_IPS must list exact proxy IP addresses or CIDRs")
+        entries = [part.strip() for part in value.split(",") if part.strip()]
+        if not entries:
+            raise ValueError("FORWARDED_ALLOW_IPS must not be empty")
+        for entry in entries:
+            if entry == "*":
+                raise ValueError("FORWARDED_ALLOW_IPS='*' is forbidden; trust only exact proxy IPs/CIDRs")
+            try:
+                network = ipaddress.ip_network(entry, strict=False)
+            except ValueError as exc:
+                raise ValueError("FORWARDED_ALLOW_IPS accepts IP addresses/CIDRs only, not hostnames") from exc
+            if network.prefixlen == 0:
+                raise ValueError("FORWARDED_ALLOW_IPS must not trust the default route")
+        return ",".join(entries)
 
     @field_validator("affiliate_webhook_secrets", mode="before")
     @classmethod

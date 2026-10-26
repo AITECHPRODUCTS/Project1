@@ -20,3 +20,21 @@ Runtime uses `trust_remote_code=False`; do not enable it merely to load an unrev
 ## Release evidence
 
 CI tests the local-only policy and immutable revision validation. Those tests do not prove a real production model artifact has been staged, reviewed for licensing, benchmarked, or loaded against the deployed RAG index. Track those as deployment evidence. Never describe a model as downloaded/verified from CI if only imports and mocked unit tests ran.
+
+
+## Release manifest gate (run on the staged deployment artifact)
+
+Use an operator-controlled manifest to connect one application commit to exact staged model files, upstream revision, acquisition evidence and license approval. Do not check in a manifest claiming a model was approved unless the artifact was actually acquired and reviewed.
+
+The UTF-8 JSON manifest requires schema_version 1, exact 40-character application_sha, and a non-empty artifacts array. Each artifact entry must include:
+- name, kind (embedding, causal_lm or lora_adapter), source (huggingface_hub or operator_local), model_id, and a relative path beneath the artifact root.
+- artifact_sha256 equal to the verifier's deterministic SHA-256 directory-tree digest. Stage materialized files rather than symlinks.
+- For Hub sources, an immutable 40-character revision SHA. Mutable tags such as main and latest are rejected.
+- license_id, license_review_status approved, license_reviewed_by, timezone-aware license_reviewed_at, acquired_by, and timezone-aware acquired_at.
+- local_files_only true and trust_remote_code false.
+
+Run after staged files and manifest arrive through the approved artifact channel and before image promotion:
+
+    python scripts/verify_model_artifact_manifest.py --manifest /release/model-artifact-manifest.json --artifact-root /opt/omni/models --application-sha "$APPLICATION_GIT_SHA" --report-out /release/model-artifact-verification.json
+
+A non-zero exit code blocks promotion. Archive the generated JSON report with the exact application SHA and deployment candidate. The verifier checks digest and metadata but does not cryptographically sign the manifest or prove a human's license approval is genuine; release owners must enforce those controls. CI uses temporary fixture artifacts only. No production model artifact is claimed staged or approved by those tests.

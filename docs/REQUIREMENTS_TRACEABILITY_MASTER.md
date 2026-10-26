@@ -392,3 +392,9 @@
 - The S8 dataset generator consumes workspace-scoped persisted experiment assignments/events and emits review-required JSONL candidates only after both variants, stable headline snapshots and per-arm sample thresholds are checked. Visitor values are not included, event IDs are deduplicated, and provenance flags state lack of provider attestation and non-causal observed rates.
 - The original test failures were corrected without weakening privacy; skill-matrix counts now match 48 partial / 5 not implemented. No model training or promotion is implemented by this feature.
 - Next: validate actual staged model artifact provenance, digest, license and cache-only load; no production artifact is presently claimed verified.
+
+
+## 2026-10-26 staged model artifact provenance gate — candidate
+- Base source-policy checkpoint `393e12760762993e70a862af9b4c3ab61d308739` is green in push [40364123382](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382) and PR [40364131533](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533).
+- New operator release gate validates the exact app SHA, immutable Hub revision, materialized artifact directory tree digest, path containment, license/acquisition metadata, timezone-aware timestamps, `local_files_only`, and `trust_remote_code=false`. Unit tests use temporary fixtures only; no model artifact is said to be staged or approved.
+- Exact-SHA CI and real deployment staging/cache-only load/RAG retrieval verification remain pending.

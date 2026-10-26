@@ -335,3 +335,9 @@
 - The first run at 684e6e1ae3d5b2a19fa6df6b074735788e47f420 failed two test assertions: the privacy assertion treated visitor_identifiers_included as a leaked identifier, and the skill-matrix assertion used stale 47/6 counts. Corrective SHA a9eebf989704b7d7d347ee9021572bd2d5ea4f03 narrows the privacy assertion to synthetic visitor values and aligns counts to 48/5; full CI passed.
 - Python 385 passed, 3 skipped; all required CI jobs passed. Data are internal, not provider-attested; observed rates are not causal proof; no model training or promotion occurs.
 - Next P0: operator-run model artifact provenance/digest/license gate. Production artifact staging/cache-only load/retrieval tests remain unverified.
+
+
+## P0 — staged model-artifact provenance/digest release gate (2026-10-26; candidate)
+- Added `scripts/verify_model_artifact_manifest.py` to validate exact application SHA, model directory containment/digest, Hub revision pin, acquisition provenance and license approval, local-only policy and remote-code prohibition. Manifest schema and invocation are documented in `docs/MODEL_ARTIFACT_OPERATIONS.md`.
+- Added `tests/test_model_artifact_manifest.py` for valid and invalid manifest, hash, path, revision, policy and approval cases.
+- Status: candidate until full hosted push and PR CI passes on exact resulting SHA. No production artifact was provided or claimed staged. Model licensing/sign-off, staged cache-only load and retrieval golden tests are deployment evidence gates.

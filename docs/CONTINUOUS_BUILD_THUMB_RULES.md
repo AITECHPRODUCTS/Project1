@@ -205,3 +205,6 @@ These additive rules apply to every future Project1 build session.
 
 
 80. Proprietary experiment-learning candidate generator is verified at `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`; push [40365898032](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032) and PR [40365904286](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286) both passed. Python 385 passed/3 skipped; PostgreSQL, AI/RAG/SBOM/license, frontend, security audit, secret scan, 53-skill guard and lockfile-sync passed. Dataset remains review-required only: no visitor identifiers, no provider-attested ground truth, no training/fine-tuning/model promotion. Registry counts are 48 partial/5 not implemented. Next P0: staged model artifact manifest gate.
+
+
+81. P0 staged-model provenance gate: `scripts/verify_model_artifact_manifest.py` must fail closed on manifest/application SHA mismatch, unsafe or symlinked paths, digest drift, mutable Hub revisions, missing license/acquisition approval evidence, timezone-naive timestamps, `local_files_only != true`, or `trust_remote_code != false`. Run against real staged artifacts before deployment promotion; fixture tests do not prove production staging. Candidate exact-SHA push and PR workflows are pending.

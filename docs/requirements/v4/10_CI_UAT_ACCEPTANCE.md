@@ -309,3 +309,9 @@
 - Exact SHA `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286 both passed. Python reported 385 passed, 3 skipped, 1 existing warning.
 - Regression gates prove A/B pairing, event deduplication, low-sample exclusions, inconsistent snapshot handling, privacy (synthetic visitor identifier values absent), workspace persistence/audit and skill parity (53 rows: 48 partial, 5 not implemented).
 - This feature produces review-required candidates only; it does not attest ground truth or train/promote a model. Next: staged artifact provenance and cache-only model-load gates.
+
+
+## 2026-10-26 staged model manifest release acceptance — candidate
+- Deployment promotion must run `python scripts/verify_model_artifact_manifest.py --manifest ... --artifact-root ... --application-sha "$APPLICATION_GIT_SHA" --report-out ...` on the staged model directory. A non-zero result blocks promotion.
+- Require matching application SHA, pinned immutable Hub revision where applicable, directory-tree digest, symlink/path containment checks, approved license + acquisition provenance with timezone-aware timestamps, local-only loading and `trust_remote_code=false`.
+- Unit fixtures do not substitute for actual artifact provenance, license review, cache-only load from the release image or retrieval-golden tests. Exact-SHA hosted CI is pending.

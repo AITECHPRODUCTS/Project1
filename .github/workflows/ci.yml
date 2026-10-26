@@ -202,7 +202,7 @@ jobs:
   dependency-remediation:
     # One-shot dependency lock refresh. It only runs for the explicitly named remediation commit
     # on the existing implementation branch, then self-disables for subsequent commits.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/build/omni-affiliate-os-production' && github.event.head_commit.message == 'chore: remediate frontend dependency advisories'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/build/omni-affiliate-os-production' && contains(github.event.head_commit.message, 'remediate frontend dependency advisories')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

@@ -94,8 +94,8 @@ def test_langchain_openai_sdk_with_both_pinned_clients_is_allowed():
 
 def test_transformer_model_loaders_require_local_files_only():
     source = (
-        "from transformers import AutoTokenizer as Tokenizer\\n"
-        "tokenizer = Tokenizer.from_pretrained('model/repo')\\n"
+        "from transformers import AutoTokenizer as Tokenizer\n"
+        "tokenizer = Tokenizer.from_pretrained('model/repo')\n"
     )
     errors = find_transport_violations(source, "backend/services/unreviewed_model.py")
     assert len(errors) == 1
@@ -104,17 +104,17 @@ def test_transformer_model_loaders_require_local_files_only():
 
 def test_transformer_model_loaders_accept_local_files_only_alias():
     source = (
-        "from transformers import AutoTokenizer as Tokenizer\\n"
-        "tokenizer = Tokenizer.from_pretrained('model/repo', local_files_only=True)\\n"
+        "from transformers import AutoTokenizer as Tokenizer\n"
+        "tokenizer = Tokenizer.from_pretrained('model/repo', local_files_only=True)\n"
     )
     assert find_transport_violations(source, "backend/services/local_model.py") == []
 
 
 def test_embedding_sdk_requires_local_files_only_in_model_kwargs():
     source = (
-        "from langchain_huggingface import HuggingFaceEmbeddings\\n"
+        "from langchain_huggingface import HuggingFaceEmbeddings\n"
         "embedding = HuggingFaceEmbeddings(model_name='model/repo', "
-        "model_kwargs={'device': 'cpu'})\\n"
+        "model_kwargs={'device': 'cpu'})\n"
     )
     errors = find_transport_violations(source, "ai_memory/unreviewed_embeddings.py")
     assert len(errors) == 1
@@ -123,8 +123,8 @@ def test_embedding_sdk_requires_local_files_only_in_model_kwargs():
 
 def test_embedding_sdk_accepts_local_files_only_in_model_kwargs():
     source = (
-        "from langchain_huggingface import HuggingFaceEmbeddings\\n"
+        "from langchain_huggingface import HuggingFaceEmbeddings\n"
         "embedding = HuggingFaceEmbeddings(model_name='model/repo', "
-        "model_kwargs={'device': 'cpu', 'local_files_only': True})\\n"
+        "model_kwargs={'device': 'cpu', 'local_files_only': True})\n"
     )
     assert find_transport_violations(source, "ai_memory/model_artifacts.py") == []

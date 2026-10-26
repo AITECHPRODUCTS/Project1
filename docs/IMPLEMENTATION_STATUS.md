@@ -738,3 +738,8 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Candidate centralizes Hugging Face embedding setup in `ai_memory/model_artifacts.py`, sets `local_files_only=True` for embeddings and local Transformers/PEFT loads, rejects mutable/short revision pins, requires an immutable 40-hex revision for production Hub embedding IDs, and places model@revision into the local SQLite vector-index identity. A blank development revision keeps the existing default index identity and adds no database migration.
 - Added static-guard regressions and `tests/test_model_artifacts_local_only.py`. The operator artifact-preparation runbook is `docs/MODEL_ARTIFACT_OPERATIONS.md`. No model artifact is claimed to have been staged, licensed, or validated in production.
 - Exact resulting-SHA push/PR CI is pending. The model cache, model license review, RAG re-ingestion golden tests and deployed runtime behavior remain separate release gates.
+
+
+## 2026-10-26 model local-only guard regression fixture — corrective commit pending CI
+- Candidate SHA `47bd006c665ba490d2cbd0c0a87c57c8350ef0f4` failed the required Python suite with four failures in `tests/test_outbound_transport_boundary.py`; the run log shows the synthetic source fixtures contained literal backslash-n sequences, so the AST guard correctly rejected unparsable Python before checking the forbidden/allowed `local_files_only` forms.
+- This is a test-fixture escaping defect, not a reason to relax the guard or permit implicit downloads. The fixtures are being corrected to use real newline escapes in the Python string literals; require new exact-SHA push and PR runs before marking the model-artifact change verified.

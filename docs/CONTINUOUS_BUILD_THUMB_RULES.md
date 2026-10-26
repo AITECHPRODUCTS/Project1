@@ -196,3 +196,6 @@ These additive rules apply to every future Project1 build session.
 
 
 76. P0 hosted-LLM sync/async egress corrective work is complete and verified: the legacy `ai_memory/rag_chain.py` RetrievalQA factory and primary generation path both receive `http_client` + `http_async_client`. Sync/async transport tests pass on `337e31ed9a964a7cdfcde56abb9ee9d379400265`; see push [40360698617](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617) and PR [40360704559](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559). Keep the static guard strict; staging and provider UAT remain open.
+
+
+77. Model-artifact local-only security change at `47bd006c665ba490d2cbd0c0a87c57c8350ef0f4` is not verified: both push and PR Python jobs failed four fixture assertions in `tests/test_outbound_transport_boundary.py` because synthetic snippets used literal backslash-n text. Fix test fixture escaping, preserve the strict AST guard, and rerun full push/PR CI before proceeding.

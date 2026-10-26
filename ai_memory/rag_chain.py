@@ -21,6 +21,7 @@ class DoctrineRAG:
         self.settings = get_settings()
         self.collection_name = "affiliate_doctrine"
         self._store = None
+        self._sdk_http_clients: list[tuple[Any, Any]] = []
 
     def vectorstore(self) -> Any:
         if self._store is None:
@@ -60,6 +61,13 @@ class DoctrineRAG:
         text = "\n\n--- Source boundary ---\n\n".join(document.page_content for document in documents)
         return RetrievedDoctrine(query, text, sources, tuple(documents))
 
+    async def aclose_retrieval_qa_clients(self) -> None:
+        """Release HTTP pools retained by chains returned from retrieval_qa()."""
+        clients, self._sdk_http_clients = self._sdk_http_clients, []
+        for sync_client, async_client in clients:
+            sync_client.close()
+            await async_client.aclose()
+
     def retrieval_qa(self) -> Any:
         try:
             from langchain_classic.chains import RetrievalQA
@@ -77,13 +85,23 @@ class DoctrineRAG:
                 "RETRIEVED DOCTRINE:\n{context}\n\nTASK:\n{question}"
             ),
         )
+        from backend.services.url_safety import (
+            create_pinned_public_async_client,
+            create_pinned_public_client,
+        )
+
+        sync_http_client = create_pinned_public_client(timeout=45)
+        async_http_client = create_pinned_public_async_client(timeout=45)
+        self._sdk_http_clients.append((sync_http_client, async_http_client))
         llm = ChatOpenAI(
             model=self.settings.openai_model,
             api_key=self.settings.openai_api_key,
             base_url=self.settings.openai_base_url or None,
             temperature=0.3,
             timeout=45,
-            max_retries=2,
+            max_retries=0,
+            http_client=sync_http_client,
+            http_async_client=async_http_client,
         )
         return RetrievalQA.from_chain_type(
             llm=llm,

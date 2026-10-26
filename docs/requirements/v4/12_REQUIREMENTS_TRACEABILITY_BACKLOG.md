@@ -303,3 +303,8 @@
 - Finding on `7a2626094c370ba12b8f10249e44dd02abd5d1e0`: raw HTTP call sites used the pinned transport, but `ChatOpenAI` constructed the OpenAI SDK-managed HTTP client independently.
 - Candidate adds an injected DNS-pinned `http_async_client`, request-time HTTPS/public-address validation, connection-IP pinning, Host/SNI preservation, no redirects and `trust_env=False`; SDK auto-retries are disabled to reduce ambiguous duplicate model spend. Static guard now enforces the injected client for ChatOpenAI/OpenAI SDK constructors.
 - New tests cover transport behavior and static policy. **Pending** exact-SHA full push/PR CI. Staging deployment, actual proxy ingress and authorized provider UAT must still be evidenced separately.
+
+
+## P0 — SDK sync + async outbound-boundary corrective candidate (2026-10-26)
+- The failed candidate run identified the legacy `ai_memory/rag_chain.py` RetrievalQA factory as a second `ChatOpenAI` constructor without a pinned HTTP client. Exact-SHA failed runs: push [40359428990](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359428990), PR [40359436287](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359436287). The failure correctly prevented a green repo-guard.
+- Corrective candidate adds a pinned sync transport alongside the async one and requires both in the static guard; both SDK call sites inject them. CI tests for sync transport pinning and both-client enforcement are pending.

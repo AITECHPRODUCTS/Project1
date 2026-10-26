@@ -193,3 +193,6 @@ These additive rules apply to every future Project1 build session.
 
 
 75. P0 hosted-LLM SDK egress: every LangChain/OpenAI-compatible SDK client must inject the DNS-pinned async HTTP client from `backend.services.url_safety`. That client must validate/pin each HTTPS destination, preserve Host/TLS SNI, reject non-HTTPS requests, disable redirects and ignore ambient proxies. SDK constructors without the required safe-client injection must fail the static transport guard. New implementation/test candidate is pending exact-SHA push and PR CI; real staging and provider UAT remain separate release gates.
+
+
+76. P0 hosted-LLM sync/async egress: the strict guard uncovered a second `ChatOpenAI` factory in `ai_memory/rag_chain.py`; do not weaken the guard or treat async-only injection as sufficient. Both `http_client` and `http_async_client` must use the DNS-pinned transports. Primary generation and legacy RetrievalQA must both inject them; sync + async transport tests and full exact-SHA push/PR CI are pending.

@@ -5,13 +5,15 @@ import asyncio
 import ipaddress
 import json
 import socket
-from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from contextlib import asynccontextmanager, contextmanager
 from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 
 DNS_TIMEOUT_SECONDS = 3.0
+_DNS_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="pinned-public-dns")
 
 
 async def _resolve_public_target(url: str) -> tuple[httpx.URL, str, str]:
@@ -63,6 +65,131 @@ async def _resolve_public_target(url: str) -> tuple[httpx.URL, str, str]:
             "Private, loopback, link-local, multicast or reserved destinations are blocked"
         )
     return target, hostname, str(addresses[0])
+
+
+def _resolve_public_target_sync(url: str) -> tuple[httpx.URL, str, str]:
+    """Synchronous sibling of the bounded async resolver for sync SDK calls."""
+    try:
+        target = httpx.URL(url)
+    except Exception as exc:
+        raise ValueError("Only absolute HTTP(S) URLs are allowed") from exc
+    if target.scheme not in {"http", "https"} or not target.host:
+        raise ValueError("Only absolute HTTP(S) URLs are allowed")
+    if target.username or target.password:
+        raise ValueError("URLs containing credentials are not allowed")
+
+    hostname = target.host.lower().rstrip(".")
+    if (
+        hostname in {"localhost", "localhost.localdomain"}
+        or hostname.endswith((".localhost", ".local", ".internal", ".test", ".home", ".lan", ".corp"))
+    ):
+        raise ValueError("Local/private hostname blocked")
+    port = target.port or (443 if target.scheme == "https" else 80)
+
+    try:
+        literal = ipaddress.ip_address(hostname)
+        addresses = [literal]
+    except ValueError:
+        future = _DNS_EXECUTOR.submit(
+            socket.getaddrinfo, hostname, port, 0, socket.SOCK_STREAM
+        )
+        try:
+            answers = future.result(timeout=DNS_TIMEOUT_SECONDS)
+        except FutureTimeoutError as exc:
+            future.cancel()
+            raise ValueError("Public hostname DNS lookup timed out") from exc
+        except OSError as exc:
+            raise ValueError("Public hostname DNS lookup failed") from exc
+        addresses = []
+        for answer in answers:
+            try:
+                addresses.append(ipaddress.ip_address(answer[4][0].split("%", 1)[0]))
+            except (ValueError, IndexError, TypeError) as exc:
+                raise ValueError("Hostname returned an invalid IP address") from exc
+
+    if not addresses:
+        raise ValueError("Hostname has no addresses")
+    if any(not address.is_global for address in addresses):
+        raise ValueError("Private, loopback, link-local, multicast or reserved destinations are blocked")
+    return target, hostname, str(addresses[0])
+
+
+class PinnedPublicSyncTransport(httpx.BaseTransport):
+    """Synchronous HTTPX transport pinned to a DNS-validated public destination."""
+
+    def __init__(self, inner_transport: httpx.BaseTransport | None = None):
+        self._transport = inner_transport or httpx.HTTPTransport(retries=0)
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        original_url = request.url
+        if original_url.scheme != "https":
+            raise ValueError("Provider SDK outbound requests require HTTPS")
+
+        target, hostname, connect_ip = _resolve_public_target_sync(str(original_url))
+        host_header = f"[{hostname}]" if ":" in hostname else hostname
+        if target.port and target.port != 443:
+            host_header = f"{host_header}:{target.port}"
+
+        original_host = request.headers.get("host")
+        allowed_host_headers = {host_header.lower()}
+        if target.port == 443:
+            allowed_host_headers.add(f"{host_header}:443".lower())
+        if original_host and original_host.lower() not in allowed_host_headers:
+            raise ValueError("Provider SDK Host header must match the configured endpoint")
+
+        had_sni = "sni_hostname" in request.extensions
+        original_sni = request.extensions.get("sni_hostname")
+        request.url = request.url.copy_with(host=connect_ip)
+        request.headers["Host"] = host_header
+        request.extensions["sni_hostname"] = hostname
+        try:
+            return self._transport.handle_request(request)
+        finally:
+            request.url = original_url
+            if original_host is None:
+                request.headers.pop("Host", None)
+            else:
+                request.headers["Host"] = original_host
+            if had_sni:
+                request.extensions["sni_hostname"] = original_sni
+            else:
+                request.extensions.pop("sni_hostname", None)
+
+    def close(self) -> None:
+        self._transport.close()
+
+
+def create_pinned_public_client(*, timeout: float = 45.0) -> httpx.Client:
+    """Create a sync provider SDK client using the pinned public transport."""
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
+    client_timeout = httpx.Timeout(timeout, connect=min(4.0, timeout))
+    return httpx.Client(
+        transport=PinnedPublicSyncTransport(),
+        timeout=client_timeout,
+        follow_redirects=False,
+        trust_env=False,
+    )
+
+
+def create_pinned_public_async_client(*, timeout: float = 45.0) -> httpx.AsyncClient:
+    """Create an async provider SDK client using the pinned public transport."""
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
+    client_timeout = httpx.Timeout(timeout, connect=min(4.0, timeout))
+    return httpx.AsyncClient(
+        transport=PinnedPublicAsyncTransport(),
+        timeout=client_timeout,
+        follow_redirects=False,
+        trust_env=False,
+    )
+
+
+@contextmanager
+def pinned_public_client(*, timeout: float = 45.0):
+    """Context-managed sync provider SDK client with DNS/IP pinning."""
+    with create_pinned_public_client(timeout=timeout) as client:
+        yield client
 
 
 class PinnedPublicAsyncTransport(httpx.AsyncBaseTransport):
@@ -122,16 +249,8 @@ class PinnedPublicAsyncTransport(httpx.AsyncBaseTransport):
 async def pinned_public_async_client(
     *, timeout: float = 45.0
 ) -> AsyncIterator[httpx.AsyncClient]:
-    """Create an async SDK client that cannot bypass the pinned public transport."""
-    if timeout <= 0:
-        raise ValueError("timeout must be positive")
-    client_timeout = httpx.Timeout(timeout, connect=min(4.0, timeout))
-    async with httpx.AsyncClient(
-        transport=PinnedPublicAsyncTransport(),
-        timeout=client_timeout,
-        follow_redirects=False,
-        trust_env=False,
-    ) as client:
+    """Context-managed async SDK client with DNS/IP pinning."""
+    async with create_pinned_public_async_client(timeout=timeout) as client:
         yield client
 
 

@@ -727,3 +727,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The OpenAI-compatible path now injects this client into `ChatOpenAI(http_async_client=...)` and disables SDK-level automatic retries to reduce ambiguous repeat model charges after a timeout. The static transport verifier also checks SDK constructors for the required safe-client injection.
 - Added transport tests for pinned-IP/Host/SNI behavior, plain-HTTP rejection and redirect/proxy defaults; expanded static-guard tests so future direct ChatOpenAI client creation without an explicit safe async client fails CI.
 - Status: **candidate only** until the new exact-SHA push and PR runs pass. The scan does not replace actual staging proxy verification or authorized model/provider UAT.
+
+
+## 2026-10-26 pinned SDK sync/async correction — candidate, CI pending
+- The first exact-SHA candidate `5ffcd5d5042d7ebd14e024c15bd271cca277908b` failed the strict transport guard at `ai_memory/rag_chain.py:80`. The failed push [40359428990](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359428990) and PR [40359436287](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359436287) otherwise passed Python, PostgreSQL migrations/concurrency, AI/RAG imports/SBOM, frontend build, security audits and secret scan. The source guard correctly identified a second legacy `ChatOpenAI` factory; it is not being suppressed.
+- Corrective candidate adds both a synchronous and asynchronous DNS-pinned transport, injects both into the primary LLM service and legacy `DoctrineRAG.retrieval_qa()`, disables SDK retries, and retains the static guard requirement for both clients. The RAG service exposes explicit async cleanup for retained clients.
+- New tests cover the sync transport's HTTPS rejection, IP pinning, Host/TLS SNI, and the static guard requires both injected clients. Await exact-SHA push and PR CI before marking this fix verified.

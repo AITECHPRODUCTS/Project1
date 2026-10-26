@@ -67,24 +67,26 @@ def test_syntax_errors_fail_closed():
     assert "cannot parse source" in errors[0]
 
 
-def test_langchain_openai_sdk_requires_pinned_async_client():
+def test_langchain_openai_sdk_requires_both_pinned_clients():
     source = (
         "from langchain_openai import ChatOpenAI as Model\n"
-        "model = Model(model='test-model', api_key='fake-test-key')\n"
+        "model = Model(model='test-model', api_key='fake-test-key', "
+        "http_async_client=safe_async_client)\n"
     )
     errors = find_transport_violations(source, "backend/services/unreviewed_llm.py")
     assert len(errors) == 1
     assert "ChatOpenAI" in errors[0]
-    assert "http_async_client" in errors[0]
+    assert "http_client" in errors[0]
 
 
-def test_langchain_openai_sdk_with_pinned_client_is_allowed():
+def test_langchain_openai_sdk_with_both_pinned_clients_is_allowed():
     source = (
         "from langchain_openai import ChatOpenAI\n"
-        "from backend.services.url_safety import pinned_public_async_client\n"
+        "from backend.services.url_safety import pinned_public_client, pinned_public_async_client\n"
         "async def build():\n"
-        "    async with pinned_public_async_client() as safe_client:\n"
-        "        return ChatOpenAI(model='test-model', api_key='fake-test-key', "
-        "http_async_client=safe_client)\n"
+        "    with pinned_public_client() as sync_client:\n"
+        "        async with pinned_public_async_client() as async_client:\n"
+        "            return ChatOpenAI(model='test-model', api_key='fake-test-key', "
+        "http_client=sync_client, http_async_client=async_client)\n"
     )
     assert find_transport_violations(source, "backend/services/llm.py") == []

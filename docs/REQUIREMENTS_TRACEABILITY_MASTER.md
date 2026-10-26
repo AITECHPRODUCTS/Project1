@@ -261,3 +261,10 @@
 - Python 289 passed/2 skipped; SQLite and PostgreSQL migration/concurrency, AI/RAG, frontend, dependency audit, skill parity and push lockfile checks passed.
 - Public auth/lead-capture quotas are distributed Redis atomic windows in production and fail closed on Redis errors; expensive generation/render requires authentication and an active workspace with IP/workspace quotas. Payload sizes and quadratic keyword clustering are bounded.
 - Next: inspect outbound URL fetching and media-render SSRF/abuse boundaries before another feature.
+
+
+## 2026-10-26 outbound URL fetch and video asset safety — verified
+- Implementation `f2d232f7ce5efaea2e3d1abca8a6ba7e47cf339c`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288412469 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288420524 both passed.
+- Shared transport pins connections to validated public IPs while preserving Host/SNI, disables environment proxies/redirects, applies a whole-request timeout and checks response byte and media-type limits. It now serves the core public page fetch, operator-configured OpenAffiliate calls, and destination health probes. Pexels download and render have source/response/output caps. Competitor URL fetching requires authenticated workspace scope and rate quota.
+- CI summary: 301 Python tests passed, 2 skipped; PostgreSQL migrations/concurrency, 9 AI/RAG imports, frontend, dependency audit, source/skill guard and lockfile sync all passed.
+- Remaining: staging trusted-proxy verification; four Chroma advisory exceptions; external provider authorization/UAT, SBOM/license/secret scans, hosted deployment smoke and backup/restore.

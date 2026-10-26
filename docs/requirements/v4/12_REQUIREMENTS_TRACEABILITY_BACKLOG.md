@@ -179,3 +179,10 @@
 - Added limits: 2 MiB Pexels search JSON, 150 MiB media download, 180 seconds source/narration, 500 MiB rendered output, and 2 MiB / 12 seconds for default public HTML fetches.
 - Competitor research now requires authentication and a selected workspace, applies the existing distributed IP/workspace quota, and limits each URL to 2,048 characters.
 - Exact-SHA CI and new regression tests are pending. Staging must still validate ingress sanitization and Uvicorn trusted-proxy configuration; do not use wildcard forwarded-header trust.
+
+
+## P0 — public outbound-fetch/video safety verified (2026-10-26)
+- Source and tests verified on `f2d232f7ce5efaea2e3d1abca8a6ba7e47cf339c`; push [40288412469](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288412469) and PR [40288420524](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288420524) both passed.
+- Implemented DNS-pinned public fetch with preserved Host/SNI, no redirects or env proxy use, request deadline and size/MIME limits; reused in research/affiliate API/health probes. Pexels B-roll is type-, size- and duration-bounded; generated output directory and size bounded. Competitor fetching is authenticated, workspace scoped and distributed-rate-limited.
+- CI evidence: Python 301 passed/2 skipped; Postgres migration/concurrency, SQLite migration/drift, 9 AI/RAG imports, front-end, audit, skill parity and lockfile sync passed.
+- Staging still needs to prove exact trusted-proxy config; four ChromaDB advisory exceptions and further release checks remain open.

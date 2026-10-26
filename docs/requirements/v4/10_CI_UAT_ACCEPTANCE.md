@@ -175,3 +175,9 @@
 - Eight regressions passed: expensive route auth, missing workspace denial, workspace context and rate-limit integration, strict video quotas, atomic Redis quota behaviour, production Redis outage returning 503 without local fallback, development fallback behaviour, and keyword input bounds.
 - Python 289 passed/2 skipped; SQLite/PostgreSQL, AI/RAG, frontend, security audit, repository guard and push lockfile gates passed.
 - Next: source-audit outbound fetch and media rendering for DNS/IP pinning, redirect revalidation, payload/time limits and trusted-proxy assumptions.
+
+
+## 2026-10-26 outbound fetch/video hardening — verified
+- Exact SHA `f2d232f7ce5efaea2e3d1abca8a6ba7e47cf339c`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288412469 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288420524 both passed.
+- Regression suite: Python 301 passed, 2 skipped. Confirmed URL pinning/Host/SNI preservation, no redirect/proxy-env, body caps, MIME and Pexels media caps, 180-second durations and output-path/size limits; competitor route authorization and per-workspace quota also passed.
+- The repository does not configure a trusted-proxy CIDR; use only exact Uvicorn forwarded-header trust values after ingress sanitizes forwarded headers. Staging validation remains pending. ChromaDB advisory exceptions and remaining external release evidence remain blockers.

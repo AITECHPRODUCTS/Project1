@@ -186,3 +186,9 @@
 - Implemented DNS-pinned public fetch with preserved Host/SNI, no redirects or env proxy use, request deadline and size/MIME limits; reused in research/affiliate API/health probes. Pexels B-roll is type-, size- and duration-bounded; generated output directory and size bounded. Competitor fetching is authenticated, workspace scoped and distributed-rate-limited.
 - CI evidence: Python 301 passed/2 skipped; Postgres migration/concurrency, SQLite migration/drift, 9 AI/RAG imports, front-end, audit, skill parity and lockfile sync passed.
 - Staging still needs to prove exact trusted-proxy config; four ChromaDB advisory exceptions and further release checks remain open.
+
+
+## P0 — configured CMS endpoints and credentialed POST SSRF (2026-10-26)
+- Audit finding: WordPress/Ghost `SITE_URL` was checked with DNS validation, then the site was resolved again by HTTPX when sending the authenticated POST. That is a check-then-connect DNS-rebinding gap on a global-credential integration.
+- Candidate fix: extend the shared public-URL transport to allow only the fixed GET/HEAD/POST methods used by the application, preserve Host/SNI with the actual socket pinned to a validated public IP, disable redirects and environment proxies, and enforce a 2 MiB response cap on CMS JSON.
+- Four tests cover WordPress/Ghost POST endpoints, selected JSON payloads/auth headers, redirects, and oversized response rejection. Status: pending exact-SHA CI.

@@ -268,3 +268,9 @@
 - Shared transport pins connections to validated public IPs while preserving Host/SNI, disables environment proxies/redirects, applies a whole-request timeout and checks response byte and media-type limits. It now serves the core public page fetch, operator-configured OpenAffiliate calls, and destination health probes. Pexels download and render have source/response/output caps. Competitor URL fetching requires authenticated workspace scope and rate quota.
 - CI summary: 301 Python tests passed, 2 skipped; PostgreSQL migrations/concurrency, 9 AI/RAG imports, frontend, dependency audit, source/skill guard and lockfile sync all passed.
 - Remaining: staging trusted-proxy verification; four Chroma advisory exceptions; external provider authorization/UAT, SBOM/license/secret scans, hosted deployment smoke and backup/restore.
+
+
+## 2026-10-26 CMS endpoint pinning — candidate
+- Follow-up to the verified shared outbound-fetch hardening: CMS configured domains were still being checked separately from credentialed WordPress/Ghost HTTP POSTs.
+- Candidate adds bounded JSON POST support to the pinned public transport and migrates CMS writes to it. Redirects are explicitly refused; proxy environment variables are ignored; response body max is 2 MiB.
+- `CMS_PUBLISH_EXECUTE` stays required for live publish. Await exact-SHA CI before marking this item complete.

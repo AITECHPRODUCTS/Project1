@@ -77,12 +77,19 @@ async def open_public_http_response(
     method: str = "GET",
     params: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
+    json_body: Any | None = None,
     timeout: float = 12.0,
 ) -> AsyncIterator[httpx.Response]:
-    """Open a request pinned to a vetted public IP, preserving Host and TLS SNI."""
+    """Open a request pinned to a vetted public IP, preserving Host and TLS SNI.
+
+    POST is supported for fixed, authenticated integrations such as the CMS API.
+    Redirects remain disabled so credentials are never forwarded to a new host.
+    """
     method = method.upper()
-    if method not in {"GET", "HEAD"}:
-        raise ValueError("Public fetch helper only supports GET and HEAD")
+    if method not in {"GET", "HEAD", "POST"}:
+        raise ValueError("Public fetch helper only supports GET, HEAD and POST")
+    if method != "POST" and json_body is not None:
+        raise ValueError("JSON request bodies are only supported for POST")
     if timeout <= 0:
         raise ValueError("timeout must be positive")
 
@@ -102,7 +109,7 @@ async def open_public_http_response(
             trust_env=False,
         ) as client:
             request = client.build_request(
-                method, str(target), params=params, headers=headers
+                method, str(target), params=params, headers=headers, json=json_body
             )
             request.url = request.url.copy_with(host=connect_ip)
             request.headers["Host"] = host_header

@@ -181,3 +181,9 @@
 - Exact SHA `f2d232f7ce5efaea2e3d1abca8a6ba7e47cf339c`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288412469 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288420524 both passed.
 - Regression suite: Python 301 passed, 2 skipped. Confirmed URL pinning/Host/SNI preservation, no redirect/proxy-env, body caps, MIME and Pexels media caps, 180-second durations and output-path/size limits; competitor route authorization and per-workspace quota also passed.
 - The repository does not configure a trusted-proxy CIDR; use only exact Uvicorn forwarded-header trust values after ingress sanitizes forwarded headers. Staging validation remains pending. ChromaDB advisory exceptions and remaining external release evidence remain blockers.
+
+
+## 2026-10-26 CMS configured-host transport — candidate
+- The verified outbound-fetch base is `910ab73fe7a0cef8fcd507fda27e30a7b3e85598` (push [40288954753](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288954753), PR [40288959578](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288959578)).
+- CMS provider calls still needed one more source-level change: authenticated WordPress/Ghost writes must use the same pinned transport rather than validate then open a separate client.
+- Four new CMS transport tests are pending the full push/PR CI matrix.

@@ -549,3 +549,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Trusted proxy configuration is **not implemented as an app setting**. Deployment instructions now explicitly require the real ingress to strip/replace forwarding headers and Uvicorn to trust exact proxy IPs/CIDRs only; staging must still prove this configuration. Do not enable wildcard forwarded-header trust.
 - Production is still **not certified live**: the four documented ChromaDB upstream advisory IDs remain temporary security exceptions, and authorized live-provider UAT, SBOM/license/secret evidence, hosted staging/deployment smoke, monitoring/SLO proof and backup/restore evidence remain open release gates.
 - Next P0: verify the actual deployment/ingress profile and add isolated integration tests around pinned-IP request behavior against local controlled transports; review remaining provider SDK/direct HTTP calls to ensure they use the shared fetch boundary where they accept untrusted URLs.
+
+
+## 2026-10-26 CMS configured-host DNS pinning — candidate
+- Starting checkpoint `910ab73fe7a0cef8fcd507fda27e30a7b3e85598` passed push [40288954753](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288954753) and PR [40288959578](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288959578).
+- Follow-up source audit found `cms_publisher.py` still validated `WORDPRESS_SITE_URL`/`GHOST_SITE_URL` and then sent credentialed POST requests using a separate HTTP client, leaving a DNS-rebinding window for global CMS credentials.
+- Candidate extends the shared pinned public HTTP transport to support fixed CMS POST operations with JSON bodies, preserves original Host/SNI, disables redirects and proxy environment use, and caps CMS responses at 2 MiB. The existing `CMS_PUBLISH_EXECUTE` live-publish gate remains unchanged.
+- Four regression tests cover WordPress and Ghost request routing/credentials, no-follow redirect behavior, and oversized response rejection. This candidate is **pending** the full exact-SHA push and PR CI matrix.

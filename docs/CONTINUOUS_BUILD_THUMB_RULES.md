@@ -129,3 +129,6 @@ These additive rules apply to every future Project1 build session.
 
 
 54. P0 public outbound-fetch/video safety is verified on `f2d232f7ce5efaea2e3d1abca8a6ba7e47cf339c`; push [40288412469](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288412469) and PR [40288420524](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288420524) both passed. Python 301/2 skipped, PostgreSQL migration/concurrency, 9 AI/RAG imports, frontend build, dependency audit, 53-skill parity and lockfile sync all green. Trusted proxy ingress still needs staging proof; four Chroma advisories and release/UAT/SBOM/backup gates remain unresolved. Next: validate actual proxy trust and verify any remaining direct HTTP integrations use the pinned transport where caller-supplied URLs enter.
+
+
+55. P0 CMS provider requests: WordPress/Ghost site URLs are operator-configured but carry global write credentials. Do not validate DNS then perform a second unpinned resolution. Use the shared pinned-IP transport, preserve Host/SNI, disable redirects/proxy env, cap response bodies, and retain the `CMS_PUBLISH_EXECUTE` gate. Tests pending full exact-SHA CI.

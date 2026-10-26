@@ -133,7 +133,8 @@
 - Four route tests verify ordinary workspace members and platform admins lacking an active workspace cannot trigger the upstream sync, successful sync updates the global catalog and audits the actor's workspace, and provider failure is audited with a 502 response.
 - Python 271 passed/2 skipped; SQLite, PostgreSQL migration/concurrency, AI/RAG profile, frontend production build, dependency audit, repository guard, and push lockfile sync passed.
 
+## 2026-10-26 OpenAffiliate outbound URL validation — verified
+- Exact SHA `49043acd6e71841c7d365a97a9d8ca31168cc8da`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280504806 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280508646 both passed.
+- Two new URL-safety tests passed. Python 273 passed/2 skipped; frontend, security, repository guard, SQLite/PostgreSQL migration/concurrency, AI/RAG and push lockfile jobs all passed.
+- The OpenAffiliate client validates its composed URL before opening an HTTP client on cache misses and retains redirects disabled. Four ChromaDB advisory exceptions and production release gates remain open.
 
-## 2026-10-26 OpenAffiliate outbound URL validation — candidate
-- Apply the repository's URL safety policy to the OpenAffiliate client: validate the composed provider URL before creating an HTTP client; keep redirects disabled.
-- Tests verify private endpoint rejection occurs before network client construction and valid endpoint requests use the validated URL. Full push/PR CI pending.

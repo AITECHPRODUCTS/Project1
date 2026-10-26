@@ -218,7 +218,11 @@
 - Success and failure paths write workspace-scoped `offers.sync` AuditLog metadata including provider, error type or created/updated counts, requested limit, and whether a query was supplied; full provider payloads and credentials are not logged. Four regression tests cover member denial, no-workspace denial, successful catalog refresh plus audit, and provider failure audit/502.
 - Next P0 audit: inspect global provider/catalog configuration operations and other integration routes for appropriate role boundaries, audit trails, request limits, and safe failure behavior. Production remains **not release-ready** due to the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates.
 
+## P0 — OpenAffiliate outbound URL safety — verified
+- Implementation SHA: `49043acd6e71841c7d365a97a9d8ca31168cc8da`.
+- Push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280504806 — **success**. PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280508646 — **success**. All seven push jobs and all required PR jobs passed.
+- Python suite: **273 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite migration/drift and PostgreSQL migration/concurrency, AI/RAG import profile, frontend typecheck/production build, dependency security audit, 53-skill repository guard and push lockfile reproducibility all passed.
+- `OpenAffiliateClient._get` now calls the existing `validate_public_http_url` before opening an HTTP client on cache misses. This rejects private, loopback, link-local, multicast and reserved destinations, while preserving `follow_redirects=False`, response byte caps, JSON validation and the existing TTL cache.
+- Two regressions prove a loopback/private base URL is rejected before HTTP client construction, and valid-provider requests use the validated URL with redirects disabled.
+- Next P0 audit: review remaining API routes and provider-configuration surfaces for public-read leaks, unsafe network destinations, global write authorization, and shared catalog/tenant boundaries. Production remains **not release-ready** because the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates remain unresolved.
 
-## 2026-10-26 OpenAffiliate URL safety — candidate
-- Source-derived gap: `backend/tools/affiliate_api.py` used `OPENAFFILIATE_BASE_URL + path` for outbound HTTP without calling `validate_public_http_url`; configured base URLs could therefore target private/loopback destinations.
-- Candidate calls the existing URL validator before provider network access and preserves `follow_redirects=False`. Two regression tests are pending full exact-SHA CI.

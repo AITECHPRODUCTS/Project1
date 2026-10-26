@@ -129,8 +129,9 @@
 - Audit records include provider, created/updated counts or error type, request limit and query-presence metadata. Four regression tests passed; Python suite 271 passed/2 skipped and full required CI passed.
 - Next: review remaining global provider integration/configuration routes for equivalent authorization and audit controls.
 
+## P0 — OpenAffiliate SSRF/network boundary verified (2026-10-26)
+- Verified SHA `49043acd6e71841c7d365a97a9d8ca31168cc8da`: push [40280504806](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280504806) and PR [40280508646](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280508646) both passed.
+- OpenAffiliate now uses `validate_public_http_url` before HTTP-client creation on cache misses and keeps redirects disabled; the existing response byte cap and JSON schema handling remain intact.
+- Two regressions passed: private/loopback endpoint is rejected before a client can open; valid provider requests use the validated URL. Python 273 passed / 2 skipped and all required CI jobs passed.
+- Next P0 audit: other API routes and provider-configuration/public-read surfaces.
 
-## P0 — OpenAffiliate SSRF/network boundary candidate (2026-10-26)
-- `OpenAffiliateClient._get` previously called the configured base URL without the existing `validate_public_http_url` helper; unlike generic adapters, it did not reject private/loopback destinations first.
-- Candidate validates the final provider path before opening the HTTP client and retains redirects disabled. Two tests cover private rejection before HTTP and successful mock request using a validated host.
-- Exact-SHA push/PR CI pending.

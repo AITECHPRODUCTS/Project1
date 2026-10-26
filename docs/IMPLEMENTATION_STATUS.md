@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 49 partial and 4 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 50 partial and 3 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -798,3 +798,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added a responsive Next.js public registration route and dashboard form for event details, agenda, privacy policy, disclosure and opening/closing registration.
 - Registrations are stored locally; meeting-room/provider integration and confirmation-email delivery remain unconfigured and are explicitly reported as such. Event registration never implies marketing opt-in.
 - Tests cover draft visibility, opening authorization, consent enforcement, duplicate registration and seat capacity. CI must pass on the exact commit before this slice is considered verified.
+
+
+## 2026-10-26 implementation update — affiliate program application packet
+- Added workspace-scoped `AffiliateProgramApplication` persistence and Alembic migration `0013_program_applications`.
+- Added create/list/review API routes for affiliate program application packets. The packet captures program and publisher URLs, audience, traffic sources, promotion channels, regions, monthly visitor declaration, promotion plan, evidence URLs and compliance attestations.
+- Readiness checks report missing official terms evidence and unchecked affiliate disclosure, traffic-source terms, geographic restrictions, consent/privacy and claims-substantiation controls. User-provided URLs are references only; the system does not fetch them or treat them as verified facts.
+- Owner/admin review can approve the packet for manual handoff or reject it. Provider submission remains `not_configured`; no external application is sent and no network approval is claimed.
+- Audit events record packet creation and internal review. Tests cover incomplete readiness, evidence/checklist-gated handoff, workspace role gate and the non-submission invariant.

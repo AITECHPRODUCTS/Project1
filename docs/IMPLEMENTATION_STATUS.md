@@ -1,5 +1,5 @@
 # Implementation status — Project1 / OmniAffiliateOS
-Updated: 2026-10-25
+Updated: 2026-10-26
 
 ## Repository/build
 - Canonical repository: https://github.com/AITECHPRODUCTS/Project1 (public).
@@ -721,15 +721,20 @@ The GitHub Actions run linked from the repository is the authoritative check res
 
 
 
-## 2026-10-26 hosted LLM SDK transport hardening — verified
-- Base SHA `7a2626094c370ba12b8f10249e44dd02abd5d1e0` is green in push [40349637942](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349637942) and PR [40349646267](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349646267). Those runs verified the raw HTTP transport guard and supply-chain artifacts, but a source audit found `backend/services/llm.py` creates a LangChain `ChatOpenAI` without injecting the DNS-pinned transport.
-- The SDK's managed HTTP client could therefore resolve/connect outside the project's outbound transport boundary. Candidate fix adds `PinnedPublicAsyncTransport` and `pinned_public_async_client` in `backend/services/url_safety.py`; it pins every HTTPS request to a validated public IP, preserves the original Host/TLS SNI, rejects HTTP, disallows redirects and ignores ambient proxy configuration.
-- The OpenAI-compatible path now injects this client into `ChatOpenAI(http_async_client=...)` and disables SDK-level automatic retries to reduce ambiguous repeat model charges after a timeout. The static transport verifier also checks SDK constructors for the required safe-client injection.
-- Added transport tests for pinned-IP/Host/SNI behavior, plain-HTTP rejection and redirect/proxy defaults; expanded static-guard tests so future direct ChatOpenAI client creation without an explicit safe async client fails CI.
-- Status: **candidate only** until the new exact-SHA push and PR runs pass. The scan does not replace actual staging proxy verification or authorized model/provider UAT.
+## 2026-10-26 hosted LLM SDK transport hardening — verification history
 
+- The initial async-only attempt `5ffcd5d5042d7ebd14e024c15bd271cca277908b` was correctly rejected by the strict guard because the legacy RAG factory also constructed `ChatOpenAI` without the pinned client. The guard was not weakened.
+- Corrected implementation SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265` passed push [40360698617](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617) and PR [40360704559](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559). Python: 368 passed, 3 skipped, 1 existing warning; all eight push jobs and all seven required PR jobs passed.
+- Documentation checkpoint `f41cb8e1eba7caeb05777263c9f53c5890f1be23` also passed push [40361504831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40361504831) and PR [40361512478](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40361512478).
+- This verifies the code-level SDK transport change only. Actual staging proxy/egress verification, authorized model/provider UAT, deployment smoke, monitoring/SLO and backup/restore remain external release gates.
 
-## 2026-10-26 pinned SDK sync/async correction — candidate, CI pending
+## 2026-10-26 pinned SDK sync/async correction — verified
 - The first exact-SHA candidate `5ffcd5d5042d7ebd14e024c15bd271cca277908b` failed the strict transport guard at `ai_memory/rag_chain.py:80`. The failed push [40359428990](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359428990) and PR [40359436287](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359436287) otherwise passed Python, PostgreSQL migrations/concurrency, AI/RAG imports/SBOM, frontend build, security audits and secret scan. The source guard correctly identified a second legacy `ChatOpenAI` factory; it is not being suppressed.
 - Corrective candidate adds both a synchronous and asynchronous DNS-pinned transport, injects both into the primary LLM service and legacy `DoctrineRAG.retrieval_qa()`, disables SDK retries, and retains the static guard requirement for both clients. The RAG service exposes explicit async cleanup for retained clients.
 - New tests cover the sync transport's HTTPS rejection, IP pinning, Host/TLS SNI, and the static guard requires both injected clients. Await exact-SHA push and PR CI before marking this fix verified.
+
+## 2026-10-26 model-artifact runtime egress boundary — candidate, exact-SHA CI pending
+- Base SHA `f41cb8e1eba7caeb05777263c9f53c5890f1be23` is green in push [40361504831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40361504831) and PR [40361512478](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40361512478). The blueprint's next P0 security follow-up is preventing implicit model downloads on API, worker, or RAG ingestion paths.
+- Candidate centralizes Hugging Face embedding setup in `ai_memory/model_artifacts.py`, sets `local_files_only=True` for embeddings and local Transformers/PEFT loads, rejects mutable/short revision pins, requires an immutable 40-hex revision for production Hub embedding IDs, and places model@revision into the local SQLite vector-index identity. A blank development revision keeps the existing default index identity and adds no database migration.
+- Added static-guard regressions and `tests/test_model_artifacts_local_only.py`. The operator artifact-preparation runbook is `docs/MODEL_ARTIFACT_OPERATIONS.md`. No model artifact is claimed to have been staged, licensed, or validated in production.
+- Exact resulting-SHA push/PR CI is pending. The model cache, model license review, RAG re-ingestion golden tests and deployed runtime behavior remain separate release gates.

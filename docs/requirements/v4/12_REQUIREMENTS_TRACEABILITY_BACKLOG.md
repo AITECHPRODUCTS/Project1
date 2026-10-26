@@ -302,12 +302,12 @@
 ## P0 — hosted LLM SDK bypass of outbound transport (2026-10-26)
 - Finding on `7a2626094c370ba12b8f10249e44dd02abd5d1e0`: raw HTTP call sites used the pinned transport, but `ChatOpenAI` constructed the OpenAI SDK-managed HTTP client independently.
 - Candidate adds an injected DNS-pinned `http_async_client`, request-time HTTPS/public-address validation, connection-IP pinning, Host/SNI preservation, no redirects and `trust_env=False`; SDK auto-retries are disabled to reduce ambiguous duplicate model spend. Static guard now enforces the injected client for ChatOpenAI/OpenAI SDK constructors.
-- New tests cover transport behavior and static policy. **Pending** exact-SHA full push/PR CI. Staging deployment, actual proxy ingress and authorized provider UAT must still be evidenced separately.
+- New tests cover transport behavior and static policy. The async-only candidate failed the strict guard at the legacy RAG factory; correction is verified at `337e31ed9a964a7cdfcde56abb9ee9d379400265` by push [40360698617](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617) and PR [40360704559](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559). Staging deployment, actual proxy ingress and authorized provider UAT remain separate gates.
 
 
 ## P0 — SDK sync + async outbound-boundary corrective candidate (2026-10-26)
 - The failed candidate run identified the legacy `ai_memory/rag_chain.py` RetrievalQA factory as a second `ChatOpenAI` constructor without a pinned HTTP client. Exact-SHA failed runs: push [40359428990](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359428990), PR [40359436287](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359436287). The failure correctly prevented a green repo-guard.
-- Corrective candidate adds a pinned sync transport alongside the async one and requires both in the static guard; both SDK call sites inject them. CI tests for sync transport pinning and both-client enforcement are pending.
+- Corrective implementation adds a pinned sync transport alongside the async one and requires both in the static guard; both SDK call sites inject them. CI tests for sync transport pinning and both-client enforcement passed on exact SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`.
 
 
 ## P0 — hosted LLM SDK egress boundary verified (2026-10-26)
@@ -315,3 +315,8 @@
 - The strict guard uncovered and closed both SDK call sites. The primary LLM and legacy RAG RetrievalQA paths inject both pinned synchronous and asynchronous clients; a missing sync or async client fails the static guard.
 - Python: 368 passed, 3 skipped, one existing warning. SQLite/PostgreSQL migration and concurrency, AI/RAG profile/SBOM, frontend build, dependency/license audit, repository/53-skill guard, secret scan and lockfile sync passed.
 - Remaining separate release gates: actual staging egress and trusted-proxy tests, live provider/model authorization UAT, LGPL license review/replacement, production deployment smoke, monitoring/SLO and backup/restore.
+
+## P0 — model artifact downloads at runtime (2026-10-26; candidate)
+- The blueprint keeps model inference, RAG doctrine, and model artifacts as distinct release gates. Source review found `HuggingFaceEmbeddings` and Transformers `from_pretrained` calls defaulted to online Hub resolution when artifacts were missing.
+- Candidate centralizes embedding construction, makes embedding/AutoTokenizer/AutoModelForCausalLM/PEFT loads local-files-only, validates immutable 40-character embedding revision pins, requires a pin for production Hub embedding IDs, and incorporates the revision into vector-index identity without changing the SQLite schema.
+- Regression tests cover helper arguments, mutable-revision rejection, production-setting enforcement and static detection of missing local-only flags. Runbook: `docs/MODEL_ARTIFACT_OPERATIONS.md`. Exact resulting-SHA CI pending; a staged model artifact/license review and production RAG retrieval check remain deployment gates.

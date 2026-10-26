@@ -33,6 +33,26 @@ def _dotted_name(node: ast.AST) -> str:
     return ""
 
 
+def _has_true_keyword(call: ast.Call, name: str) -> bool:
+    return any(
+        keyword.arg == name and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+        for keyword in call.keywords
+    )
+
+
+def _dict_keyword_has_true(call: ast.Call, keyword_name: str, dict_key: str) -> bool:
+    for keyword in call.keywords:
+        if keyword.arg != keyword_name or not isinstance(keyword.value, ast.Dict):
+            continue
+        for key, value in zip(keyword.value.keys, keyword.value.values):
+            if (
+                isinstance(key, ast.Constant) and key.value == dict_key
+                and isinstance(value, ast.Constant) and value.value is True
+            ):
+                return True
+    return False
+
+
 def find_transport_violations(source: str, relative_path: str) -> list[str]:
     """Return raw outbound-client call sites outside the single pinned transport."""
     if relative_path.replace("\\", "/") == APPROVED_TRANSPORT:
@@ -64,7 +84,9 @@ def find_transport_violations(source: str, relative_path: str) -> list[str]:
         if not name:
             return ""
         parts = name.split(".")
-        if parts[0] in module_aliases:
+        if parts[0] in imported_names:
+            parts = [imported_names[parts[0]], *parts[1:]]
+        elif parts[0] in module_aliases:
             parts[0] = module_aliases[parts[0]]
         return ".".join(parts)
 
@@ -84,6 +106,19 @@ def find_transport_violations(source: str, relative_path: str) -> list[str]:
                 f"{relative_path}:{getattr(node, 'lineno', '?')}: raw outbound client {target} "
                 f"must use backend.services.url_safety"
             )
+
+        if target.endswith(".HuggingFaceEmbeddings"):
+            if not _dict_keyword_has_true(node, "model_kwargs", "local_files_only"):
+                violations.append(
+                    f"{relative_path}:{getattr(node, 'lineno', '?')}: HuggingFaceEmbeddings "
+                    "must set model_kwargs['local_files_only']=True; stage the model before runtime"
+                )
+        if target.endswith(".from_pretrained") and target.startswith(("transformers.", "peft.")):
+            if not _has_true_keyword(node, "local_files_only"):
+                violations.append(
+                    f"{relative_path}:{getattr(node, 'lineno', '?')}: model loader "
+                    f"{target} must set local_files_only=True"
+                )
 
         if target.endswith(".ChatOpenAI"):
             required_sdk_transports = ("http_client", "http_async_client")
@@ -152,6 +187,14 @@ def main() -> int:
             if required not in llm_source:
                 errors.append(f"OpenAI-compatible LLM is missing pinned SDK transport configuration: {required}")
 
+    config_path = ROOT / "backend/config.py"
+    if not config_path.is_file():
+        errors.append("missing runtime configuration: backend/config.py")
+    else:
+        config_source = config_path.read_text(encoding="utf-8")
+        if "embedding_model_revision" not in config_source or "40-character immutable" not in config_source:
+            errors.append("production configuration must require an immutable embedding model revision for Hub models")
+
     if errors:
         print("OUTBOUND TRANSPORT BOUNDARY FAILED")
         for error in sorted(set(errors)):
@@ -162,6 +205,7 @@ def main() -> int:
     print(f"Raw HTTP client constructors are restricted to {APPROVED_TRANSPORT}")
     print("Pinned-IP, TLS SNI, redirect and ambient-proxy invariants are present")
     print("OpenAI-compatible SDK clients must inject DNS-pinned sync and async transports")
+    print("Hugging Face embedding and transformer model loads are local-files-only; production Hub embeddings are revision-pinned")
     return 0
 
 

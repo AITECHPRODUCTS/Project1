@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ai_memory.model_artifacts import build_local_embeddings, embedding_identity, normalize_embedding_revision
+
 COLLECTION_NAME = "affiliate_doctrine"
 REQUIRED_REFERENCES = {
     "offer-frameworks.md",
@@ -107,26 +109,26 @@ def ingest(
     chunk_size: int = 1200,
     overlap: int = 180,
     collection_name: str = COLLECTION_NAME,
+    revision: str | None = None,
 ) -> dict[str, Any]:
-    try:
-        from langchain_huggingface import HuggingFaceEmbeddings
-    except ImportError as exc:
-        raise RuntimeError("Install requirements-ai.txt to use local vector indexing") from exc
     from ai_memory.local_vector_store import LocalSQLiteVectorStore
 
     if chunk_size < 200 or overlap < 0 or overlap >= chunk_size:
         raise ValueError("Require chunk_size >= 200 and 0 <= overlap < chunk_size")
     documents = build_documents(repository, chunk_size, overlap)
-    embeddings = HuggingFaceEmbeddings(
-        model_name=embedding_model,
-        model_kwargs={"device": os.getenv("EMBEDDING_DEVICE", "cpu")},
-        encode_kwargs={"normalize_embeddings": True},
+    resolved_revision = normalize_embedding_revision(
+        revision if revision is not None else os.getenv("EMBEDDING_MODEL_REVISION", "")
+    )
+    embeddings = build_local_embeddings(
+        embedding_model,
+        device=os.getenv("EMBEDDING_DEVICE", "cpu"),
+        revision=resolved_revision,
     )
     store = LocalSQLiteVectorStore(
         persist_directory=persist_directory,
         collection_name=collection_name,
         embedding_function=embeddings,
-        embedding_id=embedding_model,
+        embedding_id=embedding_identity(embedding_model, resolved_revision),
     )
     ids = [document.metadata["content_hash"] for document in documents]
     active_ids = set(ids)
@@ -155,6 +157,8 @@ def ingest(
         "stale_chunks_deleted": len(stale_ids),
         "index_file": str(store.db_path.resolve()),
         "vector_store": "local_sqlite",
+        "embedding_revision": resolved_revision,
+        "model_artifacts_local_only": True,
     }
 
 
@@ -163,6 +167,7 @@ def main() -> None:
     parser.add_argument("--repository", default=os.getenv("AFFILIATE_SKILLS_DIR", "./knowledge/affiliate-skills"))
     parser.add_argument("--persist-directory", default=os.getenv("CHROMA_PERSIST_DIR", "./storage/chroma"))
     parser.add_argument("--embedding-model", default=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
+    parser.add_argument("--embedding-revision", default=os.getenv("EMBEDDING_MODEL_REVISION", ""))
     parser.add_argument("--chunk-size", type=int, default=1200)
     parser.add_argument("--overlap", type=int, default=180)
     args = parser.parse_args()
@@ -176,6 +181,7 @@ def main() -> None:
                 args.embedding_model,
                 args.chunk_size,
                 args.overlap,
+                revision=args.embedding_revision,
             ),
             indent=2,
         )

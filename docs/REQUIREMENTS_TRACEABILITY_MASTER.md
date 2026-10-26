@@ -375,3 +375,8 @@
 - The strict outbound transport guard checks both `http_client` and `http_async_client` for LangChain ChatOpenAI constructors. Both primary LLM generation and legacy RetrievalQA now use the pinned HTTPS transports, including IP resolution/pinning, Host/TLS SNI, redirect denial, and disabled ambient proxies.
 - CI: 368 Python tests passed, 3 skipped, 1 existing warning; SQLite/PostgreSQL migration and concurrency, AI/RAG imports/SBOM, frontend production build, dependency/license audit, Gitleaks, skill parity and lockfile sync passed.
 - Next P0: review other SDK-managed outbound connections (notably embedding/model downloads and any future native provider SDKs) and continue tracking real staging/provider/deploy/restore evidence. The two expiring LGPL libvips inventory exceptions still block release approval.
+
+## 2026-10-26 model artifact network boundary — candidate
+- Requirement: API requests, worker restarts and RAG indexing must not trigger implicit mutable model downloads. Embedding/causal-model files must be pre-staged, with Hub revisions immutable in production.
+- Candidate files: `ai_memory/model_artifacts.py`, `ai_memory/rag_chain.py`, `ai_memory/ingester.py`, `backend/services/local_model.py`, `backend/config.py` and the outbound transport verifier/tests. It fails closed when model files are absent locally and uses revision-aware vector-store identity.
+- Acceptance evidence pending: exact-SHA push and PR jobs, then separate artifact licensing/staging and production RAG retrieval checks. No model download, external approval or production artifact validation is claimed.

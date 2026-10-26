@@ -25,11 +25,8 @@ class DoctrineRAG:
 
     def vectorstore(self) -> Any:
         if self._store is None:
-            try:
-                from langchain_huggingface import HuggingFaceEmbeddings
-            except ImportError as exc:
-                raise RuntimeError("Install requirements-ai.txt to query the local RAG index") from exc
             from ai_memory.local_vector_store import INDEX_FILENAME, LocalSQLiteVectorStore
+            from ai_memory.model_artifacts import build_local_embeddings, embedding_identity
 
             persist_directory = Path(self.settings.chroma_persist_dir)
             index_path = persist_directory / INDEX_FILENAME
@@ -38,16 +35,16 @@ class DoctrineRAG:
                     f"Local SQLite RAG index missing at {index_path}; "
                     "run python -m ai_memory.ingester to build it"
                 )
-            embedding = HuggingFaceEmbeddings(
-                model_name=self.settings.embedding_model,
-                model_kwargs={"device": os.getenv("EMBEDDING_DEVICE", "cpu")},
-                encode_kwargs={"normalize_embeddings": True},
+            embedding = build_local_embeddings(
+                self.settings.embedding_model,
+                device=os.getenv("EMBEDDING_DEVICE", "cpu"),
+                revision=self.settings.embedding_model_revision,
             )
             self._store = LocalSQLiteVectorStore(
                 persist_directory=persist_directory,
                 collection_name=self.collection_name,
                 embedding_function=embedding,
-                embedding_id=self.settings.embedding_model,
+                embedding_id=embedding_identity(self.settings.embedding_model, self.settings.embedding_model_revision),
             )
         return self._store
 

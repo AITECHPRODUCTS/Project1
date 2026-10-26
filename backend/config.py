@@ -1,6 +1,7 @@
 from __future__ import annotations
 import ipaddress
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -34,6 +35,8 @@ class Settings(BaseSettings):
     # Legacy field/env name retained for deployment compatibility; stores local_vectors.sqlite3, not ChromaDB.
     chroma_persist_dir: str = "./storage/chroma"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Immutable Hub commit SHA for reproducible production embedding artifacts.
+    embedding_model_revision: str = ""
     openaffiliate_base_url: str = "https://openaffiliate.dev/api"
     pexels_api_key: str = ""
     reddit_client_id: str = ""
@@ -91,6 +94,16 @@ class Settings(BaseSettings):
                 raise ValueError("FORWARDED_ALLOW_IPS must not trust the default route")
         return ",".join(entries)
 
+    @field_validator("embedding_model_revision", mode="before")
+    @classmethod
+    def validate_embedding_model_revision(cls, value):
+        if value is None or not str(value).strip():
+            return ""
+        revision = str(value).strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise ValueError("EMBEDDING_MODEL_REVISION must be a 40-character immutable model commit SHA")
+        return revision
+
     @field_validator("affiliate_webhook_secrets", mode="before")
     @classmethod
     def normalize_affiliate_webhook_secrets(cls, value):
@@ -129,6 +142,11 @@ class Settings(BaseSettings):
                 raise ValueError("Production OpenAI-compatible mode requires OPENAI_API_KEY")
             if self.llm_backend == "local_transformers" and not self.local_model_path:
                 raise ValueError("Production local model mode requires LOCAL_MODEL_PATH")
+            if not Path(self.embedding_model).expanduser().is_dir() and not self.embedding_model_revision:
+                raise ValueError(
+                    "Production Hub embedding models require EMBEDDING_MODEL_REVISION as an immutable "
+                    "40-character commit SHA; model artifacts must be staged before runtime"
+                )
         return self
 
     @property

@@ -293,3 +293,8 @@
 - Exact SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559 both passed.
 - ChatOpenAI instances must supply both pinned sync and async clients; the static guard catches a missing client. Sync/async transports enforce HTTPS, DNS/public-IP validation, connection IP pinning, Host/TLS SNI preservation, redirects disabled and ambient proxy ignored.
 - Python 368 passed, 3 skipped, one existing Starlette/httpx warning. Remaining independent gates are actual staging/proxy behavior, authorized live provider/model UAT, LGPL legal resolution or component replacement, deployment smoke, monitoring/SLO and backup/restore.
+
+## P0 model-artifact loading acceptance — candidate
+- `HuggingFaceEmbeddings`, `AutoTokenizer.from_pretrained`, `AutoModelForCausalLM.from_pretrained`, and `PeftModel.from_pretrained` must explicitly use local-only loading. Static CI fails if any runtime model loader omits this.
+- Production Hub-based embedding IDs require an immutable 40-character revision SHA. The revision is part of the SQLite index identity; changing the model revision requires deliberate re-ingestion into a new or empty index before cutover. No database schema change is expected.
+- CI acceptance: helper argument tests; mutable/short revision rejection; production setting validation; static transport/model-loader guard; full Python suite; SQLite/PostgreSQL migration/concurrency; AI/RAG profile/SBOM; frontend build; dependency/license audit; secret scan; skill parity and lockfile sync. Staged model artifacts, license review and deployed retrieval behavior remain release gates.

@@ -204,3 +204,10 @@
 ## 2026-10-26 final configurable provider transport regression gate
 - New acceptance check: `ConfiguredJSONAdapter` must use the shared pinned `request_public_json` transport, enforce HTTPS, deny loopback/private/reserved targets before network I/O, disable redirects/environment proxies, and enforce a bounded JSON response.
 - Full push and PR CI must pass after the candidate code/test update. Separately, trusted-proxy behavior must be tested through the actual staging ingress; current tests validate only config syntax/Compose wiring.
+
+
+## 2026-10-26 final configurable provider transport — verified
+- Exact SHA `aa3a0e175c09df3572f077b1c76d565ec2776207`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060 passed all required checks.
+- Python 321 passed, 2 skipped; PostgreSQL migration/concurrency, AI/RAG imports (9), frontend, dependency audits, skill parity and push lockfile reproducibility passed.
+- Generic configured affiliate adapter requests use the shared pinned public HTTP transport with no redirects/ambient proxies and a 2 MiB JSON cap.
+- Current CI cannot substitute for actual trusted-proxy staging verification, authorized live-provider UAT, SBOM/license/secret scans, deployment smoke or backup/restore.

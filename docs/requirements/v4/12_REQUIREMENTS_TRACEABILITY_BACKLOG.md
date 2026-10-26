@@ -209,5 +209,11 @@
 ## P0 — final configurable affiliate adapter pinned transport (2026-10-26)
 - Finding at base `868fbbc25d3d8dde5e5d772e1abeec9b3a4a16a4`: the broad backend/AI Python source scan found `backend/adapters/factory.py::ConfiguredJSONAdapter.fetch_offers` as the only remaining standalone provider HTTP client outside the shared `url_safety.py` transport. It performed DNS admission validation, then a separate unpinned client request.
 - Candidate routes through `request_public_json`, which re-resolves the target for the actual request, pins its socket to the vetted public IP, disables environment proxies and redirect following, and caps JSON response size at 2 MiB. Existing adapter limit and configured item-path behavior are retained.
-- Tests updated for loopback denial through the real helper and request contract/normalization via a fake helper. Pending exact-SHA push/PR CI.
+- Tests updated for loopback denial through the real helper and request contract/normalization via a fake helper. Verified at `aa3a0e175c09df3572f077b1c76d565ec2776207` by push [40301426819](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819) and PR [40301436060](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060); Python 321 passed, 2 skipped.
 - Separately, the trusted proxy setting is implemented and syntax-tested, but actual proxy-header stripping and trusted-source behavior need proof from the real staging ingress.
+
+## P0 — final configurable affiliate adapter transport verified (2026-10-26)
+- Exact SHA `aa3a0e175c09df3572f077b1c76d565ec2776207`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060 both passed.
+- Scan across 59 Python modules found the generic configured adapter as the final standalone outbound client outside `url_safety.py`. Replaced its unpinned HTTPX client with the pinned helper, bounded response size at 2 MiB, and preserved result parsing/limits.
+- Real-loopback test confirms private literal destinations fail before connecting; mocked helper contract covers method, query, auth, response cap and normalization.
+- Release gates still open: actual proxy behavior in staging, four ChromaDB advisory exceptions or reviewed vector-store replacement, live provider UAT, SBOM/license/secret scans, deployment smoke, backup/restore.

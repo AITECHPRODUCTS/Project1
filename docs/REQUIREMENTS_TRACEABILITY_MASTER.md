@@ -292,3 +292,9 @@
 - Base SHA `868fbbc25d3d8dde5e5d772e1abeec9b3a4a16a4` was green in push [40292982126](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292982126) and PR [40292990297](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292990297).
 - Found one remaining raw HTTP client in the configurable generic affiliate adapter after scanning 59 backend/AI Python modules. Candidate replaces validate-then-connect with the actual DNS-pinned request helper, no redirects/proxy environment, bounded response and regression tests.
 - The deployment runbook was also corrected to describe the real `FORWARDED_ALLOW_IPS` validator and to keep live staging ingress proof explicitly open; config unit tests are not a staging result.
+
+## 2026-10-26 final generic provider adapter transport — exact-SHA verification
+- `aa3a0e175c09df3572f077b1c76d565ec2776207`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060 both passed, all required jobs successful.
+- Python suite: 321 passed / 2 skipped / 1 warning. PostgreSQL migration/concurrency, AI/RAG 9 imports, frontend build, core/AI/frontend dependency audits, 53-skill parity and push lockfile-sync passed.
+- `ConfiguredJSONAdapter` no longer opens an independent `httpx.AsyncClient`; reviewed backend/AI Python outbound HTTP paths now use the central pinned helper (which owns the underlying client with IP pinning).
+- Next is actual staging proxy-ingress evidence. CI and config unit tests are not substituted for a live ingress test; no staging result is recorded in this session.

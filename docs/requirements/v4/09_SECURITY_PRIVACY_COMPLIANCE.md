@@ -46,3 +46,9 @@
 - `ConfiguredJSONAdapter` previously called `validate_public_http_url` then connected with a separate `httpx.AsyncClient`. This was the last direct provider client found outside the shared pinned transport after scanning 59 Python modules under backend and AI memory.
 - Candidate uses `request_public_json`, applies a 2 MiB cap, retains HTTPS-only construction and the configured item extraction, and adds a loopback-denial + mocked request-contract test pair.
 - Do not call this fixed until the full push and PR runs pass on the candidate SHA.
+
+## 2026-10-26 generic affiliate adapter egress boundary — verified
+- Exact SHA `aa3a0e175c09df3572f077b1c76d565ec2776207`, push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819, PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060: both full workflows passed.
+- `ConfiguredJSONAdapter` now calls `request_public_json` directly rather than checking DNS then opening a separate client. The helper pins the connection to a vetted public address, disables ambient proxies/redirects and caps JSON responses at 2 MiB.
+- Regression coverage includes loopback rejection through the actual helper and a request-contract test. The 59-module source scan found no other raw clients outside the central URL-safety transport.
+- Actual staging proxy ingress remains unverified; config validation alone does not prove trusted forwarding behavior.

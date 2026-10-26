@@ -56,8 +56,8 @@ async def test_public_request_pins_ip_and_preserves_host_sni_without_proxy_env(m
         async def __aexit__(self, *args):
             return None
 
-        def build_request(self, method, url, *, params=None, headers=None):
-            return httpx.Request(method, url, params=params, headers=headers)
+        def build_request(self, method, url, *, params=None, headers=None, json=None):
+            return httpx.Request(method, url, params=params, headers=headers, json=json)
 
         async def send(self, request, *, stream=False):
             captured["request_url"] = str(request.url)

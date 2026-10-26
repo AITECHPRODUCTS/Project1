@@ -132,3 +132,5 @@ These additive rules apply to every future Project1 build session.
 
 
 55. P0 CMS provider requests: WordPress/Ghost site URLs are operator-configured but carry global write credentials. Do not validate DNS then perform a second unpinned resolution. Use the shared pinned-IP transport, preserve Host/SNI, disable redirects/proxy env, cap response bodies, and retain the `CMS_PUBLISH_EXECUTE` gate. Tests pending full exact-SHA CI.
+
+56. CMS transport candidate `186d149be9f99707095a1515db14ce26211db0eb` initial CI failed 5 tests (4 CMS fake-response class-scope `NameError`, 1 fake client's `build_request()` did not accept `json`). Fix is in the test fixtures, not a relaxation of the production transport; rerun full push+PR CI before marking #55 complete.

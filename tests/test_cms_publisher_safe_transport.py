@@ -11,12 +11,15 @@ from backend.services import cms_publisher
 
 
 def _response(payload: bytes, *, status: int = 201, headers: dict[str, str] | None = None):
+    response_headers = headers or {
+        "content-type": "application/json",
+        "content-length": str(len(payload)),
+    }
+
     class Response:
-        status_code = status
-        headers = headers or {
-            "content-type": "application/json",
-            "content-length": str(len(payload)),
-        }
+        def __init__(self):
+            self.status_code = status
+            self.headers = response_headers
 
         def raise_for_status(self):
             if self.status_code >= 400:

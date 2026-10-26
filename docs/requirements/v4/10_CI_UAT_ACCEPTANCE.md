@@ -303,3 +303,9 @@
 ## 2026-10-26 model-artifact local-only — verified CI gate
 - Exact SHA `393e12760762993e70a862af9b4c3ab61d308739`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533 passed. Python 377 passed/3 skipped; PostgreSQL migration/concurrency, AI/RAG imports + SBOM/license, frontend typecheck/build, dependency/license audits, secret scan, repo guard and lockfile sync all passed.
 - Staged artifacts, license/provenance, cache-only runtime load, RAG re-ingestion and retrieval golden tests are still production evidence gates and are not verified by CI.
+
+
+## 2026-10-26 proprietary experiment dataset gate — verified
+- Exact SHA `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286 both passed. Python reported 385 passed, 3 skipped, 1 existing warning.
+- Regression gates prove A/B pairing, event deduplication, low-sample exclusions, inconsistent snapshot handling, privacy (synthetic visitor identifier values absent), workspace persistence/audit and skill parity (53 rows: 48 partial, 5 not implemented).
+- This feature produces review-required candidates only; it does not attest ground truth or train/promote a model. Next: staged artifact provenance and cache-only model-load gates.

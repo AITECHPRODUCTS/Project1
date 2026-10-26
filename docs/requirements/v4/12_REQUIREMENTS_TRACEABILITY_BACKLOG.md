@@ -327,3 +327,11 @@
 - Python 377 passed, 3 skipped, 1 warning. PostgreSQL, AI/RAG import + SBOM/license, frontend, dependency/license audit, secret scan, skill parity and lockfile sync passed.
 - First attempt at `47bd006c665ba490d2cbd0c0a87c57c8350ef0f4` failed four static-guard fixture tests because literal `\\n` text produced invalid Python source. The test fixtures were corrected on `393e12760762993e70a862af9b4c3ab61d308739`; the strict guard was preserved and both rerun workflows passed.
 - No model artifacts are claimed staged or license-reviewed. Next: obtain provenance/license sign-off, stage the immutable model snapshot, validate cache-only startup and RAG retrieval golden tests on a deployment candidate.
+
+
+## P0 — proprietary experiment-learning dataset generator verified (2026-10-26)
+- Verified on `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`: push [40365898032](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032) and PR [40365904286](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286) passed.
+- Workspace-scoped endpoint persists review-only JSONL candidates and audit evidence; event IDs are deduplicated, low-sample or inconsistent experiments excluded, and rows contain aggregate experiment data only (no visitor IDs).
+- The first run at 684e6e1ae3d5b2a19fa6df6b074735788e47f420 failed two test assertions: the privacy assertion treated visitor_identifiers_included as a leaked identifier, and the skill-matrix assertion used stale 47/6 counts. Corrective SHA a9eebf989704b7d7d347ee9021572bd2d5ea4f03 narrows the privacy assertion to synthetic visitor values and aligns counts to 48/5; full CI passed.
+- Python 385 passed, 3 skipped; all required CI jobs passed. Data are internal, not provider-attested; observed rates are not causal proof; no model training or promotion occurs.
+- Next P0: operator-run model artifact provenance/digest/license gate. Production artifact staging/cache-only load/retrieval tests remain unverified.

@@ -385,3 +385,10 @@
 ## 2026-10-26 model-artifact runtime policy — verified source checkpoint
 - `393e12760762993e70a862af9b4c3ab61d308739` passed push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533. The initial four test failures were malformed synthetic source strings, corrected without weakening the outbound transport/model-loader guard.
 - Production readiness still requires operator-controlled artifact staging, immutable revision/provenance/digest/license evidence, cache-only load against the release image, re-ingestion and retrieval golden tests. Continue staging proxy, live provider, legal, deployment and restore gates.
+
+
+## 2026-10-26 proprietary learning dataset — exact-SHA verification
+- `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286 both passed (Python 385/3 skipped; PostgreSQL, AI/RAG imports + SBOM/license, frontend, dependency/license audit, secret scan, source/53-skill guard and lockfile sync passed).
+- The S8 dataset generator consumes workspace-scoped persisted experiment assignments/events and emits review-required JSONL candidates only after both variants, stable headline snapshots and per-arm sample thresholds are checked. Visitor values are not included, event IDs are deduplicated, and provenance flags state lack of provider attestation and non-causal observed rates.
+- The original test failures were corrected without weakening privacy; skill-matrix counts now match 48 partial / 5 not implemented. No model training or promotion is implemented by this feature.
+- Next: validate actual staged model artifact provenance, digest, license and cache-only load; no production artifact is presently claimed verified.

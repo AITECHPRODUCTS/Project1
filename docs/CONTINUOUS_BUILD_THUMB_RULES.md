@@ -202,3 +202,6 @@ These additive rules apply to every future Project1 build session.
 
 
 78. Next P0 after source-level model egress guard: record real staged model provenance/digest/license approval, demonstrate cache-only load from the release image and run retrieval-golden checks after re-ingestion. Never equate mocked local-only tests or CI imports with production model readiness.
+
+
+80. Proprietary experiment-learning candidate generator is verified at `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`; push [40365898032](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032) and PR [40365904286](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286) both passed. Python 385 passed/3 skipped; PostgreSQL, AI/RAG/SBOM/license, frontend, security audit, secret scan, 53-skill guard and lockfile-sync passed. Dataset remains review-required only: no visitor identifiers, no provider-attested ground truth, no training/fine-tuning/model promotion. Registry counts are 48 partial/5 not implemented. Next P0: staged model artifact manifest gate.

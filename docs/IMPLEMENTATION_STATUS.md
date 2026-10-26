@@ -377,8 +377,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Next P0 audit: remaining tenant-owned endpoints, especially content assets, leads/email queue/worker controls, and public lead-capture token binding.
 
 
-## 2026-10-26 blog and lead/email tenant boundary — candidate
-- Source audit confirmed `/content/blog` persisted a `ContentAsset` without requiring a selected workspace, and private `/leads/capture` accepted requests without explicit authentication/workspace ownership.
-- Candidate requires an authenticated workspace for blog generation and the private lead endpoint; keeps public form capture bound to its signed `lead_capture` workspace token; lead creation/scheduling requires an explicit workspace and filters lead/email identity by workspace; email delivery rejects unscoped calls and queries only messages/leads in the selected workspace.
-- New regression tests cover missing-workspace denial, blog asset ownership, public-token enforcement, lead dedup isolation across workspaces, and unscoped email-delivery denial.
-- This change is **pending** until exact-SHA push and PR workflows both pass.
+## 2026-10-26 blog and lead/email tenant boundary — verified
+- Exact SHA: `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`.
+- Push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909 — **success**. PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725 — **success**. All seven push jobs and all required PR jobs passed.
+- Python tests, SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG import checks, frontend production build, security audit, repository/53-skill guard, and push lockfile reproducibility all passed.
+- `/content/blog` now requires an authenticated active workspace and holds the explicit scope through generation and ContentAsset persistence. Private `/leads/capture` requires authentication and an active workspace. Public capture continues to validate the signed, expiring `lead_capture` workspace token before invoking lead creation.
+- Lead lookup and scheduled-sequence idempotency include workspace identity; both Lead and ScheduledEmail rows are explicitly tenant-bound. Email delivery fails closed without workspace context and restricts both queued-message and lead reads to the same workspace.
+- Six new regression tests cover cross-workspace subscriber isolation and sequence idempotency, no-workspace denial, blog asset ownership, private capture denial, public-token rejection and acceptance, and unscoped email helper denial.
+- Next P0 audit: review remaining externally impactful routes, especially the social-publish endpoint, landing-page token issuance, and any direct publishing/provider writes. Production remains blocked by the four documented ChromaDB advisory exceptions and outstanding release/UAT gates.

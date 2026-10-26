@@ -139,3 +139,9 @@
 - Passed Python, SQLite, PostgreSQL integration/concurrency, AI/RAG imports, frontend, dependency audit, 53-skill guard and push lockfile sync.
 - A first run exposed a legacy test fixture that stubbed the database session but did not provide an authorized workspace; the handler's 403 was correct. The fixture now provides a workspace and asserts both Conversion and ledger entries carry that workspace ID. The rerun passed.
 - Next P0: audit remaining tenant-owned ContentAsset/Lead/ScheduledEmail routes and public lead-capture token binding.
+
+
+## 2026-10-26 blog/lead/email tenant boundary — exact-SHA verification
+- `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725 both completed successfully.
+- New tenant-boundary tests passed: blog asset ownership, authenticated private lead capture, token-authorized public capture, no-workspace fail-closed service behavior, per-workspace subscriber identity and sequence dedup, explicit queue/lead filters.
+- Next: audit external-impact social publishing and landing-page workspace token issuance; do not assume endpoint safety solely from dry-run defaults.

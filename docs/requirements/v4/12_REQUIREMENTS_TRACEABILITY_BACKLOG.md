@@ -61,7 +61,8 @@
 - Next: audit remaining ContentAsset/Lead/ScheduledEmail routes and public lead-capture token binding.
 
 
-## P0 — blog and lead/email tenant boundary candidate (2026-10-26)
-- Tenant-owned blog assets and lead/email sequences must never be created or enumerated from an unscoped request.
-- Private lead capture requires a selected workspace. Public lead capture must validate the signed token purpose and expiration before opening the selected workspace scope. Email helpers fail closed with no workspace and use explicit workspace filters for leads and queued messages.
-- Added tests are pending exact-SHA CI; verify push and PR before this item is marked complete.
+## P0 — blog and lead/email tenant boundary verified (2026-10-26)
+- Verified on `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`; push [40269971909](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909) and PR [40269976725](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725) both succeeded.
+- Tenant-owned blog assets and lead/email sequences now require a concrete authenticated workspace or a valid signed public-capture workspace token. Lead and queued-email queries are scoped by workspace; unscoped email delivery is rejected.
+- Six new regression tests passed with the full CI matrix, including workspace-specific subscriber identity and sequence idempotency.
+- Next P0 audit: review the social-publish endpoint, landing-page token issuance, and other externally impactful provider operations for authentication, workspace ownership, approval and dry-run-by-default semantics.

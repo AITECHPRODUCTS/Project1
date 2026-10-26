@@ -73,3 +73,9 @@
 - Candidate SHA `4becae03e155fedc361e5b9fcdfc9fde66602f75`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547 both passed.
 - Tests prove unscoped users are denied campaign and conversion routes; workspace A cannot see or operate on workspace B's campaign; conversion idempotency is per workspace; and Conversion plus immutable ledger entries use the selected workspace.
 - Continue source audit of remaining tenant-owned asset, lead, scheduled-email and public-capture routes before release. The four documented ChromaDB advisory exceptions remain a separate P0 production blocker.
+
+
+## 2026-10-26 blog/lead/email workspace boundary — verified
+- Candidate SHA `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725 both passed.
+- The Python job passed the six new tenant-boundary tests. PostgreSQL, SQLite migration/drift, AI/RAG, frontend, dependency security audit, 53-skill parity and lockfile checks also passed.
+- Next release gate: explicit authorization and approval coverage for social publishing/other external side effects, plus the documented ChromaDB advisory exception and broader production UAT/deployment/backup evidence.

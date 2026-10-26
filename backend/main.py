@@ -512,14 +512,15 @@ async def resume(session_id: str, payload: ResumeRequest, user: dict[str, Any] =
   raise HTTPException(404, "Workflow session not found") from exc
  except ValueError as exc:
   raise HTTPException(409, str(exc)) from exc
-@api.post("/knowledge/ingest")
+@api.post("/knowledge/ingest", dependencies=[Depends(require_platform_admin)])
 async def knowledge_ingest():
  try:return {"status":"indexed",**await asyncio.to_thread(ingest_doctrine,settings.skills_root,Path(settings.chroma_persist_dir),settings.embedding_model,1200,180)}
  except FileNotFoundError as exc:raise HTTPException(400,str(exc)) from exc
  except Exception as exc:logger.exception("RAG ingest failed");raise HTTPException(500,f"RAG ingest failed: {type(exc).__name__}: {str(exc)[:200]}") from exc
 @api.get("/knowledge/status")
 async def knowledge_status():
- path=Path(settings.chroma_persist_dir);return {"available":path.exists() and any(path.glob("**/*")),"path":str(path.resolve()),"collection":"affiliate_doctrine","required_references":["offer-frameworks.md","platform-rules.md","seo-strategy.md","social-data-providers.md"]}
+ path=Path(settings.chroma_persist_dir)
+ return {"available":path.exists() and any(path.glob("**/*")),"storage_configured":bool(settings.chroma_persist_dir),"collection":"affiliate_doctrine","required_references":["offer-frameworks.md","platform-rules.md","seo-strategy.md","social-data-providers.md"]}
 @api.get("/offers")
 async def offers(q:str|None=None,limit:int=Query(50,ge=1,le=200),db:AsyncSession=Depends(get_session)):
  stmt=select(Offer)

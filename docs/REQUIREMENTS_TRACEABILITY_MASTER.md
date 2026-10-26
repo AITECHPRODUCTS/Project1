@@ -159,7 +159,7 @@
 - External social/CMS writes are platform-super-admin-only with explicit workspace context, live confirmation and workspace-scoped audit events; landing capture tokens are minted only for the authenticated active workspace.
 - Next: audit workflow runner side effects. ChromaDB advisories and remaining production release evidence still block certification.
 
-## 2026-10-26 workflow-stage authorization and S6 isolation — candidate
+## 2026-10-26 workflow-stage authorization and S6 isolation — verified
 - Candidate based on verified SHA `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`; workflow stages S5/S6 need their own fail-closed boundaries because the workflow engine calls handlers directly.
 - Added explicit live publishing confirmation at workflow start, server-derived authorization metadata, per-workspace publishing audit events, and explicit tenant-qualified S6 idempotency/insert operations.
-- Four regression tests and hosted CI pending.
+- Five regression tests passed at exact SHA `64a2d30af5dddb79150428936993ef1811b4419f`. Push [40275131255](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275131255) and PR [40275135461](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275135461) both succeeded. Python 255 passed/2 skipped, PostgreSQL migration/concurrency passed, frontend production build passed, dependency/security checks passed, 9 AI/RAG imports passed, and the push lockfile sync passed.

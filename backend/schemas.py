@@ -1138,3 +1138,95 @@ class WebinarRegistrationRequest(BaseModel):
         if value is not True:
             raise ValueError("Explicit registration consent is required")
         return value
+
+
+class ProgramApplicationComplianceAnswers(BaseModel):
+    affiliate_disclosure_ready: bool = False
+    program_traffic_terms_reviewed: bool = False
+    geography_restrictions_reviewed: bool = False
+    privacy_and_consent_controls_ready: bool = False
+    claims_substantiation_process_ready: bool = False
+
+
+class ProgramApplicationCreateRequest(BaseModel):
+    provider: str = Field(min_length=2, max_length=160)
+    program_name: str = Field(min_length=2, max_length=240)
+    program_url: str = Field(min_length=8, max_length=2048)
+    publisher_website_url: str = Field(min_length=8, max_length=2048)
+    audience_description: str = Field(min_length=30, max_length=3000)
+    monthly_visitors: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    traffic_sources: list[Literal["seo", "blog", "organic_social", "paid_search", "paid_social", "email_opt_in", "video", "influencer", "community", "referral", "other"]] = Field(min_length=1, max_length=11)
+    promotion_channels: list[Literal["website", "blog", "newsletter", "social", "video", "search_ads", "social_ads", "comparison_content", "community", "other"]] = Field(min_length=1, max_length=10)
+    primary_regions: list[str] = Field(min_length=1, max_length=30)
+    promotion_plan: str = Field(min_length=80, max_length=6000)
+    evidence_urls: list[str] = Field(default_factory=list, max_length=10)
+    compliance_answers: ProgramApplicationComplianceAnswers = Field(default_factory=ProgramApplicationComplianceAnswers)
+
+    @field_validator("provider", "program_name", "audience_description", "promotion_plan")
+    @classmethod
+    def normalize_application_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("This field must not be blank")
+        return normalized
+
+    @field_validator("program_url", "publisher_website_url")
+    @classmethod
+    def validate_application_url(cls, value: str) -> str:
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Application URLs must be absolute HTTP(S) URLs without embedded credentials")
+        host = parsed.hostname.lower().rstrip(".")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local or internal URLs are not valid application destinations")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private or reserved IP addresses are not valid application destinations")
+        return value.strip()
+
+    @field_validator("evidence_urls")
+    @classmethod
+    def validate_application_evidence_urls(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip() for value in values))
+        for value in normalized:
+            parsed = urlparse(value)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError("Evidence references must be absolute HTTP(S) URLs without embedded credentials")
+            host = parsed.hostname.lower().rstrip(".")
+            if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+                raise ValueError("Local or internal evidence URLs are not allowed")
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("Private or reserved evidence URLs are not allowed")
+        return normalized
+
+    @field_validator("primary_regions")
+    @classmethod
+    def normalize_regions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().upper() for value in values if value and value.strip()))
+        if not normalized or any(len(value) > 80 for value in normalized):
+            raise ValueError("Provide one or more non-empty regions of at most 80 characters")
+        return normalized
+
+    @field_validator("traffic_sources", "promotion_channels")
+    @classmethod
+    def require_unique_options(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("Choose each source/channel only once")
+        return values
+
+
+class ProgramApplicationReviewRequest(BaseModel):
+    decision: Literal["approve_for_manual_handoff", "reject"]
+    reviewer_notes: str = Field(default="", max_length=3000)
+
+    @field_validator("reviewer_notes")
+    @classmethod
+    def normalize_reviewer_notes(cls, value: str) -> str:
+        return value.strip()

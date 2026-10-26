@@ -489,3 +489,33 @@ class WebinarRegistration(TenantScopedMixin, Base):
     consent_source: Mapped[str] = mapped_column(String(100), default="webinar_registration_page")
     marketing_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AffiliateProgramApplication(TenantScopedMixin, Base):
+    """Workspace-owned affiliate application packet; provider submission is never implied."""
+    __tablename__ = "affiliate_program_applications"
+    __table_args__ = (
+        Index("ix_program_applications_workspace_status_created", "workspace_id", "status", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    provider: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    program_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    program_url: Mapped[str] = mapped_column(Text, nullable=False)
+    publisher_website_url: Mapped[str] = mapped_column(Text, nullable=False)
+    audience_description: Mapped[str] = mapped_column(Text, nullable=False)
+    monthly_visitors: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    traffic_sources_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list)
+    promotion_channels_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list)
+    primary_regions_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list)
+    promotion_plan: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_urls_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list)
+    compliance_answers_json: Mapped[dict[str, bool]] = mapped_column(JSON_VALUE, default=dict)
+    readiness_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    status: Mapped[str] = mapped_column(String(40), default="draft", index=True)
+    reviewer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_submission_status: Mapped[str] = mapped_column(String(40), default="not_configured")
+    provider_application_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

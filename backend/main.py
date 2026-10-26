@@ -23,9 +23,9 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -906,6 +906,139 @@ async def automation_multi_program_manager(
         db.add(asset)
         await db.commit()
     return {**generated, "asset_id": asset.id}
+
+
+
+def _program_application_readiness(evidence_urls: list[str], compliance_answers: dict[str, bool]) -> dict[str, Any]:
+    required = {
+        "affiliate_disclosure_ready": "affiliate_disclosure_not_confirmed",
+        "program_traffic_terms_reviewed": "program_traffic_terms_not_reviewed",
+        "geography_restrictions_reviewed": "geography_restrictions_not_reviewed",
+        "privacy_and_consent_controls_ready": "privacy_and_consent_controls_not_confirmed",
+        "claims_substantiation_process_ready": "claims_substantiation_process_not_confirmed",
+    }
+    blockers = [reason for key, reason in required.items() if compliance_answers.get(key) is not True]
+    if not evidence_urls:
+        blockers.append("official_program_terms_evidence_required")
+    return {
+        "ready_for_human_review": not blockers,
+        "blockers": blockers,
+        "evidence_count": len(evidence_urls),
+        "provider_verified": False,
+        "provider_submission_status": "not_configured",
+    }
+
+
+def _program_application_dict(row: AffiliateProgramApplication) -> dict[str, Any]:
+    return {
+        "id": row.id, "provider": row.provider, "program_name": row.program_name,
+        "program_url": row.program_url, "publisher_website_url": row.publisher_website_url,
+        "audience_description": row.audience_description, "monthly_visitors": row.monthly_visitors,
+        "traffic_sources": row.traffic_sources_json or [],
+        "promotion_channels": row.promotion_channels_json or [],
+        "primary_regions": row.primary_regions_json or [], "promotion_plan": row.promotion_plan,
+        "evidence_urls": row.evidence_urls_json or [], "compliance_answers": row.compliance_answers_json or {},
+        "readiness": row.readiness_json or {}, "status": row.status, "reviewer_notes": row.reviewer_notes,
+        "reviewed_by": row.reviewed_by, "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "provider_submission_status": row.provider_submission_status,
+        "provider_application_id": row.provider_application_id, "provider_approved": False,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@api.post("/research/program-applications", status_code=201)
+async def create_program_application(payload: ProgramApplicationCreateRequest, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    """Create a workspace-owned application packet; no provider submission is performed."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating a program application")
+    workspace_id = str(workspace_id)
+    compliance = payload.compliance_answers.model_dump()
+    readiness = _program_application_readiness(payload.evidence_urls, compliance)
+    status = "review_required" if readiness["ready_for_human_review"] else "draft"
+    with workspace_scope(workspace_id):
+        row = AffiliateProgramApplication(
+            workspace_id=workspace_id, provider=payload.provider, program_name=payload.program_name,
+            program_url=payload.program_url, publisher_website_url=payload.publisher_website_url,
+            audience_description=payload.audience_description, monthly_visitors=payload.monthly_visitors,
+            traffic_sources_json=payload.traffic_sources, promotion_channels_json=payload.promotion_channels,
+            primary_regions_json=payload.primary_regions, promotion_plan=payload.promotion_plan,
+            evidence_urls_json=payload.evidence_urls, compliance_answers_json=compliance,
+            readiness_json=readiness, status=status, provider_submission_status="not_configured",
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="research.program_application.created", resource_type="affiliate_program_application",
+            resource_id=row.id, outcome=status,
+            details_json={"provider": row.provider, "program_name": row.program_name,
+                "ready_for_human_review": readiness["ready_for_human_review"], "blockers": readiness["blockers"],
+                "provider_submission_status": "not_configured", "provider_submission_performed": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    result = _program_application_dict(row)
+    result.update({"provider_submission_performed": False, "manual_handoff_only": True})
+    return result
+
+
+@api.get("/research/program-applications")
+async def list_program_applications(limit: int = Query(default=100, ge=1, le=300), status: str | None = Query(default=None, max_length=40), user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before listing program applications")
+    workspace_id = str(workspace_id)
+    allowed = {"draft", "review_required", "approved_for_manual_handoff", "rejected"}
+    if status is not None and status not in allowed:
+        raise HTTPException(422, "Unsupported application status filter")
+    with workspace_scope(workspace_id):
+        query = select(AffiliateProgramApplication).where(AffiliateProgramApplication.workspace_id == workspace_id)
+        if status is not None:
+            query = query.where(AffiliateProgramApplication.status == status)
+        rows = list((await db.scalars(query.order_by(AffiliateProgramApplication.created_at.desc()).limit(limit))).all())
+    return {"count": len(rows), "data": [_program_application_dict(row) for row in rows]}
+
+
+@api.post("/research/program-applications/{application_id}/review")
+async def review_program_application(application_id: str, payload: ProgramApplicationReviewRequest, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    """Internal human review only; this never submits to or claims approval by a network."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing a program application")
+    if user.get("workspace_role") not in {"owner", "admin"} and user.get("is_admin") is not True:
+        raise HTTPException(403, "Workspace owner/admin review permission is required")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(AffiliateProgramApplication).where(
+            AffiliateProgramApplication.id == application_id,
+            AffiliateProgramApplication.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Program application not found in the active workspace")
+        if row.status == "rejected":
+            raise HTTPException(409, "A rejected application packet cannot be approved; create a new packet")
+        if payload.decision == "approve_for_manual_handoff":
+            if not (row.readiness_json or {}).get("ready_for_human_review"):
+                raise HTTPException(409, "Complete compliance checks and add official program terms evidence before approval")
+            row.status = "approved_for_manual_handoff"
+        else:
+            row.status = "rejected"
+        row.reviewer_notes = payload.reviewer_notes
+        row.reviewed_by = str(user.get("email") or "unknown")
+        row.reviewed_at = datetime.now(timezone.utc)
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=row.reviewed_by, action="research.program_application.reviewed",
+            resource_type="affiliate_program_application", resource_id=row.id, outcome=row.status,
+            details_json={"decision": payload.decision, "readiness_passed": bool((row.readiness_json or {}).get("ready_for_human_review")),
+                "provider_submission_status": row.provider_submission_status, "provider_submission_performed": False, "provider_approved": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    result = _program_application_dict(row)
+    result.update({"provider_submission_performed": False, "manual_handoff_only": True})
+    return result
 
 
 @api.post("/research/traffic-analyzer", status_code=201)

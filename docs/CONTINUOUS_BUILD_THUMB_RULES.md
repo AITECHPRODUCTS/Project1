@@ -111,3 +111,6 @@ These additive rules apply to every future Project1 build session.
 
 
 48. Next P0: inspect remaining global provider/configuration and integration routes for role boundaries, tenant ownership, audit trails, rate limits and safe network access. Do not relax shared-resource permissions to make tests pass; update the tests to express the intended authorization contract.
+
+
+49. P0 global provider readiness/capability confidentiality: `/api/integrations` and `/api/capabilities` reveal global deployment configuration and missing environment-variable names. Require Platform Super Admin and active workspace without changing safe status classifications. Add tests for anonymous and workspace-admin denial, missing-workspace denial, and raw-secret non-disclosure. Mark pending until full push and PR CI pass.

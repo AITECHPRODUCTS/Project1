@@ -503,8 +503,14 @@ async def switch_workspace(workspace_id: str, request: Request,
 
 
 @api.get("/integrations")
-async def integration_registry():
- return build_network_registry(settings.load_yaml())
+async def integration_registry(user: dict[str, Any] = Depends(require_platform_admin)):
+    # Provider readiness is deployment-wide configuration state; do not disclose
+    # it to anonymous visitors or ordinary workspace members.
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before viewing global provider configuration")
+    return build_network_registry(settings.load_yaml())
+
+
 @api.get("/skills/find")
 async def skills_find(
     q: str = Query(min_length=2, max_length=120),
@@ -525,7 +531,11 @@ async def skills_find(
 
 
 @api.get("/capabilities")
-async def capabilities():
+async def capabilities(user: dict[str, Any] = Depends(require_platform_admin)):
+    # This matrix reports global model, email, CMS and social credential
+    # presence; expose it only to the platform operator with an active workspace.
+    if not user.get("workspace_id"):
+        raise HTTPException(403, "Select an authorized workspace before viewing global capability configuration")
     registry = build_network_registry(settings.load_yaml())
     return build_capability_matrix(settings, registry)
 

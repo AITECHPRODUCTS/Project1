@@ -149,3 +149,9 @@
 - Implementation SHA `0ea1735648ce408fb831abc51179544facd3ed69`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173 passed.
 - Four regression tests prove the global mailbox operation is Platform Super Admin-only, requires a workspace for accountability, and audits success/failure without mailbox contents. Python 277 passed/2 skipped; other required gates all passed.
 - Next: inspect remaining global provider/configuration and integration routes for role, workspace, audit and rate-limit gates. ChromaDB advisory exceptions and release evidence remain open.
+
+
+## 2026-10-26 global integration readiness confidentiality — candidate
+- Restrict global provider and capability summaries to Platform Super Admin plus a selected workspace; leave their existing status classifications unchanged.
+- Require tests for anonymous/workspace-admin denials, no-workspace denial, and ensure no raw sentinel secret values are present in either endpoint response.
+- Candidate remains pending until full push and PR workflows pass.

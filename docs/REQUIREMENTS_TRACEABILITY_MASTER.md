@@ -237,3 +237,8 @@
 - Exact SHA `0ea1735648ce408fb831abc51179544facd3ed69`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173 both passed.
 - `/api/finance/email-import` uses shared global mailbox credentials and now requires Platform Super Admin plus workspace context; audit records only aggregate counts/error type rather than message content or credentials. Four dedicated tests pass.
 - Python 277 passed, 2 skipped; complete required CI matrix passed. Next: remaining global provider/configuration permissions and safe integration routes.
+
+
+## 2026-10-26 provider readiness summary access — candidate
+- Audit found global provider/configuration readiness exposed without authentication at `/api/integrations` and `/api/capabilities`.
+- Candidate restricts the endpoints to Platform Super Admin with selected workspace, with tests for unauthorized roles, absent workspace and raw credential redaction. Exact-SHA CI pending.

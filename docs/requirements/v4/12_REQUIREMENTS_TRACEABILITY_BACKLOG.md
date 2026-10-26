@@ -147,3 +147,9 @@
 - Four tests passed: workspace-admin denied before importer call, platform admin without workspace denied, successful import scoped/audited with only counts, and failure audited by error type/502 without mailbox contents in audit metadata.
 - Python 277 passed/2 skipped; full backend, PostgreSQL, AI/RAG, frontend, security audit, repository guard and push lockfile matrix passed.
 - Next: global provider/configuration access review. Production is not release-ready while ChromaDB advisories and live-provider/UAT/SBOM/license/secret/deployment/restore evidence remain unresolved.
+
+
+## P0 — global provider readiness/capability access (2026-10-26)
+- Candidate changes restrict `/api/integrations` and `/api/capabilities` to Platform Super Admin + active workspace because responses reveal global provider/model/email/CMS/social readiness and missing configuration variable names.
+- Existing response status meanings remain unchanged; only access is tightened. Raw credential values are not returned and are covered by sentinel-redaction tests.
+- Await full exact-SHA push/PR CI before verification.

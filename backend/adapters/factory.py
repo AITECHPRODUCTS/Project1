@@ -1,11 +1,12 @@
 from __future__ import annotations
 import os
 from typing import Any
-import httpx,yaml
+import yaml
 from backend.adapters.base import AffiliateNetworkAdapter
 from backend.adapters.openaffiliate import OpenAffiliateAdapter
 from backend.core.errors import IntegrationNotConfiguredError
-from backend.services.url_safety import validate_public_http_url
+from backend.services.url_safety import request_public_json
+
 class ConfiguredJSONAdapter(AffiliateNetworkAdapter):
  def __init__(self,network_name:str,endpoint:str,token:str,items_path:str="data"):
   if not endpoint or not token:raise IntegrationNotConfiguredError(f"{network_name} API endpoint/token not configured")
@@ -13,11 +14,18 @@ class ConfiguredJSONAdapter(AffiliateNetworkAdapter):
   self.network_name=network_name;self.endpoint=endpoint;self.token=token;self.items_path=items_path
  async def fetch_offers(self,*,query:str|None=None,limit:int=100)->list[dict[str,Any]]:
   normalized_limit=max(1,min(int(limit),200))
-  # Configuration is not proof that a URL is safe. Validate before opening a
-  # client so loopback, private, link-local and reserved destinations are blocked.
-  endpoint=await validate_public_http_url(self.endpoint)
-  async with httpx.AsyncClient(timeout=httpx.Timeout(20,connect=5),follow_redirects=False) as c:
-   r=await c.get(endpoint,params={"q":query,"limit":normalized_limit},headers={"Authorization":f"Bearer {self.token}","Accept":"application/json"});r.raise_for_status();data=r.json()
+  # This helper resolves the configured host, blocks non-public addresses,
+  # pins the connection to the vetted IP, disables proxy/redirect behavior,
+  # and caps decoded response size. Do not validate DNS and then open a
+  # separate client, which would reintroduce a DNS-rebinding window.
+  data=await request_public_json(
+   self.endpoint,
+   method="GET",
+   params={"q":query,"limit":normalized_limit},
+   headers={"Authorization":f"Bearer {self.token}","Accept":"application/json"},
+   timeout=20,
+   max_bytes=2_000_000,
+  )
   for part in self.items_path.split("."):data=data.get(part) if isinstance(data,dict) else None
   if not isinstance(data,list):raise ValueError(f"{self.network_name} response lacks configured list path {self.items_path}")
   return [x for x in data if isinstance(x,dict)][:normalized_limit]

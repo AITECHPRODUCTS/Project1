@@ -572,8 +572,20 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Next P0: audit remaining direct HTTP integrations and validate the trusted-proxy deployment profile in staging.
 
 
-## 2026-10-26 fixed credentialed provider HTTP transport — candidate
+## 2026-10-26 fixed credentialed provider HTTP transport — verified
 - Base checkpoint `e79b4bad6f067e537306fc6aff4c0b94629cf847` was verified green by push [40290480101](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290480101) and PR [40290486273](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290486273).
 - Source audit found remaining bare HTTPX clients at fixed credentialed provider endpoints for Resend delivery, Reddit OAuth/search, X trend search, Pinterest/Reddit publishing and Meta campaign pause. URLs were fixed official-provider endpoints, not user-supplied targets, but they bypassed shared DNS-pinned connection, no-proxy and no-redirect behavior.
-- Candidate adds bounded `request_public_json` on the shared pinned transport, including form-encoded POST support; migrates those endpoints while preserving Resend stable `Idempotency-Key` and tenant-safe atomic claim/retry, social `PUBLISHING_DRY_RUN`, and Meta `AD_AUTOMATION_EXECUTE`. Meta campaign IDs are validated before path interpolation.
-- Three new provider contract tests cover Reddit/X response transformation, Pinterest/Reddit publishing and dry-run, Meta execute gate/path validation. Existing Resend concurrency/stale-retry tests now mock the helper while asserting the same idempotency key and stable unsubscribe header. Candidate pending full exact-SHA CI.
+- The change adds bounded `request_public_json` on the shared pinned transport, including form-encoded POST support; migrates those endpoints while preserving Resend stable `Idempotency-Key` and tenant-safe atomic claim/retry, social `PUBLISHING_DRY_RUN`, and Meta `AD_AUTOMATION_EXECUTE`. Meta campaign IDs are validated before path interpolation.
+- Three new provider contract tests cover Reddit/X response transformation, Pinterest/Reddit publishing and dry-run, Meta execute gate/path validation. Existing Resend concurrency/stale-retry tests now mock the helper while asserting the same idempotency key and stable unsubscribe header. Verified: push [40292024351](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292024351) and PR [40292030798](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292030798) passed; the later clean exact-HEAD push [40292982126](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292982126) and PR [40292990297](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292990297) passed again.
+
+
+## 2026-10-26 fixed credentialed provider HTTP transport — verified
+- Implementation commit: `15edaf7ea7103150295098754ae8a64166120e3d`; subsequent current HEAD `868fbbc25d3d8dde5e5d772e1abeec9b3a4a16a4` includes the change.
+- Push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292024351 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292030798 passed; the later exact-HEAD push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292982126 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292990297 also passed all required jobs.
+- Resend, Reddit OAuth/search, X trend search, Pinterest/Reddit publishing and Meta campaign pause use the shared pinned `request_public_json` helper. Response semantics, Resend stable idempotency, workspace-scoped email claim/retry, `PUBLISHING_DRY_RUN`, and `AD_AUTOMATION_EXECUTE` were retained; Meta campaign IDs are validated before URL path interpolation.
+- New provider contract tests assert request method, endpoint, headers/body, response adaptation, dry-run and execution-gate behavior. The separate trusted-proxy ingress check remains a staging release gate.
+
+## 2026-10-26 final generic affiliate-adapter transport — candidate
+- The 59-file backend/AI Python source scan found one remaining standalone HTTP client outside `backend/services/url_safety.py`: `ConfiguredJSONAdapter.fetch_offers` validated its configurable endpoint and then opened an unpinned `httpx.AsyncClient`, creating a DNS-rebinding gap.
+- Candidate replaces that request with the shared pinned `request_public_json` boundary and a 2 MiB response cap, and updates adapter tests to use the real loopback rejection path plus a mocked pinned helper contract.
+- The current base SHA `868fbbc25d3d8dde5e5d772e1abeec9b3a4a16a4` passed both push [40292982126](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292982126) and PR [40292990297](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292990297). This new adapter change is **pending** its own full exact-SHA CI.

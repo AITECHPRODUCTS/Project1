@@ -199,3 +199,8 @@
 ## 2026-10-26 fixed credentialed provider HTTP — candidate
 - Base checkpoint `e79b4bad6f067e537306fc6aff4c0b94629cf847` passed push [40290480101](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290480101) and PR [40290486273](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290486273).
 - Candidate migrates Resend, Reddit/X, Pinterest/Reddit and Meta pause fixed endpoints to the shared pinned helper, adds bounded JSON/form POST request support, and retains existing idempotency/dry-run/execute gates. Verification pending on the candidate SHA.
+
+
+## 2026-10-26 final configurable provider transport regression gate
+- New acceptance check: `ConfiguredJSONAdapter` must use the shared pinned `request_public_json` transport, enforce HTTPS, deny loopback/private/reserved targets before network I/O, disable redirects/environment proxies, and enforce a bounded JSON response.
+- Full push and PR CI must pass after the candidate code/test update. Separately, trusted-proxy behavior must be tested through the actual staging ingress; current tests validate only config syntax/Compose wiring.

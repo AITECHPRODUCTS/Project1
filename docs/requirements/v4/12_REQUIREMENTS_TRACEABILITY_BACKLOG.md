@@ -204,3 +204,10 @@
 ## P0 — remaining fixed-provider direct HTTP (2026-10-26)
 - Source scan identified direct clients for Resend emails, Reddit OAuth and search, X trends, Pinterest/Reddit post submission, and Meta campaign pause. These are fixed provider endpoints, not arbitrary URL fetches, but credentials and external writes should use the same pinned IP/no-proxy/no-redirect transport.
 - Candidate adds a JSON/form request helper with response cap and migrates callers; retains stable per-email Idempotency-Key, workspace tenant logic, publication dry-run and Meta automation execution gate. Three focused tests added. Pending exact-SHA full CI.
+
+
+## P0 — final configurable affiliate adapter pinned transport (2026-10-26)
+- Finding at base `868fbbc25d3d8dde5e5d772e1abeec9b3a4a16a4`: the broad backend/AI Python source scan found `backend/adapters/factory.py::ConfiguredJSONAdapter.fetch_offers` as the only remaining standalone provider HTTP client outside the shared `url_safety.py` transport. It performed DNS admission validation, then a separate unpinned client request.
+- Candidate routes through `request_public_json`, which re-resolves the target for the actual request, pins its socket to the vetted public IP, disables environment proxies and redirect following, and caps JSON response size at 2 MiB. Existing adapter limit and configured item-path behavior are retained.
+- Tests updated for loopback denial through the real helper and request contract/normalization via a fake helper. Pending exact-SHA push/PR CI.
+- Separately, the trusted proxy setting is implemented and syntax-tested, but actual proxy-header stripping and trusted-source behavior need proof from the real staging ingress.

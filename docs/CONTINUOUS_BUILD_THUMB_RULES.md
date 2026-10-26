@@ -140,3 +140,6 @@ These additive rules apply to every future Project1 build session.
 
 
 58. P0 fixed credentialed provider HTTP: migrate Resend, Reddit OAuth/search, X trend search, Pinterest/Reddit publishing, and Meta pause from bare HTTPX to the pinned `request_public_json` helper. Preserve response semantics, stable Resend idempotency, tenant-scoped claim/retry, `PUBLISHING_DRY_RUN`, and `AD_AUTOMATION_EXECUTE`; add provider contract tests. Candidate pending full push/PR CI.
+
+
+59. P0 final configured affiliate adapter transport: no credentialed or configurable provider should validate a hostname and then open a separate unpinned HTTP client. Route `ConfiguredJSONAdapter.fetch_offers` through `request_public_json` with bounded responses; test real loopback rejection and provider request contract. Candidate pending full exact-SHA CI. Staging trusted-proxy verification remains a separate external release gate.

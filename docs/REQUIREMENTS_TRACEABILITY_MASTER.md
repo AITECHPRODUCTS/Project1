@@ -286,3 +286,9 @@
 ## 2026-10-26 fixed-provider HTTP transport — candidate
 - Migrate remaining fixed credentialed outbound calls (Resend, Reddit/X, Pinterest/Reddit, Meta pause) onto the shared DNS-pinned public HTTP transport. Add form POST support while preserving provider payloads/headers, response shape, email idempotency, publishing dry-run and ad execution gate.
 - New provider contract tests added and existing Resend concurrency tests adapted to the helper; exact-SHA CI pending.
+
+
+## 2026-10-26 final configured affiliate adapter transport — candidate
+- Base SHA `868fbbc25d3d8dde5e5d772e1abeec9b3a4a16a4` was green in push [40292982126](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292982126) and PR [40292990297](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40292990297).
+- Found one remaining raw HTTP client in the configurable generic affiliate adapter after scanning 59 backend/AI Python modules. Candidate replaces validate-then-connect with the actual DNS-pinned request helper, no redirects/proxy environment, bounded response and regression tests.
+- The deployment runbook was also corrected to describe the real `FORWARDED_ALLOW_IPS` validator and to keep live staging ingress proof explicitly open; config unit tests are not a staging result.

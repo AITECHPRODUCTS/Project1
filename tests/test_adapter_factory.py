@@ -8,65 +8,44 @@ from backend.adapters.factory import ConfiguredJSONAdapter
 
 
 @pytest.mark.asyncio
-async def test_configured_json_adapter_rejects_private_endpoint_before_opening_http_client(monkeypatch):
-    endpoint = "https://127.0.0.1/private"
-    calls: list[str] = []
+async def test_configured_json_adapter_rejects_private_endpoint_before_network_io():
+    adapter = ConfiguredJSONAdapter(
+        "test-network",
+        "https://127.0.0.1/private",
+        "test-token",
+    )
 
-    async def reject_private(url: str) -> str:
-        calls.append(url)
-        raise ValueError("Private, loopback, link-local, multicast or reserved destinations are blocked")
-
-    def unexpected_client(**kwargs: Any):
-        raise AssertionError("HTTP client must not be created before URL validation succeeds")
-
-    monkeypatch.setattr("backend.adapters.factory.validate_public_http_url", reject_private)
-    monkeypatch.setattr("backend.adapters.factory.httpx.AsyncClient", unexpected_client)
-    adapter = ConfiguredJSONAdapter("test-network", endpoint, "test-token")
-
+    # The real pinned helper rejects loopback while resolving the destination,
+    # before it constructs or opens an HTTP client.
     with pytest.raises(ValueError, match="Private"):
         await adapter.fetch_offers(query="tools", limit=10)
-    assert calls == [endpoint]
 
 
 @pytest.mark.asyncio
-async def test_configured_json_adapter_bounds_limit_and_normalizes_items(monkeypatch):
+async def test_configured_json_adapter_uses_pinned_helper_and_normalizes_items(monkeypatch):
     endpoint = "https://partner.example/api/offers"
-    monkeypatch.setattr(
-        "backend.adapters.factory.validate_public_http_url",
-        lambda url: _async_value(url),
-    )
     captured: dict[str, Any] = {}
 
-    class Response:
-        def raise_for_status(self) -> None:
-            return None
+    async def fake_request_public_json(url: str, **kwargs: Any) -> dict[str, Any]:
+        captured.update({"url": url, **kwargs})
+        return {"data": [{"id": str(i)} for i in range(5)] + ["not-an-object"]}
 
-        def json(self) -> dict[str, Any]:
-            return {"data": [{"id": str(i)} for i in range(5)] + ["not-an-object"]}
-
-    class Client:
-        def __init__(self, **kwargs: Any) -> None:
-            self.kwargs = kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args: Any) -> None:
-            return None
-
-        async def get(self, url: str, *, params: dict[str, Any], headers: dict[str, str]):
-            captured.update({"url": url, "params": params, "headers": headers})
-            return Response()
-
-    monkeypatch.setattr("backend.adapters.factory.httpx.AsyncClient", Client)
+    monkeypatch.setattr(
+        "backend.adapters.factory.request_public_json",
+        fake_request_public_json,
+    )
     adapter = ConfiguredJSONAdapter("test-network", endpoint, "test-token")
     result = await adapter.fetch_offers(query="creator tools", limit=-10)
 
-    assert captured["url"] == endpoint
-    assert captured["params"] == {"q": "creator tools", "limit": 1}
-    assert len(result) == 1
-    assert result[0] == {"id": "0"}
-
-
-async def _async_value(value: str) -> str:
-    return value
+    assert captured == {
+        "url": endpoint,
+        "method": "GET",
+        "params": {"q": "creator tools", "limit": 1},
+        "headers": {
+            "Authorization": "Bearer test-token",
+            "Accept": "application/json",
+        },
+        "timeout": 20,
+        "max_bytes": 2_000_000,
+    }
+    assert result == [{"id": "0"}]

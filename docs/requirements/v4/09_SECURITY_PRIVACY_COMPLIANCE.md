@@ -40,3 +40,9 @@
 ## 2026-10-26 fixed credentialed provider endpoints — candidate
 - The verified CMS transport is pinned; remaining bare HTTPX clients exist for Resend, Reddit/X, Pinterest/Reddit and Meta campaign pause, all using fixed official-provider endpoints but bypassing the same no-proxy/no-redirect/pinned-IP policy.
 - Candidate migrates these calls to the shared helper with JSON/form POST support, timeouts and bounded JSON responses. Email idempotency and ad/publishing execution gates remain unchanged. Exact-SHA tests/CI are pending.
+
+
+## 2026-10-26 generic affiliate adapter transport — candidate
+- `ConfiguredJSONAdapter` previously called `validate_public_http_url` then connected with a separate `httpx.AsyncClient`. This was the last direct provider client found outside the shared pinned transport after scanning 59 Python modules under backend and AI memory.
+- Candidate uses `request_public_json`, applies a 2 MiB cap, retains HTTPS-only construction and the configured item extraction, and adds a loopback-denial + mocked request-contract test pair.
+- Do not call this fixed until the full push and PR runs pass on the candidate SHA.

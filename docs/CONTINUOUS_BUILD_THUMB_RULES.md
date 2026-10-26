@@ -35,3 +35,6 @@ These additive rules apply to every future Project1 build session.
 
 
 18. Resume checkpoint dated 2026-10-26: the current next action is to repair the verified npm audit failure on the existing `build/omni-affiliate-os-production` branch; do not restart/rebase/branch-switch. Pre-repair SHA `565c76bd7d6931721ce66cb0a84fc25129997c52` has passing Python, PostgreSQL, AI/RAG, skill-parity and frontend build jobs but failing `npm audit` (five advisories reported). Preserve all passing areas, regenerate the lockfile through the guarded one-shot workflow, inspect logs, and rerun the full matrix before advancing to the next P0 backlog item.
+
+
+19. 2026-10-26 lockfile checkpoint: the temporary `dependency-remediation` workflow job passed `npm audit`, `npm ci`, frontend typecheck and production build, then committed the patched lockfile as `0180f2f0fd84445ff76131d4ca04389676043b8a`. That bot commit did not give a normal full-matrix push run; do not count it as a full CI pass. The temporary lock-refresh job has been removed. The next regular commit must trigger the full matrix on the committed Next.js 16.4.3 lockfile; inspect and fix failures before selecting another P0 task.

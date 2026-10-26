@@ -89,3 +89,9 @@
 - Inspected the exact current branch/head and recent runs rather than restarting from a historical snapshot. On `565c76bd7d6931721ce66cb0a84fc25129997c52`, Python tests, SQLite migrations, PostgreSQL migration/concurrency tests, repo/source guard, 53-skill parity, AI/RAG imports, and frontend typecheck/build all passed in push and PR CI.
 - Push run [40215636414](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40215636414) and PR run [40215641152](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40215641152) failed only the frontend dependency audit. Its logs identify a nested Next.js/PostCSS path and postcss-selector-parser; do not count the run as green.
 - The fix is on this same existing branch and includes a guarded lock refresh plus a required clean npm audit and clean-install/typecheck/build. The resulting SHA and logs must be rechecked before the backlog item can be marked complete.
+
+
+## 2026-10-26 lockfile repair — follow-up full matrix required
+- GitHub's temporary lock refresh succeeded: `npm audit`, clean `npm ci`, TypeScript check and production UI build passed using the patched resolution; lock commit is `0180f2f0fd84445ff76131d4ca04389676043b8a` on the existing build branch.
+- The regular frontend job on the earlier commit failed because it began before that lockfile was pushed. Treat that run as failed; the success of the helper job does not substitute for exact-SHA full CI.
+- Removed the one-shot lock-refresh job to keep CI deterministic. The current normal push run must validate the committed lock, full Python and PostgreSQL tests/migration gates, AI/RAG, skill parity, and frontend security audit. Keep release blocked until all required gates and the separately documented Chroma exception are resolved.

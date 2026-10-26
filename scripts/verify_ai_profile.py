@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 import importlib
+import sys
+from pathlib import Path
+
+# Executed as `python scripts/verify_ai_profile.py` in CI: include the repo
+# root so the project package `ai_memory` is importable from that entry point.
+ROOT = str(Path(__file__).resolve().parents[1])
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 MODULES = (
     "langchain",

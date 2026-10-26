@@ -224,3 +224,8 @@
 - Candidate uses `ai_memory/local_vector_store.py` (SQLite, normalized float32 embedding blobs, JSON metadata, stable IDs/upserts, collection and embedding-model checks, cosine similarity); ingestion/retrieval now use that storage; active AI requirements remove `chromadb` and `langchain-chroma`; CI removes four advisory ignore arguments.
 - Five tests cover persistent reopen/search ranking, stable-ID update and delete, collection isolation, model identity mismatch and invalid vector rejection.
 - Status: **pending** the resulting exact-SHA CI, especially the clean AI audit and the AI/RAG import job. Existing Chroma files are not migrated automatically; rebuild with `python -m ai_memory.ingester` during rollout.
+
+
+## P0 — AI profile verifier path correction (2026-10-26)
+- First candidate `6a24ed5e73181bc190e6da391e6b4df040ebb49c` passed all jobs except AI import verification. The only reported error was `ModuleNotFoundError: No module named 'ai_memory'` from executing the verifier file path directly.
+- Candidate correction adds the repository root to `sys.path` before import checks. Needs full push/PR CI re-verification.

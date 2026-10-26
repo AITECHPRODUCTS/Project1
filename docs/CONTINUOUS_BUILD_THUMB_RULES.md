@@ -149,3 +149,6 @@ These additive rules apply to every future Project1 build session.
 
 
 61. P0 Chroma advisory elimination — candidate: replace ChromaDB/`langchain-chroma` with a SQLite-persisted local vector index, preserve RAG APIs, remove all audit ignores, guard active runtime/dependency files against reintroduction, and test persistence/upsert/cosine ranking/model compatibility/collection isolation. Base `38a7b0ff6399d4702f8e8f798cdee81567a5c45d` passed its previous matrix; this remediation stays pending until the new exact-SHA push and PR workflows both pass with a clean AI dependency audit. Old index data needs explicit re-ingestion; don't delete the prior index as part of the code upgrade.
+
+
+62. The first Chroma-removal candidate `6a24ed5e73181bc190e6da391e6b4df040ebb49c` failed only because CI invokes `python scripts/verify_ai_profile.py` and that script lacked the repository root on `sys.path` (`ModuleNotFoundError: ai_memory`). The core tests, PostgreSQL, frontend, repo guard, clean audit and lockfile sync passed; fix the verifier path and rerun both exact-SHA workflows. Keep item 61 pending until all jobs pass.

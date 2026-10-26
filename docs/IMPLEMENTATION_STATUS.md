@@ -604,3 +604,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Candidate replaces the Chroma-backed RAG index with `ai_memory/local_vector_store.py`: SQLite persistence, normalized float32 embeddings, JSON source metadata, stable IDs/upserts, collection/model identity checks and in-process cosine ranking. The legacy `CHROMA_PERSIST_DIR` configuration remains for compatibility but now stores `local_vectors.sqlite3`.
 - Removes both vulnerable-package references from the active AI requirements, removes all four conditional audit ignores, updates the AI import check, and adds five deterministic vector persistence/ranking/isolation tests plus a static no-Chroma guard.
 - **Pending:** full exact-SHA push/PR workflows and clean `pip-audit -r requirements-ai.txt`. Existing Chroma index files are not auto-migrated; run `python -m ai_memory.ingester` to rebuild after deployment. No production-readiness claim is made.
+
+
+## 2026-10-26 Chroma removal candidate — first hosted verification result
+- Candidate SHA `6a24ed5e73181bc190e6da391e6b4df040ebb49c`: push [40303851568](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40303851568) and PR [40303859476](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40303859476) failed only at `Verify AI/RAG dependency imports`. The error was `ModuleNotFoundError: No module named 'ai_memory'` because `python scripts/verify_ai_profile.py` puts `scripts/` rather than the repository root on `sys.path`.
+- All other jobs passed on both runs: core suite (**326 passed, 2 skipped**), PostgreSQL migration/concurrency, frontend production build, repository guard, clean unignored AI dependency audit, and push lockfile sync.
+- Corrected the verifier to add the repository root before importing the local vector store. Full push/PR CI on the next exact SHA is pending; do not call Chroma removal verified until the AI profile and every other required job pass.

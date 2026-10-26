@@ -362,3 +362,9 @@
 - The only Gitleaks ignore is the precise fingerprint for an ordinary-text false positive at a historical upstream skill line. Unit tests enforce that no second/broad ignore is added.
 - The license exception file permits only the exact two package/version/license combinations until 2026-11-02. It is CI inventory reporting only, not legal release approval.
 - External staging proxy, provider UAT, deployment smoke, monitoring/SLO and database backup/restore still require operational evidence.
+
+
+## 2026-10-26 hosted-model SDK egress-boundary hardening — candidate
+- Base SHA `7a2626094c370ba12b8f10249e44dd02abd5d1e0` passed push [40349637942](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349637942) and PR [40349646267](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349646267).
+- A provider-SDK audit found `ChatOpenAI` lacked an injected custom HTTP client and could bypass the single DNS-pinned outbound transport. Candidate fixes the integration and expands the static guard/tests.
+- Verify with full push/PR CI before calling it complete. Actual hosted staging ingress, authorized live provider UAT, license resolution and deployment/restore evidence remain production blockers.

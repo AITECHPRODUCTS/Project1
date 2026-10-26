@@ -84,6 +84,19 @@ def find_transport_violations(source: str, relative_path: str) -> list[str]:
                 f"{relative_path}:{getattr(node, 'lineno', '?')}: raw outbound client {target} "
                 f"must use backend.services.url_safety"
             )
+
+        required_sdk_transport = None
+        if target.endswith(".ChatOpenAI"):
+            required_sdk_transport = "http_async_client"
+        elif target.endswith(".AsyncOpenAI") or target.endswith(".OpenAI"):
+            required_sdk_transport = "http_client"
+        if required_sdk_transport and not any(
+            keyword.arg == required_sdk_transport for keyword in node.keywords
+        ):
+            violations.append(
+                f"{relative_path}:{getattr(node, 'lineno', '?')}: provider SDK client {target} "
+                f"must receive {required_sdk_transport} backed by backend.services.url_safety"
+            )
     return sorted(set(violations))
 
 
@@ -123,6 +136,14 @@ def main() -> int:
             continue
         errors.extend(find_transport_violations(source, relative))
 
+    llm_path = ROOT / "backend/services/llm.py"
+    if not llm_path.is_file():
+        errors.append("missing hosted-LLM integration: backend/services/llm.py")
+    else:
+        llm_source = llm_path.read_text(encoding="utf-8")
+        if "pinned_public_async_client(" not in llm_source or "http_async_client=http_client" not in llm_source:
+            errors.append("OpenAI-compatible LLM must inject the DNS-pinned async client from backend.services.url_safety")
+
     if errors:
         print("OUTBOUND TRANSPORT BOUNDARY FAILED")
         for error in sorted(set(errors)):
@@ -132,6 +153,7 @@ def main() -> int:
     print(f"Runtime Python files scanned: {scanned}")
     print(f"Raw HTTP client constructors are restricted to {APPROVED_TRANSPORT}")
     print("Pinned-IP, TLS SNI, redirect and ambient-proxy invariants are present")
+    print("OpenAI-compatible SDK clients must inject the DNS-pinned async transport")
     return 0
 
 

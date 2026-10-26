@@ -190,3 +190,6 @@ These additive rules apply to every future Project1 build session.
 
 
 74. Production release remains blocked until the two LGPL exception items are legally reviewed or replaced and actual external staging/provider/deployment/restore evidence is recorded. The scan artifact URLs and exact SHA are recorded in `docs/IMPLEMENTATION_STATUS.md`; exception expiration must fail closed.
+
+
+75. P0 hosted-LLM SDK egress: every LangChain/OpenAI-compatible SDK client must inject the DNS-pinned async HTTP client from `backend.services.url_safety`. That client must validate/pin each HTTPS destination, preserve Host/TLS SNI, reject non-HTTPS requests, disable redirects and ignore ambient proxies. SDK constructors without the required safe-client injection must fail the static transport guard. New implementation/test candidate is pending exact-SHA push and PR CI; real staging and provider UAT remain separate release gates.

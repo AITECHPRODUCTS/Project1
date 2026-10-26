@@ -24,8 +24,11 @@ class LLMService:
    elif backend=="openai_compatible":
     from langchain_openai import ChatOpenAI
     from langchain_core.messages import HumanMessage,SystemMessage
-    model=ChatOpenAI(model=s.openai_model,api_key=s.openai_api_key,base_url=s.openai_base_url or None,temperature=temperature,max_tokens=s.content_max_llm_tokens,timeout=45,max_retries=2)
-    response=await model.ainvoke([SystemMessage(content=full_system),HumanMessage(content=user_prompt)]);result=str(response.content).strip();provider=s.openai_model;usage=getattr(response,"usage_metadata",None) or {};in_tokens=int(usage.get("input_tokens") or estimated_input);out_tokens=int(usage.get("output_tokens") or max(1,len(result)//3))
+    from backend.services.url_safety import pinned_public_async_client
+    async with pinned_public_async_client(timeout=45) as http_client:
+     model=ChatOpenAI(model=s.openai_model,api_key=s.openai_api_key,base_url=s.openai_base_url or None,temperature=temperature,max_tokens=s.content_max_llm_tokens,timeout=45,max_retries=0,http_async_client=http_client)
+     response=await model.ainvoke([SystemMessage(content=full_system),HumanMessage(content=user_prompt)])
+    result=str(response.content).strip();provider=s.openai_model;usage=getattr(response,"usage_metadata",None) or {};in_tokens=int(usage.get("input_tokens") or estimated_input);out_tokens=int(usage.get("output_tokens") or max(1,len(result)//3))
    else:raise RuntimeError(f"Unsupported LLM_BACKEND: {backend}")
    if not result:raise RuntimeError("Configured model returned empty output")
    await finalize(reservation,in_tokens,out_tokens,"completed")

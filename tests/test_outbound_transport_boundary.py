@@ -65,3 +65,26 @@ def test_syntax_errors_fail_closed():
     errors = find_transport_violations("async def broken(:\n pass\n", "backend/services/broken.py")
     assert len(errors) == 1
     assert "cannot parse source" in errors[0]
+
+
+def test_langchain_openai_sdk_requires_pinned_async_client():
+    source = (
+        "from langchain_openai import ChatOpenAI as Model\n"
+        "model = Model(model='test-model', api_key='fake-test-key')\n"
+    )
+    errors = find_transport_violations(source, "backend/services/unreviewed_llm.py")
+    assert len(errors) == 1
+    assert "ChatOpenAI" in errors[0]
+    assert "http_async_client" in errors[0]
+
+
+def test_langchain_openai_sdk_with_pinned_client_is_allowed():
+    source = (
+        "from langchain_openai import ChatOpenAI\n"
+        "from backend.services.url_safety import pinned_public_async_client\n"
+        "async def build():\n"
+        "    async with pinned_public_async_client() as safe_client:\n"
+        "        return ChatOpenAI(model='test-model', api_key='fake-test-key', "
+        "http_async_client=safe_client)\n"
+    )
+    assert find_transport_violations(source, "backend/services/llm.py") == []

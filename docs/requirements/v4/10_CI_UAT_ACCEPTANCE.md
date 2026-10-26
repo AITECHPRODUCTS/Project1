@@ -281,3 +281,9 @@
 - Core/test Python 76 packages and AI/RAG 90 packages each have zero license findings. Frontend CycloneDX covers 109 packages and has no unreviewed findings. It uses two exact LGPL-3.0-or-later libvips CI-inventory exceptions through 2026-11-02; the report explicitly sets `release_approved=false`.
 - Full-history Gitleaks scan passed with zero findings; its only ignore is the exact historical false-positive fingerprint guarded by a test. Reports are linked from `docs/IMPLEMENTATION_STATUS.md`.
 - The CI tooling task is complete; legal review for the two LGPL packages and actual staging/provider/deployment/restore acceptance remain blockers to production release.
+
+
+## 2026-10-26 provider SDK transport acceptance gate — pending
+- The OpenAI-compatible LangChain SDK must be instantiated with an `http_async_client` backed by `PinnedPublicAsyncTransport`, not its implicit default network client.
+- Tests must prove the SDK transport pins the connection to a validated public IP while preserving Host/TLS SNI, rejects plain HTTP, disables redirects and does not honor ambient proxy variables. Static CI must fail SDK constructors that omit the required safe client.
+- This is a code/CI gate only. It does not close real staging trusted-proxy verification, provider account authorization/live UAT, license exception resolution or deployment/restore evidence.

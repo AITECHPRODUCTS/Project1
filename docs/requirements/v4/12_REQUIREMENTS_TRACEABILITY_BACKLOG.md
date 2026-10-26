@@ -297,3 +297,9 @@
 - Verification: Python **361 passed, 3 skipped, 1 existing warning**; all 8 push jobs and all 7 required PR jobs passed. The secret scan reported zero findings after the one exact-fingerprint ordinary-text false positive was narrowly ignored under regression test.
 - Python core/test (76 packages) and AI/RAG (90 packages) license reports have zero findings; frontend (109 packages) has two exact, expiring LGPL items marked release blockers, with `release_approved=false`. Legal review or replacement is mandatory before production distribution.
 - Remaining independent release gates: actual staging proxy spoof/identity behavior, authorized provider live UAT, deploy smoke, monitoring/SLO, production data/RAG re-ingestion validation and backup/restore.
+
+
+## P0 — hosted LLM SDK bypass of outbound transport (2026-10-26)
+- Finding on `7a2626094c370ba12b8f10249e44dd02abd5d1e0`: raw HTTP call sites used the pinned transport, but `ChatOpenAI` constructed the OpenAI SDK-managed HTTP client independently.
+- Candidate adds an injected DNS-pinned `http_async_client`, request-time HTTPS/public-address validation, connection-IP pinning, Host/SNI preservation, no redirects and `trust_env=False`; SDK auto-retries are disabled to reduce ambiguous duplicate model spend. Static guard now enforces the injected client for ChatOpenAI/OpenAI SDK constructors.
+- New tests cover transport behavior and static policy. **Pending** exact-SHA full push/PR CI. Staging deployment, actual proxy ingress and authorized provider UAT must still be evidenced separately.

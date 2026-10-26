@@ -65,6 +65,76 @@ async def _resolve_public_target(url: str) -> tuple[httpx.URL, str, str]:
     return target, hostname, str(addresses[0])
 
 
+class PinnedPublicAsyncTransport(httpx.AsyncBaseTransport):
+    """HTTPX transport for provider SDKs; resolves, validates and pins every request.
+
+    This prevents an SDK-managed HTTP client from bypassing the same DNS-rebinding,
+    private-address, redirect and ambient-proxy boundary used by direct provider calls.
+    Provider requests require HTTPS because they can carry API credentials.
+    """
+
+    def __init__(self, inner_transport: httpx.AsyncBaseTransport | None = None):
+        self._transport = inner_transport or httpx.AsyncHTTPTransport(retries=0)
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        original_url = request.url
+        if original_url.scheme != "https":
+            raise ValueError("Provider SDK outbound requests require HTTPS")
+
+        target, hostname, connect_ip = await _resolve_public_target(str(original_url))
+        default_port = 443
+        host_header = f"[{hostname}]" if ":" in hostname else hostname
+        if target.port and target.port != default_port:
+            host_header = f"{host_header}:{target.port}"
+
+        original_host = request.headers.get("host")
+        allowed_host_headers = {host_header.lower()}
+        if target.port == default_port:
+            allowed_host_headers.add(f"{host_header}:443".lower())
+        if original_host and original_host.lower() not in allowed_host_headers:
+            raise ValueError("Provider SDK Host header must match the configured endpoint")
+
+        had_sni = "sni_hostname" in request.extensions
+        original_sni = request.extensions.get("sni_hostname")
+        request.url = request.url.copy_with(host=connect_ip)
+        request.headers["Host"] = host_header
+        request.extensions["sni_hostname"] = hostname
+        try:
+            return await self._transport.handle_async_request(request)
+        finally:
+            # Restore the logical URL after the connection has been established so that
+            # SDK diagnostics and response.request retain the configured hostname.
+            request.url = original_url
+            if original_host is None:
+                request.headers.pop("Host", None)
+            else:
+                request.headers["Host"] = original_host
+            if had_sni:
+                request.extensions["sni_hostname"] = original_sni
+            else:
+                request.extensions.pop("sni_hostname", None)
+
+    async def aclose(self) -> None:
+        await self._transport.aclose()
+
+
+@asynccontextmanager
+async def pinned_public_async_client(
+    *, timeout: float = 45.0
+) -> AsyncIterator[httpx.AsyncClient]:
+    """Create an async SDK client that cannot bypass the pinned public transport."""
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
+    client_timeout = httpx.Timeout(timeout, connect=min(4.0, timeout))
+    async with httpx.AsyncClient(
+        transport=PinnedPublicAsyncTransport(),
+        timeout=client_timeout,
+        follow_redirects=False,
+        trust_env=False,
+    ) as client:
+        yield client
+
+
 async def validate_public_http_url(url: str) -> str:
     """Admission-time validation; actual fetches must use the pinned helper too."""
     await _resolve_public_target(url)

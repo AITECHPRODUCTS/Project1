@@ -116,7 +116,8 @@
 - Corrected the fixture, keeping production enforcement unchanged. Full exact-SHA push and PR CI are pending.
 
 
-## P0 — S5 workflow idempotency candidate (2026-10-26)
-- S5 directly invoked the distribution adapter and bypassed the verified direct-route `ExternalAction` idempotency registry.
-- Candidate extracts shared claim/finish/fingerprint logic and uses stable per-item keys derived from a workflow-level `Idempotency-Key`. Completed actions replay; unknown outcomes block retries even when the caller changes the key. Live workflows fail closed without a key.
-- Regression tests and full exact-SHA push/PR CI pending.
+## P0 — S5 workflow idempotency verified (2026-10-26)
+- Verified on `e7ca02df933c3028489e8c3ba1abbfba3d82ae90`; push [40279412060](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279412060) and PR [40279416167](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279416167) both passed.
+- S5 uses the shared tenant-scoped ExternalAction registry and stable per-item keys derived from the workflow-level `Idempotency-Key`. Completed actions replay; changed payloads or in-progress/unknown outcomes return conflict and block duplicate side effects.
+- Three new workflow S5 tests passed (Python 267 passed / 2 skipped). Full SQLite/PostgreSQL migration/concurrency, AI/RAG, frontend, dependency audit, repo guard, and push lockfile checks passed.
+- Next: review remaining provider adapters and externally impactful workflow/worker paths for authorization, idempotency and safe retries.

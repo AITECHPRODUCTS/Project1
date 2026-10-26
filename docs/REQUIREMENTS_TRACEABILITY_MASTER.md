@@ -194,3 +194,12 @@
 - Source review after direct provider-write idempotency passed found S5 still called `social_media_scheduler` directly, bypassing request-level claims/replay for workflow-triggered posts.
 - Candidate reuses a shared `external_action_registry` service. Each live S5 item gets a stable bounded key derived from the workflow request key; completed responses replay and ambiguous provider results remain locked as `unknown`. API and S5 service boundaries reject missing keys in live mode.
 - Regression tests and full exact-SHA CI pending.
+
+
+## P0 — workflow S5 external-action registry integration — verified
+- Implementation SHA: `e7ca02df933c3028489e8c3ba1abbfba3d82ae90`.
+- Push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279412060 — **success**. PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279416167 — **success**. All seven push jobs and all required PR jobs passed.
+- Python suite: **267 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite migration/drift and PostgreSQL migration/concurrency, AI/RAG import profile (**9 imports**), frontend typecheck/production build, dependency security audit, 53-skill repository guard and push lockfile reproducibility all passed.
+- The provider-write claim/hash/replay helpers are now shared in `backend/services/external_action_registry.py`. Live workflow publishing requires a valid `Idempotency-Key` at the API and S5 service boundaries, in addition to Platform Super Admin authorization and explicit confirmation. Each S5 item derives a stable per-item idempotency key. Completed actions replay the stored response without a second provider call; key/payload conflicts and in-progress/unknown actions fail closed; timeouts/network/5xx outcomes remain `unknown` for reconciliation.
+- Three new S5 regressions prove missing-key denial, completed-result replay without duplicate provider execution, and same/alternate-key rejection after an ambiguous provider outcome. Existing route regression now checks the mandatory workflow Idempotency-Key.
+- Next P0 source audit: review the remaining provider adapters and externally impactful workflow/worker paths for approval gates, idempotency, tenant-scoped audit outcomes, and safe retry semantics. Production remains **not release-ready** while the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates are open.

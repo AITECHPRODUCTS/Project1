@@ -122,6 +122,7 @@
 - Next: include S5 workflow provider writes in the durable registry; verify manual workflow resubmissions cannot bypass direct-route idempotency.
 
 
-## 2026-10-26 workflow S5 request idempotency — candidate
-- Applies durable `ExternalAction` registry to workflow-stage publishing. Live workflow runs with publish requests require the header `Idempotency-Key`; S5 uses stable per-item keys and replay/unknown-outcome semantics.
-- Tests cover missing key, duplicate S5 replay and unknown-outcome blocking; full exact-SHA push/PR verification pending.
+## 2026-10-26 workflow S5 request idempotency — verified
+- Exact implementation SHA `e7ca02df933c3028489e8c3ba1abbfba3d82ae90`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279412060 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279416167 both passed.
+- Python 267 passed/2 skipped; PostgreSQL migration/concurrency, SQLite drift, AI/RAG 9 imports, frontend build, dependency audit, 53-skill guard and push lockfile sync all passed.
+- S5 shares the tenant-scoped ExternalAction registry, requires live workflow keys at both API and service boundaries, derives stable per-item keys, replays completed actions and blocks unknown outcomes until reconciliation.

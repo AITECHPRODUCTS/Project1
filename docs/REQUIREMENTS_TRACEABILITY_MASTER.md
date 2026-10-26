@@ -181,3 +181,10 @@
 ## Provider write idempotency — CI fixture correction pending verification
 - Initial SHA `b3495a58202f944621f43063efbe9d293323ee24`'s Python test job had 1 failure, 263 passed, 2 skipped: a pre-existing social confirmation test omitted the new mandatory `Idempotency-Key`, and received the expected 428.
 - Added the key to the regression fixture; full CI must pass on the corrected SHA before verification is claimed.
+
+
+## 2026-10-26 provider-write idempotency — verified
+- Exact implementation SHA `1cc839bbf80d1a66e35b9e36f244b4fa13cb68af`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278503530 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278508177 succeeded; Python 264 passed/2 skipped; PostgreSQL/SQLite migrations, 9 AI/RAG imports, frontend production build, security audit, 53-skill repository guard and push lockfile reproducibility passed.
+- Durable ExternalAction claims now protect direct social/CMS writes with request fingerprinting, key uniqueness, completed response replay, payload mismatch rejection, and unknown-outcome blocks. Migration 0009 is part of the validated migration chain.
+- Corrected one legacy authorization test to include the newly mandatory idempotency key; the initial failure was test-contract drift, not a reason to relax the guard.
+- Next: bring S5 workflow publishing under the same registry; otherwise direct-route and workflow-run duplication have inconsistent protection.

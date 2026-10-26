@@ -104,9 +104,11 @@
 - At `3dc01b9b954bf0ec392aafed522c4ec968faffa9`, the workflow runner marks S5 as side-effecting and suppresses automatic retries after timeout/connection errors that may have occurred after an external provider accepted a post. It persists `workflow.side_effect_outcome_unknown` scoped to the workspace and requires reconciliation before any manual re-submit. Read-only transient retries remain.
 - Two regression tests passed and full exact-SHA CI is green. Verified implementation SHA `3dc01b9b954bf0ec392aafed522c4ec968faffa9`: push [40277040070](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277040070) and PR [40277047842](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277047842) both passed. Python suite: **260 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG profile (**9 imports**), frontend typecheck/production build, dependency security audit, 53-skill guard and push lockfile reproducibility all passed.
 
-## P0 — manual provider-write idempotency candidate (2026-10-26)
-- Route auth and confirmation do not prevent duplicate external requests after a client loses the response. Social/CMS requests should require an idempotency key for live writes, persist a workspace/type/key claim before the call, and replay stored success.
-- Key/payload mismatch is a 409. Network or 5xx ambiguity is stored as unknown and blocked for the same payload even if the client attempts a new key until reconciliation. Four regression tests pending hosted CI.
+## P0 — manual provider-write idempotency verified (2026-10-26)
+- Verified SHA `1cc839bbf80d1a66e35b9e36f244b4fa13cb68af`: push [40278503530](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278503530) and PR [40278508177](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278508177) both succeeded.
+- Migration 0009 and the tenant-scoped ExternalAction registry ensure direct social/CMS provider claims are durable before the provider call; identical completed requests replay, changed key payloads return 409, missing keys return 428, and ambiguous network/5xx outcomes block same-key and alternate-key repeats until reconciliation.
+- Four regression tests passed with Python 264 passed / 2 skipped; full CI passed. Initial CI exposed one stale fixture without an Idempotency-Key; the fixture was corrected without weakening production enforcement.
+- Next P0: workflow S5 currently invokes the social adapter directly and must participate in the same idempotency registry to prevent duplicate posts from manually restarted/re-submitted workflows.
 
 
 ## CI correction — live social confirmation test now supplies the idempotency key

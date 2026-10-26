@@ -119,3 +119,10 @@
 - Exact SHA `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440 both passed.
 - Test coverage proves same-workspace event routing, dropping scope-less events, scoped event emission, and denying WebSocket connections after workspace membership revocation. All seven push jobs passed, including PostgreSQL, AI/RAG imports and the dependency audit.
 - Next P0: audit and enforce workspace ownership for workflow status, pause, resume, retry, cancel and background-worker recovery endpoints/actions.
+
+
+## 2026-10-26 workflow lifecycle ownership — exact-SHA proof
+- At 16eee55a6935e9afa1d5f2b020c867713754aa67, push run [40265845238](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265845238) and PR run [40265848400](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265848400) passed.
+- Workflow starts are explicitly scoped to the authenticated workspace. Status/resume require and validate the workspace and return a not-found result across tenants; paused recovery uses stored ownership. Dashboard status aggregates are scoped.
+- Three additional tests cover authentication, cross-workspace access denial and unscoped-start rejection.
+- Next: platform-admin authorization for shared knowledge ingestion and limited status disclosure.

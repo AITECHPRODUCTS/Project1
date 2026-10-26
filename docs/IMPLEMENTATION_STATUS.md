@@ -323,3 +323,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Seven push jobs passed: Python suite including all four new WebSocket isolation tests; SQLite migration/drift; PostgreSQL migration/concurrency; AI/RAG imports; 53-skill repository guard; frontend `npm ci`, typecheck and production build; security audit; lockfile reproducibility.
 - The WebSocket tenant isolation issue is addressed by this patch and test suite. This does not establish production readiness: the four ChromaDB advisory IDs remain a conditional exception; authorized live provider verification, broad route/worker/export/WebSocket UAT, SBOM/license/secret scans, deployment smoke and backup/restore remain.
 - Next P0 candidate for code audit: verify that workflow run status/pause/resume/retry endpoints and background worker actions enforce actor + workspace ownership, not just session presence or a guessable run/session ID.
+
+
+## 2026-10-26 workflow lifecycle ownership — verified
+- Exact SHA: 16eee55a6935e9afa1d5f2b020c867713754aa67.
+- Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265845238 — **success**. PR CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265848400 — **success**.
+- Verified gates: all Python tests including new workflow authorization/ownership cases; SQLite migration/drift; PostgreSQL migration and concurrent reversal; AI/RAG imports; frontend clean install/typecheck/production build; repository source and 53-skill parity; core/AI-RAG/frontend security audits under the existing documented Chroma exception; and lockfile reproducibility.
+- Changes include explicit workspace required at workflow start, workspace argument required for status/resume, owner-workspace checks on both the paused record and run, workspace-scoped recovery, and scoped /api/status plus /api/flywheel/status aggregates.
+- Next P0 audit item: make shared knowledge-index ingestion platform-admin-only and minimize host filesystem disclosure in its status endpoint. This must be tested on the next exact SHA.

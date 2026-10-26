@@ -54,3 +54,10 @@
 - Verified fix and tests on `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440 both passed.
 - Required test assertions include workspace-matched event delivery only, scope-less event dropping, workflow emitter scope propagation, and denied connection for revoked membership.
 - Next: workflow run status/pause/resume/retry/cancel must verify actor and workspace ownership, with negative cross-tenant tests.
+
+
+## 2026-10-26 workflow lifecycle ownership — verified
+- Candidate SHA 16eee55a6935e9afa1d5f2b020c867713754aa67: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265845238 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265848400 both completed successfully.
+- Checks include Python suite with workflow/tenant tests, PostgreSQL migrations and concurrent reversal test, AI/RAG imports, frontend checks/build, 53-skill source guard, audits and lockfile verification.
+- Remaining conditional exception: four documented ChromaDB advisories still prevent a clean AI/RAG security result and production approval.
+- Next P0 review: gate shared knowledge-index ingestion to platform operations and remove internal absolute path leakage.

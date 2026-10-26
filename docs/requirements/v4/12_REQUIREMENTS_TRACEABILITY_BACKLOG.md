@@ -37,3 +37,10 @@
 - Finding: workflow/HITL events previously lacked workspace IDs, and EventHub broadcast them to every connected WebSocket. The endpoint also did not revalidate active workspace membership at connect time.
 - Candidate fix binds event payloads to workspace scope, routes only to same-workspace sockets, rejects scope-less events, and validates membership on connect and recovery.
 - Four regression tests added in `tests/test_websocket_tenant_isolation.py`. Verified on exact SHA `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push [40265255592](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592) and PR [40265259440](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440) both succeeded.
+
+
+## P0 — workflow lifecycle tenant ownership (2026-10-26)
+- Implemented explicit workspace context at workflow start and required workspace scope for status/resume. Status/resume verify the WorkflowRun and PausedSession belong to the requested workspace; internal paused recovery passes the stored owning workspace. Dashboard status aggregates run tenant queries under the authorized workspace scope.
+- Added tests for auth on workflow/status endpoints, cross-workspace status/resume denial, and refusal to start a workflow without workspace context.
+- Verified exact SHA 16eee55a6935e9afa1d5f2b020c867713754aa67: push [40265845238](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265845238) and PR [40265848400](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265848400) both succeeded.
+- Next P0 audit: require Platform Super Admin for shared RAG knowledge-index ingestion; remove host-local absolute path from end-user status responses and test deny-by-default behavior.

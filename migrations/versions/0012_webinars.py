@@ -3,8 +3,8 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0008_webinars"
-down_revision = "0007_conversion_ledger"
+revision = "0012_webinars"
+down_revision = "0011_durable_hitl_resume_responses"
 branch_labels = None
 depends_on = None
 

@@ -224,3 +224,10 @@
 - Commit `3ba90e4cb2fcb72494c0fda71e1d535398229c22`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972 both passed.
 - Required evidence: SQLite vector persistence/ranking/isolation tests, static guard against Chroma reintroduction, clean `pip-audit -r requirements-ai.txt` without ignored findings, and 10 AI/RAG imports. All full-matrix jobs passed.
 - Rollout remains gated on preserving old data, rebuilding the index from authorized sources, validating source/count/retrieval coverage in staging, and completing separate provider/security/deployment/restore release checks.
+
+
+## 2026-10-26 workflow lease/restart recovery — verified
+- Candidate SHA `03d967e97b1993b80f853cc2fec72cf9e6b5f392`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306591424 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306596350 succeeded.
+- Python: 330 passed, 3 skipped. PostgreSQL migration/drift gate passed through migration 0010 upgrade/downgrade/re-upgrade; all three Postgres integration tests passed, including concurrent workflow lease claiming.
+- CI gates cover expired read-only checkpoint recovery, active lease non-stealing, paused-session recovery, live side-effect outcome-unknown safety, and concurrent Postgres claim. Full workflows passed.
+- Limitation: HITL response is not persisted; users may need to resubmit after crash. Multi-replica resume, durable outbox, stress/fault recovery, staging deployment and backup/restore are still open.

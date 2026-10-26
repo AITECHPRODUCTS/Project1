@@ -243,4 +243,11 @@
 - Runtime: process-unique worker ID, periodic heartbeat, expired lease claim with PostgreSQL row locking, recovery loop for queued/running/paused workflow checkpoints.
 - Safety: only a read-only checkpoint is resumed after lease expiry; expired live S5 publication is marked `unknown` and requires manual provider reconciliation. No automatic duplicate external write is attempted.
 - Tests: four SQLite recovery tests plus a PostgreSQL-only concurrent claim test added to the explicit integration job.
-- Status: **pending** the exact-SHA push/PR runs and migration/drift/concurrency results. Multi-replica HITL response routing remains unverified; response payload is not persisted and may need resubmission after interruption.
+- Status: **CI verified** on exact SHA `03d967e97b1993b80f853cc2fec72cf9e6b5f392`: push [40306591424](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306591424) and PR [40306596350](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306596350) passed; PostgreSQL migration/drift and the concurrent lease claim test passed. Multi-replica HITL response routing remains unverified; response payload is not persisted and may need resubmission after interruption.
+
+
+## P1 — durable workflow leases/restart recovery verified (2026-10-26)
+- Exact SHA `03d967e97b1993b80f853cc2fec72cf9e6b5f392`; push [40306591424](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306591424) and PR [40306596350](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306596350) both passed.
+- Four SQLite recovery/lease tests passed as part of Python (330 passed, 3 skipped). PostgreSQL job applied migration `0010_durable_workflow_leases`, ran drift checks through downgrade/re-upgrade, and passed 3 integration tests including concurrent workflow claim.
+- Expired worker leases are claimed through PostgreSQL row locks. Read-only work resumes from the persisted current-step checkpoint. Potentially accepted live S5 publication is marked unknown and requires manual reconciliation.
+- Remaining limitation: HITL response data is not persisted and must be re-submitted after a process death; multi-replica response routing, durable outbox/queue semantics, crash/fault load tests and production operational validation remain open.

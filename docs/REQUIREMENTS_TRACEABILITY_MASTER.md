@@ -311,3 +311,10 @@
 - The local SQLite index tests, static no-Chroma boundary guard, clean unignored AI dependency audit and AI/RAG import profile (10 imports) passed along with the full CI matrix.
 - First-run failure was corrected in the verifier by adding the repository root to `sys.path`; no advisory suppression was reintroduced.
 - Current software dependency status is verified. Production data migration/re-ingestion, retrieval validation, provider live UAT, SBOM/license/secret scans, deployment smoke and backup/restore evidence remain distinct release tasks.
+
+
+## 2026-10-26 workflow lease/recovery evidence
+- Exact implementation SHA `03d967e97b1993b80f853cc2fec72cf9e6b5f392`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306591424 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306596350 passed.
+- `WorkflowRun` now stores lease owner/expiry, heartbeat and attempt count; migration 0010 is verified through PostgreSQL upgrade/downgrade/drift; concurrent lease claim regression is integrated into the PostgreSQL Actions job.
+- Recovery resumes a non-side-effecting checkpoint, reclaims paused workflows through a lease, and refuses to replay an expired live-publishing S5 stage. The latter is logged as outcome unknown for manual reconciliation.
+- This does not finish durable execution architecture: HITL responses remain memory-only; cross-replica HITL routing and DB outbox/event delivery guarantee still need implementation and verification.

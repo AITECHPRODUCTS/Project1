@@ -241,7 +241,7 @@ async def lifespan(app:FastAPI):
  scheduler.add_job(email_job,"interval",minutes=5,id="email-send",replace_existing=True,max_instances=1)
  scheduler.add_job(threshold_job,CronTrigger(day_of_week="mon",hour=4),id="thresholds",replace_existing=True,max_instances=1);scheduler.start()
  yield
- scheduler.shutdown(wait=False);await hub.stop();await close_db()
+ scheduler.shutdown(wait=False);await hub.stop();await close_public_rate_limiter();await close_db()
 docs_url="/docs" if settings.app_env != "production" else None
 redoc_url="/redoc" if settings.app_env != "production" else None
 openapi_url="/openapi.json" if settings.app_env != "production" else None
@@ -1037,14 +1037,56 @@ async def research_competitors(p:CompetitorRequest):return {"results":await comp
 @api.post("/research/trends")
 async def research_trends(p:TrendRequest):return await trending_content_scout(p.query,limit=p.limit)
 @api.post("/content/social")
-async def social_content(p:SocialPostRequest):return await viral_post_writer(p.topic,p.hooks,p.platform)
+async def social_content(
+    payload: SocialPostRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating social content")
+    _validate_generation_payload_size(payload)
+    await workspace_generation_rate_limit(request, str(workspace_id))
+    with workspace_scope(str(workspace_id)):
+        return await viral_post_writer(payload.topic, payload.hooks, payload.platform)
+
+
 @api.post("/content/tiktok-script")
-async def tiktok_content(p:SocialPostRequest):return await tiktok_script_writer(p.topic,p.hooks)
+async def tiktok_content(
+    payload: SocialPostRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating a video script")
+    _validate_generation_payload_size(payload)
+    await workspace_generation_rate_limit(request, str(workspace_id))
+    with workspace_scope(str(workspace_id)):
+        return await tiktok_script_writer(payload.topic, payload.hooks)
+
+
 @api.post("/content/keywords")
-async def keywords(payload:dict[str,Any]):
- items=payload.get("keywords")
- if not isinstance(items,list) or any(not isinstance(x,str) for x in items):raise HTTPException(422,"keywords must be a list of strings")
- return keyword_cluster_architect(items)
+async def keywords(
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before clustering keywords")
+    items = payload.get("keywords")
+    if (
+        not isinstance(items, list)
+        or len(items) < 50
+        or len(items) > 500
+        or any(not isinstance(item, str) or not item.strip() or len(item) > 500 for item in items)
+    ):
+        raise HTTPException(422, "keywords must contain 50-500 non-empty strings of at most 500 characters")
+    _validate_generation_payload_size(payload, limit_bytes=256 * 1024)
+    await workspace_generation_rate_limit(request, str(workspace_id))
+    with workspace_scope(str(workspace_id)):
+        return keyword_cluster_architect(items)
 
 @api.post("/content/angles/rank")
 async def content_angle_rank(
@@ -1206,11 +1248,63 @@ async def blog(
         result["asset_id"] = asset.id
         return result
 @api.post("/content/video")
-async def video(p:VideoRequest):return await render_vertical_video(p.script,broll_query=p.broll_query,voice=p.voice,captions=p.captions)
+async def video(
+    payload: VideoRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before rendering video")
+    _validate_generation_payload_size(payload)
+    await workspace_generation_rate_limit(request, str(workspace_id), video=True)
+    with workspace_scope(str(workspace_id)):
+        return await render_vertical_video(
+            payload.script,
+            broll_query=payload.broll_query,
+            voice=payload.voice,
+            captions=payload.captions,
+        )
+
+
 @api.post("/landing/offer")
-async def landing_offer(p:dict[str,Any]):return await grand_slam_offer_generator(p.get("product") or {},str(p.get("audience") or ""),str(p.get("main_problem") or ""))
+async def landing_offer(
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating an offer")
+    _validate_generation_payload_size(payload)
+    product = payload.get("product") or {}
+    audience = str(payload.get("audience") or "")
+    main_problem = str(payload.get("main_problem") or "")
+    if not isinstance(product, dict) or len(audience) > 1000 or len(main_problem) > 2000:
+        raise HTTPException(422, "Offer inputs exceed the supported limits")
+    await workspace_generation_rate_limit(request, str(workspace_id))
+    with workspace_scope(str(workspace_id)):
+        return await grand_slam_offer_generator(product, audience, main_problem)
+
+
 @api.post("/landing/value-ladder")
-async def landing_ladder(p:dict[str,Any]):return await value_ladder_architect(str(p.get("audience") or ""),p.get("product") or {},p.get("deliverable_assets"))
+async def landing_ladder(
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating a value ladder")
+    _validate_generation_payload_size(payload)
+    audience = str(payload.get("audience") or "")
+    product = payload.get("product") or {}
+    assets = payload.get("deliverable_assets")
+    if not isinstance(product, dict) or len(audience) > 1000:
+        raise HTTPException(422, "Value-ladder inputs exceed the supported limits")
+    await workspace_generation_rate_limit(request, str(workspace_id))
+    with workspace_scope(str(workspace_id)):
+        return await value_ladder_architect(audience, product, assets)
 @api.post("/landing/guarantee-draft", status_code=201)
 async def landing_guarantee_draft(
     payload: GuaranteeDraftRequest,
@@ -1354,16 +1448,152 @@ async def social_publish(
         remote_id=result.get("remote_id"),
     )
     return result
-_public_hits:dict[str,list[float]]={};_public_lock=asyncio.Lock()
-async def public_rate_limit(request:Request):
- ip=request.client.host if request.client else "unknown";now=time.monotonic()
- async with _public_lock:
-  recent=[x for x in _public_hits.get(ip,[]) if now-x<3600]
-  if len(recent)>=20:raise HTTPException(429,"Signup rate limit exceeded")
-  recent.append(now);_public_hits[ip]=recent
-  if len(_public_hits)>5000:
-   for key in list(_public_hits)[:1000]:
-    if not _public_hits[key] or now-_public_hits[key][-1]>=3600:_public_hits.pop(key,None)
+_public_hits: dict[str, list[float]] = {}
+_public_lock = asyncio.Lock()
+_public_rate_limit_redis: Any | None = None
+_public_rate_limit_redis_lock = asyncio.Lock()
+_RATE_LIMIT_WINDOW_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+return count
+"""
+
+
+def _rate_limit_key(bucket: str, identity: str) -> str:
+    # Never store a raw client IP or workspace identifier in Redis keys.
+    digest = hashlib.sha256(identity.encode("utf-8", "replace")).hexdigest()
+    return f"omni-affiliate-os:rate-limit:v1:{bucket}:{digest}"
+
+
+async def _get_public_rate_limit_redis():
+    global _public_rate_limit_redis
+    if _public_rate_limit_redis is not None:
+        return _public_rate_limit_redis
+    async with _public_rate_limit_redis_lock:
+        if _public_rate_limit_redis is None:
+            from redis.asyncio import Redis
+
+            _public_rate_limit_redis = Redis.from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=1.0,
+                socket_timeout=1.0,
+            )
+    return _public_rate_limit_redis
+
+
+async def close_public_rate_limiter() -> None:
+    global _public_rate_limit_redis
+    client = _public_rate_limit_redis
+    _public_rate_limit_redis = None
+    if client is not None:
+        close = getattr(client, "aclose", None) or getattr(client, "close", None)
+        if close is not None:
+            result = close()
+            if asyncio.iscoroutine(result):
+                await result
+
+
+async def _consume_rate_limit(
+    *,
+    bucket: str,
+    identity: str,
+    limit: int,
+    window_seconds: int,
+    detail: str,
+) -> None:
+    key = _rate_limit_key(bucket, identity)
+    if settings.app_env == "production":
+        try:
+            client = await _get_public_rate_limit_redis()
+            count = int(await client.eval(_RATE_LIMIT_WINDOW_SCRIPT, 1, key, window_seconds))
+        except Exception as exc:
+            # Do not fall back to per-process limits in production: multiple workers
+            # would otherwise multiply the effective quota and defeat abuse controls.
+            logger.error("Distributed rate limiting unavailable: %s", type(exc).__name__)
+            raise HTTPException(503, "Request protection is temporarily unavailable; retry later") from exc
+        if count > limit:
+            raise HTTPException(429, detail)
+        return
+
+    # Local/test mode keeps a deterministic in-memory implementation so unit tests
+    # and developer setups do not require Redis. Production never uses this fallback.
+    now = time.monotonic()
+    async with _public_lock:
+        recent = [stamp for stamp in _public_hits.get(key, []) if now - stamp < window_seconds]
+        if len(recent) >= limit:
+            _public_hits[key] = recent
+            raise HTTPException(429, detail)
+        recent.append(now)
+        _public_hits[key] = recent
+        if len(_public_hits) > 5000:
+            for stale_key in list(_public_hits)[:1000]:
+                stamps = _public_hits.get(stale_key, [])
+                if not stamps or now - stamps[-1] >= 3600:
+                    _public_hits.pop(stale_key, None)
+
+
+async def public_rate_limit(request: Request) -> None:
+    # Use the direct ASGI peer address. X-Forwarded-For is intentionally ignored
+    # unless a trusted-proxy deployment explicitly normalizes request.client.host.
+    ip = request.client.host if request.client else "unknown"
+    await _consume_rate_limit(
+        bucket="public-ip",
+        identity=ip,
+        limit=20,
+        window_seconds=3600,
+        detail="Signup rate limit exceeded",
+    )
+
+
+async def workspace_generation_rate_limit(
+    request: Request,
+    workspace_id: str,
+    *,
+    video: bool = False,
+) -> None:
+    ip = request.client.host if request.client else "unknown"
+    await _consume_rate_limit(
+        bucket="generation-ip",
+        identity=ip,
+        limit=60,
+        window_seconds=3600,
+        detail="Content generation rate limit exceeded for this client",
+    )
+    await _consume_rate_limit(
+        bucket="generation-workspace",
+        identity=workspace_id,
+        limit=20,
+        window_seconds=3600,
+        detail="Workspace content generation budget exceeded",
+    )
+    if video:
+        await _consume_rate_limit(
+            bucket="video-ip",
+            identity=ip,
+            limit=5,
+            window_seconds=3600,
+            detail="Video rendering rate limit exceeded for this client",
+        )
+        await _consume_rate_limit(
+            bucket="video-workspace",
+            identity=workspace_id,
+            limit=3,
+            window_seconds=3600,
+            detail="Workspace video rendering budget exceeded",
+        )
+
+
+def _validate_generation_payload_size(payload: Any, *, limit_bytes: int = 65536) -> None:
+    if hasattr(payload, "model_dump_json"):
+        serialized = payload.model_dump_json()
+    else:
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    if len(serialized.encode("utf-8")) > limit_bytes:
+        raise HTTPException(413, "Generation request exceeds the configured payload size limit")
+
 async def create_lead(
     payload: LeadCaptureRequest,
     db: AsyncSession,
@@ -1404,6 +1634,9 @@ async def lead_capture(
 @app.post("/api/public/leads/capture", status_code=201)
 async def public_lead_capture(request: Request, db: AsyncSession = Depends(get_session)):
     await public_rate_limit(request)
+    body = await request.body()
+    if len(body) > 32 * 1024:
+        raise HTTPException(413, "Lead capture request exceeds the 32 KiB size limit")
     content_type = request.headers.get("content-type", "").lower()
     if "application/json" in content_type:
         raw = await request.json()
@@ -1540,10 +1773,13 @@ async def conversion_create(
             raise HTTPException(409, "Conversion could not be persisted idempotently")
         return {"status": "recorded", "id": row.id, "utm": utm}
 @api.post("/analytics/track")
-async def track(p:dict[str,Any]):
- raw=p.get("url") or p.get("query")
- if not raw:raise HTTPException(422,"url or query required")
- return conversion_tracker(str(raw))
+async def track(payload: dict[str, Any]):
+    raw = payload.get("url") or payload.get("query")
+    if not isinstance(raw, str) or not raw.strip():
+        raise HTTPException(422, "url or query must be a non-empty string")
+    if len(raw) > 8192:
+        raise HTTPException(413, "Tracking input exceeds the supported length")
+    return conversion_tracker(raw)
 @api.post("/analytics/ab-test")
 async def ab_test(
     payload: ABTestAssignmentRequest,

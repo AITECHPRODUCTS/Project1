@@ -117,3 +117,6 @@ These additive rules apply to every future Project1 build session.
 
 
 50. Next P0: examine abuse controls on public endpoints that perform generation or create tracking/lead records. Identify whether a trusted proxy/API layer already rate-limits them; avoid double-limiting; add route-level request limits and regression tests only for verified gaps.
+
+
+51. P0 public-route abuse controls/generation authorization: production public signup/lead limits must be shared across replicas and fail closed if Redis is unavailable; never fall back to per-process quotas in production. Authenticated workspace is required for LLM draft, offer/value-ladder, keyword-cluster and video-render endpoints; apply per-workspace/per-IP quotas and bounded payloads. Add tests for atomic Redis quotas, 503 on backend failure, auth/workspace denial, rate limit enforcement and size caps. Candidate pending exact-SHA CI.

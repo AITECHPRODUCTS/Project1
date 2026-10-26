@@ -162,3 +162,9 @@
 - Four tests cover auth denial, workspace-admin denial, missing selected workspace, and secret redaction from authorized responses. Existing global readiness semantics are preserved.
 - Python 281 passed/2 skipped, SQLite/PostgreSQL, AI/RAG, frontend, security audit, repository parity and push lockfile sync passed.
 - Next P0: review public route abuse controls; the four ChromaDB advisories and remaining production release gates remain unresolved.
+
+
+## 2026-10-26 public-route abuse controls — candidate
+- Require Redis-backed distributed rate limiting for production public sign-up/login/lead capture. Redis unavailability denies the operation with 503, never silently falling back to a per-process limit.
+- LLM-backed post/script/offer/value-ladder and video rendering require authenticated workspace context and are quota-limited. Keyword clustering, public capture body and stateless tracking input have explicit bounds.
+- New regression tests must pass on the resulting push SHA and PR head before marking verified.

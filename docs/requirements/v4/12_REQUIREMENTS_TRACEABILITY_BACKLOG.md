@@ -159,3 +159,9 @@
 - Audit public tracking, public lead-capture and draft-generation routes for per-IP/token quotas, payload-size limits, budget consumption, bot abuse and trusted-proxy assumptions.
 - Inspect existing middleware/edge controls first; make no assumption that a missing route decorator means there is no upstream limit. Add bounded route-level controls and tests only if no existing defense exists.
 - Keep release blocked until the ChromaDB advisories and production UAT/SBOM/license/secret/deployment/restore gates are closed.
+
+
+## P0 — public-route abuse controls and generation budgets (2026-10-26)
+- Baseline verified at `96402915bc857035a859e068810f5d23f58ecca7` in push [40283105487](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283105487) and PR [40283111955](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283111955).
+- Candidate hardens the existing signup/login/public-lead limiter with Redis atomic fixed windows in production, fails closed on Redis failure, adds workspace/IP budgets for LLM and video generation, requires authenticated workspace on expensive generation endpoints, caps keyword clustering at 500 values and public capture bodies at 32 KiB, and caps stateless tracking input at 8,192 characters.
+- Regression tests and exact-SHA CI pending.

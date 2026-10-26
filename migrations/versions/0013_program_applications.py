@@ -38,6 +38,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["workspace_id"], ["workspaces.id"], name="fk_program_applications_workspace_id_workspaces", ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index("ix_affiliate_program_applications_workspace_id", "affiliate_program_applications", ["workspace_id"])
     op.create_index("ix_affiliate_program_applications_provider", "affiliate_program_applications", ["provider"])
     op.create_index("ix_affiliate_program_applications_status", "affiliate_program_applications", ["status"])
     op.create_index("ix_affiliate_program_applications_created_at", "affiliate_program_applications", ["created_at"])
@@ -48,5 +49,6 @@ def downgrade() -> None:
     op.drop_index("ix_program_applications_workspace_status_created", table_name="affiliate_program_applications")
     op.drop_index("ix_affiliate_program_applications_created_at", table_name="affiliate_program_applications")
     op.drop_index("ix_affiliate_program_applications_status", table_name="affiliate_program_applications")
+    op.drop_index("ix_affiliate_program_applications_workspace_id", table_name="affiliate_program_applications")
     op.drop_index("ix_affiliate_program_applications_provider", table_name="affiliate_program_applications")
     op.drop_table("affiliate_program_applications")

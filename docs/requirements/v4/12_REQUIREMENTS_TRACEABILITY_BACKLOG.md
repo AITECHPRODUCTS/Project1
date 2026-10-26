@@ -341,3 +341,11 @@
 - Added `scripts/verify_model_artifact_manifest.py` to validate exact application SHA, model directory containment/digest, Hub revision pin, acquisition provenance and license approval, local-only policy and remote-code prohibition. Manifest schema and invocation are documented in `docs/MODEL_ARTIFACT_OPERATIONS.md`.
 - Added `tests/test_model_artifact_manifest.py` for valid and invalid manifest, hash, path, revision, policy and approval cases.
 - Status: candidate until full hosted push and PR CI passes on exact resulting SHA. No production artifact was provided or claimed staged. Model licensing/sign-off, staged cache-only load and retrieval golden tests are deployment evidence gates.
+
+
+
+## P0 — staged model artifact manifest gate verified at source/CI level (2026-10-26)
+- Exact SHA: a3c2627d26a765ac88e4ef3c164b86e850a7c40c; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367360162; PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367367483. Both workflows succeeded.
+- Python 396 passed, 3 skipped, 1 warning; PostgreSQL migrations/concurrency, AI/RAG imports and SBOM/license, frontend, dependency/license audits, secret scan, source/53-skill guard and push lockfile sync passed.
+- The validator checks application SHA, path containment and symlinks, staged-tree digest, immutable Hub revision, license/acquisition metadata, timezone-aware timestamps and local-only runtime flags. Ten test cases cover valid and invalid manifests.
+- Real staged model provenance, license review, cache-only load from the deployed image and RAG retrieval golden tests remain external deployment evidence; none are claimed complete.

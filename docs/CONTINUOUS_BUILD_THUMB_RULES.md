@@ -208,3 +208,7 @@ These additive rules apply to every future Project1 build session.
 
 
 81. P0 staged-model provenance gate: `scripts/verify_model_artifact_manifest.py` must fail closed on manifest/application SHA mismatch, unsafe or symlinked paths, digest drift, mutable Hub revisions, missing license/acquisition approval evidence, timezone-naive timestamps, `local_files_only != true`, or `trust_remote_code != false`. Run against real staged artifacts before deployment promotion; fixture tests do not prove production staging. Candidate exact-SHA push and PR workflows are pending.
+
+
+
+82. Staged model artifact manifest validator is source/CI verified on a3c2627d26a765ac88e4ef3c164b86e850a7c40c. Push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367360162 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367367483 passed; Python 396 passed/3 skipped and all required security, SBOM/license, PostgreSQL, frontend, repo-guard and lockfile jobs passed. The CLI validates a real staged directory against its manifest but does not prove the manifest's approval fields are genuine. Actual staged artifact, immutable revision, digest, license sign-off, cache-only runtime load and RAG retrieval evidence remain release gates.

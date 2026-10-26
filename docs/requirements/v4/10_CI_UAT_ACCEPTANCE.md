@@ -315,3 +315,11 @@
 - Deployment promotion must run `python scripts/verify_model_artifact_manifest.py --manifest ... --artifact-root ... --application-sha "$APPLICATION_GIT_SHA" --report-out ...` on the staged model directory. A non-zero result blocks promotion.
 - Require matching application SHA, pinned immutable Hub revision where applicable, directory-tree digest, symlink/path containment checks, approved license + acquisition provenance with timezone-aware timestamps, local-only loading and `trust_remote_code=false`.
 - Unit fixtures do not substitute for actual artifact provenance, license review, cache-only load from the release image or retrieval-golden tests. Exact-SHA hosted CI is pending.
+
+
+
+## 2026-10-26 staged model artifact manifest gate — source/CI verified
+- Exact SHA a3c2627d26a765ac88e4ef3c164b86e850a7c40c: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367360162 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367367483 both passed.
+- Test result: Python 396 passed, 3 skipped, 1 existing warning; all required push jobs passed including PostgreSQL, AI/RAG SBOM/license, security/license audit, secret scan, frontend build, 53-skill guard and lockfile sync.
+- Before promotion, run scripts/verify_model_artifact_manifest.py against the release manifest and staged artifact root. Require matching app SHA, immutable Hub revision, tree digest, path/symlink safety, approved license/acquisition metadata and local-only loading flags.
+- Separate approval remains mandatory for the real artifact and license; the current CI uses test fixtures only and does not prove deployed cache-only loading or RAG retrieval quality.

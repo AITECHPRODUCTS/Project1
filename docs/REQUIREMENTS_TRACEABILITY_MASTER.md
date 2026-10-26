@@ -398,3 +398,11 @@
 - Base source-policy checkpoint `393e12760762993e70a862af9b4c3ab61d308739` is green in push [40364123382](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382) and PR [40364131533](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533).
 - New operator release gate validates the exact app SHA, immutable Hub revision, materialized artifact directory tree digest, path containment, license/acquisition metadata, timezone-aware timestamps, `local_files_only`, and `trust_remote_code=false`. Unit tests use temporary fixtures only; no model artifact is said to be staged or approved.
 - Exact-SHA CI and real deployment staging/cache-only load/RAG retrieval verification remain pending.
+
+
+
+## 2026-10-26 model artifact release manifest — verified validator
+- a3c2627d26a765ac88e4ef3c164b86e850a7c40c passed push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367360162 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367367483.
+- Python 396 passed, 3 skipped. All required CI gates including PostgreSQL integration, AI/RAG SBOM/license, frontend, audits, secret scan, skill parity and lockfile sync passed.
+- The operator CLI validates staged artifact directory hashes, application SHA, Hub revision pin, license/acquisition metadata and runtime local-only policy. Its fixture tests do not prove any actual model has been downloaded, staged or licensed.
+- Production artifact/cache-only load, retrieval-golden testing, staging egress, provider UAT, legal exception resolution, deployment and restore evidence remain pending.

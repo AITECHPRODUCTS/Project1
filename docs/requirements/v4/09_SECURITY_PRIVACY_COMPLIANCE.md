@@ -28,3 +28,10 @@
 - Existing CMS code checked the configured hostname and then sent credentialed WordPress/Ghost POST requests via a separate HTTPX client. DNS rebinding could change the actual destination after validation.
 - Candidate routes CMS JSON POSTs through the shared pinned-IP helper, refuses redirects and proxy-environment routing, and caps provider response bodies at 2 MiB.
 - Existing live publish flag remains mandatory. Four regression tests have been added; full exact-SHA CI is pending.
+
+
+## 2026-10-26 credentialed CMS transport — verified
+- Implementation `13ec393d0897c4ba75ed83ba6bed8ce8690f7c06` passed push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290026088 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290033400.
+- WordPress/Ghost credentialed POSTs use the pinned-IP transport, preserve Host/SNI, disable redirects and proxy env, and cap response bodies at 2 MiB. Four regression tests passed, including redirect and oversized-response cases.
+- Python suite: 305 passed, 2 skipped. PostgreSQL, AI/RAG, frontend, security audits, skill parity and lockfile sync all passed. `CMS_PUBLISH_EXECUTE` remains the live-publication gate.
+- Remaining release blockers include four documented Chroma advisories, trusted-proxy ingress staging verification, provider live UAT, SBOM/license/secret evidence, deployment smoke and backup/restore.

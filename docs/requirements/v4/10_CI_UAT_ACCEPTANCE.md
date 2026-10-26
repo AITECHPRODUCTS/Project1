@@ -187,3 +187,10 @@
 - The verified outbound-fetch base is `910ab73fe7a0cef8fcd507fda27e30a7b3e85598` (push [40288954753](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288954753), PR [40288959578](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288959578)).
 - CMS provider calls still needed one more source-level change: authenticated WordPress/Ghost writes must use the same pinned transport rather than validate then open a separate client.
 - Four new CMS transport tests are pending the full push/PR CI matrix.
+
+
+## 2026-10-26 CMS configured-host DNS pinning — verified
+- Exact implementation SHA `13ec393d0897c4ba75ed83ba6bed8ce8690f7c06`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290026088 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290033400 both passed.
+- Regression suite passed (305 passed, 2 skipped), with PostgreSQL migration/concurrency, AI/RAG imports, frontend build, dependency audits, repository/53-skill guard and push lockfile sync green.
+- Four CMS tests verify WordPress/Ghost transport, redirect rejection and response-size cap. This does not certify live CMS authorization/UAT; `CMS_PUBLISH_EXECUTE` is still required for actual publishing.
+- Next: inspect remaining direct HTTP integrations and verify trusted-proxy configuration in staging.

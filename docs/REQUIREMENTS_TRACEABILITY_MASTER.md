@@ -274,3 +274,10 @@
 - Follow-up to the verified shared outbound-fetch hardening: CMS configured domains were still being checked separately from credentialed WordPress/Ghost HTTP POSTs.
 - Candidate adds bounded JSON POST support to the pinned public transport and migrates CMS writes to it. Redirects are explicitly refused; proxy environment variables are ignored; response body max is 2 MiB.
 - `CMS_PUBLISH_EXECUTE` stays required for live publish. Await exact-SHA CI before marking this item complete.
+
+
+## 2026-10-26 CMS configured-host transport — exact-SHA verification
+- Exact SHA `13ec393d0897c4ba75ed83ba6bed8ce8690f7c06`, push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290026088 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290033400 both passed.
+- WordPress/Ghost authenticated POSTs use the pinned-IP shared transport; redirect following is disabled, proxy env is ignored, TLS hostname validation is preserved, and the CMS JSON response cap is 2 MiB.
+- Initial test run exposed fake-response and fake-client signature issues; corrected fixtures passed the full test suite and CI matrix. `CMS_PUBLISH_EXECUTE` remains required for actual publishing.
+- Next: finish direct-HTTP/configurable-target audit and trusted-proxy staging verification; other production release gates remain open.

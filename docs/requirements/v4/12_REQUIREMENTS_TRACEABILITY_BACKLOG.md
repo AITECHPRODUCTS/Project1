@@ -192,3 +192,10 @@
 - Audit finding: WordPress/Ghost `SITE_URL` was checked with DNS validation, then the site was resolved again by HTTPX when sending the authenticated POST. That is a check-then-connect DNS-rebinding gap on a global-credential integration.
 - Candidate fix: extend the shared public-URL transport to allow only the fixed GET/HEAD/POST methods used by the application, preserve Host/SNI with the actual socket pinned to a validated public IP, disable redirects and environment proxies, and enforce a 2 MiB response cap on CMS JSON.
 - Four tests cover WordPress/Ghost POST endpoints, selected JSON payloads/auth headers, redirects, and oversized response rejection. Status: pending exact-SHA CI.
+
+
+## P0 — CMS configured-host DNS rebinding fix verified (2026-10-26)
+- Exact SHA `13ec393d0897c4ba75ed83ba6bed8ce8690f7c06`: push [40290026088](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290026088) and PR [40290033400](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290033400) both passed.
+- CMS endpoints no longer validate DNS and then use a second independent resolution when sending global WordPress/Ghost credentials. They use the shared pinned HTTP helper, preserve Host/SNI, disable redirects and environment proxies, apply total timeout and enforce a 2 MiB JSON response cap.
+- Four CMS tests pass. The first CI failure was five test-double incompatibilities and was corrected without weakening production assertions. Final Python result: 305 passed, 2 skipped.
+- Next: review remaining configurable direct HTTP calls and prove trusted proxy configuration in staging; keep Chroma advisories and release/UAT evidence gates open.

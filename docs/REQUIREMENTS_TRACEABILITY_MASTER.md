@@ -304,3 +304,10 @@
 - Remove the optional `chromadb` and `langchain-chroma` packages and replace them with `ai_memory/local_vector_store.py`, an SQLite-persisted cosine-similarity index. Preserve the existing `DoctrineRAG` API and licensed source metadata.
 - The candidate removes the four advisory ignores from CI, adds a static no-Chroma dependency/runtime guard and deterministic persistence/ranking tests. Exact-SHA CI and an unignored `pip-audit -r requirements-ai.txt` remain required before the historic exception is closed.
 - The `CHROMA_PERSIST_DIR` environment variable/config field remains as a compatibility alias for the storage directory; the new index file is `local_vectors.sqlite3`. Old Chroma storage is not automatically migrated and should be kept until the new index is rebuilt and validated.
+
+
+## 2026-10-26 local SQLite vector-store remediation — verified
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972 both passed on `3ba90e4cb2fcb72494c0fda71e1d535398229c22`.
+- The local SQLite index tests, static no-Chroma boundary guard, clean unignored AI dependency audit and AI/RAG import profile (10 imports) passed along with the full CI matrix.
+- First-run failure was corrected in the verifier by adding the repository root to `sys.path`; no advisory suppression was reintroduced.
+- Current software dependency status is verified. Production data migration/re-ingestion, retrieval validation, provider live UAT, SBOM/license/secret scans, deployment smoke and backup/restore evidence remain distinct release tasks.

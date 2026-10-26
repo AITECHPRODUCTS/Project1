@@ -223,9 +223,16 @@
 - Base `38a7b0ff6399d4702f8e8f798cdee81567a5c45d` passed the previous full push/PR matrix.
 - Candidate uses `ai_memory/local_vector_store.py` (SQLite, normalized float32 embedding blobs, JSON metadata, stable IDs/upserts, collection and embedding-model checks, cosine similarity); ingestion/retrieval now use that storage; active AI requirements remove `chromadb` and `langchain-chroma`; CI removes four advisory ignore arguments.
 - Five tests cover persistent reopen/search ranking, stable-ID update and delete, collection isolation, model identity mismatch and invalid vector rejection.
-- Status: **pending** the resulting exact-SHA CI, especially the clean AI audit and the AI/RAG import job. Existing Chroma files are not migrated automatically; rebuild with `python -m ai_memory.ingester` during rollout.
+- Status: **CI verified** on exact SHA `3ba90e4cb2fcb72494c0fda71e1d535398229c22`; push [40304270245](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245) and PR [40304278972](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972) passed, including clean unignored AI audit and 10 AI/RAG imports. Existing Chroma files are not migrated automatically; rebuild with `python -m ai_memory.ingester` during rollout.
 
 
 ## P0 — AI profile verifier path correction (2026-10-26)
 - First candidate `6a24ed5e73181bc190e6da391e6b4df040ebb49c` passed all jobs except AI import verification. The only reported error was `ModuleNotFoundError: No module named 'ai_memory'` from executing the verifier file path directly.
 - Candidate correction adds the repository root to `sys.path` before import checks. Needs full push/PR CI re-verification.
+
+
+## P0 — ChromaDB dependency removal CI evidence (2026-10-26)
+- Exact SHA `3ba90e4cb2fcb72494c0fda71e1d535398229c22`, push [40304270245](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245) and PR [40304278972](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972) both passed.
+- Removed `chromadb` and `langchain-chroma` from active AI requirements, replaced the retrieval index with local SQLite storage, removed the four dependency-audit ignores, and guarded against package/runtime reintroduction.
+- The candidate's first AI-profile failure was a verifier import-path issue and was fixed without weakening the check. The new verifier reports 10 successful AI/RAG imports; unignored `pip-audit -r requirements-ai.txt` is green.
+- Deployment still needs a preserved-index backup, re-ingestion with `python -m ai_memory.ingester`, count/source/retrieval validation in staging, and separate release UAT/security/backup evidence.

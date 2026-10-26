@@ -1,6 +1,6 @@
 # Vector-store security exception record
 
-**Status:** ChromaDB dependency removal candidate; not verified until the exact-SHA push and PR workflows pass with a clean, unignored AI dependency audit.
+**Status:** historical remediation record; dependency replacement verified in CI on `3ba90e4cb2fcb72494c0fda71e1d535398229c22`. Push [40304270245](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245) and PR [40304278972](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972) passed with the unignored AI dependency audit and AI/RAG import checks green.
 **Production release:** still blocked by the other release/UAT gates documented in the implementation status.
 
 ## Historical upstream findings
@@ -26,3 +26,10 @@ These records describe the former package graph. This project does **not** claim
 This is still a **candidate** until exact-SHA push and PR workflows pass, including the unignored AI audit, static security guard, SQLite persistence/search tests and AI-profile imports. Old Chroma index files are not automatically converted or deleted; after rollout, operators must run `python -m ai_memory.ingester` to build the SQLite index. Keep the old directory/backups until the replacement index is validated.
 
 Actual trusted-proxy ingress verification, authorized provider live UAT, SBOM/license/secret scans, deployment smoke and backup/restore remain separate release gates.
+
+
+## Remediation verification evidence — 2026-10-26
+- Exact verified SHA: `3ba90e4cb2fcb72494c0fda71e1d535398229c22`.
+- Push [40304270245](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245) and PR [40304278972](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972) both succeeded.
+- `pip-audit -r requirements-ai.txt` ran without advisory-ignore flags and passed. The local SQLite vector-store guard and all 10 AI/RAG import checks passed.
+- This record preserves the removed package's former vulnerability context; it is not a current advisory exception. The new index still requires data re-ingestion and staging verification before production use.

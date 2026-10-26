@@ -218,3 +218,9 @@
 - Acceptance before closure: full push + PR CI; clean `pip-audit -r requirements-ai.txt`; local vector index persistence/upsert/delete/ranking/collection/model-identity tests; AI import-profile pass; smoke test re-ingesting a representative skills/reference corpus and verifying source paths in retrieval.
 - Storage compatibility: `CHROMA_PERSIST_DIR` remains an env alias to avoid breaking deployment configuration, but it now contains `local_vectors.sqlite3`; existing Chroma index data is not automatically migrated. Re-ingest and validate before switching a live environment.
 - Candidate status remains pending until exact-SHA hosted jobs pass; production remains blocked by staging ingress, provider UAT, SBOM/license/secret scans, deployment smoke and backup/restore.
+
+
+## 2026-10-26 ChromaDB replacement — exact-SHA CI verified
+- Commit `3ba90e4cb2fcb72494c0fda71e1d535398229c22`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972 both passed.
+- Required evidence: SQLite vector persistence/ranking/isolation tests, static guard against Chroma reintroduction, clean `pip-audit -r requirements-ai.txt` without ignored findings, and 10 AI/RAG imports. All full-matrix jobs passed.
+- Rollout remains gated on preserving old data, rebuilding the index from authorized sources, validating source/count/retrieval coverage in staging, and completing separate provider/security/deployment/restore release checks.

@@ -61,3 +61,10 @@
 - Checks include Python suite with workflow/tenant tests, PostgreSQL migrations and concurrent reversal test, AI/RAG imports, frontend checks/build, 53-skill source guard, audits and lockfile verification.
 - Remaining conditional exception: four documented ChromaDB advisories still prevent a clean AI/RAG security result and production approval.
 - Next P0 review: gate shared knowledge-index ingestion to platform operations and remove internal absolute path leakage.
+
+
+## 2026-10-26 shared knowledge-index permission — verified
+- Exact SHA `743e404e63b7c3a54423a18b1cf17af1338c5abf`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192 both succeeded.
+- Checks include the new knowledge-index admin/path tests; Python suite, PostgreSQL migration/concurrency, AI/RAG imports, frontend checks/build, repository source and skill parity guard, security audit, and lockfile reproducibility.
+- Keep production release blocked by the four documented ChromaDB advisory exceptions and outstanding provider authorization, browser/UAT, SBOM/license/secret scanning, deployment smoke, and backup/restore gates.
+- Next: verify resource-budget and learning aggregate scoping under tenant and scheduled execution.

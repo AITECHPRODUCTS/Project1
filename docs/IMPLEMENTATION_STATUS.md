@@ -331,3 +331,12 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Verified gates: all Python tests including new workflow authorization/ownership cases; SQLite migration/drift; PostgreSQL migration and concurrent reversal; AI/RAG imports; frontend clean install/typecheck/production build; repository source and 53-skill parity; core/AI-RAG/frontend security audits under the existing documented Chroma exception; and lockfile reproducibility.
 - Changes include explicit workspace required at workflow start, workspace argument required for status/resume, owner-workspace checks on both the paused record and run, workspace-scoped recovery, and scoped /api/status plus /api/flywheel/status aggregates.
 - Next P0 audit item: make shared knowledge-index ingestion platform-admin-only and minimize host filesystem disclosure in its status endpoint. This must be tested on the next exact SHA.
+
+
+## 2026-10-26 shared knowledge-index admin boundary — verified
+- Exact implementation SHA: `743e404e63b7c3a54423a18b1cf17af1338c5abf`.
+- Push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644 — **success**. PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192 — **success**.
+- All seven push jobs passed: Python suite including new knowledge-index authorization tests; SQLite migration/drift; PostgreSQL migration/concurrency; AI/RAG imports; 53-skill repository guard; frontend clean install/typecheck/production build; dependency audit; and lockfile reproducibility. The corresponding PR run also passed.
+- Shared doctrine ingestion now requires the explicit Platform Super Admin permission, the UI hides the action from non-platform admins, and knowledge status no longer returns the server's absolute RAG storage path. The tests cover workspace-owner denial, platform-admin success, and path non-disclosure.
+- Security boundary still outstanding: four explicitly documented ChromaDB advisories remain conditionally excepted by the embedded/local-only guard; this is not a clean optional-AI security scan or production approval.
+- Next P0 review: tenant-scoping of resource-budget and self-learning summaries, including any scheduled/background calls that run without a request workspace context.

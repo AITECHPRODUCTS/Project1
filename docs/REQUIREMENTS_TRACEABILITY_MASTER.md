@@ -126,3 +126,10 @@
 - Workflow starts are explicitly scoped to the authenticated workspace. Status/resume require and validate the workspace and return a not-found result across tenants; paused recovery uses stored ownership. Dashboard status aggregates are scoped.
 - Three additional tests cover authentication, cross-workspace access denial and unscoped-start rejection.
 - Next: platform-admin authorization for shared knowledge ingestion and limited status disclosure.
+
+
+## 2026-10-26 shared RAG ingestion permission — exact-SHA proof
+- `743e404e63b7c3a54423a18b1cf17af1338c5abf` passed push [40266330644](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644) and PR [40266336192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192).
+- Shared RAG ingestion is explicitly platform-admin-only; ordinary workspace owners cannot mutate the index. UI authorization matches the API authorization, and the knowledge-status route no longer exposes an absolute host path.
+- New tests prove denied workspace-owner mutation, allowed platform-admin action, and path non-disclosure.
+- Next: test tenant isolation of resource-budget/learning summaries and cron/background execution contexts.

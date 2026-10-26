@@ -44,3 +44,12 @@
 - Added tests for auth on workflow/status endpoints, cross-workspace status/resume denial, and refusal to start a workflow without workspace context.
 - Verified exact SHA 16eee55a6935e9afa1d5f2b020c867713754aa67: push [40265845238](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265845238) and PR [40265848400](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265848400) both succeeded.
 - Next P0 audit: require Platform Super Admin for shared RAG knowledge-index ingestion; remove host-local absolute path from end-user status responses and test deny-by-default behavior.
+
+
+## P0 — shared knowledge-index administration and path disclosure (2026-10-26)
+- Shared doctrine ingestion now declares `Depends(require_platform_admin)`; a workspace owner/admin cannot mutate the shared RAG index using their workspace privilege.
+- UI renders the ingestion button only to Platform Super Admin. Knowledge status returns only availability/configuration and collection/reference metadata, not the server's resolved filesystem path.
+- Added `tests/test_knowledge_admin_access.py` for workspace-owner denial, explicit platform-admin allowed behavior (ingester stubbed), and path non-disclosure.
+- Verified exact SHA `743e404e63b7c3a54423a18b1cf17af1338c5abf`: push [40266330644](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644) and PR [40266336192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192) both succeeded.
+- Remaining P0 security issue: four documented ChromaDB advisories remain behind a conditional local-only guard; remove the exception after an upstream fix or a verified vector-store replacement.
+- Next: inspect resource-budget/learning summary access under workspace and background execution contexts, then add tests for any tenant leak.

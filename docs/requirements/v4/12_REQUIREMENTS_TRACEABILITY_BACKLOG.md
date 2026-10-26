@@ -320,3 +320,10 @@
 - The blueprint keeps model inference, RAG doctrine, and model artifacts as distinct release gates. Source review found `HuggingFaceEmbeddings` and Transformers `from_pretrained` calls defaulted to online Hub resolution when artifacts were missing.
 - Candidate centralizes embedding construction, makes embedding/AutoTokenizer/AutoModelForCausalLM/PEFT loads local-files-only, validates immutable 40-character embedding revision pins, requires a pin for production Hub embedding IDs, and incorporates the revision into vector-index identity without changing the SQLite schema.
 - Regression tests cover helper arguments, mutable-revision rejection, production-setting enforcement and static detection of missing local-only flags. Runbook: `docs/MODEL_ARTIFACT_OPERATIONS.md`. Exact resulting-SHA CI pending; a staged model artifact/license review and production RAG retrieval check remain deployment gates.
+
+
+## P0 — model artifact runtime egress boundary verified (2026-10-26)
+- Verified at `393e12760762993e70a862af9b4c3ab61d308739`; push [40364123382](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382) and PR [40364131533](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533) both succeeded.
+- Python 377 passed, 3 skipped, 1 warning. PostgreSQL, AI/RAG import + SBOM/license, frontend, dependency/license audit, secret scan, skill parity and lockfile sync passed.
+- First attempt at `47bd006c665ba490d2cbd0c0a87c57c8350ef0f4` failed four static-guard fixture tests because literal `\\n` text produced invalid Python source. The test fixtures were corrected on `393e12760762993e70a862af9b4c3ab61d308739`; the strict guard was preserved and both rerun workflows passed.
+- No model artifacts are claimed staged or license-reviewed. Next: obtain provenance/license sign-off, stage the immutable model snapshot, validate cache-only startup and RAG retrieval golden tests on a deployment candidate.

@@ -298,3 +298,8 @@
 - `HuggingFaceEmbeddings`, `AutoTokenizer.from_pretrained`, `AutoModelForCausalLM.from_pretrained`, and `PeftModel.from_pretrained` must explicitly use local-only loading. Static CI fails if any runtime model loader omits this.
 - Production Hub-based embedding IDs require an immutable 40-character revision SHA. The revision is part of the SQLite index identity; changing the model revision requires deliberate re-ingestion into a new or empty index before cutover. No database schema change is expected.
 - CI acceptance: helper argument tests; mutable/short revision rejection; production setting validation; static transport/model-loader guard; full Python suite; SQLite/PostgreSQL migration/concurrency; AI/RAG profile/SBOM; frontend build; dependency/license audit; secret scan; skill parity and lockfile sync. Staged model artifacts, license review and deployed retrieval behavior remain release gates.
+
+
+## 2026-10-26 model-artifact local-only — verified CI gate
+- Exact SHA `393e12760762993e70a862af9b4c3ab61d308739`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533 passed. Python 377 passed/3 skipped; PostgreSQL migration/concurrency, AI/RAG imports + SBOM/license, frontend typecheck/build, dependency/license audits, secret scan, repo guard and lockfile sync all passed.
+- Staged artifacts, license/provenance, cache-only runtime load, RAG re-ingestion and retrieval golden tests are still production evidence gates and are not verified by CI.

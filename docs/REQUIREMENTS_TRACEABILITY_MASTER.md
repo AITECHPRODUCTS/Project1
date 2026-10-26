@@ -379,4 +379,9 @@
 ## 2026-10-26 model artifact network boundary — candidate
 - Requirement: API requests, worker restarts and RAG indexing must not trigger implicit mutable model downloads. Embedding/causal-model files must be pre-staged, with Hub revisions immutable in production.
 - Candidate files: `ai_memory/model_artifacts.py`, `ai_memory/rag_chain.py`, `ai_memory/ingester.py`, `backend/services/local_model.py`, `backend/config.py` and the outbound transport verifier/tests. It fails closed when model files are absent locally and uses revision-aware vector-store identity.
-- Acceptance evidence pending: exact-SHA push and PR jobs, then separate artifact licensing/staging and production RAG retrieval checks. No model download, external approval or production artifact validation is claimed.
+- Source/CI acceptance verified at `393e12760762993e70a862af9b4c3ab61d308739`: push [40364123382](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382) and PR [40364131533](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533) both passed (Python 377/3 skipped, plus PostgreSQL, AI/RAG/SBOM, frontend, security/license, secret scan, skill parity and lockfile checks). Separate artifact licensing/staging and production RAG retrieval checks remain open; no model download or production artifact validation is claimed.
+
+
+## 2026-10-26 model-artifact runtime policy — verified source checkpoint
+- `393e12760762993e70a862af9b4c3ab61d308739` passed push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533. The initial four test failures were malformed synthetic source strings, corrected without weakening the outbound transport/model-loader guard.
+- Production readiness still requires operator-controlled artifact staging, immutable revision/provenance/digest/license evidence, cache-only load against the release image, re-ingestion and retrieval golden tests. Continue staging proxy, live provider, legal, deployment and restore gates.

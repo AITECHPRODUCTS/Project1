@@ -121,3 +121,9 @@
 - S5 uses the shared tenant-scoped ExternalAction registry and stable per-item keys derived from the workflow-level `Idempotency-Key`. Completed actions replay; changed payloads or in-progress/unknown outcomes return conflict and block duplicate side effects.
 - Three new workflow S5 tests passed (Python 267 passed / 2 skipped). Full SQLite/PostgreSQL migration/concurrency, AI/RAG, frontend, dependency audit, repo guard, and push lockfile checks passed.
 - Next: review remaining provider adapters and externally impactful workflow/worker paths for authorization, idempotency and safe retries.
+
+
+## P0 — global offer registry sync — candidate
+- Source-derived gap: `/api/offers/sync` mutates shared catalog rows and performs provider calls while only relying on router-level authentication. Offer is a global Base model, not a tenant-owned table.
+- Candidate requires Platform Super Admin and an active audit workspace; adds success/failure AuditLog records and tests denial before provider invocation plus success/failure audit paths.
+- Exact-SHA CI pending.

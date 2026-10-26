@@ -635,18 +635,126 @@ async def offers(q:str|None=None,limit:int=Query(50,ge=1,le=200),db:AsyncSession
  rows=list((await db.scalars(stmt.order_by(Offer.verified.desc(),Offer.name).limit(limit))).all())
  return {"count":len(rows),"data":[{"id":o.id,"network":o.network,"external_id":o.external_id,"name":o.name,"url":o.url,"category":o.category,"description":o.description,"reward_type":o.reward_type,"reward_value":o.reward_value,"cookie_days":o.cookie_days,"traffic_score":o.traffic_score,"gravity_score":o.gravity_score,"normalized_gravity":o.normalized_gravity,"epc":o.epc,"conversion_rate":o.conversion_rate,"recurring_commission":o.recurring_commission,"source_stars":o.source_stars,"verified":o.verified,"source_url":o.source_url} for o in rows]}
 @api.post("/offers/sync")
-async def offers_sync(q:str|None=None,limit:int=Query(100,ge=1,le=200),db:AsyncSession=Depends(get_session)):
- try:data=await openaffiliate_client.fetch_programs(q=q,limit=limit)
- except Exception as exc:raise HTTPException(502,f"OpenAffiliate error: {type(exc).__name__}: {str(exc)[:200]}") from exc
- created=updated=0
- for item in data["data"]:
-  eid=str(item.get("slug") or item.get("id") or "")
-  if not eid:continue
-  row=await db.scalar(select(Offer).where(Offer.network=="openaffiliate",Offer.external_id==eid))
-  if row is None:row=Offer(network="openaffiliate",external_id=eid,name=item["name"]);db.add(row);created+=1
-  else:updated+=1
-  row.name=item["name"];row.url=item.get("url");row.category=item.get("category");row.description=item.get("description","");row.reward_type=item.get("reward_type");row.reward_value=item.get("reward_value");row.cookie_days=item.get("cookie_days");row.traffic_score=item.get("traffic_score");row.source_stars=item.get("stars_count");row.verified=bool(item.get("verified"));raw=item.get("raw") or {};row.source_url=raw.get("source_url") if isinstance(raw,dict) else None;metrics=compute_offer_metrics({"reward_type":row.reward_type,"reward_value":row.reward_value,"gravity_score":raw.get("gravity_score",raw.get("gravity"))});row.gravity_score=metrics["gravity_score"];row.normalized_gravity=metrics["normalized_gravity"];row.epc=metrics["epc"];row.conversion_rate=metrics["conversion_rate"];row.recurring_commission=metrics["recurring_commission"];row.metadata_json={"tags":item.get("tags",[])}
- await db.commit();return {"created":created,"updated":updated,"registry_total":data.get("registry_total"),"traffic_score_note":"Unknown unless upstream actually supplies the field."}
+async def offers_sync(
+    q: str | None = None,
+    limit: int = Query(100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    # Offer rows form the shared catalog (Offer is intentionally not tenant-scoped).
+    # Only a platform admin may refresh this global registry from a remote provider.
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before synchronizing the global offer registry")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    owner_workspace_id = str(workspace_id)
+    try:
+        data = await openaffiliate_client.fetch_programs(q=q, limit=limit)
+    except Exception as exc:
+        with workspace_scope(owner_workspace_id):
+            db.add(AuditLog(
+                workspace_id=owner_workspace_id,
+                actor=actor,
+                action="offers.sync",
+                resource_type="offer_registry",
+                outcome="failed",
+                details_json={
+                    "provider": "openaffiliate",
+                    "error_type": type(exc).__name__[:120],
+                    "requested_limit": limit,
+                    "query_supplied": bool(q),
+                },
+            ))
+            await db.commit()
+        raise HTTPException(502, f"OpenAffiliate error: {type(exc).__name__}: {str(exc)[:200]}") from exc
+
+    created = updated = 0
+    try:
+        # This catalog is global rather than workspace-owned; queries are over the
+        # unique (network, external_id) identity, and rows remain evidence-tagged
+        # with provider-supplied verification/metrics only.
+        for item in data["data"]:
+            external_id = str(item.get("slug") or item.get("id") or "")
+            if not external_id:
+                continue
+            row = await db.scalar(
+                select(Offer).where(
+                    Offer.network == "openaffiliate",
+                    Offer.external_id == external_id,
+                )
+            )
+            if row is None:
+                row = Offer(network="openaffiliate", external_id=external_id, name=item["name"])
+                db.add(row)
+                created += 1
+            else:
+                updated += 1
+            row.name = item["name"]
+            row.url = item.get("url")
+            row.category = item.get("category")
+            row.description = item.get("description", "")
+            row.reward_type = item.get("reward_type")
+            row.reward_value = item.get("reward_value")
+            row.cookie_days = item.get("cookie_days")
+            row.traffic_score = item.get("traffic_score")
+            row.source_stars = item.get("stars_count")
+            row.verified = bool(item.get("verified"))
+            raw = item.get("raw") or {}
+            row.source_url = raw.get("source_url") if isinstance(raw, dict) else None
+            metrics = compute_offer_metrics({
+                "reward_type": row.reward_type,
+                "reward_value": row.reward_value,
+                "gravity_score": raw.get("gravity_score", raw.get("gravity")),
+            })
+            row.gravity_score = metrics["gravity_score"]
+            row.normalized_gravity = metrics["normalized_gravity"]
+            row.epc = metrics["epc"]
+            row.conversion_rate = metrics["conversion_rate"]
+            row.recurring_commission = metrics["recurring_commission"]
+            row.metadata_json = {"tags": item.get("tags", [])}
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        with workspace_scope(owner_workspace_id):
+            db.add(AuditLog(
+                workspace_id=owner_workspace_id,
+                actor=actor,
+                action="offers.sync",
+                resource_type="offer_registry",
+                outcome="failed",
+                details_json={
+                    "provider": "openaffiliate",
+                    "error_type": "CatalogPersistenceError",
+                    "requested_limit": limit,
+                    "query_supplied": bool(q),
+                },
+            ))
+            await db.commit()
+        raise
+
+    with workspace_scope(owner_workspace_id):
+        db.add(AuditLog(
+            workspace_id=owner_workspace_id,
+            actor=actor,
+            action="offers.sync",
+            resource_type="offer_registry",
+            outcome="completed",
+            details_json={
+                "provider": "openaffiliate",
+                "created": created,
+                "updated": updated,
+                "registry_total": data.get("registry_total"),
+                "requested_limit": limit,
+                "query_supplied": bool(q),
+            },
+        ))
+        await db.commit()
+    return {
+        "created": created,
+        "updated": updated,
+        "registry_total": data.get("registry_total"),
+        "traffic_score_note": "Unknown unless upstream actually supplies the field.",
+    }
 @api.post("/automation/multi-program-manager", status_code=201)
 async def automation_multi_program_manager(
     payload: MultiProgramManagerRequest,

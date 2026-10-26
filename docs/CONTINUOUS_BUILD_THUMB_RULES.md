@@ -96,3 +96,6 @@ These additive rules apply to every future Project1 build session.
 
 
 42. P0 workflow S5 ExternalAction registry integration is verified at `e7ca02df933c3028489e8c3ba1abbfba3d82ae90`; push [40279412060](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279412060) and PR [40279416167](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279416167) both passed. Python: 267 passed/2 skipped; PostgreSQL, SQLite drift, AI/RAG (9 imports), frontend, security audit, repo guard, and push lockfile passed. S5 now shares the durable action registry and derives stable per-item keys from a required workflow `Idempotency-Key`; completed results replay and unknown outcomes block same/alternate-key retry. Next P0 audit: remaining provider adapters and externally impactful workflow/worker paths.
+
+
+43. P0 global offer sync: `/api/offers/sync` writes the shared (not TenantScoped) `Offer` table and contacts OpenAffiliate, but previously allowed any authenticated member. Candidate gates it behind Platform Super Admin + explicit audit workspace and persists success/failure audit events. Four route tests and exact-SHA CI pending.

@@ -460,3 +460,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The provider-write claim/hash/replay helpers are now shared in `backend/services/external_action_registry.py`. Live workflow publishing requires a valid `Idempotency-Key` at the API and S5 service boundaries, in addition to Platform Super Admin authorization and explicit confirmation. Each S5 item derives a stable per-item idempotency key. Completed actions replay the stored response without a second provider call; key/payload conflicts and in-progress/unknown actions fail closed; timeouts/network/5xx outcomes remain `unknown` for reconciliation.
 - Three new S5 regressions prove missing-key denial, completed-result replay without duplicate provider execution, and same/alternate-key rejection after an ambiguous provider outcome. Existing route regression now checks the mandatory workflow Idempotency-Key.
 - Next P0 source audit: review the remaining provider adapters and externally impactful workflow/worker paths for approval gates, idempotency, tenant-scoped audit outcomes, and safe retry semantics. Production remains **not release-ready** while the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates are open.
+
+
+
+## P0 — global offer catalog sync authorization — candidate
+- Source audit at `c29150409170cae8548bbe66c8dc7f2534fdc72b` found `/api/offers/sync` performs an upstream OpenAffiliate request and inserts/updates the shared global `Offer` catalog while requiring only ordinary authentication.
+- Candidate requires Platform Super Admin and an active audit workspace; records provider sync success/failure and count metadata in the workspace audit log without storing credentials or offer payloads. Shared Offer rows remain global as defined by the model.
+- Four regression tests cover workspace-member denial before provider invocation, no-workspace denial, successful sync/global catalog update with audit, and provider-failure audit/502 response. Exact-SHA CI pending.

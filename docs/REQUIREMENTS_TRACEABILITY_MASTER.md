@@ -203,3 +203,8 @@
 - The provider-write claim/hash/replay helpers are now shared in `backend/services/external_action_registry.py`. Live workflow publishing requires a valid `Idempotency-Key` at the API and S5 service boundaries, in addition to Platform Super Admin authorization and explicit confirmation. Each S5 item derives a stable per-item idempotency key. Completed actions replay the stored response without a second provider call; key/payload conflicts and in-progress/unknown actions fail closed; timeouts/network/5xx outcomes remain `unknown` for reconciliation.
 - Three new S5 regressions prove missing-key denial, completed-result replay without duplicate provider execution, and same/alternate-key rejection after an ambiguous provider outcome. Existing route regression now checks the mandatory workflow Idempotency-Key.
 - Next P0 source audit: review the remaining provider adapters and externally impactful workflow/worker paths for approval gates, idempotency, tenant-scoped audit outcomes, and safe retry semantics. Production remains **not release-ready** while the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates are open.
+
+
+## 2026-10-26 global offer sync authorization — candidate
+- The shared Offer catalog is not workspace-scoped, and `/api/offers/sync` previously allowed workspace members to request an upstream fetch and mutate global catalog records.
+- Candidate requires Platform Super Admin + workspace context for accountability, adds audit metadata for successful/failed sync and four regression tests. Full push/PR CI pending.

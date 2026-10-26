@@ -256,9 +256,17 @@
 ## P1 — durable encrypted HITL response and multi-worker resume (2026-10-26)
 - The previous recovery checkpoint acknowledged resume requests while the response existed only in process memory. This meant process loss or a different API replica could drop an acknowledged response.
 - Candidate migration adds `paused_sessions.verification_response_encrypted`; Fernet encryption uses a key derived from the stable shared `APP_SESSION_SECRET`. The scheduler loop polls for resume requests for its own lease and wakes the local task. Recovery retains encrypted queued responses and consumes them before emitting a new HITL alert.
-- Regression tests cover a non-owner API instance submitting the response and the lease owner waking, as well as process restart, lease claim and response consumption. Status remains pending until the full exact-SHA CI matrix passes.
+- Regression tests cover a non-owner API instance submitting the response and the lease owner waking, as well as process restart, lease claim and response consumption. Verified on exact SHA `92af1c5d06544e4870c8c550176fd19a25084d06`; push [40333566763](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763) and PR [40333573375](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375) both passed.
 
 
 ## HITL response encryption dependency audit correction (2026-10-26)
 - The first candidate CI reported seven cryptography 46.0.7 advisories; that range is rejected and not waived.
 - Change `requirements.txt` to `cryptography>=50,<51` and rerun the full exact-SHA CI. Release status remains pending until `pip-audit -r requirements-dev.txt` and all other required jobs pass.
+
+
+## P1 — durable encrypted HITL response verified (2026-10-26)
+- Exact SHA `92af1c5d06544e4870c8c550176fd19a25084d06`; push [40333566763](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763) and PR [40333573375](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375) both passed all required jobs.
+- The migration-backed `PausedSession.verification_response_encrypted` uses Fernet derived from stable `APP_SESSION_SECRET`; response data never enters plain workflow state or audit detail.
+- Two end-to-end tests cover an API request arriving at a non-owner instance and waking the lease owner, plus a response being consumed by a fresh worker after restart/lease claim. SQLite and PostgreSQL migration/drift/concurrency, Python, AI/RAG, frontend, dependency audit, repository guard and lockfile sync passed.
+- An initial audit failure found cryptography 46.0.7 had advisories; requirement was tightened to `cryptography>=50,<51` and the follow-up audit passed. No advisory exception was used.
+- Production remains pending remaining provider/UAT, comprehensive security testing, SBOM/license/secret scan, deployment and backup/restore evidence.

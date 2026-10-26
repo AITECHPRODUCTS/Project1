@@ -231,3 +231,11 @@
 - Python: 330 passed, 3 skipped. PostgreSQL migration/drift gate passed through migration 0010 upgrade/downgrade/re-upgrade; all three Postgres integration tests passed, including concurrent workflow lease claiming.
 - CI gates cover expired read-only checkpoint recovery, active lease non-stealing, paused-session recovery, live side-effect outcome-unknown safety, and concurrent Postgres claim. Full workflows passed.
 - Limitation: HITL response is not persisted; users may need to resubmit after crash. Multi-replica resume, durable outbox, stress/fault recovery, staging deployment and backup/restore are still open.
+
+
+## 2026-10-26 durable HITL response persistence — exact-SHA verification
+- Implementation SHA `92af1c5d06544e4870c8c550176fd19a25084d06`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375 both succeeded.
+- Added migration 0011 for encrypted HITL responses; lease-owner polling supports resume delivery across replicas, and recovery consumes a persisted response following restart. Responses are cleared after the stage checkpoint, not on HTTP acknowledgement.
+- Full required matrix passed, including SQLite/PostgreSQL migrations/drift/concurrency, Python tests, 10 AI/RAG imports, frontend production build/typecheck, 53-skill parity, core/AI/frontend audits, and push lockfile sync.
+- Core dependency audit initially failed because `cryptography>=44,<47` selected 46.0.7. The dependency was updated to `cryptography>=50,<51`; follow-up push/PR audit passed without suppressing advisories.
+- Operational constraint: replicas must share a stable `APP_SESSION_SECRET`. Production deployment and provider/UAT/security-evidence gates remain outstanding.

@@ -653,3 +653,14 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The first run on `1095ae96a599ade8d3d2320ab0491a40bc4a43f6` exposed a required security-audit failure: `cryptography>=44,<47` resolved to 46.0.7 and `pip-audit` reported seven advisories. This failure is not waived.
 - Updated the runtime range to `cryptography>=50,<51` based on the failed CI report's fixed versions (the live PyPI package record listed 50.0.2 as the latest release at review time). The follow-up exact-SHA audit and the entire matrix must pass before HITL encryption is considered verified.
 - First-run checks before this correction: repository guard, frontend typecheck/build and push lockfile sync passed; Python, PostgreSQL, and AI/RAG jobs were still running. The current candidate remains pending the replacement run.
+
+
+
+## 2026-10-26 durable encrypted HITL response and cross-worker resume — verified
+- Exact implementation SHA: `92af1c5d06544e4870c8c550176fd19a25084d06`.
+- Push CI https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763 — **success**; PR CI https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375 — **success**. All required jobs passed on this exact SHA.
+- Confirmed gates: Python test suite and compile; fresh SQLite migration upgrade/downgrade/re-upgrade plus Alembic drift check; PostgreSQL migration upgrade/downgrade/re-upgrade, drift and lease/conversion concurrency tests; AI/RAG import profile; frontend `npm ci`, typecheck and production build; 53-skill source/runtime parity; core/AI/frontend dependency audit; and push lockfile sync.
+- New migration `0011_durable_hitl_resume_responses` persists `PausedSession.verification_response_encrypted`. Fernet uses a key derived from `APP_SESSION_SECRET`; response values are not written to workflow state JSON or audit details. The response is cleared after the retried stage checkpoint succeeds.
+- Any authenticated API replica can persist a workspace-validated resume request. The lease-owning worker polls its own pending rows and wakes its local task; after worker loss, a new lease owner consumes the encrypted pending response before emitting a fresh HITL prompt. A decryption/config mismatch fails closed and is audited. Two focused tests passed for active cross-worker delivery and process-restart recovery.
+- Audit correction: the first candidate range selected vulnerable `cryptography 46.0.7` and failed CI; the finding was not waived. The requirement is now `cryptography>=50,<51`, and the subsequent full dependency audit passed.
+- Production remains **not certified**: remaining provider authorization/UAT, broader route/worker/export tests, SBOM/license/secret scans, deployment smoke, backup/restore, and other outstanding release gates still need evidence. Every replica must keep the same stable `APP_SESSION_SECRET`; key rotation with pending encrypted responses needs a plan.

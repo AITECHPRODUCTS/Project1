@@ -217,3 +217,8 @@
 - `/api/offers/sync` now requires explicit Platform Super Admin authorization and an active workspace. This is deliberately a platform-level operation because `Offer` is the shared global catalog, not a tenant-owned model. Non-admin/no-workspace callers are denied before calling OpenAffiliate.
 - Success and failure paths write workspace-scoped `offers.sync` AuditLog metadata including provider, error type or created/updated counts, requested limit, and whether a query was supplied; full provider payloads and credentials are not logged. Four regression tests cover member denial, no-workspace denial, successful catalog refresh plus audit, and provider failure audit/502.
 - Next P0 audit: inspect global provider/catalog configuration operations and other integration routes for appropriate role boundaries, audit trails, request limits, and safe failure behavior. Production remains **not release-ready** due to the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates.
+
+
+## 2026-10-26 OpenAffiliate URL safety — candidate
+- Source-derived gap: `backend/tools/affiliate_api.py` used `OPENAFFILIATE_BASE_URL + path` for outbound HTTP without calling `validate_public_http_url`; configured base URLs could therefore target private/loopback destinations.
+- Candidate calls the existing URL validator before provider network access and preserves `follow_redirects=False`. Two regression tests are pending full exact-SHA CI.

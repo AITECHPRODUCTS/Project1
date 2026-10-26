@@ -128,3 +128,9 @@
 - `/api/offers/sync` calls OpenAffiliate and updates the global shared `Offer` catalog; it now requires Platform Super Admin and an active workspace used for audit accountability. Unauthorized callers cannot trigger the upstream provider call.
 - Audit records include provider, created/updated counts or error type, request limit and query-presence metadata. Four regression tests passed; Python suite 271 passed/2 skipped and full required CI passed.
 - Next: review remaining global provider integration/configuration routes for equivalent authorization and audit controls.
+
+
+## P0 — OpenAffiliate SSRF/network boundary candidate (2026-10-26)
+- `OpenAffiliateClient._get` previously called the configured base URL without the existing `validate_public_http_url` helper; unlike generic adapters, it did not reject private/loopback destinations first.
+- Candidate validates the final provider path before opening the HTTP client and retains redirects disabled. Two tests cover private rejection before HTTP and successful mock request using a validated host.
+- Exact-SHA push/PR CI pending.

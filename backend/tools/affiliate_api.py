@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import quote
 import httpx
 from backend.config import get_settings
+from backend.services.url_safety import validate_public_http_url
 
 @dataclass(frozen=True)
 class AffiliateProgram:
@@ -43,9 +44,14 @@ class OpenAffiliateClient:
     def __init__(self,base_url: str | None=None,timeout: float=10.0,cache: TTLCache | None=None):
         self.base=(base_url or get_settings().openaffiliate_base_url).rstrip("/"); self.timeout=httpx.Timeout(timeout,connect=4); self.cache=cache or TTLCache()
     async def _get(self,path: str,params: dict[str,Any] | None=None) -> Any:
-        url=self.base+path; key=json.dumps({"url":url,"params":params or {}},sort_keys=True)
+        url=self.base+path
+        key=json.dumps({"url":url,"params":params or {}},sort_keys=True)
         cached=await self.cache.get(key)
         if cached is not None:return cached
+        # OPENAFFILIATE_BASE_URL is operator configuration, not proof that its
+        # destination is public. Reject private/loopback/link-local targets
+        # before opening a network client; redirects are disabled below.
+        await validate_public_http_url(url)
         async with httpx.AsyncClient(timeout=self.timeout,follow_redirects=False,headers={"Accept":"application/json","User-Agent":"AffiliateOS/0.1"}) as client:
             async with client.stream("GET",url,params=params) as response:
                 response.raise_for_status(); length=int(response.headers.get("content-length","0") or 0)

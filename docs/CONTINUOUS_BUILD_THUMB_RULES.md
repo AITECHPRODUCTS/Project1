@@ -102,3 +102,6 @@ These additive rules apply to every future Project1 build session.
 
 
 44. Next P0: continue the remaining integrations/configuration route audit, especially global provider registry operations and role/audit/rate-limit coverage. Keep production blocked until four documented ChromaDB advisories and release/UAT/SBOM/license/secret/deployment/backup evidence are resolved.
+
+
+45. P0 OpenAffiliate HTTP boundary: provider client now needs to validate configured base URL/path before network access, matching the guard already used by generic JSON adapters/CMS/research. Regression tests for loopback blocking and redirects-disabled valid requests are pending exact-SHA CI.

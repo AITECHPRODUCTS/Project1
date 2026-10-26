@@ -476,3 +476,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - `/api/offers/sync` now requires explicit Platform Super Admin authorization and an active workspace. This is deliberately a platform-level operation because `Offer` is the shared global catalog, not a tenant-owned model. Non-admin/no-workspace callers are denied before calling OpenAffiliate.
 - Success and failure paths write workspace-scoped `offers.sync` AuditLog metadata including provider, error type or created/updated counts, requested limit, and whether a query was supplied; full provider payloads and credentials are not logged. Four regression tests cover member denial, no-workspace denial, successful catalog refresh plus audit, and provider failure audit/502.
 - Next P0 audit: inspect global provider/catalog configuration operations and other integration routes for appropriate role boundaries, audit trails, request limits, and safe failure behavior. Production remains **not release-ready** due to the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates.
+
+
+
+## P0 — OpenAffiliate outbound URL boundary — candidate
+- Source audit at `bbba32f901207e3979f32d684a624a604e7a7157` found `OpenAffiliateClient._get` called the configured `OPENAFFILIATE_BASE_URL` directly; it was not using the existing `validate_public_http_url` guard that already protects generic adapters, CMS destinations and research fetches.
+- Candidate validates the fully composed provider endpoint before constructing an HTTP client, retains redirects-disabled behavior, and adds regression tests for loopback/private rejection and valid-provider request behavior.
+- Exact-SHA CI pending.

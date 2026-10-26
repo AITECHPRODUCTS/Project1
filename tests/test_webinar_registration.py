@@ -82,7 +82,7 @@ def test_public_registration_records_consent_deduplicates_and_enforces_capacity(
     payload = {"full_name":"Test Registrant","email":"User@example.com","consent":True}
     first = client.post(url, json=payload)
     assert first.status_code == 201, first.text
-    assert first.json()["consent_recorded"] is True and first.json()["email_confirmation_sent"] is False
+    assert first.json()["consent_recorded"] is True and first.json()["confirmation_email_sent"] is False
     duplicate = client.post(url, json=payload)
     assert duplicate.status_code == 200, duplicate.text
     assert duplicate.json()["status"] == "already_registered"

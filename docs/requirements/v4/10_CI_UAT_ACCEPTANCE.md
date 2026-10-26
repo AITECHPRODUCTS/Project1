@@ -211,3 +211,10 @@
 - Python 321 passed, 2 skipped; PostgreSQL migration/concurrency, AI/RAG imports (9), frontend, dependency audits, skill parity and push lockfile reproducibility passed.
 - Generic configured affiliate adapter requests use the shared pinned public HTTP transport with no redirects/ambient proxies and a 2 MiB JSON cap.
 - Current CI cannot substitute for actual trusted-proxy staging verification, authorized live-provider UAT, SBOM/license/secret scans, deployment smoke or backup/restore.
+
+
+## 2026-10-26 RAG security remediation — candidate gate
+- Candidate removes ChromaDB and LangChain Chroma integration from the optional AI profile, routes ingestion/query to a local SQLite vector store, and removes the four `pip-audit` ignores.
+- Acceptance before closure: full push + PR CI; clean `pip-audit -r requirements-ai.txt`; local vector index persistence/upsert/delete/ranking/collection/model-identity tests; AI import-profile pass; smoke test re-ingesting a representative skills/reference corpus and verifying source paths in retrieval.
+- Storage compatibility: `CHROMA_PERSIST_DIR` remains an env alias to avoid breaking deployment configuration, but it now contains `local_vectors.sqlite3`; existing Chroma index data is not automatically migrated. Re-ingest and validate before switching a live environment.
+- Candidate status remains pending until exact-SHA hosted jobs pass; production remains blocked by staging ingress, provider UAT, SBOM/license/secret scans, deployment smoke and backup/restore.

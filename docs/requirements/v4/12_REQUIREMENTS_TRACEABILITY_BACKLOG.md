@@ -217,3 +217,10 @@
 - Scan across 59 Python modules found the generic configured adapter as the final standalone outbound client outside `url_safety.py`. Replaced its unpinned HTTPX client with the pinned helper, bounded response size at 2 MiB, and preserved result parsing/limits.
 - Real-loopback test confirms private literal destinations fail before connecting; mocked helper contract covers method, query, auth, response cap and normalization.
 - Release gates still open: actual proxy behavior in staging, four ChromaDB advisory exceptions or reviewed vector-store replacement, live provider UAT, SBOM/license/secret scans, deployment smoke, backup/restore.
+
+
+## P0 — Remove ChromaDB from optional AI/RAG (2026-10-26; candidate)
+- Base `38a7b0ff6399d4702f8e8f798cdee81567a5c45d` passed the previous full push/PR matrix.
+- Candidate uses `ai_memory/local_vector_store.py` (SQLite, normalized float32 embedding blobs, JSON metadata, stable IDs/upserts, collection and embedding-model checks, cosine similarity); ingestion/retrieval now use that storage; active AI requirements remove `chromadb` and `langchain-chroma`; CI removes four advisory ignore arguments.
+- Five tests cover persistent reopen/search ranking, stable-ID update and delete, collection isolation, model identity mismatch and invalid vector rejection.
+- Status: **pending** the resulting exact-SHA CI, especially the clean AI audit and the AI/RAG import job. Existing Chroma files are not migrated automatically; rebuild with `python -m ai_memory.ingester` during rollout.

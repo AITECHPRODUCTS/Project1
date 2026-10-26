@@ -298,3 +298,9 @@
 - Python suite: 321 passed / 2 skipped / 1 warning. PostgreSQL migration/concurrency, AI/RAG 9 imports, frontend build, core/AI/frontend dependency audits, 53-skill parity and push lockfile-sync passed.
 - `ConfiguredJSONAdapter` no longer opens an independent `httpx.AsyncClient`; reviewed backend/AI Python outbound HTTP paths now use the central pinned helper (which owns the underlying client with IP pinning).
 - Next is actual staging proxy-ingress evidence. CI and config unit tests are not substituted for a live ingress test; no staging result is recorded in this session.
+
+
+## 2026-10-26 local SQLite RAG store — candidate
+- Remove the optional `chromadb` and `langchain-chroma` packages and replace them with `ai_memory/local_vector_store.py`, an SQLite-persisted cosine-similarity index. Preserve the existing `DoctrineRAG` API and licensed source metadata.
+- The candidate removes the four advisory ignores from CI, adds a static no-Chroma dependency/runtime guard and deterministic persistence/ranking tests. Exact-SHA CI and an unignored `pip-audit -r requirements-ai.txt` remain required before the historic exception is closed.
+- The `CHROMA_PERSIST_DIR` environment variable/config field remains as a compatibility alias for the storage directory; the new index file is `local_vectors.sqlite3`. Old Chroma storage is not automatically migrated and should be kept until the new index is rebuilt and validated.

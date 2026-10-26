@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import importlib
-import sys
 
 MODULES = (
     "langchain",
     "langchain_classic",
-    "langchain_chroma",
+    "langchain_community",
+    "langchain_core",
     "langchain_huggingface",
     "langchain_openai",
     "langchain_text_splitters",
-    "chromadb",
     "sentence_transformers",
     "openai",
+    "ai_memory.local_vector_store",
 )
 
 
@@ -21,7 +21,7 @@ def main() -> int:
     for module in MODULES:
         try:
             importlib.import_module(module)
-        except Exception as exc:  # Report broken native/import dependencies too.
+        except Exception as exc:
             missing.append(f"{module}: {type(exc).__name__}: {str(exc)[:220]}")
     if missing:
         print("AI/RAG profile verification FAILED")

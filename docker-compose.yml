@@ -49,6 +49,7 @@ services:
       LOCAL_MODEL_PATH: ${LOCAL_MODEL_PATH:-}
       LOCAL_LORA_ADAPTER_PATH: ${LOCAL_LORA_ADAPTER_PATH:-}
       AFFILIATE_SKILLS_DIR: /app/knowledge/affiliate-skills
+      # Legacy mapping retained; the directory now stores the local SQLite vector index.
       CHROMA_PERSIST_DIR: /app/storage/chroma
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
       OPENAFFILIATE_BASE_URL: ${OPENAFFILIATE_BASE_URL:-https://openaffiliate.dev/api}

@@ -52,3 +52,9 @@
 - `ConfiguredJSONAdapter` now calls `request_public_json` directly rather than checking DNS then opening a separate client. The helper pins the connection to a vetted public address, disables ambient proxies/redirects and caps JSON responses at 2 MiB.
 - Regression coverage includes loopback rejection through the actual helper and a request-contract test. The 59-module source scan found no other raw clients outside the central URL-safety transport.
 - Actual staging proxy ingress remains unverified; config validation alone does not prove trusted forwarding behavior.
+
+
+## 2026-10-26 RAG vector-store security remediation — candidate
+- Replace ChromaDB with a local SQLite vector index and remove the Chroma integration package from the optional AI profile; do not hide upstream advisories behind ignore flags.
+- The candidate adds deterministic tests for on-disk persistence, normalized cosine retrieval, stable-ID upsert/delete, collection separation, embedding-model/dimension consistency and malformed vector rejection. A CI static guard checks active dependencies/runtime do not reintroduce Chroma or unsafe pickle deserialization.
+- Verification is pending full push/PR CI on the exact candidate SHA and an unignored AI/RAG dependency audit. The historic Chroma advisory IDs remain in the exception record only to explain why the dependency is being removed; they must not be ignored by the new pipeline.

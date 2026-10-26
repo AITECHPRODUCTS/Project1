@@ -1,28 +1,28 @@
-# Temporary security exception — embedded-only ChromaDB
+# Vector-store security exception record
 
-**Review date:** 25 October 2026  
-**Status:** temporary, configuration-scoped mitigation; **not** a clean dependency scan and **not** production-release approval.  
-**Scope:** optional AI/RAG profile only.
+**Status:** ChromaDB dependency removal candidate; not verified until the exact-SHA push and PR workflows pass with a clean, unignored AI dependency audit.
+**Production release:** still blocked by the other release/UAT gates documented in the implementation status.
 
-## Unpatched upstream findings
+## Historical upstream findings
 
-The latest PyPI ChromaDB release resolved by CI is 1.5.9. The audit database reports these IDs without a fixed version: `PYSEC-2026-311` / CVE-2026-45829 (pre-auth code injection), `PYSEC-2026-3814` / CVE-2026-45833 (code injection), `PYSEC-2026-3815` / CVE-2026-45831 (tenant/database/collection authorization), and `PYSEC-2026-3813` / CVE-2026-45830 (cross-tenant access). As checked on 25 October 2026, the upstream/published records mark 1.5.9 as affected and no fixed PyPI version is available.
+The prior optional RAG graph included ChromaDB 1.5.9, which was reported against:
+- `PYSEC-2026-311` / CVE-2026-45829 (pre-auth code injection)
+- `PYSEC-2026-3814` / CVE-2026-45833 (code injection)
+- `PYSEC-2026-3815` / CVE-2026-45831 (tenant/database/collection authorization)
+- `PYSEC-2026-3813` / CVE-2026-45830 (cross-tenant access)
 
-References:
-- https://osv.dev/vulnerability/PYSEC-2026-311
-- https://osv.dev/vulnerability/PYSEC-2026-3814
-- https://osv.dev/vulnerability/PYSEC-2026-3815
-- https://osv.dev/vulnerability/PYSEC-2026-3813
-- https://github.com/chroma-core/chroma/issues/7909
+These records describe the former package graph. This project does **not** claim the upstream ChromaDB package has been patched.
 
-## Compensating controls enforced by code and CI
+## Candidate remediation
 
-- Project1 uses LangChain's Chroma integration with a local `persist_directory` in `ai_memory/ingester.py` and `ai_memory/rag_chain.py`.
-- Project1 does not configure a separate Chroma HTTP server, a `chromadb.HttpClient` / `AsyncHttpClient`, or a Chroma network listener in Docker Compose.
-- The product runtime may not set `trust_remote_code=True` for untrusted model repositories.
-- `scripts/verify_chroma_security_boundary.py` enforces these assumptions in CI; `tests/test_ai_security_boundary.py` is its regression test.
-- The AI dependency audit may ignore only these four exact PYSEC IDs, only after the local-only guard passes. Any other advisory fails the audit and must be fixed. The workflow emits an explicit warning when this exception is in force.
+- Remove both `chromadb` and `langchain-chroma` from `requirements-ai.txt`.
+- Replace the Chroma-backed index with `ai_memory/local_vector_store.py`: a local `sqlite3` database storing normalized float32 embedding vectors, source text and JSON metadata. Queries use bounded in-process cosine similarity.
+- Preserve the existing configured persistence directory and `CHROMA_PERSIST_DIR` environment variable as compatibility names. The new on-disk index file is `local_vectors.sqlite3`.
+- The index supports stable-ID upsert, stale chunk deletion and collection/embedding-model identity checks. It does not use a remote vector service or pickle/dill deserialization.
+- Remove the previous four `pip-audit --ignore-vuln` arguments and the conditional audit warning. The optional AI/RAG dependency graph must pass `pip-audit -r requirements-ai.txt` without ignored advisories.
 
-## Release restriction
+## Verification and rollout
 
-This mitigation does **not** patch ChromaDB. Do not deploy a standalone/network-exposed Chroma service, enable remote code, or promote this dependency profile as fully security-cleared. Production release remains blocked until a patched upstream version is available and the ignore list is removed, or Chroma is replaced with a separately reviewed vector-store implementation and the full RAG acceptance suite passes.
+This is still a **candidate** until exact-SHA push and PR workflows pass, including the unignored AI audit, static security guard, SQLite persistence/search tests and AI-profile imports. Old Chroma index files are not automatically converted or deleted; after rollout, operators must run `python -m ai_memory.ingester` to build the SQLite index. Keep the old directory/backups until the replacement index is validated.
+
+Actual trusted-proxy ingress verification, authorized provider live UAT, SBOM/license/secret scans, deployment smoke and backup/restore remain separate release gates.

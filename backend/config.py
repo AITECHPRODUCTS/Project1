@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     local_lora_adapter_path: str = ""
     local_model_device: str = "auto"
     affiliate_skills_dir: str = "./knowledge/affiliate-skills"
+    # Legacy field/env name retained for deployment compatibility; stores local_vectors.sqlite3, not ChromaDB.
     chroma_persist_dir: str = "./storage/chroma"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     openaffiliate_base_url: str = "https://openaffiliate.dev/api"

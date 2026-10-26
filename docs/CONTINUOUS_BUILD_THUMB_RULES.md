@@ -146,3 +146,6 @@ These additive rules apply to every future Project1 build session.
 
 
 60. P0 trusted-proxy runtime validation: `FORWARDED_ALLOW_IPS` accepts exact IPs/CIDRs and rejects wildcard/default-route/hostname values; Compose defaults to loopback-only. Actual reverse-proxy header stripping/replacement, trusted-peer behavior and rate-limit client-IP identity are **not** proven by CI. Run the documented spoofed-`X-Forwarded-For` staging checks and record deployed SHA/image digest, proxy source addresses and sanitized results before marking complete. Do not claim staging without a real endpoint.
+
+
+61. P0 Chroma advisory elimination — candidate: replace ChromaDB/`langchain-chroma` with a SQLite-persisted local vector index, preserve RAG APIs, remove all audit ignores, guard active runtime/dependency files against reintroduction, and test persistence/upsert/cosine ranking/model compatibility/collection isolation. Base `38a7b0ff6399d4702f8e8f798cdee81567a5c45d` passed its previous matrix; this remediation stays pending until the new exact-SHA push and PR workflows both pass with a clean AI dependency audit. Old index data needs explicit re-ingestion; don't delete the prior index as part of the code upgrade.

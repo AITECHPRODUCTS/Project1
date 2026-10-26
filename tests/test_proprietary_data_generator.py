@@ -42,7 +42,8 @@ def test_generates_paired_aggregate_dataset_without_visitor_identifiers():
     assert row["variant_a"]["observed_event_rate"] == round(8 / 120, 6)
     assert row["variant_b"]["recorded_conversion_events"] == 6
     assert row["provenance"]["visitor_identifiers_included"] is False
-    assert "visitor_id" not in repr(result)
+    assert "private-exp-1-A" not in repr(result)
+    assert "private-exp-1-B" not in repr(result)
     assert result["provider_attested"] is False
     assert result["training_started"] is False
     assert result["model_updated"] is False

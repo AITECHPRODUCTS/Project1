@@ -360,10 +360,18 @@ The GitHub Actions run linked from the repository is the authoritative check res
 ## 2026-10-26 campaign/conversion workspace binding — candidate
 - Audit found campaign list/create/health and API-submitted conversion handlers relied on ambient workspace context instead of validating and passing the authenticated workspace explicitly.
 - Candidate fix checks the selected workspace, scopes campaign reads/writes, includes workspace ID in conversion duplicate checks, and assigns the same workspace ID to both Conversion and ConversionLedgerEntry.
-- Added `tests/test_campaign_conversion_workspace_routes.py` for no-workspace denial, cross-tenant campaign hiding/health denial and same provider event IDs being independent per workspace. This candidate is **pending** exact-SHA hosted CI.
+- Added `tests/test_campaign_conversion_workspace_routes.py` for no-workspace denial, cross-tenant campaign hiding/health denial and same provider event IDs being independent per workspace. Verified on exact SHA 4becae03e155fedc361e5b9fcdfc9fde66602f75; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547 both passed.
 
 
 ## 2026-10-26 campaign/conversion route test-fixture correction — pending re-verification
 - The first hosted run for candidate `5cf7d3305b33e003fefaf4c1e56c25d8c0cc0834` exposed one regression in the pre-existing `tests/test_conversion_ledger.py::test_conversion_create_api_records_decimal_but_unverified_evidence`: it returned 403 because the test stubbed the DB session (including the development workspace lookup) but did not stub an authenticated workspace. The new handler's 403 was the intended fail-closed behavior; weakening the handler would be incorrect.
 - Updated the pre-existing test to provide an explicit authorized workspace through `require_auth` and assert both Conversion and ConversionLedgerEntry carry that workspace ID.
-- This fixture fix and the new campaign/conversion route tests must pass a new full push and PR CI run before the route-boundary candidate is marked verified.
+- Fixture fix verified on exact SHA 4becae03e155fedc361e5b9fcdfc9fde66602f75: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547 both passed the full required CI matrix.
+
+## 2026-10-26 campaign/conversion workspace binding — verified
+- Exact SHA: `4becae03e155fedc361e5b9fcdfc9fde66602f75`.
+- Push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324 — **success**. PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547 — **success**.
+- Both runs passed Python tests (including campaign/conversion route tests and the corrected conversion-ledger fixture), SQLite migrations/drift, PostgreSQL migrations/concurrency, AI/RAG imports, repository and 53-skill guard, frontend clean install/typecheck/build, security audit, and push lockfile sync.
+- Campaign list/create/health requires an active workspace and isolates reads/writes. API-submitted conversion idempotency is scoped to `(workspace_id, network, external_event_id)`, and both Conversion and ConversionLedgerEntry receive the authenticated workspace ID. Cross-tenant campaign health returns not found; the same event ID can be independently recorded by different tenants.
+- Production remains blocked by the documented four ChromaDB advisory exceptions and outstanding provider verification, broader endpoint/worker/export UAT, SBOM/license/secret scans, deployment smoke, and backup/restore.
+- Next P0 audit: remaining tenant-owned endpoints, especially content assets, leads/email queue/worker controls, and public lead-capture token binding.

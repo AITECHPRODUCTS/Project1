@@ -68,3 +68,8 @@
 - Checks include the new knowledge-index admin/path tests; Python suite, PostgreSQL migration/concurrency, AI/RAG imports, frontend checks/build, repository source and skill parity guard, security audit, and lockfile reproducibility.
 - Keep production release blocked by the four documented ChromaDB advisory exceptions and outstanding provider authorization, browser/UAT, SBOM/license/secret scanning, deployment smoke, and backup/restore gates.
 - Next: verify resource-budget and learning aggregate scoping under tenant and scheduled execution.
+
+## 2026-10-26 campaign/conversion workspace binding — verified
+- Candidate SHA `4becae03e155fedc361e5b9fcdfc9fde66602f75`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547 both passed.
+- Tests prove unscoped users are denied campaign and conversion routes; workspace A cannot see or operate on workspace B's campaign; conversion idempotency is per workspace; and Conversion plus immutable ledger entries use the selected workspace.
+- Continue source audit of remaining tenant-owned asset, lead, scheduled-email and public-capture routes before release. The four documented ChromaDB advisory exceptions remain a separate P0 production blocker.

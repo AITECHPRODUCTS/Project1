@@ -133,3 +133,9 @@
 - Shared RAG ingestion is explicitly platform-admin-only; ordinary workspace owners cannot mutate the index. UI authorization matches the API authorization, and the knowledge-status route no longer exposes an absolute host path.
 - New tests prove denied workspace-owner mutation, allowed platform-admin action, and path non-disclosure.
 - Next: test tenant isolation of resource-budget/learning summaries and cron/background execution contexts.
+
+## 2026-10-26 campaign/conversion tenant binding — exact-SHA verification
+- Exact SHA `4becae03e155fedc361e5b9fcdfc9fde66602f75`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547 both completed successfully.
+- Passed Python, SQLite, PostgreSQL integration/concurrency, AI/RAG imports, frontend, dependency audit, 53-skill guard and push lockfile sync.
+- A first run exposed a legacy test fixture that stubbed the database session but did not provide an authorized workspace; the handler's 403 was correct. The fixture now provides a workspace and asserts both Conversion and ledger entries carry that workspace ID. The rerun passed.
+- Next P0: audit remaining tenant-owned ContentAsset/Lead/ScheduledEmail routes and public lead-capture token binding.

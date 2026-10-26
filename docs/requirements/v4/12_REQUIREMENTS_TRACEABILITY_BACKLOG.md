@@ -53,3 +53,9 @@
 - Verified exact SHA `743e404e63b7c3a54423a18b1cf17af1338c5abf`: push [40266330644](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644) and PR [40266336192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192) both succeeded.
 - Remaining P0 security issue: four documented ChromaDB advisories remain behind a conditional local-only guard; remove the exception after an upstream fix or a verified vector-store replacement.
 - Next: inspect resource-budget/learning summary access under workspace and background execution contexts, then add tests for any tenant leak.
+
+## P0 — campaign/conversion workspace binding verified (2026-10-26)
+- Verified on `4becae03e155fedc361e5b9fcdfc9fde66602f75`; push [40268073324](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324) and PR [40268078547](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547) both green.
+- Campaign list/create/health fail closed without a selected workspace and scope reads/writes to the authenticated tenant. API conversion duplicate checks include workspace ID, and both Conversion and ConversionLedgerEntry are explicitly tenant-bound.
+- Regression tests deny users without a workspace, prove cross-workspace campaigns are hidden and cross-workspace health is not found, and prove the same provider event ID can be recorded independently in separate workspaces. The older conversion-ledger test now stubs an authorized workspace rather than relying on development fallback while using a fake DB session.
+- Next: audit remaining ContentAsset/Lead/ScheduledEmail routes and public lead-capture token binding.

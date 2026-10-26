@@ -93,3 +93,10 @@
 - Recover claims after 15 minutes only within 23 hours; older ambiguous claims become `delivery_unknown` because Resend documents a 24-hour idempotency-key window. Three regression tests passed. Verified implementation SHA `fedd1f74dbaa33e210b0587c774bc2ad63d92b8d`: push [40276085004](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276085004) and PR [40276090006](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276090006) both succeeded. Python suite: **258 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite upgrade/drift, PostgreSQL migration upgrade/downgrade/drift and concurrency, AI/RAG profile (**9 imports**), frontend typecheck/production build, dependency security audit, 53-skill guard and push lockfile reproducibility all passed.
 ## Email worker correction trace
 - First SHA `7c1b6bab08924a077aa790cbf39130e5eece0aad` failed one stable unsubscribe header assertion (257 passed, 2 skipped; push [40275990654](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275990654), PR [40275995997](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275995997)). Corrected regex at `fedd1f74dbaa33e210b0587c774bc2ad63d92b8d`; push [40276085004](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276085004) and PR [40276090006](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276090006) both passed.
+
+
+
+## P0 — workflow side-effect retry safety candidate (2026-10-26)
+- Runner currently retries timeout/connection errors generically, including external publishing in S5; an ambiguous provider result could be duplicated.
+- Candidate marks S5 as side-effecting, suppresses transient automatic retries and writes a tenant-scoped reconciliation event. Read-only retry behavior should remain unchanged.
+- Two regression tests pending exact-SHA push/PR.

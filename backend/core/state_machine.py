@@ -13,7 +13,11 @@ from backend.tenancy import get_workspace_id,workspace_scope
 logger=logging.getLogger(__name__)
 StageHandler=Callable[[dict[str,Any]],Awaitable[dict[str,Any]|None]]
 @dataclass(frozen=True)
-class WorkflowStep:key:str;label:str;handler:StageHandler
+class WorkflowStep:
+ key: str
+ label: str
+ handler: StageHandler
+ side_effecting: bool = False
 class WorkflowRunner:
  def __init__(self):self.tasks:dict[str,asyncio.Task]={};self.events:dict[str,asyncio.Event]={};self.responses:dict[str,str]={};self.resolver:Callable[[str],list[WorkflowStep]]|None=None
  def set_resolver(self,fn):self.resolver=fn
@@ -86,9 +90,43 @@ class WorkflowRunner:
      except asyncio.CancelledError:raise
      except Exception as exc:
       attempts+=1
-      if attempts<=int(settings.load_yaml().get("app",{}).get("max_workflow_retries",2)) and isinstance(exc,(TimeoutError,ConnectionError)):
+      transient= isinstance(exc,(TimeoutError,ConnectionError))
+      if transient and step.side_effecting:
+       # A provider may have accepted a write before a timeout/connection break.
+       # Never blindly retry an external side effect; leave a durable reconciliation event.
+       metadata=state.get("metadata",{})
+       workspace_id=str(metadata.get("workspace_id") or "").strip() if isinstance(metadata,dict) else ""
+       if workspace_id:
+        try:
+         with workspace_scope(workspace_id):
+          async with SessionLocal() as db:
+           db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(metadata.get("initiated_by") or "workflow")[:320],
+            action="workflow.side_effect_outcome_unknown",
+            resource_type="external_publication",
+            resource_id=sid,
+            outcome="unknown",
+            details_json={
+             "stage":step.key,
+             "error_type":type(exc).__name__,
+             "automatic_retry":False,
+             "manual_reconciliation_required":True,
+            },
+           ))
+           await db.commit()
+        except Exception:
+         logger.exception("Unable to persist unknown side-effect outcome for workflow %s stage %s",sid,step.key)
+       failure_message=f"{step.key}: external side-effect outcome unknown after {type(exc).__name__}; automatic retry suppressed; reconcile the provider before resubmitting."
+      elif transient and attempts<=int(settings.load_yaml().get("app",{}).get("max_workflow_retries",2)):
        await asyncio.sleep(min(2**attempts,8));continue
-      logger.exception("Workflow stage failed: %s/%s",sid,step.key);state.setdefault("stages",{})[step.key]={"status":"failed","error":f"{type(exc).__name__}: {str(exc)[:300]}"};await self._save(sid,"failed",i,state,f"{step.key}: {type(exc).__name__}: {exc}",True);await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"status":"failed","stage":step.key,"message":str(exc)[:300]});return
+      else:
+       failure_message=f"{step.key}: {type(exc).__name__}: {exc}"
+      logger.exception("Workflow stage failed: %s/%s",sid,step.key)
+      state.setdefault("stages",{})[step.key]={"status":"failed","error":failure_message[:500]}
+      await self._save(sid,"failed",i,state,failure_message,True)
+      await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"status":"failed","stage":step.key,"message":failure_message[:300]})
+      return
    state.setdefault("metadata",{})["finished_at"]=datetime.now(timezone.utc).isoformat();await self._save(sid,"completed",len(steps),state,done=True,result=state)
    async with SessionLocal() as db:db.add(AuditLog(actor="system",action="workflow.completed",resource_type="workflow",resource_id=sid,details_json={"name":name}));await db.commit()
    await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"workflow_name":name,"status":"completed","current_step":len(steps),"total_steps":len(steps)})

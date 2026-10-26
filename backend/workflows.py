@@ -153,7 +153,7 @@ async def s7(state:dict[str,Any])->dict[str,Any]:
 async def s8(state:dict[str,Any])->dict[str,Any]:
  if not state.get("run_learning",True):return {"s8_result":{"status":"skipped","reason":"run_learning=false"}}
  return {"s8_result":await self_improver_loop(lookback_days=int(state.get("learning_lookback_days",30)))}
-STEPS=[WorkflowStep(key,LABELS[key],fn) for key,fn in [("S1",s1),("S2",s2),("S3",s3),("S4",s4),("S5",s5),("S6",s6),("S7",s7),("S8",s8)]]
+STEPS=[WorkflowStep(key,LABELS[key],fn,side_effecting=(key=="S5")) for key,fn in [("S1",s1),("S2",s2),("S3",s3),("S4",s4),("S5",s5),("S6",s6),("S7",s7),("S8",s8)]]
 def resolve_steps(name:str)->list[WorkflowStep]:
  norm=name.lower().replace("-","_")
  if norm in {"full_flywheel","affiliate_flywheel","all"}:return list(STEPS)

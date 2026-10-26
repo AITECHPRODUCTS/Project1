@@ -149,7 +149,13 @@
 - Next: global provider/configuration access review. Production is not release-ready while ChromaDB advisories and live-provider/UAT/SBOM/license/secret/deployment/restore evidence remain unresolved.
 
 
-## P0 — global provider readiness/capability access (2026-10-26)
+## P0 — global provider readiness/capability access verified (2026-10-26)
 - Candidate changes restrict `/api/integrations` and `/api/capabilities` to Platform Super Admin + active workspace because responses reveal global provider/model/email/CMS/social readiness and missing configuration variable names.
 - Existing response status meanings remain unchanged; only access is tightened. Raw credential values are not returned and are covered by sentinel-redaction tests.
-- Await full exact-SHA push/PR CI before verification.
+- Verified on exact SHA `a0bb0ff23f86b29e7e4a9072d2109e77d0328d40`; push [40282793722](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282793722) and PR [40282799345](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282799345) passed; Python 281 passed/2 skipped and all required jobs passed.
+
+
+## Next P0 — public route abuse/rate limiting
+- Audit public tracking, public lead-capture and draft-generation routes for per-IP/token quotas, payload-size limits, budget consumption, bot abuse and trusted-proxy assumptions.
+- Inspect existing middleware/edge controls first; make no assumption that a missing route decorator means there is no upstream limit. Add bounded route-level controls and tests only if no existing defense exists.
+- Keep release blocked until the ChromaDB advisories and production UAT/SBOM/license/secret/deployment/restore gates are closed.

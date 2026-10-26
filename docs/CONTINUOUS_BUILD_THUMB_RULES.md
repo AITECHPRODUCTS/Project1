@@ -113,4 +113,7 @@ These additive rules apply to every future Project1 build session.
 48. Next P0: inspect remaining global provider/configuration and integration routes for role boundaries, tenant ownership, audit trails, rate limits and safe network access. Do not relax shared-resource permissions to make tests pass; update the tests to express the intended authorization contract.
 
 
-49. P0 global provider readiness/capability confidentiality: `/api/integrations` and `/api/capabilities` reveal global deployment configuration and missing environment-variable names. Require Platform Super Admin and active workspace without changing safe status classifications. Add tests for anonymous and workspace-admin denial, missing-workspace denial, and raw-secret non-disclosure. Mark pending until full push and PR CI pass.
+49. P0 global provider readiness/capability confidentiality is verified on `a0bb0ff23f86b29e7e4a9072d2109e77d0328d40`; push [40282793722](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282793722) and PR [40282799345](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282799345) passed. Python 281 passed/2 skipped, full required CI green. Both endpoints require Platform Super Admin plus selected workspace; four regressions cover authentication, workspace role, absent workspace, and raw credential redaction.
+
+
+50. Next P0: examine abuse controls on public endpoints that perform generation or create tracking/lead records. Identify whether a trusted proxy/API layer already rate-limits them; avoid double-limiting; add route-level request limits and regression tests only for verified gaps.

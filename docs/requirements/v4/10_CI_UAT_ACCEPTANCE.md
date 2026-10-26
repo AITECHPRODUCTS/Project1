@@ -155,3 +155,10 @@
 - Restrict global provider and capability summaries to Platform Super Admin plus a selected workspace; leave their existing status classifications unchanged.
 - Require tests for anonymous/workspace-admin denials, no-workspace denial, and ensure no raw sentinel secret values are present in either endpoint response.
 - Candidate remains pending until full push and PR workflows pass.
+
+
+## 2026-10-26 global provider configuration confidentiality — verified
+- Exact SHA `a0bb0ff23f86b29e7e4a9072d2109e77d0328d40`; push [40282793722](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282793722) and PR [40282799345](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282799345) succeeded.
+- Four tests cover auth denial, workspace-admin denial, missing selected workspace, and secret redaction from authorized responses. Existing global readiness semantics are preserved.
+- Python 281 passed/2 skipped, SQLite/PostgreSQL, AI/RAG, frontend, security audit, repository parity and push lockfile sync passed.
+- Next P0: review public route abuse controls; the four ChromaDB advisories and remaining production release gates remain unresolved.

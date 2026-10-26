@@ -242,3 +242,9 @@
 ## 2026-10-26 provider readiness summary access — candidate
 - Audit found global provider/configuration readiness exposed without authentication at `/api/integrations` and `/api/capabilities`.
 - Candidate restricts the endpoints to Platform Super Admin with selected workspace, with tests for unauthorized roles, absent workspace and raw credential redaction. Exact-SHA CI pending.
+
+
+## 2026-10-26 provider configuration-summary access — verified
+- Exact SHA `a0bb0ff23f86b29e7e4a9072d2109e77d0328d40`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282793722 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282799345 both passed.
+- The deployment-wide integration and capability summaries require Platform Super Admin and selected workspace; builder output schemas are unchanged and response redaction tests pass. Python 281 passed, 2 skipped; all required CI jobs passed.
+- Next: review public route abuse/rate-limiting boundaries for tracking, lead capture and computationally expensive draft generation, including whether an upstream proxy already supplies safe quotas.

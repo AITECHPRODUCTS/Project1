@@ -450,36 +450,68 @@ async def capabilities():
     return build_capability_matrix(settings, registry)
 
 @api.get("/status")
-async def status(db:AsyncSession=Depends(get_session)):
- clicks=int(await db.scalar(select(func.count(ClickEvent.id)) ) or 0);events=int(await db.scalar(select(func.count(Conversion.id))) or 0);commission=float(await db.scalar(select(func.coalesce(func.sum(Conversion.commission),0.0))) or 0)
- recent=list((await db.scalars(select(WorkflowRun).order_by(WorkflowRun.created_at.desc()).limit(6))).all());path=Path(settings.chroma_persist_dir)
- indexed=path.exists() and any(path.glob("**/*"))
- model_configured=(settings.llm_backend=="openai_compatible" and bool(settings.openai_api_key)) or (settings.llm_backend=="local_transformers" and bool(settings.local_model_path))
+async def status(user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+ workspace_id = user.get("workspace_id")
+ if not workspace_id:
+  raise HTTPException(403, "Select an authorized workspace before viewing status")
+ with workspace_scope(str(workspace_id)):
+  clicks = int(await db.scalar(select(func.count(ClickEvent.id))) or 0)
+  events = int(await db.scalar(select(func.count(Conversion.id))) or 0)
+  commission = float(await db.scalar(select(func.coalesce(func.sum(Conversion.commission), 0.0))) or 0)
+  recent = list((await db.scalars(select(WorkflowRun).order_by(WorkflowRun.created_at.desc()).limit(6))).all())
+ path = Path(settings.chroma_persist_dir)
+ indexed = path.exists() and any(path.glob("**/*"))
+ model_configured = (settings.llm_backend == "openai_compatible" and bool(settings.openai_api_key)) or (settings.llm_backend == "local_transformers" and bool(settings.local_model_path))
  return {"app_name":settings.app_name,"environment":settings.app_env,"execution_mode":settings.execution_mode,"stage_count":8,"stages":[{"id":k,"label":v} for k,v in LABELS.items()],"knowledge_index_available":indexed,"api_model_configured":model_configured,"email_delivery_configured":bool(settings.resend_api_key and settings.resend_from_email),"video_rendering_available":bool(settings.pexels_api_key),"publishing_dry_run":settings.publishing_dry_run,"ad_automation_execute":settings.ad_automation_execute,"clicks":clicks,"conversion_events":events,"commission_recorded":round(commission,2),"recent_workflows":[{"session_id":x.id,"name":x.workflow_name,"status":x.status,"current_step":x.current_step,"created_at":x.created_at.isoformat() if x.created_at else None} for x in recent]}
+
 @api.get("/flywheel/status")
-async def flywheel_status(db:AsyncSession=Depends(get_session)):
- run=await db.scalar(select(WorkflowRun).order_by(WorkflowRun.created_at.desc()))
- if not run:return {"active_session":None,"stages":[{"id":k,"label":v,"status":"idle"} for k,v in LABELS.items()]}
+async def flywheel_status(user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+ workspace_id = user.get("workspace_id")
+ if not workspace_id:
+  raise HTTPException(403, "Select an authorized workspace before viewing workflow status")
+ with workspace_scope(str(workspace_id)):
+  run = await db.scalar(select(WorkflowRun).order_by(WorkflowRun.created_at.desc()))
+ if not run:
+  return {"active_session":None,"stages":[{"id":k,"label":v,"status":"idle"} for k,v in LABELS.items()]}
  states=(run.state_json or {}).get("stages",{});stages=[{"id":k,"label":v,"status":states.get(k,{}).get("status","pending"),"error":states.get(k,{}).get("error")} for k,v in LABELS.items()]
  stage_keys=list(LABELS);active=None
  if run.status=="paused" and run.current_step<len(stage_keys):active=stage_keys[run.current_step];stages[run.current_step]["status"]="waiting_for_human"
  elif run.status=="running" and run.current_step<len(stage_keys):active=stage_keys[run.current_step];stages[run.current_step]["status"]="running"
  return {"active_session":run.id,"workflow_name":run.workflow_name,"workflow_status":run.status,"current_step":run.current_step,"active_stage":active,"execution_mode":run.execution_mode,"stages":stages}
 @api.post("/workflows/run",status_code=202)
-async def start_workflow(payload:WorkflowStartRequest):
- try:sid=await runner.start(payload.workflow_name,payload.state,resolve_steps(payload.workflow_name),payload.execution_mode)
- except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+async def start_workflow(payload: WorkflowStartRequest, user: dict[str, Any] = Depends(require_auth)):
+ workspace_id = user.get("workspace_id")
+ if not workspace_id:
+  raise HTTPException(403, "Select an authorized workspace before starting a workflow")
+ try:
+  with workspace_scope(str(workspace_id)):
+   sid = await runner.start(payload.workflow_name, payload.state, resolve_steps(payload.workflow_name), payload.execution_mode)
+ except ValueError as exc:
+  raise HTTPException(422, str(exc)) from exc
  return {"session_id":sid,"status":"queued","workflow_name":payload.workflow_name,"execution_mode":payload.execution_mode or settings.execution_mode,"status_url":f"/api/workflows/{sid}"}
+
 @api.get("/workflows/{session_id}")
-async def workflow_status(session_id:str):
- data=await runner.status(session_id)
- if data is None:raise HTTPException(404,"Workflow session not found")
+async def workflow_status(session_id: str, user: dict[str, Any] = Depends(require_auth)):
+ workspace_id = user.get("workspace_id")
+ if not workspace_id:
+  raise HTTPException(403, "Select an authorized workspace before viewing a workflow")
+ data = await runner.status(session_id, workspace_id=str(workspace_id))
+ if data is None:
+  raise HTTPException(404, "Workflow session not found")
  return data
+
 @api.post("/resume/{session_id}")
-async def resume(session_id:str,payload:ResumeRequest):
- try:return await runner.resume(session_id,payload.verification_code)
- except KeyError as exc:raise HTTPException(404,str(exc)) from exc
- except ValueError as exc:raise HTTPException(409,str(exc)) from exc
+async def resume(session_id: str, payload: ResumeRequest, user: dict[str, Any] = Depends(require_auth)):
+ workspace_id = user.get("workspace_id")
+ if not workspace_id:
+  raise HTTPException(403, "Select an authorized workspace before resuming a workflow")
+ try:
+  with workspace_scope(str(workspace_id)):
+   return await runner.resume(session_id, payload.verification_code, workspace_id=str(workspace_id))
+ except KeyError as exc:
+  raise HTTPException(404, "Workflow session not found") from exc
+ except ValueError as exc:
+  raise HTTPException(409, str(exc)) from exc
 @api.post("/knowledge/ingest")
 async def knowledge_ingest():
  try:return {"status":"indexed",**await asyncio.to_thread(ingest_doctrine,settings.skills_root,Path(settings.chroma_persist_dir),settings.embedding_model,1200,180)}

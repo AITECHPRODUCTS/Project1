@@ -28,7 +28,9 @@ class WorkflowRunner:
   mode=mode or get_settings().execution_mode
   if mode not in {"FULL_AUTONOMOUS","SEMI_AUTONOMOUS","MANUAL_OVERRIDE"}:raise ValueError("Invalid execution mode")
   if mode=="MANUAL_OVERRIDE" and len(steps)!=1:raise ValueError("MANUAL_OVERRIDE runs exactly one stage")
-  sid=str(uuid.uuid4());state=copy.deepcopy(state);state.setdefault("metadata",{}).update({"workflow":name,"execution_mode":mode,"started_at":datetime.now(timezone.utc).isoformat(),"workspace_id":get_workspace_id()})
+  workspace_id=get_workspace_id()
+  if not isinstance(workspace_id,str) or not workspace_id.strip():raise ValueError("Authorized workspace context required to start a workflow")
+  sid=str(uuid.uuid4());state=copy.deepcopy(state);state.setdefault("metadata",{}).update({"workflow":name,"execution_mode":mode,"started_at":datetime.now(timezone.utc).isoformat(),"workspace_id":workspace_id})
   async with SessionLocal() as db:
    db.add(WorkflowRun(id=sid,workflow_name=name,status="queued",execution_mode=mode,state_json=state));db.add(AuditLog(actor="system",action="workflow.started",resource_type="workflow",resource_id=sid,details_json={"name":name,"mode":mode}));await db.commit()
   self.events[sid]=asyncio.Event();self.tasks[sid]=asyncio.create_task(self._drive(sid,name,state,steps,0,mode),name=f"affiliate-os-{sid}");return sid
@@ -92,21 +94,26 @@ class WorkflowRunner:
    await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"workflow_name":name,"status":"completed","current_step":len(steps),"total_steps":len(steps)})
   except asyncio.CancelledError:await self._save(sid,"cancelled",0,state,done=True);raise
   finally:self.tasks.pop(sid,None)
- async def resume(self,sid:str,code:str)->dict[str,Any]:
+ async def resume(self,sid:str,code:str,workspace_id:str)->dict[str,Any]:
+  if not isinstance(workspace_id,str) or not workspace_id.strip():raise KeyError("Paused session not found")
   if not code.strip() or len(code)>512:raise ValueError("Verification response must be 1..512 characters")
-  async with SessionLocal() as db:
-   paused=await db.get(PausedSession,sid);run=await db.get(WorkflowRun,sid)
-   if not paused or not run:raise KeyError("Paused session not found")
-   if paused.status!="paused":raise ValueError(f"Workflow is not paused ({paused.status})")
-   paused.status="resume_requested";await db.commit()
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    paused=await db.get(PausedSession,sid);run=await db.get(WorkflowRun,sid)
+    if not paused or not run:raise KeyError("Paused session not found")
+    if paused.workspace_id!=workspace_id or run.workspace_id!=workspace_id:raise KeyError("Paused session not found")
+    if paused.status!="paused" or run.status!="paused":raise ValueError("Workflow is not paused")
+    paused.status="resume_requested";await db.commit()
   self.responses[sid]=code.strip();self.events.setdefault(sid,asyncio.Event()).set()
   return {"session_id":sid,"status":"resume_requested","verification_code_persisted":False}
- async def status(self,sid:str)->dict[str,Any]|None:
-  async with SessionLocal() as db:
-   run=await db.get(WorkflowRun,sid)
-   if not run:return None
-   paused=await db.get(PausedSession,sid)
-   return {"session_id":sid,"workflow_name":run.workflow_name,"status":run.status,"current_step":run.current_step,"execution_mode":run.execution_mode,"state":run.state_json,"result":run.result_json,"error":run.error_message,"paused_session":{"status":paused.status,"required_action":paused.required_action,"stage_index":paused.current_step} if paused else None}
+ async def status(self,sid:str,workspace_id:str|None=None)->dict[str,Any]|None:
+  if not isinstance(workspace_id,str) or not workspace_id.strip():return None
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    run=await db.get(WorkflowRun,sid)
+    if not run or run.workspace_id!=workspace_id:return None
+    paused=await db.get(PausedSession,sid)
+    return {"session_id":sid,"workflow_name":run.workflow_name,"status":run.status,"current_step":run.current_step,"execution_mode":run.execution_mode,"state":run.state_json,"result":run.result_json,"error":run.error_message,"paused_session":{"status":paused.status,"required_action":paused.required_action,"stage_index":paused.current_step} if paused and paused.workspace_id==workspace_id else None}
  async def _wait_recovered_pause(self,sid:str,name:str,state:dict[str,Any],steps:list[WorkflowStep],index:int,mode:str,action:str,error:str|None):
   event=self.events.setdefault(sid,asyncio.Event())
   await self._emit(state, {"event":"HITL_ALERT","session_id":sid,"workflow_name":name,"stage":steps[index].key if index<len(steps) else None,"stage_label":steps[index].label if index<len(steps) else None,"required_action":action,"message":error or "Workflow recovered paused; human response required."})
@@ -124,7 +131,8 @@ class WorkflowRunner:
    async with SessionLocal() as db:
     fresh=await db.get(PausedSession,row.session_id)
     if fresh and fresh.status!="paused":fresh.status="paused";await db.commit()
-   run=await self.status(row.session_id)
+   if not row.workspace_id:continue
+   run=await self.status(row.session_id,workspace_id=row.workspace_id)
    if not run:continue
    steps=self.resolver(row.workflow_name)
    if row.current_step>=len(steps):continue

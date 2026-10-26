@@ -269,8 +269,15 @@
 - Reports are uploaded as artifacts with the candidate commit SHA and 30-day retention. The scan is not complete until the exact-SHA push/PR checks pass; false-positive handling must use narrow, reviewed exceptions, never blanket path exclusions.
 
 
-## 2026-10-26 supply-chain scanner first-run result and correction
+## 2026-10-26 supply-chain scanner first-run result and correction — verified
 - Initial code candidate `4331d2c5f848d5580dc93990191fc01a7c80b2cb`: push [40346076313](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40346076313), PR [40346091684](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40346091684). Core/test Python license report passed (76 packages), but the new Gitleaks job found one historical false positive in preserved skill wording and the frontend license gate found two transitive LGPL libvips components.
 - Candidate correction suppresses only the exact Gitleaks fingerprint associated with “conversational tone” at the cited historical line; a regression test constrains the file to that single fingerprint.
 - License-policy exception file matches only the two exact @img/sharp-libvips package names, version 1.3.4 and license LGPL-3.0-or-later. Expiry is 2026-11-02. License reports explicitly set `release_approved=false` when these exceptions are used. This is not production/legal clearance.
-- New exact-SHA push + PR results and artifact review are pending.
+- Verified on `f254ec0d998fa6541fba8415d0ed059fda7e4a23`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348612494 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348624953 both passed. Gitleaks reported zero findings; report artifacts were inspected. The frontend license artifact explicitly includes two time-bound exceptions and `release_approved=false`.
+
+
+## 2026-10-26 SBOM/license/secret scan CI gate — verified
+- Exact SHA `f254ec0d998fa6541fba8415d0ed059fda7e4a23`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348612494 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348624953 both passed. Python 361 passed/3 skipped/1 warning; PostgreSQL, AI/RAG, frontend, dependency audits, repo guard and lockfile sync passed.
+- Core/test Python 76 packages and AI/RAG 90 packages each have zero license findings. Frontend CycloneDX covers 109 packages and has no unreviewed findings. It uses two exact LGPL-3.0-or-later libvips CI-inventory exceptions through 2026-11-02; the report explicitly sets `release_approved=false`.
+- Full-history Gitleaks scan passed with zero findings; its only ignore is the exact historical false-positive fingerprint guarded by a test. Reports are linked from `docs/IMPLEMENTATION_STATUS.md`.
+- The CI tooling task is complete; legal review for the two LGPL packages and actual staging/provider/deployment/restore acceptance remain blockers to production release.

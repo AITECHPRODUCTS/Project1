@@ -354,3 +354,11 @@
 - Added a single exact .gitleaksignore fingerprint backed by tests; no whole-file/path or broad rule suppression.
 - Added time-limited exact component/version/license exceptions only for CI inventory of two `@img/sharp-libvips-*` 1.3.4 binaries. Every report marks these as release blockers pending legal review and the exception file expires 2026-11-02.
 - Corrective source/test patch is pending new push/PR workflow evidence; do not count this supply-chain task green before both runs and their artifact reports are inspected.
+
+
+## 2026-10-26 SBOM/license/secret scan evidence — exact-SHA verified
+- Exact SHA `f254ec0d998fa6541fba8415d0ed059fda7e4a23`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348612494 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348624953 both passed.
+- Artifact review: Gitleaks redacted JSON is empty (zero findings); Python core/test SBOM/license (76 packages) and AI/RAG SBOM/license (90 packages) show no findings; frontend SBOM/license (109 packages) has two known LGPL libvips inventory exceptions and `release_approved=false`.
+- The only Gitleaks ignore is the precise fingerprint for an ordinary-text false positive at a historical upstream skill line. Unit tests enforce that no second/broad ignore is added.
+- The license exception file permits only the exact two package/version/license combinations until 2026-11-02. It is CI inventory reporting only, not legal release approval.
+- External staging proxy, provider UAT, deployment smoke, monitoring/SLO and database backup/restore still require operational evidence.

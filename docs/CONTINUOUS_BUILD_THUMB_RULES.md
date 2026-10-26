@@ -187,3 +187,6 @@ These additive rules apply to every future Project1 build session.
 
 
 73. 2026-10-26 supply-chain first-run finding correction: exact-SHA candidate `4331d2c5f848d5580dc93990191fc01a7c80b2cb` failed Gitleaks on ordinary phrase “conversational tone” at the preserved upstream skill file line 68 and failed the license gate on exactly two `@img/sharp-libvips-*` 1.3.4 components under LGPL-3.0-or-later. Ignore only the exact historical fingerprint `513bbaacd9441024ef191472c95dd80289c6ea31:knowledge/affiliate-skills/upstream/skills/content/viral-post-writer/SKILL.md:linkedin-client-id:68`. License exceptions are exact package + version + license, expire 2026-11-02, are emitted as `release_approved=false`, and do not grant legal or production approval. Tests and new push/PR CI pending.
+
+
+74. Production release remains blocked until the two LGPL exception items are legally reviewed or replaced and actual external staging/provider/deployment/restore evidence is recorded. The scan artifact URLs and exact SHA are recorded in `docs/IMPLEMENTATION_STATUS.md`; exception expiration must fail closed.

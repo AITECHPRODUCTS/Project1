@@ -289,3 +289,11 @@
 - Raised uvicorn[standard] lower bound from 0.30 to 0.31 because the app validates CIDR trust configuration and needs a Uvicorn version with IP-network parsing support.
 - Added tests/test_trusted_proxy_middleware.py using the real Uvicorn middleware for untrusted spoof attempts, trusted CIDR forwarding and multi-hop chains.
 - Pending exact-SHA full push and PR CI. A live staging request through the real reverse proxy remains mandatory to prove it strips/replaces incoming forwarding headers.
+
+
+## P0 — automated SBOM, license-policy and secret scanning (2026-10-26) — verified
+- Exact SHA `f254ec0d998fa6541fba8415d0ed059fda7e4a23`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348612494 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348624953 both succeeded.
+- CI produces reproducible CycloneDX SBOM artifacts for Python core/test, optional AI/RAG and frontend; emits license inventory JSON keyed to `GITHUB_SHA`; runs full-history Gitleaks with redaction; and uploads report artifacts with candidate SHA in their names.
+- Verification: Python **361 passed, 3 skipped, 1 existing warning**; all 8 push jobs and all 7 required PR jobs passed. The secret scan reported zero findings after the one exact-fingerprint ordinary-text false positive was narrowly ignored under regression test.
+- Python core/test (76 packages) and AI/RAG (90 packages) license reports have zero findings; frontend (109 packages) has two exact, expiring LGPL items marked release blockers, with `release_approved=false`. Legal review or replacement is mandatory before production distribution.
+- Remaining independent release gates: actual staging proxy spoof/identity behavior, authorized provider live UAT, deploy smoke, monitoring/SLO, production data/RAG re-ingestion validation and backup/restore.

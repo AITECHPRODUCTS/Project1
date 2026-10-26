@@ -38,3 +38,6 @@ These additive rules apply to every future Project1 build session.
 
 
 19. 2026-10-26 lockfile checkpoint: the temporary `dependency-remediation` workflow job passed `npm audit`, `npm ci`, frontend typecheck and production build, then committed the patched lockfile as `0180f2f0fd84445ff76131d4ca04389676043b8a`. That bot commit did not give a normal full-matrix push run; do not count it as a full CI pass. The temporary lock-refresh job has been removed. The next regular commit must trigger the full matrix on the committed Next.js 16.4.3 lockfile; inspect and fix failures before selecting another P0 task.
+
+
+20. 2026-10-26 verified checkpoint: full push run [40264037056](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056) and PR run [40264040473](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473) passed on exact SHA `668b33670ea11e30f97ccc3c6e50180124609207`. The frontend npm audit and standard/AI-RAG audits passed, with only the four precisely documented Chroma advisories conditionally excepted by the embedded-only guard. Preserve this as a verified checkpoint. Next: move GitHub Actions dependencies off retired Node 20 releases to current Node 24-capable action majors, then rerun the full matrix; production is still blocked by the Chroma exception and provider/UAT/deploy/restore gates.

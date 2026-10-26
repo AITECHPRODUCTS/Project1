@@ -291,3 +291,13 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The resulting lock records Next.js `16.4.3`, resolved PostCSS `8.5.31`, and `postcss-selector-parser` `7.1.6`. The guarded dependency-repair job's `npm audit`, clean `npm ci`, frontend typecheck, and production build all passed before it pushed that lockfile.
 - The broad workflow on the earlier pre-lock commit is not counted as green: its parallel frontend job had started with a stale lockfile and failed `npm ci`. The GitHub Actions bot's lockfile commit did not provide a successful full-matrix run on the lockfile SHA; a PR run was marked `action_required`. The temporary repair job has therefore been removed, and a normal follow-up commit on this branch will trigger the complete matrix against the committed lockfile.
 - CI/security result still to verify on the new exact SHA: standard frontend `npm ci`, `npm audit --audit-level=high`, full tests/migrations, Postgres integration, AI/RAG, and skill parity. The separate ChromaDB exception remains an explicit production-release blocker.
+
+
+## 2026-10-26 verified full CI — dependency repair complete
+- Exact candidate SHA: `668b33670ea11e30f97ccc3c6e50180124609207`.
+- Push run: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056 (**success**).
+- Pull-request run: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473 (**success**).
+- Passed on the exact SHA: repository/source inventory and 53-skill parity; Python compile and full pytest suite; SQLite migration upgrade/downgrade/drift; PostgreSQL migration upgrade/downgrade/drift and concurrent conversion reversal; AI/RAG dependency import; frontend `npm ci`, TypeScript typecheck and Next.js production build; core/test and AI/RAG dependency audit; frontend `npm audit --audit-level=high`; and clean lockfile sync.
+- The frontend dependency fix includes Next.js `16.4.3`, PostCSS `8.5.31`, and postcss-selector-parser `7.1.6`. The previous dependency-audit failure is resolved in this full matrix.
+- Explicit outstanding security limitation: the four ChromaDB advisory IDs documented in `docs/SECURITY_EXCEPTIONS.md` are still temporary exceptions behind the local-only guard; this is not a clean AI/RAG scan or production release approval.
+- Current next P0 hygiene action: migrate workflow actions off retired Node 20 releases, then rerun the complete matrix on the new exact SHA. Provider live authorization, SBOM/license/secret scans, browser UAT, deployment smoke and backup/restore remain separate release gates.

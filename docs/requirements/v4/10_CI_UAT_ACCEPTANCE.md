@@ -29,3 +29,12 @@
 
 ## AI/RAG dependency-audit exception
 - The current ChromaDB 1.5.9 advisory records identify four unpatched IDs and no fixed PyPI release at the time of review. The only permitted temporary CI exception is enumerated in `docs/SECURITY_EXCEPTIONS.md` and is conditional on `scripts/verify_chroma_security_boundary.py` passing. This is not a clean dependency scan or production approval. Replace Chroma or remove the exception after an upstream fix, then rerun audits and full RAG retrieval evaluation.
+
+
+## 2026-10-26 exact-SHA full matrix
+- Candidate `668b33670ea11e30f97ccc3c6e50180124609207`: push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473 both passed.
+- Confirmed: repository guard/53-skill parity, Python suite, SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG imports, frontend `npm ci`/typecheck/build, core/test and AI/RAG audits, frontend `npm audit --audit-level=high`, and lockfile sync.
+- The ChromaDB temporary exception remains a release blocker; these successful runs must not be presented as complete production release approval.
+
+## 2026-10-26 CI runtime maintenance
+- Workflow actions were using old releases with Node 20 runtime warnings. Node 20 was removed from GitHub-hosted Actions on 23 September 2026; action releases must support Node 24. This checkpoint updates those action versions; validate the exact updated workflow before advancing.

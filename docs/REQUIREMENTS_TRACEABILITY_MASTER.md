@@ -95,3 +95,9 @@
 - GitHub's temporary lock refresh succeeded: `npm audit`, clean `npm ci`, TypeScript check and production UI build passed using the patched resolution; lock commit is `0180f2f0fd84445ff76131d4ca04389676043b8a` on the existing build branch.
 - The regular frontend job on the earlier commit failed because it began before that lockfile was pushed. Treat that run as failed; the success of the helper job does not substitute for exact-SHA full CI.
 - Removed the one-shot lock-refresh job to keep CI deterministic. The current normal push run must validate the committed lock, full Python and PostgreSQL tests/migration gates, AI/RAG, skill parity, and frontend security audit. Keep release blocked until all required gates and the separately documented Chroma exception are resolved.
+
+
+## 2026-10-26 P0 dependency gate verified on exact SHA
+- Push [40264037056](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056) and PR [40264040473](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473) both completed successfully at `668b33670ea11e30f97ccc3c6e50180124609207`.
+- Passed gates include the full Python suite, SQLite and PostgreSQL migration/drift, PostgreSQL concurrency, AI/RAG imports, 53-skill registry parity, frontend typecheck/build, dependency audit, clean `npm ci`, and lockfile reproducibility.
+- Security caveat remains material: four exact ChromaDB advisory IDs are conditionally excepted only behind the documented local-only guard. The current result is not production security clearance. Provider authorization, browser UAT, SBOM/license/secret scan, deployment and restore evidence remain pending.

@@ -11,3 +11,9 @@ Test SIGTERM, worker crash/restart, lease expiry/races, duplicate delivery, retr
 
 ## Status
 The repository now includes Dockerfile/Compose and an Alembic baseline/gate. A real hosted staging deployment, PostgreSQL upgrade/restore, production domain/secret setup and monitoring/SLO evidence are not recorded, so no live status is claimed.
+
+
+## Inbound reverse-proxy and client-IP trust
+- Docker Compose binds the API to loopback by default. Rate-limit keys use `request.client.host`; do not treat a client-supplied `X-Forwarded-For` value as trusted identity.
+- If deploying behind a reverse proxy, configure Uvicorn forwarded-header trust only for the exact proxy address(es)/CIDR(s) using `--forwarded-allow-ips`. The proxy must strip and replace inbound forwarding headers. Never use `--forwarded-allow-ips=*` on a public deployment.
+- This repository does not define a trusted-proxy CIDR setting. Document and test the real ingress/proxy chain during staging; until then, assume the direct peer address is the rate-limit identity.

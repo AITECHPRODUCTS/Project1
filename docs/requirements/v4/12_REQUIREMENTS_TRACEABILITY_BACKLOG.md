@@ -171,3 +171,11 @@
 - Review all public outbound requests in research URL fetch, OpenAffiliate offer discovery, generic provider adapters and Pexels video download. Confirm safe DNS/IP resolution on every connection, redirects disabled or revalidated, byte caps, timeouts and rate budgets.
 - Existing `backend/services/url_safety.py` and `backend/services/video_engine.py` already have controls; inspect their exact semantics and add only verified regression gaps. Note trusted proxy behaviour explicitly.
 - Production remains blocked by ChromaDB advisories and provider/UAT/SBOM/license/secret/deployment/restore evidence.
+
+
+## P0 — public outbound fetch, proxy and video asset safety (2026-10-26)
+- Finding: URL validation blocked non-public DNS answers but the actual HTTP request resolved the hostname again, so the socket destination was not pinned. Campaign health probes had the same pattern; Pexels asset downloads lacked media Content-Type/declared-size checks and a source-duration cap.
+- Candidate shared transport pins requests to a vetted public IP while preserving Host/SNI, disables redirects and proxy environment variables, applies total deadlines, and checks both declared and streamed response size. It is reused by HTML research fetches, configured OpenAffiliate requests, link-health probes and Pexels search/media downloads.
+- Added limits: 2 MiB Pexels search JSON, 150 MiB media download, 180 seconds source/narration, 500 MiB rendered output, and 2 MiB / 12 seconds for default public HTML fetches.
+- Competitor research now requires authentication and a selected workspace, applies the existing distributed IP/workspace quota, and limits each URL to 2,048 characters.
+- Exact-SHA CI and new regression tests are pending. Staging must still validate ingress sanitization and Uvicorn trusted-proxy configuration; do not use wildcard forwarded-header trust.

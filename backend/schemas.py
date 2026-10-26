@@ -4,7 +4,7 @@ import ipaddress
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -41,7 +41,7 @@ class NicheFinderRequest(BaseModel):
 
 
 class CompetitorRequest(BaseModel):
-    urls: list[str] = Field(min_length=1, max_length=10)
+    urls: list[Annotated[str, Field(min_length=8, max_length=2048)]] = Field(min_length=1, max_length=10)
 
 
 class TrendRequest(BaseModel):

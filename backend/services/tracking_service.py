@@ -1,12 +1,12 @@
+
 from __future__ import annotations
 import hashlib,hmac,time
 from datetime import datetime,timezone
 from typing import Any
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
 from backend.models import Campaign,ClickEvent
-from backend.services.url_safety import validate_public_http_url
+from backend.services.url_safety import open_public_http_response
 def sign_click(click_id:str,timestamp:int)->str:
  secret=get_settings().tracking_hmac_secret
  if len(secret)<32:raise RuntimeError("TRACKING_HMAC_SECRET must be a fresh 32+ char value")
@@ -17,11 +17,13 @@ def verify_click_signature(click_id:str,timestamp:int,signature:str,max_age_seco
  except (ValueError,RuntimeError):return False
 async def destination_healthy(url:str,timeout:float=4.0)->tuple[bool,int|None,str|None]:
  try:
-  await validate_public_http_url(url)
-  async with httpx.AsyncClient(timeout=httpx.Timeout(timeout,connect=2),follow_redirects=False,headers={"User-Agent":"AffiliateOSLinkHealth/0.1"}) as c:
-   r=await c.head(url)
-   if r.status_code in (405,501):r=await c.get(url,headers={"Range":"bytes=0-0"})
-   return r.status_code<500 and r.status_code!=404,r.status_code,None
+  headers={"User-Agent":"AffiliateOSLinkHealth/0.1"}
+  async with open_public_http_response(url,method="HEAD",timeout=timeout,headers=headers) as response:
+   status=response.status_code
+  if status in (405,501):
+   async with open_public_http_response(url,method="GET",timeout=timeout,headers={**headers,"Range":"bytes=0-0"}) as response:
+    status=response.status_code
+  return status<500 and status!=404,status,None
  except Exception as exc:return False,None,f"{type(exc).__name__}: {str(exc)[:150]}"
 async def choose_destination(campaign:Campaign)->dict[str,Any]:
  ok,code,error=await destination_healthy(campaign.primary_destination)

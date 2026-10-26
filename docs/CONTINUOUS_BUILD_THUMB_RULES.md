@@ -123,3 +123,6 @@ These additive rules apply to every future Project1 build session.
 
 
 52. Next P0: review every public outbound-fetch/render route and its URL safety boundaries. Verify DNS rebinding/redirect handling, private/reserved-address rejection, byte/time/response caps, Pexels download caps, and whether trusted-proxy assumptions are documented and configured. Do not duplicate existing SSRF protections; identify and test gaps only.
+
+
+53. P0 public outbound-fetch/video hardening candidate on base `bba6b736b43a525f41723fef84dd72cb2a77e6f2`: existing code validates DNS but re-resolves during HTTP fetch; pin the actual connection to a vetted public IP, preserve original Host/SNI, disable ambient proxy/redirect behavior, enforce total time and body caps, cap Pexels source/output duration/size, and authenticate/rate-limit competitor fetches. Mark verified only after exact-SHA CI passes. Trusted proxy must be explicitly configured for exact proxy IPs/CIDRs; never trust arbitrary client `X-Forwarded-For` or use wildcard forwarded-header trust.

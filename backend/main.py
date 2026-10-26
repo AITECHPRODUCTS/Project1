@@ -1033,7 +1033,18 @@ async def research_internal_links(
 @api.post("/research/niches")
 async def research_niches(p:NicheFinderRequest):return {"results":monopoly_niche_finder(p.candidates,top_n=p.top_n)}
 @api.post("/research/competitors")
-async def research_competitors(p:CompetitorRequest):return {"results":await competitor_spy(p.urls)}
+async def research_competitors(
+    payload: CompetitorRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before fetching competitor pages")
+    _validate_generation_payload_size(payload)
+    await workspace_generation_rate_limit(request, str(workspace_id))
+    with workspace_scope(str(workspace_id)):
+        return {"results": await competitor_spy(payload.urls)}
 @api.post("/research/trends")
 async def research_trends(p:TrendRequest):return await trending_content_scout(p.query,limit=p.limit)
 @api.post("/content/social")

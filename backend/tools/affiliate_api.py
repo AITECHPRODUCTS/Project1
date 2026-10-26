@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import quote
 import httpx
 from backend.config import get_settings
-from backend.services.url_safety import validate_public_http_url
+from backend.services.url_safety import open_public_http_response, read_limited_response
 
 @dataclass(frozen=True)
 class AffiliateProgram:
@@ -42,26 +42,30 @@ class TTLCache:
 class OpenAffiliateClient:
     MAX_BYTES=5*1024*1024
     def __init__(self,base_url: str | None=None,timeout: float=10.0,cache: TTLCache | None=None):
-        self.base=(base_url or get_settings().openaffiliate_base_url).rstrip("/"); self.timeout=httpx.Timeout(timeout,connect=4); self.cache=cache or TTLCache()
+        self.base=(base_url or get_settings().openaffiliate_base_url).rstrip("/"); self.timeout_seconds=timeout; self.cache=cache or TTLCache()
     async def _get(self,path: str,params: dict[str,Any] | None=None) -> Any:
         url=self.base+path
         key=json.dumps({"url":url,"params":params or {}},sort_keys=True)
         cached=await self.cache.get(key)
         if cached is not None:return cached
-        # OPENAFFILIATE_BASE_URL is operator configuration, not proof that its
-        # destination is public. Reject private/loopback/link-local targets
-        # before opening a network client; redirects are disabled below.
-        await validate_public_http_url(url)
-        async with httpx.AsyncClient(timeout=self.timeout,follow_redirects=False,headers={"Accept":"application/json","User-Agent":"AffiliateOS/0.1"}) as client:
-            async with client.stream("GET",url,params=params) as response:
-                response.raise_for_status(); length=int(response.headers.get("content-length","0") or 0)
-                if length>self.MAX_BYTES: raise ValueError("OpenAffiliate response exceeded 5 MB limit")
-                data=bytearray()
-                async for part in response.aiter_bytes():
-                    data.extend(part)
-                    if len(data)>self.MAX_BYTES: raise ValueError("OpenAffiliate response exceeded 5 MB limit")
-                try: payload=json.loads(data)
-                except json.JSONDecodeError as exc: raise ValueError("OpenAffiliate returned invalid JSON") from exc
+        # Configured provider URLs are also untrusted. The shared transport pins
+        # the connection to a vetted public IP and disables redirects/proxy env.
+        async with open_public_http_response(
+            url,
+            method="GET",
+            params=params,
+            headers={"Accept":"application/json","User-Agent":"AffiliateOS/0.1"},
+            timeout=self.timeout_seconds,
+        ) as response:
+            if 300 <= response.status_code < 400:
+                raise ValueError("OpenAffiliate redirects are not followed")
+            response.raise_for_status()
+            content_type=response.headers.get("content-type","").split(";",1)[0].strip().lower()
+            if content_type and content_type not in {"application/json","application/problem+json"}:
+                raise ValueError(f"Unsupported OpenAffiliate content type: {content_type}")
+            data=await read_limited_response(response,max_bytes=self.MAX_BYTES)
+            try: payload=json.loads(data)
+            except json.JSONDecodeError as exc: raise ValueError("OpenAffiliate returned invalid JSON") from exc
         await self.cache.set(key,payload); return payload
     @staticmethod
     def adapt(row: dict[str,Any]) -> AffiliateProgram:

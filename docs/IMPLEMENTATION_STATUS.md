@@ -355,3 +355,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - All push jobs passed: Python suite with four new tests, migration/source checks, PostgreSQL migration and concurrent reversal, AI/RAG imports, 53-skill repository guard, frontend clean install/typecheck/build, security audit under the documented Chroma exception, and lockfile reproducibility.
 - Budget reserve/finalize/status and self-learning now require a concrete authorized workspace, reject mismatched context, and scope all reads/writes. API and scheduled-learning callers provide workspace identity explicitly.
 - Next P0 audit found three additional scheduled workers (campaign health, email delivery, payout threshold) were relying on implicit/global ORM context. The following commit scopes each tenant operation explicitly and adds worker regression tests; that change remains pending CI.
+
+
+## 2026-10-26 campaign/conversion workspace binding — candidate
+- Audit found campaign list/create/health and API-submitted conversion handlers relied on ambient workspace context instead of validating and passing the authenticated workspace explicitly.
+- Candidate fix checks the selected workspace, scopes campaign reads/writes, includes workspace ID in conversion duplicate checks, and assigns the same workspace ID to both Conversion and ConversionLedgerEntry.
+- Added `tests/test_campaign_conversion_workspace_routes.py` for no-workspace denial, cross-tenant campaign hiding/health denial and same provider event IDs being independent per workspace. This candidate is **pending** exact-SHA hosted CI.

@@ -1143,13 +1143,65 @@ async def email_worker(
         raise HTTPException(403, "Select an authorized workspace before running the email worker")
     return await send_due_emails(db, workspace_id=str(workspace_id))
 @api.post("/analytics/conversions")
-async def conversion_create(p:ConversionRequest,db:AsyncSession=Depends(get_session)):
- network=p.network.lower();existing=await db.scalar(select(Conversion.id).where(Conversion.network==network,Conversion.external_event_id==p.external_event_id))
- if existing:return {"status":"duplicate_ignored","id":existing}
- utm=conversion_tracker(p.url or "");row=Conversion(network=network,external_event_id=p.external_event_id,click_id=p.click_id or utm["click_id"],utm_source=p.utm_source or utm["utm_source"],utm_medium=p.utm_medium or utm["utm_medium"],utm_campaign=p.utm_campaign or utm["utm_campaign"],utm_content=p.utm_content or utm["utm_content"],hook=p.hook or p.utm_content or utm["utm_content"],revenue=float(p.revenue),commission=float(p.commission),currency=p.currency.upper(),status=p.status.lower(),event_json=p.event_json);ledger_row=ConversionLedgerEntry(workspace_id=get_workspace_id(),network=network,external_event_id=p.external_event_id,click_id=p.click_id or utm["click_id"],entry_type="conversion",commission_amount=p.commission,revenue_amount=p.revenue,currency=p.currency.upper(),status=p.status.lower(),evidence_status="api_submitted_unverified",source_event_json=p.event_json,observed_at=utcnow());db.add(row);db.add(ledger_row)
- try:await db.commit()
- except IntegrityError:await db.rollback();return {"status":"duplicate_ignored"}
- return {"status":"recorded","id":row.id,"utm":utm}
+async def conversion_create(
+    payload: ConversionRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before recording a conversion")
+    network = payload.network.strip().lower()
+    owner_workspace_id = str(workspace_id)
+    with workspace_scope(owner_workspace_id):
+        existing = await db.scalar(
+            select(Conversion.id).where(
+                Conversion.workspace_id == owner_workspace_id,
+                Conversion.network == network,
+                Conversion.external_event_id == payload.external_event_id,
+            )
+        )
+        if existing:
+            return {"status": "duplicate_ignored", "id": existing}
+        utm = conversion_tracker(payload.url or "")
+        click_id = payload.click_id or utm["click_id"]
+        row = Conversion(
+            workspace_id=owner_workspace_id, network=network,
+            external_event_id=payload.external_event_id, click_id=click_id,
+            utm_source=payload.utm_source or utm["utm_source"],
+            utm_medium=payload.utm_medium or utm["utm_medium"],
+            utm_campaign=payload.utm_campaign or utm["utm_campaign"],
+            utm_content=payload.utm_content or utm["utm_content"],
+            hook=payload.hook or payload.utm_content or utm["utm_content"],
+            revenue=float(payload.revenue), commission=float(payload.commission),
+            currency=payload.currency.upper(), status=payload.status.lower(),
+            event_json=payload.event_json,
+        )
+        ledger_row = ConversionLedgerEntry(
+            workspace_id=owner_workspace_id, network=network,
+            external_event_id=payload.external_event_id, click_id=click_id,
+            entry_type="conversion", commission_amount=payload.commission,
+            revenue_amount=payload.revenue, currency=payload.currency.upper(),
+            status=payload.status.lower(), evidence_status="api_submitted_unverified",
+            source_event_json=payload.event_json, observed_at=utcnow(),
+        )
+        db.add(row)
+        db.add(ledger_row)
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            existing = await db.scalar(
+                select(Conversion.id).where(
+                    Conversion.workspace_id == owner_workspace_id,
+                    Conversion.network == network,
+                    Conversion.external_event_id == payload.external_event_id,
+                )
+            )
+            if existing:
+                return {"status": "duplicate_ignored", "id": existing}
+            raise HTTPException(409, "Conversion could not be persisted idempotently")
+        return {"status": "recorded", "id": row.id, "utm": utm}
 @api.post("/analytics/track")
 async def track(p:dict[str,Any]):
  raw=p.get("url") or p.get("query")
@@ -1327,18 +1379,91 @@ async def resource_budget(user: dict[str, Any] = Depends(require_auth)):
         raise HTTPException(403, "Select an authorized workspace before viewing resource usage")
     return await budget_status(workspace_id=str(workspace_id))
 @api.get("/campaigns")
-async def campaigns(db:AsyncSession=Depends(get_session)):
- rows=list((await db.scalars(select(Campaign).order_by(Campaign.created_at.desc()).limit(200))).all());return {"count":len(rows),"data":[{"id":x.id,"name":x.name,"niche":x.niche,"primary_destination":x.primary_destination,"fallback_destination":x.fallback_destination,"is_active":x.is_active,"primary_healthy":x.primary_healthy,"fallback_healthy":x.fallback_healthy,"health_last_error":x.health_last_error} for x in rows]}
-@api.post("/campaigns",status_code=201)
-async def campaign_create(p:CampaignCreateRequest,db:AsyncSession=Depends(get_session)):
- try:await validate_public_http_url(p.primary_destination);await validate_public_http_url(p.fallback_destination) if p.fallback_destination else None
- except ValueError as exc:raise HTTPException(422,str(exc)) from exc
- row=Campaign(name=p.name,niche=p.niche,primary_destination=p.primary_destination,fallback_destination=p.fallback_destination,tracking_parameter=p.tracking_parameter,disclosure_text=p.disclosure_text,auto_publish=p.auto_publish,max_daily_spend=p.max_daily_spend);db.add(row);await db.commit();return {"id":row.id,"name":row.name,"tracking_url":f"{settings.app_public_url.rstrip('/')}/r/{row.id}","status":"created"}
+async def campaigns(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing campaigns")
+    with workspace_scope(str(workspace_id)):
+        rows = list((await db.scalars(
+            select(Campaign)
+            .where(Campaign.workspace_id == str(workspace_id))
+            .order_by(Campaign.created_at.desc())
+            .limit(200)
+        )).all())
+    return {
+        "count": len(rows),
+        "data": [
+            {
+                "id": row.id, "name": row.name, "niche": row.niche,
+                "primary_destination": row.primary_destination,
+                "fallback_destination": row.fallback_destination,
+                "is_active": row.is_active, "primary_healthy": row.primary_healthy,
+                "fallback_healthy": row.fallback_healthy, "health_last_error": row.health_last_error,
+            }
+            for row in rows
+        ],
+    }
+
+
+@api.post("/campaigns", status_code=201)
+async def campaign_create(
+    payload: CampaignCreateRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating a campaign")
+    try:
+        await validate_public_http_url(payload.primary_destination)
+        if payload.fallback_destination:
+            await validate_public_http_url(payload.fallback_destination)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    with workspace_scope(str(workspace_id)):
+        row = Campaign(
+            workspace_id=str(workspace_id), name=payload.name, niche=payload.niche,
+            primary_destination=payload.primary_destination, fallback_destination=payload.fallback_destination,
+            tracking_parameter=payload.tracking_parameter, disclosure_text=payload.disclosure_text,
+            auto_publish=payload.auto_publish, max_daily_spend=payload.max_daily_spend,
+        )
+        db.add(row)
+        await db.commit()
+        return {
+            "id": row.id, "name": row.name,
+            "tracking_url": f"{settings.app_public_url.rstrip('/')}/r/{row.id}",
+            "status": "created",
+        }
+
+
 @api.post("/campaigns/{campaign_id}/health")
-async def campaign_health(campaign_id:str,db:AsyncSession=Depends(get_session)):
- row=await db.get(Campaign,campaign_id)
- if not row:raise HTTPException(404,"Campaign not found")
- out=await choose_destination(row);row.primary_healthy=out.get("primary_healthy");row.fallback_healthy=out.get("fallback_healthy");row.health_last_checked_at=utcnow();row.health_last_error=str(out.get("health_error") or "")[:1000] or None;await db.commit();return {"campaign_id":row.id,**out,"note":"Fallback applies to this click; campaign configuration is unchanged."}
+async def campaign_health(
+    campaign_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before checking campaign health")
+    with workspace_scope(str(workspace_id)):
+        row = await db.get(Campaign, campaign_id)
+        if not row or row.workspace_id != str(workspace_id):
+            raise HTTPException(404, "Campaign not found")
+        out = await choose_destination(row)
+        row.primary_healthy = out.get("primary_healthy")
+        row.fallback_healthy = out.get("fallback_healthy")
+        row.health_last_checked_at = utcnow()
+        row.health_last_error = str(out.get("health_error") or "")[:1000] or None
+        await db.commit()
+        return {
+            "campaign_id": row.id, **out,
+            "note": "Fallback applies to this click; campaign configuration is unchanged.",
+        }
+
+
 @api.get("/finance/ledger")
 async def ledger(
     user: dict[str, Any] = Depends(require_auth),

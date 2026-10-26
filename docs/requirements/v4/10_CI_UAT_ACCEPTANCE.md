@@ -239,3 +239,9 @@
 - Full required matrix passed, including SQLite/PostgreSQL migrations/drift/concurrency, Python tests, 10 AI/RAG imports, frontend production build/typecheck, 53-skill parity, core/AI/frontend audits, and push lockfile sync.
 - Core dependency audit initially failed because `cryptography>=44,<47` selected 46.0.7. The dependency was updated to `cryptography>=50,<51`; follow-up push/PR audit passed without suppressing advisories.
 - Operational constraint: replicas must share a stable `APP_SESSION_SECRET`. Production deployment and provider/UAT/security-evidence gates remain outstanding.
+
+
+## 2026-10-26 outbound HTTP transport boundary — candidate
+- Gate the repository against raw provider clients outside `backend/services/url_safety.py`. The allowed helper owns DNS admission and actual socket pinning, disables redirect following and ambient proxy configuration, preserves TLS SNI, and bounds response bodies.
+- Candidate adds `scripts/verify_outbound_transport_boundary.py`, runs it in `repo-guard`, and tests HTTPX/requests/aiohttp/urllib/urllib3 alias detection. Await new exact-SHA push/PR CI.
+- Staging trust proxy gate remains open until spoofed `Forwarded`/`X-Forwarded-For` tests are run through the real proxy and sanitized source IP, deployment SHA/image and timestamps are recorded.

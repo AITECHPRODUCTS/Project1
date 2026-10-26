@@ -26,6 +26,8 @@ jobs:
           python-version: "3.11"
       - name: Verify repository inventory and source syntax
         run: python scripts/verify_project.py
+      - name: Verify DNS-pinned outbound HTTP transport boundary
+        run: python scripts/verify_outbound_transport_boundary.py
       - name: Verify pinned 53-skill source and runtime parity
         run: python scripts/verify_skill_registry.py
 

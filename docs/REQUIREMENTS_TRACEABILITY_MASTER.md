@@ -318,3 +318,9 @@
 - `WorkflowRun` now stores lease owner/expiry, heartbeat and attempt count; migration 0010 is verified through PostgreSQL upgrade/downgrade/drift; concurrent lease claim regression is integrated into the PostgreSQL Actions job.
 - Recovery resumes a non-side-effecting checkpoint, reclaims paused workflows through a lease, and refuses to replay an expired live-publishing S5 stage. The latter is logged as outcome unknown for manual reconciliation.
 - This does not finish durable execution architecture: HITL responses remain memory-only; cross-replica HITL routing and DB outbox/event delivery guarantee still need implementation and verification.
+
+
+## 2026-10-26 outbound transport invariant — CI candidate
+- Current live branch head before this change: `a1c11b197d3c81a0c6ed077bda9048f96048fdb8`, with push [40334257428](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40334257428) and PR [40334262387](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40334262387) passing.
+- New AST guard restricts raw outbound HTTP client construction to the approved DNS-pinned transport, and runs in `repo-guard` without waiting for dependencies. The test suite checks multiple import aliases and a fail-closed parse error.
+- Exact-SHA test evidence is pending. Actual reverse-proxy header stripping/client-IP trust must still be verified through the deployed staging ingress.

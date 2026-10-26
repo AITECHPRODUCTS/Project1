@@ -270,3 +270,10 @@
 - Two end-to-end tests cover an API request arriving at a non-owner instance and waking the lease owner, plus a response being consumed by a fresh worker after restart/lease claim. SQLite and PostgreSQL migration/drift/concurrency, Python, AI/RAG, frontend, dependency audit, repository guard and lockfile sync passed.
 - An initial audit failure found cryptography 46.0.7 had advisories; requirement was tightened to `cryptography>=50,<51` and the follow-up audit passed. No advisory exception was used.
 - Production remains pending remaining provider/UAT, comprehensive security testing, SBOM/license/secret scan, deployment and backup/restore evidence.
+
+
+## P0 — outbound transport boundary guard (2026-10-26; candidate)
+- The current approved transport pins each actual outbound connection to a verified public IP, maintains TLS hostname validation/SNI, disables redirects and ambient proxies, and bounds responses.
+- Added `scripts/verify_outbound_transport_boundary.py`, a standard-library AST check for raw provider HTTP client creation outside `backend/services/url_safety.py`; CI runs it in the fast repository guard.
+- Added regression tests for aliased HTTPX/requests/aiohttp/urllib/urllib3 clients, the allowed transport module, helper-based requests and syntax errors.
+- Status: pending exact-SHA push/PR CI. This does not close the live staging proxy trust gate.

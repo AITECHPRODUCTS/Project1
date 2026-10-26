@@ -170,3 +170,6 @@ These additive rules apply to every future Project1 build session.
 
 
 68. Encrypted HITL persistence verified on `92af1c5d06544e4870c8c550176fd19a25084d06`: push [40333566763](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763) and PR [40333573375](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375) both green. `cryptography>=50,<51` passes the current core/test dependency audit. Active cross-worker delivery, durable response across worker restart, and clearing encrypted response only after stage checkpoint are covered by passing regressions. Keep stable shared `APP_SESSION_SECRET` across replicas. This does not certify the entire product for production; remaining deployment/provider/UAT and documented release gates still apply.
+
+
+69. P0 outbound transport boundary guard: all runtime provider HTTP must use `backend/services/url_safety.py`; new raw HTTP clients in `backend/` or `ai_memory/` are rejected by `scripts/verify_outbound_transport_boundary.py` and its tests. CI runs the guard before package installation. Candidate status remains pending exact-SHA push/PR CI. Live trusted-proxy ingress spoofing verification is still an external staging gate.

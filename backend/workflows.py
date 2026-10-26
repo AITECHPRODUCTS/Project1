@@ -1,10 +1,15 @@
 from __future__ import annotations
+import logging
 from typing import Any
 from sqlalchemy import select
+from backend.config import get_settings
 from backend.core.errors import VerificationRequiredError
 from backend.core.state_machine import WorkflowStep
 from backend.database import SessionLocal
-from backend.models import Conversion
+from backend.models import AuditLog,Conversion
+from backend.tenancy import workspace_scope
+
+logger = logging.getLogger(__name__)
 from backend.services.s1_research import monopoly_niche_finder,competitor_spy,trending_content_scout
 from backend.services.s2_s3_content import affiliate_blog_builder,content_research_brief,keyword_cluster_architect,viral_post_writer,tiktok_script_writer
 from backend.services.s4_s5_landing import grand_slam_offer_generator,social_media_scheduler,value_ladder_architect
@@ -45,26 +50,98 @@ async def s4(state:dict[str,Any])->dict[str,Any]:
  if state.get("create_offer",True):out["offer"]=await grand_slam_offer_generator(product,audience,str(state.get("main_problem") or "the supplied audience problem"))
  if state.get("create_value_ladder",True):out["value_ladder"]=await value_ladder_architect(audience,product,state.get("deliverable_assets"))
  return {"s4_result":out}
+async def _audit_distribution_attempt(
+    *,
+    metadata: dict[str, Any],
+    workspace_id: str,
+    platform: str,
+    outcome: str,
+    remote_id: str | int | None = None,
+    error_type: str | None = None,
+) -> None:
+    details: dict[str, Any] = {
+        "platform": platform[:80],
+        "workflow": str(metadata.get("workflow") or "")[:180],
+        "execution_mode": str(metadata.get("execution_mode") or "")[:40],
+        "live_execution_enabled": not get_settings().publishing_dry_run,
+    }
+    if error_type:
+        details["error_type"] = error_type[:120]
+    with workspace_scope(workspace_id):
+        async with SessionLocal() as db:
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(metadata.get("initiated_by") or "workflow")[:320],
+                action="workflow.social_publish",
+                resource_type="external_publication",
+                resource_id=str(remote_id)[:255] if remote_id is not None else None,
+                outcome=outcome[:80],
+                details_json=details,
+            ))
+            await db.commit()
+
+
 async def s5(state:dict[str,Any])->dict[str,Any]:
  requests=state.get("publish_requests") or []
  if not requests:return {"s5_result":{"status":"skipped","reason":"No publish request supplied; outputs remain drafts."}}
+ raw_metadata=state.get("metadata")
+ metadata=raw_metadata if isinstance(raw_metadata,dict) else {}
+ workspace_id=str(metadata.get("workspace_id") or "").strip()
+ if not workspace_id:
+  raise ValueError("Authorized workspace context required for workflow publishing")
+ settings=get_settings()
+ if not settings.publishing_dry_run:
+  if metadata.get("platform_admin_authorized") is not True:
+   raise PermissionError("Platform Super Admin permission required for live workflow publishing")
+  if metadata.get("live_publish_confirmed") is not True:
+   raise PermissionError("Explicit live-publish confirmation required for workflow publishing")
  results=[]
  for item in requests[:10]:
   if item.get("require_verification") and not state.get("_verification_response"):
    raise VerificationRequiredError("Provider requires human verification before continuing.",action=str(item.get("verification_action") or "verification"))
-  # Credentials/dry-run flags are checked by the provider adapter; the OTP is never logged or persisted.
-  result=await social_media_scheduler(str(item.get("platform") or ""),dict(item.get("post") or {}));results.append(result)
+  platform=str(item.get("platform") or "").strip().lower()
+  # Persist an attempt record before a possible external side effect. If that
+  # write fails, the provider operation is not attempted.
+  await _audit_distribution_attempt(metadata=metadata,workspace_id=workspace_id,platform=platform or "unknown",outcome="requested")
+  try:
+   with workspace_scope(workspace_id):
+    result=await social_media_scheduler(platform,dict(item.get("post") or {}))
+  except Exception as exc:
+   try:
+    await _audit_distribution_attempt(metadata=metadata,workspace_id=workspace_id,platform=platform or "unknown",outcome="failed",error_type=type(exc).__name__)
+   except Exception:
+    logger.exception("Could not persist failed workflow publication audit for workspace %s",workspace_id[:8])
+   raise
+  results.append(result)
+  try:
+   await _audit_distribution_attempt(metadata=metadata,workspace_id=workspace_id,platform=platform or "unknown",outcome=str(result.get("status") or "unknown"),remote_id=result.get("remote_id"))
+  except Exception:
+   # The pre-side-effect "requested" event remains durable for reconciliation.
+   logger.exception("Could not persist completed workflow publication audit for workspace %s",workspace_id[:8])
  state.pop("_verification_response",None)
  return {"s5_result":{"status":"completed","publish_results":results}}
 async def s6(state:dict[str,Any])->dict[str,Any]:
  url=state.get("tracking_url");out={"status":"completed","utm":conversion_tracker(str(url)) if url else None,"conversion_events_saved":0}
- for event in (state.get("conversion_events") or [])[:100]:
+ raw_metadata=state.get("metadata")
+ metadata=raw_metadata if isinstance(raw_metadata,dict) else {}
+ workspace_id=str(metadata.get("workspace_id") or "").strip()
+ events=(state.get("conversion_events") or [])[:100]
+ if events and not workspace_id:
+  raise ValueError("Authorized workspace context required to import conversion events")
+ for event in events:
   network=str(event.get("network") or "manual_import").lower()[:100];external=str(event.get("external_event_id") or event.get("transaction_id") or "")[:255]
   if not external:continue
-  async with SessionLocal() as db:
-   if await db.scalar(select(Conversion.id).where(Conversion.network==network,Conversion.external_event_id==external)):continue
-   parsed=conversion_tracker(str(event.get("url") or ""));commission=max(0,float(event.get("commission",0) or 0));revenue=max(0,float(event.get("revenue",0) or 0))
-   db.add(Conversion(network=network,external_event_id=external,click_id=event.get("click_id") or parsed.get("click_id"),utm_source=event.get("utm_source") or parsed.get("utm_source"),utm_medium=event.get("utm_medium") or parsed.get("utm_medium"),utm_campaign=event.get("utm_campaign") or parsed.get("utm_campaign"),utm_content=event.get("utm_content") or parsed.get("utm_content"),hook=event.get("hook") or event.get("utm_content") or parsed.get("utm_content"),commission=commission,revenue=revenue,currency=str(event.get("currency") or "USD")[:3].upper(),status=str(event.get("status") or "pending").lower(),event_json=event));await db.commit();out["conversion_events_saved"]+=1
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    duplicate=await db.scalar(select(Conversion.id).where(
+     Conversion.workspace_id==workspace_id,
+     Conversion.network==network,
+     Conversion.external_event_id==external,
+    ))
+    if duplicate:continue
+    parsed=conversion_tracker(str(event.get("url") or ""));commission=max(0,float(event.get("commission",0) or 0));revenue=max(0,float(event.get("revenue",0) or 0))
+    db.add(Conversion(workspace_id=workspace_id,network=network,external_event_id=external,click_id=event.get("click_id") or parsed.get("click_id"),utm_source=event.get("utm_source") or parsed.get("utm_source"),utm_medium=event.get("utm_medium") or parsed.get("utm_medium"),utm_campaign=event.get("utm_campaign") or parsed.get("utm_campaign"),utm_content=event.get("utm_content") or parsed.get("utm_content"),hook=event.get("hook") or event.get("utm_content") or parsed.get("utm_content"),commission=commission,revenue=revenue,currency=str(event.get("currency") or "USD")[:3].upper(),status=str(event.get("status") or "pending").lower(),event_json=event))
+    await db.commit();out["conversion_events_saved"]+=1
  return {"s6_result":out}
 async def s7(state:dict[str,Any])->dict[str,Any]:
  metrics=state.get("campaign_metrics") or []

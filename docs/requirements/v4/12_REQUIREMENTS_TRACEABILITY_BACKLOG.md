@@ -80,3 +80,8 @@
 - Social and CMS writes with shared global credentials require Platform Super Admin and active workspace; live publishing requires `confirm_live_publish=true`; CMS also preserves the `CMS_PUBLISH_EXECUTE` gate. Success/failure metadata is audited under the selected workspace.
 - Landing-page token issuance requires an authenticated active workspace and explicit workspace scope. Six new tests cover the auth/role/workspace/approval/audit behavior; Python reported 250 passed and 2 skipped.
 - Next P0: audit workflow runner step handlers and remaining provider mutation endpoints for approvals, idempotency, audit evidence and dry-run enforcement. ChromaDB advisories and release/UAT evidence remain open.
+
+## P0 — workflow-stage publishing and conversion-import isolation candidate (2026-10-26)
+- At `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`, S5 directly calls `social_media_scheduler` and could bypass route authorization when global publishing is enabled. S6 conversion imports use the runner's ambient scope without an explicit workspace predicate/row field.
+- Candidate binds live publishing to authenticated Platform Super Admin plus top-level confirmation and selected workspace, records attempt/outcome audit rows, and makes conversion dedup/insert explicitly workspace-specific.
+- Four regression tests pending the exact-SHA push/PR matrix.

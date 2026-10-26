@@ -27,6 +27,7 @@ class WorkspaceCreateRequest(BaseModel):
 class WorkflowStartRequest(BaseModel):
     workflow_name: str = Field(default="full_flywheel", max_length=180)
     execution_mode: Literal["FULL_AUTONOMOUS", "SEMI_AUTONOMOUS", "MANUAL_OVERRIDE"] | None = None
+    confirm_live_publish: bool = False
     state: dict[str, Any] = Field(default_factory=dict)
 
 

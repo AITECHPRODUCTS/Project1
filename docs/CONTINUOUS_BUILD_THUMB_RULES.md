@@ -77,3 +77,5 @@ These additive rules apply to every future Project1 build session.
 
 
 33. Next P0: inspect workflow runner step handlers and any remaining provider-integration endpoints for external mutations. Confirm human approval, idempotency, durable audit events, explicit provider scopes and dry-run behavior. The four documented ChromaDB advisory exceptions and remaining release evidence remain blockers.
+
+34. P0 workflow-side-effect boundary candidate: S5 must not bypass the social publishing authorization. Live workflow publish requires Platform Super Admin identity from the authenticated request, a top-level explicit `confirm_live_publish=true`, and selected workspace; do not trust client-provided authorization metadata. Record per-workspace attempt and result/error audit metadata without storing post bodies. S6 conversion imports must explicitly scope duplicate lookup and new Conversion rows to `metadata.workspace_id`. New regression tests pending exact-SHA CI.

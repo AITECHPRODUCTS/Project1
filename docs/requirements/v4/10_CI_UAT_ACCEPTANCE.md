@@ -92,3 +92,7 @@
 - Six new route tests prove authentication and role restriction for global social/CMS provider credentials, explicit workspace binding for landing token issuance, live confirmation, and workspace-scoped audit persistence.
 - Existing `PUBLISHING_DRY_RUN=true` default and `CMS_PUBLISH_EXECUTE=false` default remain in force; live operations additionally require the explicit request confirmation.
 - Next: review workflow step execution and remaining provider mutation endpoints. The four ChromaDB advisory exceptions, broader provider UAT, deployment smoke and backup/restore remain open release gates.
+
+## 2026-10-26 workflow-stage side-effect boundary — candidate
+- Based on `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`, where the previous auth/token/publishing hardening had passed CI. Candidate adds four tests covering S5 live side-effect authorization, audit events, and S6 tenant dedup.
+- Do not mark verified until exact-SHA push/PR workflows pass all Python, SQLite, PostgreSQL, AI/RAG, frontend, dependency/security, repo-guard and lockfile jobs.

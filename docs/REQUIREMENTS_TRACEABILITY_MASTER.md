@@ -158,3 +158,8 @@
 - All push jobs passed: Python 250 passed/2 skipped, SQLite migration/drift, PostgreSQL migration/concurrency, 9 AI/RAG imports, frontend production build, dependency audits, 53-skill repo guard, and lockfile sync.
 - External social/CMS writes are platform-super-admin-only with explicit workspace context, live confirmation and workspace-scoped audit events; landing capture tokens are minted only for the authenticated active workspace.
 - Next: audit workflow runner side effects. ChromaDB advisories and remaining production release evidence still block certification.
+
+## 2026-10-26 workflow-stage authorization and S6 isolation — candidate
+- Candidate based on verified SHA `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`; workflow stages S5/S6 need their own fail-closed boundaries because the workflow engine calls handlers directly.
+- Added explicit live publishing confirmation at workflow start, server-derived authorization metadata, per-workspace publishing audit events, and explicit tenant-qualified S6 idempotency/insert operations.
+- Four regression tests and hosted CI pending.

@@ -402,3 +402,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Six regression tests prove unauthenticated denial, workspace-admin denial for shared global provider credentials, missing-workspace token issuance denial, workspace-bound token issuance, explicit live-confirmation enforcement, and audit event persistence.
 - Production remains **not release-ready**: the documented four ChromaDB advisory exceptions remain unresolved, as do remaining provider authorization verification, comprehensive external-side-effect UAT, SBOM/license/secret checks, deployment smoke and backup/restore evidence.
 - Next P0 audit: workflow runner step implementations and remaining provider integration routes for external mutations, explicit approvals, idempotency, audit recording and dry-run behavior.
+
+## 2026-10-26 workflow-stage side-effect boundary — candidate
+- Rechecked base SHA `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`; checkpoint push [40271100102](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40271100102) and PR [40271104015](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40271104015) both passed.
+- Audit found S5 invokes the publishing adapter directly, bypassing route-level live-publish confirmation and Platform Super Admin checks. S6 conversion import relied on ambient query scope and did not state workspace identity in its duplicate predicate/row construction.
+- Candidate adds a typed workflow-start confirmation, server-derived authorization metadata, fail-closed S5 live-publish checks, per-tenant attempt/outcome audit events, and explicit S6 workspace filters and tenant-bound Conversion rows.
+- Four new regression tests cover route-level role/confirmation, spoofed metadata rejection, S5 audit persistence, and workspace-specific S6 dedup. Pending exact-SHA push and PR CI.

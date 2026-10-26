@@ -561,9 +561,25 @@ async def start_workflow(payload: WorkflowStartRequest, user: dict[str, Any] = D
  workspace_id = user.get("workspace_id")
  if not workspace_id:
   raise HTTPException(403, "Select an authorized workspace before starting a workflow")
+ state = dict(payload.state)
+ raw_metadata = state.get("metadata")
+ metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+ has_publish_requests = bool(state.get("publish_requests"))
+ if has_publish_requests and not settings.publishing_dry_run:
+  if user.get("is_admin") is not True:
+   raise HTTPException(403, "Platform Super Admin permission required for live workflow publishing")
+  if payload.confirm_live_publish is not True:
+   raise HTTPException(409, "Live workflow publishing requires confirm_live_publish=true from an authorized operator")
+ # Never trust authorization metadata supplied inside client workflow state.
+ metadata.update({
+  "initiated_by": str(user.get("email") or user.get("user_id") or "unknown")[:320],
+  "platform_admin_authorized": user.get("is_admin") is True,
+  "live_publish_confirmed": payload.confirm_live_publish is True and user.get("is_admin") is True,
+ })
+ state["metadata"] = metadata
  try:
   with workspace_scope(str(workspace_id)):
-   sid = await runner.start(payload.workflow_name, payload.state, resolve_steps(payload.workflow_name), payload.execution_mode)
+   sid = await runner.start(payload.workflow_name, state, resolve_steps(payload.workflow_name), payload.execution_mode)
  except ValueError as exc:
   raise HTTPException(422, str(exc)) from exc
  return {"session_id":sid,"status":"queued","workflow_name":payload.workflow_name,"execution_mode":payload.execution_mode or settings.execution_mode,"status_url":f"/api/workflows/{sid}"}

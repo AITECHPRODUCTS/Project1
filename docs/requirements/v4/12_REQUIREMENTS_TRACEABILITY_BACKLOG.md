@@ -284,3 +284,8 @@
 - Six regression tests and fast CI guard pass. Runtime code in `backend/` and `ai_memory/` may not create raw HTTP clients outside the DNS-pinned approved transport. Transport SNI/pinning/redirect/proxy invariants are checked.
 - Python 338 passed, 3 skipped, 1 warning; AI/RAG profile verified 10 imports; SQLite/PostgreSQL migration/concurrency, frontend, security audit, skill parity and lockfile sync passed.
 - Still open: real staging ingress test for spoofed `Forwarded`/`X-Forwarded-For`; authorized provider UAT, SBOM/license/secret scans, deployment smoke, backup/restore, monitoring/SLO evidence.
+
+## P0 — Uvicorn trusted-proxy middleware compatibility (2026-10-26; candidate)
+- Raised uvicorn[standard] lower bound from 0.30 to 0.31 because the app validates CIDR trust configuration and needs a Uvicorn version with IP-network parsing support.
+- Added tests/test_trusted_proxy_middleware.py using the real Uvicorn middleware for untrusted spoof attempts, trusted CIDR forwarding and multi-hop chains.
+- Pending exact-SHA full push and PR CI. A live staging request through the real reverse proxy remains mandatory to prove it strips/replaces incoming forwarding headers.

@@ -176,3 +176,5 @@ These additive rules apply to every future Project1 build session.
 
 
 69. P0 outbound transport guard verified at `1725afcfc17acc8b890d8ccbc4bf04114638458d`; push [40338107674](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674) and PR [40338115729](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729) both passed all required jobs. Python 338 passed/3 skipped/1 warning; AI/RAG 10 imports passed; PostgreSQL and frontend gates passed. The AST guard blocks raw provider HTTP clients outside `backend/services/url_safety.py`. Actual staging-proxy spoofing/client-IP verification remains open and cannot be inferred from CI.
+
+70. P0 Uvicorn trusted-proxy compatibility: FORWARDED_ALLOW_IPS accepts CIDRs, therefore require uvicorn[standard]>=0.31,<1.0. Test Uvicorn actual ProxyHeadersMiddleware: spoofed X-Forwarded-For/X-Forwarded-Proto from a non-allowlisted peer must be ignored; an allowlisted CIDR can supply forwarding information; trusted-hop chains must resolve to the first untrusted client. Exact-SHA CI pending. Live ingress stripping/replacement remains external staging evidence.

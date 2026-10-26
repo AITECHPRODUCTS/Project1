@@ -330,3 +330,8 @@
 - Implementation SHA `1725afcfc17acc8b890d8ccbc4bf04114638458d`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729 both succeeded.
 - A new AST scanner is part of the fast CI source guard and six tests cover aliasing of HTTPX/requests/aiohttp/urllib/urllib3, use of the approved helper, the allowed transport module, and parse failures. No raw outbound client was found outside `backend/services/url_safety.py`.
 - CI does not establish live staging reverse-proxy trust; the deployment runbook's real spoofed-header test remains required.
+
+## 2026-10-26 trusted-proxy middleware behavior — candidate
+- The app setting accepts CIDRs, so the runtime dependency minimum is raised to uvicorn[standard]>=0.31,<1.0 to guarantee IP-network trusted-proxy support.
+- New tests exercise the actual Uvicorn ProxyHeadersMiddleware: headers from untrusted peers must not alter ASGI client/scheme, while trusted CIDR peers and chains are normalized correctly.
+- These are in-process middleware tests only. Deployed staging must prove proxy header stripping/replacement end-to-end.

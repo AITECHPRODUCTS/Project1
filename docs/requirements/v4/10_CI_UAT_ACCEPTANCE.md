@@ -251,3 +251,8 @@
 - Exact SHA `1725afcfc17acc8b890d8ccbc4bf04114638458d`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729 both passed.
 - Static AST guard prevents new raw HTTP client call sites outside the sole DNS-pinned outbound transport. Six targeted tests passed, along with the full CI matrix (Python 338 passed/3 skipped, PostgreSQL integration/concurrency, AI/RAG 10 imports, frontend, dependency audit, repo guard and push lockfile sync).
 - Release gate still open: test proxy spoofing and allowlisted/non-allowlisted client IP behavior through the actual staging ingress. Record sanitized evidence; do not replace with config-unit-test claims.
+
+## 2026-10-26 trusted-proxy middleware regression gate — candidate
+- Require uvicorn[standard]>=0.31,<1.0 for CIDR trusted-proxy parsing and tests against the actual ProxyHeadersMiddleware.
+- Test that spoofed X-Forwarded-For and X-Forwarded-Proto from a non-allowlisted peer do not change client identity or scheme, and that a trusted CIDR peer can supply forwarding data.
+- Exact-SHA CI pending. This is not a substitute for a live staging ingress test.

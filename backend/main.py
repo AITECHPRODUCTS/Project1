@@ -1953,8 +1953,11 @@ async def public_webinar_register(public_id: str, request: Request, db: AsyncSes
             WebinarRegistration.workspace_id == workspace_id, WebinarRegistration.webinar_id == row.id,
             WebinarRegistration.email == payload.email))
         if existing is not None:
-            return {"registration_id": existing.id, "status": "already_registered",
-                    "confirmation_email_sent": False, "email_delivery": "not_configured"}
+            return JSONResponse(
+                status_code=200,
+                content={"registration_id": existing.id, "status": "already_registered",
+                         "confirmation_email_sent": False, "email_delivery": "not_configured"},
+            )
         count = await db.scalar(select(func.count(WebinarRegistration.id)).where(
             WebinarRegistration.workspace_id == workspace_id, WebinarRegistration.webinar_id == row.id))
         if row.capacity is not None and int(count or 0) >= row.capacity:
@@ -1978,8 +1981,11 @@ async def public_webinar_register(public_id: str, request: Request, db: AsyncSes
                 WebinarRegistration.workspace_id == workspace_id, WebinarRegistration.webinar_id == row.id,
                 WebinarRegistration.email == payload.email))
             if existing is not None:
-                return {"registration_id": existing.id, "status": "already_registered",
-                        "confirmation_email_sent": False, "email_delivery": "not_configured"}
+                return JSONResponse(
+                    status_code=200,
+                    content={"registration_id": existing.id, "status": "already_registered",
+                             "confirmation_email_sent": False, "email_delivery": "not_configured"},
+                )
             raise HTTPException(409, "Registration could not be persisted safely")
         return {"registration_id": registration.id, "status": "registered", "consent_recorded": True,
             "marketing_consent": registration.marketing_consent, "confirmation_email_sent": False,

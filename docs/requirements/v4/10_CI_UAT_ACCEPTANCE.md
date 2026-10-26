@@ -287,3 +287,9 @@
 - The OpenAI-compatible LangChain SDK must be instantiated with an `http_async_client` backed by `PinnedPublicAsyncTransport`, not its implicit default network client.
 - Tests must prove the SDK transport pins the connection to a validated public IP while preserving Host/TLS SNI, rejects plain HTTP, disables redirects and does not honor ambient proxy variables. Static CI must fail SDK constructors that omit the required safe client.
 - This is a code/CI gate only. It does not close real staging trusted-proxy verification, provider account authorization/live UAT, license exception resolution or deployment/restore evidence.
+
+
+## 2026-10-26 hosted LLM SDK transport acceptance — verified
+- Exact SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559 both passed.
+- ChatOpenAI instances must supply both pinned sync and async clients; the static guard catches a missing client. Sync/async transports enforce HTTPS, DNS/public-IP validation, connection IP pinning, Host/TLS SNI preservation, redirects disabled and ambient proxy ignored.
+- Python 368 passed, 3 skipped, one existing Starlette/httpx warning. Remaining independent gates are actual staging/proxy behavior, authorized live provider/model UAT, LGPL legal resolution or component replacement, deployment smoke, monitoring/SLO and backup/restore.

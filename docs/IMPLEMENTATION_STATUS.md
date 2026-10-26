@@ -721,7 +721,7 @@ The GitHub Actions run linked from the repository is the authoritative check res
 
 
 
-## 2026-10-26 hosted LLM SDK transport hardening — candidate, CI pending
+## 2026-10-26 hosted LLM SDK transport hardening — verified
 - Base SHA `7a2626094c370ba12b8f10249e44dd02abd5d1e0` is green in push [40349637942](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349637942) and PR [40349646267](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349646267). Those runs verified the raw HTTP transport guard and supply-chain artifacts, but a source audit found `backend/services/llm.py` creates a LangChain `ChatOpenAI` without injecting the DNS-pinned transport.
 - The SDK's managed HTTP client could therefore resolve/connect outside the project's outbound transport boundary. Candidate fix adds `PinnedPublicAsyncTransport` and `pinned_public_async_client` in `backend/services/url_safety.py`; it pins every HTTPS request to a validated public IP, preserves the original Host/TLS SNI, rejects HTTP, disallows redirects and ignores ambient proxy configuration.
 - The OpenAI-compatible path now injects this client into `ChatOpenAI(http_async_client=...)` and disables SDK-level automatic retries to reduce ambiguous repeat model charges after a timeout. The static transport verifier also checks SDK constructors for the required safe-client injection.

@@ -368,3 +368,10 @@
 - Base SHA `7a2626094c370ba12b8f10249e44dd02abd5d1e0` passed push [40349637942](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349637942) and PR [40349646267](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40349646267).
 - A provider-SDK audit found `ChatOpenAI` lacked an injected custom HTTP client and could bypass the single DNS-pinned outbound transport. Candidate fixes the integration and expands the static guard/tests.
 - Verify with full push/PR CI before calling it complete. Actual hosted staging ingress, authorized live provider UAT, license resolution and deployment/restore evidence remain production blockers.
+
+
+## 2026-10-26 hosted LLM sync/async SDK transport — exact-SHA verified
+- Implementation SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559 both completed successfully.
+- The strict outbound transport guard checks both `http_client` and `http_async_client` for LangChain ChatOpenAI constructors. Both primary LLM generation and legacy RetrievalQA now use the pinned HTTPS transports, including IP resolution/pinning, Host/TLS SNI, redirect denial, and disabled ambient proxies.
+- CI: 368 Python tests passed, 3 skipped, 1 existing warning; SQLite/PostgreSQL migration and concurrency, AI/RAG imports/SBOM, frontend production build, dependency/license audit, Gitleaks, skill parity and lockfile sync passed.
+- Next P0: review other SDK-managed outbound connections (notably embedding/model downloads and any future native provider SDKs) and continue tracking real staging/provider/deploy/restore evidence. The two expiring LGPL libvips inventory exceptions still block release approval.

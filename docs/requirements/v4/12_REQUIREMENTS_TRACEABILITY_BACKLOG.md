@@ -308,3 +308,10 @@
 ## P0 — SDK sync + async outbound-boundary corrective candidate (2026-10-26)
 - The failed candidate run identified the legacy `ai_memory/rag_chain.py` RetrievalQA factory as a second `ChatOpenAI` constructor without a pinned HTTP client. Exact-SHA failed runs: push [40359428990](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359428990), PR [40359436287](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359436287). The failure correctly prevented a green repo-guard.
 - Corrective candidate adds a pinned sync transport alongside the async one and requires both in the static guard; both SDK call sites inject them. CI tests for sync transport pinning and both-client enforcement are pending.
+
+
+## P0 — hosted LLM SDK egress boundary verified (2026-10-26)
+- Exact SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559 both green.
+- The strict guard uncovered and closed both SDK call sites. The primary LLM and legacy RAG RetrievalQA paths inject both pinned synchronous and asynchronous clients; a missing sync or async client fails the static guard.
+- Python: 368 passed, 3 skipped, one existing warning. SQLite/PostgreSQL migration and concurrency, AI/RAG profile/SBOM, frontend build, dependency/license audit, repository/53-skill guard, secret scan and lockfile sync passed.
+- Remaining separate release gates: actual staging egress and trusted-proxy tests, live provider/model authorization UAT, LGPL license review/replacement, production deployment smoke, monitoring/SLO and backup/restore.

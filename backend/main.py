@@ -154,35 +154,83 @@ async def bootstrap_admin():
             account.is_active = True
         await ensure_workspace_membership(db, account, "Platform administrator workspace")
         await db.commit()
+async def _background_workspace_ids() -> list[str]:
+ # This is the only intentionally unscoped tenant enumeration in the scheduler.
+ # All tenant data reads/writes happen afterward inside a concrete workspace scope.
+ with workspace_scope(None):
+  async with SessionLocal() as db:
+   return list(
+    (await db.scalars(
+     select(Workspace.id)
+     .where(Workspace.slug != "legacy-quarantine")
+     .order_by(Workspace.created_at.asc())
+    )).all()
+   )
+
+
 async def campaign_health_job():
- async with SessionLocal() as db:
-  rows=list((await db.scalars(select(Campaign).where(Campaign.is_active.is_(True)).limit(100))).all());
-  for item in rows:
-   ok,code,error=await destination_healthy(item.primary_destination);item.primary_healthy=ok;item.health_last_checked_at=utcnow();item.health_last_error=None if ok else (error or f"HTTP {code}")[:1000]
-   if item.fallback_destination:item.fallback_healthy=(await destination_healthy(item.fallback_destination))[0]
-  await db.commit()
+ for workspace_id in await _background_workspace_ids():
+  try:
+   with workspace_scope(workspace_id):
+    async with SessionLocal() as db:
+     rows=list((await db.scalars(
+      select(Campaign).where(Campaign.is_active.is_(True)).limit(100)
+     )).all())
+     for item in rows:
+      ok,code,error=await destination_healthy(item.primary_destination)
+      item.primary_healthy=ok
+      item.health_last_checked_at=utcnow()
+      item.health_last_error=None if ok else (error or f"HTTP {code}")[:1000]
+      if item.fallback_destination:
+       item.fallback_healthy=(await destination_healthy(item.fallback_destination))[0]
+     await db.commit()
+  except Exception:
+   logger.exception("Campaign health worker failed for workspace %s",str(workspace_id)[:8])
+
+
 async def learning_job():
  try:
-  async with SessionLocal() as db:
-   workspace_ids=list((await db.scalars(select(Workspace.id).where(Workspace.slug!="legacy-quarantine"))).all())
-  for workspace_id in workspace_ids:
+  for workspace_id in await _background_workspace_ids():
    with workspace_scope(workspace_id):
     async with SessionLocal() as db:
      result=await self_improver_loop(db,lookback_days=30,workspace_id=workspace_id)
      logger.info("Performance-memory workspace %s: %s",workspace_id[:8],result)
  except Exception:
   logger.exception("Performance-memory job failed")
+
+
 async def email_job():
- try:await send_due_emails()
- except Exception:logger.exception("Email sender worker failed")
+ for workspace_id in await _background_workspace_ids():
+  try:
+   with workspace_scope(workspace_id):
+    async with SessionLocal() as db:
+     result=await send_due_emails(db,workspace_id=workspace_id)
+     logger.info(
+      "Email worker workspace %s: sent=%s attempted=%s skipped=%s",
+      str(workspace_id)[:8],result.get("sent",0),result.get("attempted",0),result.get("skipped",0),
+     )
+  except Exception:
+   logger.exception("Email sender worker failed for workspace %s",str(workspace_id)[:8])
+
+
 async def threshold_job():
- async with SessionLocal() as db:
-  rows=list((await db.scalars(select(PayoutThreshold))).all());now=utcnow()
-  for row in rows:
-   reached=float(row.reported_balance or 0)>=float(row.minimum_threshold or 0)
-   if reached and not row.threshold_reached:row.threshold_reached=True;row.threshold_reached_at=now
-   elif not reached:row.threshold_reached=False;row.threshold_reached_at=None
-  await db.commit()
+ for workspace_id in await _background_workspace_ids():
+  try:
+   with workspace_scope(workspace_id):
+    async with SessionLocal() as db:
+     rows=list((await db.scalars(select(PayoutThreshold))).all())
+     now=utcnow()
+     for row in rows:
+      reached=float(row.reported_balance or 0)>=float(row.minimum_threshold or 0)
+      if reached and not row.threshold_reached:
+       row.threshold_reached=True
+       row.threshold_reached_at=now
+      elif not reached:
+       row.threshold_reached=False
+       row.threshold_reached_at=None
+     await db.commit()
+  except Exception:
+   logger.exception("Payout threshold worker failed for workspace %s",str(workspace_id)[:8])
 @asynccontextmanager
 async def lifespan(app:FastAPI):
  await init_db();await hub.start(settings.redis_url);await bootstrap_admin();runner.set_resolver(resolve_steps);count=await runner.recover_paused();logger.info("Recovered paused sessions: %s",count)

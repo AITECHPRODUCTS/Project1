@@ -347,3 +347,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The resource-budget and self-learning service helpers could be invoked without an active workspace context. Because their models rely on ORM tenant filters driven by that context, an unscoped invocation could aggregate rows across tenants.
 - Candidate changes now fail closed without an authorized workspace, explicitly scope budget reserve/finalize/status and self-learning queries, pass workspace identity from the API and scheduled learning job, and reject a requested workspace that conflicts with the active context.
 - Added regression tests are intended to cover unscoped denial, cross-workspace aggregate isolation, self-learning isolation, and API denial when no authorized workspace is selected. This candidate remains **pending** until the exact-SHA push and PR CI runs are verified.
+
+
+## 2026-10-26 resource-budget and self-learning tenant boundary — verified
+- Exact SHA: `3322babb2865019e6a94bc5dc946cc700cd301f7`.
+- Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40267076940 — **success**. PR CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40267081364 — **success**.
+- All push jobs passed: Python suite with four new tests, migration/source checks, PostgreSQL migration and concurrent reversal, AI/RAG imports, 53-skill repository guard, frontend clean install/typecheck/build, security audit under the documented Chroma exception, and lockfile reproducibility.
+- Budget reserve/finalize/status and self-learning now require a concrete authorized workspace, reject mismatched context, and scope all reads/writes. API and scheduled-learning callers provide workspace identity explicitly.
+- Next P0 audit found three additional scheduled workers (campaign health, email delivery, payout threshold) were relying on implicit/global ORM context. The following commit scopes each tenant operation explicitly and adds worker regression tests; that change remains pending CI.

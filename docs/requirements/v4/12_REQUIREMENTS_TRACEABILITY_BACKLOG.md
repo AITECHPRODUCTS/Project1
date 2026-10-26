@@ -66,3 +66,10 @@
 - Tenant-owned blog assets and lead/email sequences now require a concrete authenticated workspace or a valid signed public-capture workspace token. Lead and queued-email queries are scoped by workspace; unscoped email delivery is rejected.
 - Six new regression tests passed with the full CI matrix, including workspace-specific subscriber identity and sequence idempotency.
 - Next P0 audit: review the social-publish endpoint, landing-page token issuance, and other externally impactful provider operations for authentication, workspace ownership, approval and dry-run-by-default semantics.
+
+
+
+## P0 — social/CMS external-publish authorization and landing-token issuance (2026-10-26)
+- Source audit at `31826a37d7494050457606c963aefba3421dceb9` found unauthenticated social publishing, ambient-only landing token issuance, and CMS publishing authorized by workspace admin despite global provider credentials.
+- Candidate requires platform-super-admin plus selected workspace for global provider writes; live social/CMS actions require `confirm_live_publish=true`; success/failure outcomes are written to workspace audit logs; landing token issuance uses the authenticated workspace explicitly.
+- Six new regression tests are pending full exact-SHA hosted CI.

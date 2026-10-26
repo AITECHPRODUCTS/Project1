@@ -79,3 +79,9 @@
 - Candidate SHA `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725 both passed.
 - The Python job passed the six new tenant-boundary tests. PostgreSQL, SQLite migration/drift, AI/RAG, frontend, dependency security audit, 53-skill parity and lockfile checks also passed.
 - Next release gate: explicit authorization and approval coverage for social publishing/other external side effects, plus the documented ChromaDB advisory exception and broader production UAT/deployment/backup evidence.
+
+
+
+## 2026-10-26 external publishing authorization — candidate
+- Base `31826a37d7494050457606c963aefba3421dceb9` passed push [40270284075](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270284075) and PR [40270289947](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270289947).
+- Candidate regressions cover missing authentication, workspace-admin denial for global credentials, live-confirmation enforcement, audit persistence and explicit workspace binding for landing tokens. The candidate is not verified until its own push and PR runs both pass.

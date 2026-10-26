@@ -70,3 +70,7 @@ These additive rules apply to every future Project1 build session.
 
 
 30. P0 blog/lead/email workspace boundary verified on `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`: push [40269971909](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909) and PR [40269976725](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725) both passed. `/content/blog` requires an authenticated workspace and persists its ContentAsset under that tenant. Private `/leads/capture` requires authentication/workspace; public signup requires the signed purpose-bound `lead_capture` token. Lead/email lookups and sequence idempotency are workspace-scoped, and `send_due_emails` fails closed with no workspace. Six regression tests passed. Next audit: the social-publish endpoint, landing-page token issuance, and remaining external-impact provider operations.
+
+
+
+32. P0 external publishing and landing-token issuance candidate on base `31826a37d7494050457606c963aefba3421dceb9`: social/CMS routes need platform-super-admin and selected workspace because credentials are global; live actions require explicit confirmation; outcomes must be audited per workspace; landing-token issuance must bind explicitly to authenticated workspace. Regression tests and exact-SHA CI are pending.

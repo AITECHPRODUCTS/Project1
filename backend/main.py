@@ -313,6 +313,36 @@ async def require_platform_admin(user: dict[str, Any] = Depends(require_auth)) -
     return user
 
 
+async def _record_external_publish_audit(
+    db: AsyncSession,
+    *,
+    user: dict[str, Any],
+    workspace_id: str,
+    action: str,
+    platform: str,
+    outcome: str,
+    remote_id: str | int | None = None,
+    error_type: str | None = None,
+) -> None:
+    details: dict[str, Any] = {
+        "platform": platform[:80],
+        "live_execution_enabled": not settings.publishing_dry_run,
+    }
+    if error_type:
+        details["error_type"] = error_type[:120]
+    with workspace_scope(workspace_id):
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action=action[:180],
+            resource_type="external_publication",
+            resource_id=str(remote_id)[:255] if remote_id is not None else None,
+            outcome=outcome[:80],
+            details_json=details,
+        ))
+        await db.commit()
+
+
 @app.get("/health")
 async def health():return {"status":"ok","service":"affiliate-os-api","time":utcnow().isoformat()}
 @app.post("/api/auth/register", status_code=201)
@@ -1083,15 +1113,80 @@ async def landing_guarantee_draft(
 
 
 @api.post("/landing/page")
-async def landing_page(p: LandingPageRequest):
- workspace_id = get_workspace_id()
- if settings.app_env == "production" and not workspace_id:
-  raise HTTPException(403, "An active workspace is required to create a public landing page")
- return HTMLResponse(squeeze_page_builder(headline=p.headline,subheadline=p.subheadline,benefit_bullets=p.benefit_bullets,form_action=p.form_action,privacy_url=p.privacy_url,affiliate_disclosure=p.affiliate_disclosure,lead_magnet=p.lead_magnet,audience=p.audience,workspace_token=issue_workspace_token(workspace_id,"lead_capture")))
+async def landing_page(
+    payload: LandingPageRequest,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before issuing a landing page token")
+    owner_workspace_id = str(workspace_id)
+    with workspace_scope(owner_workspace_id):
+        html = squeeze_page_builder(
+            headline=payload.headline,
+            subheadline=payload.subheadline,
+            benefit_bullets=payload.benefit_bullets,
+            form_action=payload.form_action,
+            privacy_url=payload.privacy_url,
+            affiliate_disclosure=payload.affiliate_disclosure,
+            lead_magnet=payload.lead_magnet,
+            audience=payload.audience,
+            workspace_token=issue_workspace_token(owner_workspace_id, "lead_capture"),
+        )
+    return HTMLResponse(html)
+
+
 @api.post("/landing/email-drip")
-async def drip(payload:dict[str,Any]):return {"sequence":email_drip_sequence(audience=str(payload.get("audience") or ""),lead_magnet=str(payload.get("lead_magnet") or ""),affiliate_offer=payload.get("affiliate_offer") or {},duration_days=int(payload.get("duration_days",5)))}
+async def drip(payload: dict[str, Any]):
+    return {
+        "sequence": email_drip_sequence(
+            audience=str(payload.get("audience") or ""),
+            lead_magnet=str(payload.get("lead_magnet") or ""),
+            affiliate_offer=payload.get("affiliate_offer") or {},
+            duration_days=int(payload.get("duration_days", 5)),
+        )
+    }
+
+
 @api.post("/social/publish")
-async def social_publish(payload:dict[str,Any]):return await social_media_scheduler(str(payload.get("platform") or ""),dict(payload.get("post") or {}))
+async def social_publish(
+    payload: dict[str, Any],
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    # Current provider tokens are global configuration, not workspace-owned credentials.
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before social publishing")
+    platform = str(payload.get("platform") or "").strip().lower()
+    post = dict(payload.get("post") or {})
+    if not settings.publishing_dry_run and payload.get("confirm_live_publish") is not True:
+        raise HTTPException(409, "Live publishing requires confirm_live_publish=true from an authorized operator")
+    owner_workspace_id = str(workspace_id)
+    try:
+        with workspace_scope(owner_workspace_id):
+            result = await social_media_scheduler(platform, post)
+    except Exception as exc:
+        await _record_external_publish_audit(
+            db,
+            user=user,
+            workspace_id=owner_workspace_id,
+            action="social_publish",
+            platform=platform or "unknown",
+            outcome="failed",
+            error_type=type(exc).__name__,
+        )
+        raise
+    await _record_external_publish_audit(
+        db,
+        user=user,
+        workspace_id=owner_workspace_id,
+        action="social_publish",
+        platform=platform or "unknown",
+        outcome=str(result.get("status") or "unknown"),
+        remote_id=result.get("remote_id"),
+    )
+    return result
 _public_hits:dict[str,list[float]]={};_public_lock=asyncio.Lock()
 async def public_rate_limit(request:Request):
  ip=request.client.host if request.client else "unknown";now=time.monotonic()
@@ -2080,8 +2175,52 @@ async def ads_evaluate(
  try:d=evaluate_roas(str(p["campaign_id"]),float(p["spend"]),float(p["commission"]),float(p.get("threshold",1.2)))
  except (KeyError,ValueError,TypeError) as exc:raise HTTPException(422,"campaign_id, spend and commission are required numeric values") from exc
  return {"campaign_id":d.campaign_id,"roas":d.roas,"threshold":d.threshold,"pause_recommended":d.pause_recommended,"executed":False,"reason":d.reason}
-@api.post("/cms/publish",dependencies=[Depends(require_admin)])
-async def cms(p:CMSPublishRequest):return await publish_article(provider=p.provider,title=p.title,article_html=p.article_html,canonical_url=p.canonical_url,status=p.status,tags=p.tags,disclosure=p.disclosure)
+@api.post("/cms/publish")
+async def cms(
+    payload: CMSPublishRequest,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    # WordPress/Ghost credentials are global config today, so workspace-admin
+    # status alone must not authorize writes to a shared external CMS account.
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before CMS publishing")
+    if payload.status == "publish" and payload.confirm_live_publish is not True:
+        raise HTTPException(409, "Live CMS publishing requires confirm_live_publish=true from an authorized operator")
+    owner_workspace_id = str(workspace_id)
+    try:
+        with workspace_scope(owner_workspace_id):
+            result = await publish_article(
+                provider=payload.provider,
+                title=payload.title,
+                article_html=payload.article_html,
+                canonical_url=payload.canonical_url,
+                status=payload.status,
+                tags=payload.tags,
+                disclosure=payload.disclosure,
+            )
+    except Exception as exc:
+        await _record_external_publish_audit(
+            db,
+            user=user,
+            workspace_id=owner_workspace_id,
+            action="cms_publish",
+            platform=payload.provider,
+            outcome="failed",
+            error_type=type(exc).__name__,
+        )
+        raise
+    await _record_external_publish_audit(
+        db,
+        user=user,
+        workspace_id=owner_workspace_id,
+        action="cms_publish",
+        platform=payload.provider,
+        outcome=str(result.get("status") or payload.status),
+        remote_id=result.get("remote_id"),
+    )
+    return result
 @api.get("/audit")
 async def audit(
     limit: int = Query(100, ge=1, le=500),

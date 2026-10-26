@@ -131,6 +131,7 @@ class CMSPublishRequest(BaseModel):
     article_html: str = Field(min_length=30, max_length=500000)
     canonical_url: str = Field(min_length=8, max_length=2048)
     status: Literal["draft", "publish"] = "draft"
+    confirm_live_publish: bool = False
     tags: list[str] = Field(default_factory=list, max_length=20)
     disclosure: str = Field(default="Disclosure: I may earn a commission from qualifying purchases through affiliate links.", max_length=1200)
 

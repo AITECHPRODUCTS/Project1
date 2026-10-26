@@ -145,3 +145,9 @@
 - `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725 both completed successfully.
 - New tenant-boundary tests passed: blog asset ownership, authenticated private lead capture, token-authorized public capture, no-workspace fail-closed service behavior, per-workspace subscriber identity and sequence dedup, explicit queue/lead filters.
 - Next: audit external-impact social publishing and landing-page workspace token issuance; do not assume endpoint safety solely from dry-run defaults.
+
+
+
+## 2026-10-26 external-publish guard candidate
+- Base `31826a37d7494050457606c963aefba3421dceb9` is verified green in push [40270284075](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270284075) and PR [40270289947](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270289947).
+- Candidate restricts global-credential social/CMS writes to platform super-admins with explicit workspace context, requires explicit live-publish confirmation, audits success/failure by workspace and binds landing capture tokens to the authenticated workspace. Await new push/PR CI.

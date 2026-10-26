@@ -199,3 +199,8 @@
 - CMS endpoints no longer validate DNS and then use a second independent resolution when sending global WordPress/Ghost credentials. They use the shared pinned HTTP helper, preserve Host/SNI, disable redirects and environment proxies, apply total timeout and enforce a 2 MiB JSON response cap.
 - Four CMS tests pass. The first CI failure was five test-double incompatibilities and was corrected without weakening production assertions. Final Python result: 305 passed, 2 skipped.
 - Next: review remaining configurable direct HTTP calls and prove trusted proxy configuration in staging; keep Chroma advisories and release/UAT evidence gates open.
+
+
+## P0 — remaining fixed-provider direct HTTP (2026-10-26)
+- Source scan identified direct clients for Resend emails, Reddit OAuth and search, X trends, Pinterest/Reddit post submission, and Meta campaign pause. These are fixed provider endpoints, not arbitrary URL fetches, but credentials and external writes should use the same pinned IP/no-proxy/no-redirect transport.
+- Candidate adds a JSON/form request helper with response cap and migrates callers; retains stable per-email Idempotency-Key, workspace tenant logic, publication dry-run and Meta automation execution gate. Three focused tests added. Pending exact-SHA full CI.

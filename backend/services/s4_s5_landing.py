@@ -2,10 +2,10 @@ from __future__ import annotations
 import html
 from datetime import datetime,timezone
 from typing import Any
-import httpx
 from backend.config import get_settings
 from backend.core.errors import IntegrationNotConfiguredError
 from backend.services.llm import llm_service
+from backend.services.url_safety import request_public_json
 def _esc(x:Any)->str:return html.escape(str(x),quote=True)
 async def grand_slam_offer_generator(product:dict[str,Any],audience:str,main_problem:str)->dict[str,Any]:
  if not product.get("name") or not audience.strip() or not main_problem.strip():raise ValueError("product.name, audience and main_problem required")
@@ -37,18 +37,19 @@ async def social_media_scheduler(platform:str,post:dict[str,Any],*,publish_at:da
  s=get_settings();platform=platform.lower().strip()
  if publish_at and publish_at>datetime.now(timezone.utc):return {"status":"queue_required","platform":platform,"publish_at":publish_at.isoformat(),"published":False}
  if s.publishing_dry_run:return {"status":"dry_run","platform":platform,"payload":post,"published":False}
- async with httpx.AsyncClient(timeout=20,follow_redirects=False) as client:
-  if platform=="pinterest":
-   if not s.pinterest_access_token:raise IntegrationNotConfiguredError("PINTEREST_ACCESS_TOKEN is required with pins:write authorization")
-   required=(post.get("board_id"),post.get("title"),post.get("image_url"))
-   if not all(required) or not str(post["image_url"]).startswith("https://"):raise ValueError("Pinterest needs board_id, title and HTTPS image_url")
-   payload={"board_id":str(post["board_id"]),"title":str(post["title"])[:100],"description":str(post.get("description",""))[:800],"media_source":{"source_type":"image_url","url":post["image_url"]}}
-   if post.get("link"):payload["link"]=post["link"]
-   resp=await client.post("https://api.pinterest.com/v5/pins",json=payload,headers={"Authorization":f"Bearer {s.pinterest_access_token}"});resp.raise_for_status();data=resp.json();return {"status":"published","platform":platform,"remote_id":data.get("id"),"response":data}
-  if platform=="reddit":
-   if not s.reddit_access_token:raise IntegrationNotConfiguredError("REDDIT_ACCESS_TOKEN must come from authorized user OAuth with submit scope")
-   if not all(post.get(k) for k in ("subreddit","title","text")):raise ValueError("Reddit needs subreddit, title and text")
-   resp=await client.post("https://oauth.reddit.com/api/submit",data={"sr":str(post["subreddit"]).removeprefix("r/"),"kind":"self","title":str(post["title"])[:300],"text":str(post["text"])[:40000],"resubmit":"true"},headers={"Authorization":f"Bearer {s.reddit_access_token}","User-Agent":s.reddit_user_agent});resp.raise_for_status();data=resp.json();errors=data.get("json",{}).get("errors",[])
-   if errors:raise RuntimeError(f"Reddit rejected post: {errors}")
-   return {"status":"published","platform":platform,"response":data}
+ if platform=="pinterest":
+  if not s.pinterest_access_token:raise IntegrationNotConfiguredError("PINTEREST_ACCESS_TOKEN is required with pins:write authorization")
+  required=(post.get("board_id"),post.get("title"),post.get("image_url"))
+  if not all(required) or not str(post["image_url"]).startswith("https://"):raise ValueError("Pinterest needs board_id, title and HTTPS image_url")
+  payload={"board_id":str(post["board_id"]),"title":str(post["title"])[:100],"description":str(post.get("description",""))[:800],"media_source":{"source_type":"image_url","url":post["image_url"]}}
+  if post.get("link"):payload["link"]=post["link"]
+  data=await request_public_json("https://api.pinterest.com/v5/pins",method="POST",json_body=payload,headers={"Authorization":f"Bearer {s.pinterest_access_token}"},timeout=20,max_bytes=2_000_000)
+  return {"status":"published","platform":platform,"remote_id":data.get("id"),"response":data}
+ if platform=="reddit":
+  if not s.reddit_access_token:raise IntegrationNotConfiguredError("REDDIT_ACCESS_TOKEN must come from authorized user OAuth with submit scope")
+  if not all(post.get(k) for k in ("subreddit","title","text")):raise ValueError("Reddit needs subreddit, title and text")
+  data=await request_public_json("https://oauth.reddit.com/api/submit",method="POST",data_body={"sr":str(post["subreddit"]).removeprefix("r/"),"kind":"self","title":str(post["title"])[:300],"text":str(post["text"])[:40000],"resubmit":"true"},headers={"Authorization":f"Bearer {s.reddit_access_token}","User-Agent":s.reddit_user_agent},timeout=20,max_bytes=2_000_000)
+  errors=data.get("json",{}).get("errors",[])
+  if errors:raise RuntimeError(f"Reddit rejected post: {errors}")
+  return {"status":"published","platform":platform,"response":data}
  raise ValueError("Supported platforms: reddit, pinterest")

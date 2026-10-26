@@ -194,3 +194,8 @@
 - Regression suite passed (305 passed, 2 skipped), with PostgreSQL migration/concurrency, AI/RAG imports, frontend build, dependency audits, repository/53-skill guard and push lockfile sync green.
 - Four CMS tests verify WordPress/Ghost transport, redirect rejection and response-size cap. This does not certify live CMS authorization/UAT; `CMS_PUBLISH_EXECUTE` is still required for actual publishing.
 - Next: inspect remaining direct HTTP integrations and verify trusted-proxy configuration in staging.
+
+
+## 2026-10-26 fixed credentialed provider HTTP — candidate
+- Base checkpoint `e79b4bad6f067e537306fc6aff4c0b94629cf847` passed push [40290480101](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290480101) and PR [40290486273](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290486273).
+- Candidate migrates Resend, Reddit/X, Pinterest/Reddit and Meta pause fixed endpoints to the shared pinned helper, adds bounded JSON/form POST request support, and retains existing idempotency/dry-run/execute gates. Verification pending on the candidate SHA.

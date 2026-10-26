@@ -1,10 +1,9 @@
 from __future__ import annotations
 import asyncio,base64,math,re
 from typing import Any
-import httpx
 from bs4 import BeautifulSoup
 from backend.config import get_settings
-from backend.services.url_safety import fetch_public_page
+from backend.services.url_safety import fetch_public_page, request_public_json
 def monopoly_niche_finder(candidates:list[dict[str,Any]],*,top_n:int=10)->list[dict[str,Any]]:
  """Score supplied, measured keyword demand/competition. Never manufacture search volumes."""
  if not candidates:raise ValueError("Provide measured niche candidates")
@@ -40,22 +39,21 @@ async def trending_content_scout(query:str,*,limit:int=10)->dict[str,Any]:
  if settings.reddit_client_id and settings.reddit_client_secret:
   try:
    basic=base64.b64encode(f"{settings.reddit_client_id}:{settings.reddit_client_secret}".encode()).decode()
-   async with httpx.AsyncClient(timeout=12) as client:
-    r=await client.post("https://www.reddit.com/api/v1/access_token",headers={"Authorization":f"Basic {basic}","User-Agent":settings.reddit_user_agent},data={"grant_type":"client_credentials"});r.raise_for_status();token=r.json()["access_token"]
-    r=await client.get("https://oauth.reddit.com/search",params={"q":query,"sort":"top","t":"month","limit":limit},headers={"Authorization":f"Bearer {token}","User-Agent":settings.reddit_user_agent});r.raise_for_status()
-    for child in r.json().get("data",{}).get("children",[]):
-     d=child.get("data",{});title=str(d.get("title",""));score=max(0,int(d.get("ups",0)))+2*max(0,int(d.get("num_comments",0)))
-     results.append({"platform":"reddit","text":title,"hook":extract_hook(title),"url":"https://reddit.com"+str(d.get("permalink","")),"score":score,"likes":d.get("ups"),"comments":d.get("num_comments"),"source":"official_reddit_api"})
+   token_payload=await request_public_json("https://www.reddit.com/api/v1/access_token",method="POST",headers={"Authorization":f"Basic {basic}","User-Agent":settings.reddit_user_agent},data_body={"grant_type":"client_credentials"},timeout=12,max_bytes=1_000_000)
+   token=str(token_payload["access_token"])
+   reddit_payload=await request_public_json("https://oauth.reddit.com/search",method="GET",params={"q":query,"sort":"top","t":"month","limit":limit},headers={"Authorization":f"Bearer {token}","User-Agent":settings.reddit_user_agent},timeout=12,max_bytes=2_000_000)
+   for child in reddit_payload.get("data",{}).get("children",[]):
+    d=child.get("data",{});title=str(d.get("title",""));score=max(0,int(d.get("ups",0)))+2*max(0,int(d.get("num_comments",0)))
+    results.append({"platform":"reddit","text":title,"hook":extract_hook(title),"url":"https://reddit.com"+str(d.get("permalink","")),"score":score,"likes":d.get("ups"),"comments":d.get("num_comments"),"source":"official_reddit_api"})
    providers["reddit"]="ok"
   except Exception as exc:providers["reddit"]=f"error:{type(exc).__name__}"
  else:providers["reddit"]="not_configured"
  if settings.x_bearer_token:
   try:
-   async with httpx.AsyncClient(timeout=12) as client:
-    r=await client.get("https://api.x.com/2/tweets/search/recent",params={"query":f"({query}) -is:retweet","max_results":min(100,limit),"tweet.fields":"public_metrics,created_at"},headers={"Authorization":f"Bearer {settings.x_bearer_token}"});r.raise_for_status()
-    for d in r.json().get("data",[]):
-     m=d.get("public_metrics",{});text=d.get("text","");score=sum(int(m.get(k,0)) for k in ("like_count","reply_count","retweet_count"))
-     results.append({"platform":"x","text":text,"hook":extract_hook(text),"url":f"https://x.com/i/web/status/{d.get('id')}","score":score,"metrics":m,"published_at":d.get("created_at"),"source":"official_x_api_v2"})
+   x_payload=await request_public_json("https://api.x.com/2/tweets/search/recent",method="GET",params={"query":f"({query}) -is:retweet","max_results":min(100,limit),"tweet.fields":"public_metrics,created_at"},headers={"Authorization":f"Bearer {settings.x_bearer_token}"},timeout=12,max_bytes=2_000_000)
+   for d in x_payload.get("data",[]):
+    m=d.get("public_metrics",{});item_text=d.get("text","");score=sum(int(m.get(k,0)) for k in ("like_count","reply_count","retweet_count"))
+    results.append({"platform":"x","text":item_text,"hook":extract_hook(item_text),"url":f"https://x.com/i/web/status/{d.get('id')}","score":score,"metrics":m,"published_at":d.get("created_at"),"source":"official_x_api_v2"})
    providers["x"]="ok"
   except Exception as exc:providers["x"]=f"error:{type(exc).__name__}"
  else:providers["x"]="not_configured"

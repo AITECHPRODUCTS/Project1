@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import socket
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -78,18 +79,21 @@ async def open_public_http_response(
     params: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     json_body: Any | None = None,
+    data_body: dict[str, Any] | None = None,
     timeout: float = 12.0,
 ) -> AsyncIterator[httpx.Response]:
     """Open a request pinned to a vetted public IP, preserving Host and TLS SNI.
 
-    POST is supported for fixed, authenticated integrations such as the CMS API.
-    Redirects remain disabled so credentials are never forwarded to a new host.
+    GET/HEAD are for public reads; POST is for fixed authenticated provider
+    integrations. Redirects and ambient proxy configuration remain disabled.
     """
     method = method.upper()
     if method not in {"GET", "HEAD", "POST"}:
         raise ValueError("Public fetch helper only supports GET, HEAD and POST")
-    if method != "POST" and json_body is not None:
-        raise ValueError("JSON request bodies are only supported for POST")
+    if method != "POST" and (json_body is not None or data_body is not None):
+        raise ValueError("Request bodies are only supported for POST")
+    if json_body is not None and data_body is not None:
+        raise ValueError("Choose JSON or form-encoded data, not both")
     if timeout <= 0:
         raise ValueError("timeout must be positive")
 
@@ -109,7 +113,7 @@ async def open_public_http_response(
             trust_env=False,
         ) as client:
             request = client.build_request(
-                method, str(target), params=params, headers=headers, json=json_body
+                method, str(target), params=params, headers=headers, json=json_body, data=data_body
             )
             request.url = request.url.copy_with(host=connect_ip)
             request.headers["Host"] = host_header
@@ -152,6 +156,38 @@ async def read_limited_response(
             raise ValueError("Response exceeds byte limit")
         chunks.append(chunk)
     return b"".join(chunks)
+
+
+async def request_public_json(
+    url: str,
+    *,
+    method: str = "GET",
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    json_body: Any | None = None,
+    data_body: dict[str, Any] | None = None,
+    timeout: float = 12.0,
+    max_bytes: int = 2_000_000,
+) -> dict[str, Any] | list[Any]:
+    """Request JSON from a fixed/configured public provider via the pinned transport."""
+    async with open_public_http_response(
+        url, method=method, params=params, headers=headers,
+        json_body=json_body, data_body=data_body, timeout=timeout,
+    ) as response:
+        if 300 <= response.status_code < 400:
+            raise ValueError("Public provider redirects are not followed")
+        response.raise_for_status()
+        content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if content_type and content_type not in {"application/json", "application/problem+json"}:
+            raise ValueError(f"Unsupported provider response content type: {content_type}")
+        body = await read_limited_response(response, max_bytes=max_bytes)
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Public provider returned invalid JSON") from exc
+    if not isinstance(payload, (dict, list)):
+        raise ValueError("Public provider returned an unexpected JSON response")
+    return payload
 
 
 async def fetch_public_page(

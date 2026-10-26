@@ -281,3 +281,8 @@
 - WordPress/Ghost authenticated POSTs use the pinned-IP shared transport; redirect following is disabled, proxy env is ignored, TLS hostname validation is preserved, and the CMS JSON response cap is 2 MiB.
 - Initial test run exposed fake-response and fake-client signature issues; corrected fixtures passed the full test suite and CI matrix. `CMS_PUBLISH_EXECUTE` remains required for actual publishing.
 - Next: finish direct-HTTP/configurable-target audit and trusted-proxy staging verification; other production release gates remain open.
+
+
+## 2026-10-26 fixed-provider HTTP transport — candidate
+- Migrate remaining fixed credentialed outbound calls (Resend, Reddit/X, Pinterest/Reddit, Meta pause) onto the shared DNS-pinned public HTTP transport. Add form POST support while preserving provider payloads/headers, response shape, email idempotency, publishing dry-run and ad execution gate.
+- New provider contract tests added and existing Resend concurrency tests adapted to the helper; exact-SHA CI pending.

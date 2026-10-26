@@ -137,3 +137,6 @@ These additive rules apply to every future Project1 build session.
 
 
 57. P0 CMS credentialed POST transport is verified on `13ec393d0897c4ba75ed83ba6bed8ce8690f7c06`; push [40290026088](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290026088) and PR [40290033400](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290033400) both green. Python 305/2 skipped, PostgreSQL migration/concurrency, AI/RAG imports, frontend, dependency audits, 53-skill parity and push lockfile-sync all passed. Next: audit remaining direct HTTP integrations and validate actual trusted-proxy ingress in staging; Chroma advisories and other release gates remain open.
+
+
+58. P0 fixed credentialed provider HTTP: migrate Resend, Reddit OAuth/search, X trend search, Pinterest/Reddit publishing, and Meta pause from bare HTTPX to the pinned `request_public_json` helper. Preserve response semantics, stable Resend idempotency, tenant-scoped claim/retry, `PUBLISHING_DRY_RUN`, and `AD_AUTOMATION_EXECUTE`; add provider contract tests. Candidate pending full push/PR CI.

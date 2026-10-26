@@ -83,26 +83,18 @@ class _Response:
 class _FakeClient:
     calls = []
 
-    def __init__(self, *args, **kwargs):
-        self.timeout = kwargs.get("timeout")
 
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        return None
-
-    async def post(self, url, *, json, headers):
-        await asyncio.sleep(0.05)
-        self.calls.append({"url": url, "json": json, "headers": headers})
-        return _Response()
+async def _fake_request(url, *, method="GET", params=None, headers=None, json_body=None, data_body=None, timeout=12, max_bytes=2_000_000):
+    await asyncio.sleep(0.05)
+    _FakeClient.calls.append({"url": url, "method": method, "json": json_body, "data": data_body, "headers": headers, "timeout": timeout})
+    return {"id": "resend-message-id"}
 
 
 @pytest.mark.asyncio
 async def test_concurrent_workers_atomically_claim_and_send_a_due_email_once(tmp_path, monkeypatch):
     engine, sessions = await _database(tmp_path, monkeypatch)
     _FakeClient.calls = []
-    monkeypatch.setattr("backend.services.email_delivery.httpx.AsyncClient", _FakeClient)
+    monkeypatch.setattr(email_delivery, "request_public_json", _fake_request)
     try:
         workspace_id, _, message_id = await _seed_email(sessions)
         with workspace_scope(workspace_id):
@@ -132,7 +124,7 @@ async def test_concurrent_workers_atomically_claim_and_send_a_due_email_once(tmp
 async def test_stale_delivery_lease_is_retried_with_same_idempotency_key(tmp_path, monkeypatch):
     engine, sessions = await _database(tmp_path, monkeypatch)
     _FakeClient.calls = []
-    monkeypatch.setattr("backend.services.email_delivery.httpx.AsyncClient", _FakeClient)
+    monkeypatch.setattr(email_delivery, "request_public_json", _fake_request)
     try:
         claimed_at = datetime.now(timezone.utc) - timedelta(minutes=20)
         workspace_id, _, message_id = await _seed_email(
@@ -158,7 +150,7 @@ async def test_stale_delivery_lease_is_retried_with_same_idempotency_key(tmp_pat
 async def test_stale_delivery_older_than_provider_dedup_window_requires_manual_review(tmp_path, monkeypatch):
     engine, sessions = await _database(tmp_path, monkeypatch)
     _FakeClient.calls = []
-    monkeypatch.setattr("backend.services.email_delivery.httpx.AsyncClient", _FakeClient)
+    monkeypatch.setattr(email_delivery, "request_public_json", _fake_request)
     try:
         claimed_at = datetime.now(timezone.utc) - timedelta(hours=24)
         workspace_id, _, message_id = await _seed_email(

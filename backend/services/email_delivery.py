@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio,hashlib,hmac,html,json,re,time
 from datetime import datetime,timedelta,timezone
 from typing import Any
-import httpx
+from backend.services.url_safety import request_public_json
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
@@ -242,93 +242,94 @@ async def send_due_emails(
    # stale read snapshots while attempting to write.
    await session.commit()
 
-   async with httpx.AsyncClient(timeout=20) as client:
-    for message in messages:
-     claim = await session.execute(
-      update(ScheduledEmail)
-      .where(
-       ScheduledEmail.id == message.id,
-       ScheduledEmail.workspace_id == owner_workspace_id,
-       ScheduledEmail.status.in_(["scheduled", "retry"]),
-       ScheduledEmail.send_at <= now,
-      )
-      .values(
-       status="sending",
-       attempts=ScheduledEmail.attempts + 1,
-       claimed_at=now,
-       last_error="Delivery claim active",
-      )
-      .execution_options(synchronize_session=False)
+   for message in messages:
+    claim = await session.execute(
+     update(ScheduledEmail)
+     .where(
+      ScheduledEmail.id == message.id,
+      ScheduledEmail.workspace_id == owner_workspace_id,
+      ScheduledEmail.status.in_(["scheduled", "retry"]),
+      ScheduledEmail.send_at <= now,
      )
-     if claim.rowcount != 1:
-      skipped += 1
-      continue
-     await session.commit()
-     await session.refresh(message)
-     attempted += 1
-
-     lead = await session.scalar(
-      select(Lead).where(
-       Lead.id == message.lead_id,
-       Lead.workspace_id == owner_workspace_id,
-      )
+     .values(
+      status="sending",
+      attempts=ScheduledEmail.attempts + 1,
+      claimed_at=now,
+      last_error="Delivery claim active",
      )
-     if not lead or lead.unsubscribed_at:
-      message.status = "suppressed"
-      message.claimed_at = None
-      message.last_error = "Lead is missing or has unsubscribed"
-      skipped += 1
-      continue
-     if message.condition_json.get("skip_days_3_4_if_purchased") and lead.purchased_at:
-      message.status = "suppressed_purchased"
-      message.claimed_at = None
-      message.last_error = "Lead purchased before the scheduled email was sent"
-      skipped += 1
-      continue
-     if message.attempts > 4:
-      message.status = "failed_permanent"
-      message.claimed_at = None
-      message.last_error = "Maximum delivery attempts exceeded"
-      skipped += 1
-      continue
+     .execution_options(synchronize_session=False)
+    )
+    if claim.rowcount != 1:
+     skipped += 1
+     continue
+    await session.commit()
+    await session.refresh(message)
+    attempted += 1
 
-     # Keep the RFC List-Unsubscribe target stable across retries so Resend sees
-     # the same request payload for the same Idempotency-Key.
-     unsubscribe_match = re.search(r"Unsubscribe:\s*(https?://\S+)", message.body_text)
-     if unsubscribe_match:
-      unsubscribe_url = unsubscribe_match.group(1).rstrip(".,)")
-     else:
-      created_at = message.created_at
-      if created_at is not None and created_at.tzinfo is None:
-       created_at = created_at.replace(tzinfo=timezone.utc)
-      unsubscribe_url = _unsubscribe_url(lead.id, int(created_at.timestamp()) if created_at else int(now.timestamp()))
-     try:
-      response = await client.post(
-       "https://api.resend.com/emails",
-       json={
-        "from": settings.resend_from_email,
-        "to": [lead.email],
-        "subject": message.subject,
-        "html": message.body_html,
-        "text": message.body_text,
-        "headers": {"List-Unsubscribe": f"<{unsubscribe_url}>"},
-       },
-       headers={
-        "Authorization": f"Bearer {settings.resend_api_key}",
-        "Idempotency-Key": f"scheduled-email/{owner_workspace_id}/{message.id}",
-       },
-      )
-      response.raise_for_status()
-      message.status = "sent"
-      message.claimed_at = None
-      message.provider_message_id = response.json().get("id")
-      message.last_error = None
-      sent += 1
-     except Exception as exc:
-      message.status = "retry" if message.attempts < 4 else "failed_permanent"
-      message.claimed_at = None
-      message.last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
-      message.send_at = now + timedelta(minutes=min(2 ** message.attempts * 5, 180))
+    lead = await session.scalar(
+     select(Lead).where(
+      Lead.id == message.lead_id,
+      Lead.workspace_id == owner_workspace_id,
+     )
+    )
+    if not lead or lead.unsubscribed_at:
+     message.status = "suppressed"
+     message.claimed_at = None
+     message.last_error = "Lead is missing or has unsubscribed"
+     skipped += 1
+     continue
+    if message.condition_json.get("skip_days_3_4_if_purchased") and lead.purchased_at:
+     message.status = "suppressed_purchased"
+     message.claimed_at = None
+     message.last_error = "Lead purchased before the scheduled email was sent"
+     skipped += 1
+     continue
+    if message.attempts > 4:
+     message.status = "failed_permanent"
+     message.claimed_at = None
+     message.last_error = "Maximum delivery attempts exceeded"
+     skipped += 1
+     continue
+
+    # Keep the RFC List-Unsubscribe target stable across retries so Resend sees
+    # the same request payload for the same Idempotency-Key.
+    unsubscribe_match = re.search(r"Unsubscribe:\s*(https?://\S+)", message.body_text)
+    if unsubscribe_match:
+     unsubscribe_url = unsubscribe_match.group(1).rstrip(".,)")
+    else:
+     created_at = message.created_at
+     if created_at is not None and created_at.tzinfo is None:
+      created_at = created_at.replace(tzinfo=timezone.utc)
+     unsubscribe_url = _unsubscribe_url(lead.id, int(created_at.timestamp()) if created_at else int(now.timestamp()))
+    try:
+     response = await request_public_json(
+      "https://api.resend.com/emails",
+      method="POST",
+      json_body={
+       "from": settings.resend_from_email,
+       "to": [lead.email],
+       "subject": message.subject,
+       "html": message.body_html,
+       "text": message.body_text,
+       "headers": {"List-Unsubscribe": f"<{unsubscribe_url}>"},
+      },
+      headers={
+       "Authorization": f"Bearer {settings.resend_api_key}",
+       "Idempotency-Key": f"scheduled-email/{owner_workspace_id}/{message.id}",
+      },
+      timeout=20,
+      max_bytes=1_000_000,
+     )
+     message.status = "sent"
+     message.claimed_at = None
+     message.provider_message_id = response.get("id")
+     message.last_error = None
+     sent += 1
+    except Exception as exc:
+     message.status = "retry" if message.attempts < 4 else "failed_permanent"
+     message.claimed_at = None
+     message.last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
+     message.send_at = now + timedelta(minutes=min(2 ** message.attempts * 5, 180))
    await session.commit()
    return {
     "sent": sent,

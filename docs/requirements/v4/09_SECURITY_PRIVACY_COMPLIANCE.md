@@ -35,3 +35,8 @@
 - WordPress/Ghost credentialed POSTs use the pinned-IP transport, preserve Host/SNI, disable redirects and proxy env, and cap response bodies at 2 MiB. Four regression tests passed, including redirect and oversized-response cases.
 - Python suite: 305 passed, 2 skipped. PostgreSQL, AI/RAG, frontend, security audits, skill parity and lockfile sync all passed. `CMS_PUBLISH_EXECUTE` remains the live-publication gate.
 - Remaining release blockers include four documented Chroma advisories, trusted-proxy ingress staging verification, provider live UAT, SBOM/license/secret evidence, deployment smoke and backup/restore.
+
+
+## 2026-10-26 fixed credentialed provider endpoints — candidate
+- The verified CMS transport is pinned; remaining bare HTTPX clients exist for Resend, Reddit/X, Pinterest/Reddit and Meta campaign pause, all using fixed official-provider endpoints but bypassing the same no-proxy/no-redirect/pinned-IP policy.
+- Candidate migrates these calls to the shared helper with JSON/form POST support, timeouts and bounded JSON responses. Email idempotency and ad/publishing execution gates remain unchanged. Exact-SHA tests/CI are pending.

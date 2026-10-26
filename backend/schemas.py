@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -1032,3 +1033,108 @@ class ProprietaryDatasetRequest(BaseModel):
     min_conversions: int = Field(default=5, ge=1, le=100_000)
     max_assignments: int = Field(default=5000, ge=1, le=10_000)
     max_events: int = Field(default=50000, ge=1, le=100_000)
+
+
+class WebinarAgendaItem(BaseModel):
+    title: str = Field(min_length=2, max_length=180)
+    description: str = Field(default="", max_length=700)
+
+    @field_validator("title")
+    @classmethod
+    def agenda_title_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Agenda title must not be blank")
+        return value
+
+
+class WebinarCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    summary: str = Field(min_length=10, max_length=600)
+    description: str = Field(min_length=30, max_length=8000)
+    host_name: str = Field(min_length=2, max_length=200)
+    host_bio: str | None = Field(default=None, max_length=3000)
+    start_at: datetime
+    end_at: datetime
+    timezone_name: str = Field(default="UTC", min_length=1, max_length=100)
+    registration_deadline: datetime | None = None
+    capacity: int | None = Field(default=None, ge=1, le=1_000_000)
+    agenda_items: list[WebinarAgendaItem] = Field(default_factory=list, max_length=20)
+    privacy_policy_url: str = Field(min_length=8, max_length=2048)
+    consent_text: str = Field(min_length=12, max_length=1200,
+        default="I agree that my registration details may be used to administer this webinar.")
+    affiliate_disclosure: str | None = Field(default=None, max_length=1200)
+
+    @field_validator("title", "summary", "description", "host_name", "consent_text")
+    @classmethod
+    def required_webinar_text_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field must not be blank")
+        return value
+
+    @field_validator("timezone_name")
+    @classmethod
+    def valid_timezone_name(cls, value: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        value = value.strip()
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("timezone_name must be a valid IANA timezone") from exc
+        return value
+
+    @field_validator("privacy_policy_url")
+    @classmethod
+    def valid_privacy_url(cls, value: str) -> str:
+        parts = urlparse(value.strip())
+        if parts.scheme not in {"http", "https"} or not parts.netloc or parts.username or parts.password:
+            raise ValueError("privacy_policy_url must be an absolute HTTP(S) URL without credentials")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def valid_event_window(self):
+        for name in ("start_at", "end_at"):
+            value = getattr(self, name)
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{name} must include a timezone offset")
+        if self.start_at >= self.end_at:
+            raise ValueError("end_at must be after start_at")
+        if self.start_at <= datetime.now(timezone.utc):
+            raise ValueError("start_at must be in the future")
+        if self.registration_deadline is not None:
+            if self.registration_deadline.tzinfo is None or self.registration_deadline.utcoffset() is None:
+                raise ValueError("registration_deadline must include a timezone offset")
+            if self.registration_deadline > self.start_at:
+                raise ValueError("registration_deadline cannot be after start_at")
+        return self
+
+
+class WebinarRegistrationRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=200)
+    email: str = Field(min_length=5, max_length=320)
+    consent: bool
+    marketing_consent: bool = False
+
+    @field_validator("full_name")
+    @classmethod
+    def normalized_name(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("Full name must not be blank")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def normalized_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Enter a valid email address")
+        return value
+
+    @field_validator("consent")
+    @classmethod
+    def require_registration_consent(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("Explicit registration consent is required")
+        return value

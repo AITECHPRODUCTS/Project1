@@ -438,3 +438,54 @@ class AdPerformanceObservation(TenantScopedMixin, Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+
+
+class WebinarEvent(TenantScopedMixin, Base):
+    """Workspace-owned webinar registration page and current registration policy."""
+    __tablename__ = "webinar_events"
+    __table_args__ = (
+        UniqueConstraint("public_id", name="uq_webinar_events_public_id"),
+        Index("ix_webinar_events_workspace_status_start", "workspace_id", "status", "start_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    public_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    summary: Mapped[str] = mapped_column(String(600), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    host_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    host_bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    timezone_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    registration_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agenda_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON_VALUE, default=list)
+    privacy_policy_url: Mapped[str] = mapped_column(Text, nullable=False)
+    consent_text: Mapped[str] = mapped_column(Text, nullable=False)
+    affiliate_disclosure: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class WebinarRegistration(TenantScopedMixin, Base):
+    """Consent-recorded registration; does not imply an external webinar account exists."""
+    __tablename__ = "webinar_registrations"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "webinar_id", "email",
+            name="uq_webinar_registrations_workspace_event_email",
+        ),
+        Index("ix_webinar_registrations_workspace_webinar_created", "workspace_id", "webinar_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    webinar_id: Mapped[str] = mapped_column(
+        ForeignKey("webinar_events.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consent_text_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    consent_source: Mapped[str] = mapped_column(String(100), default="webinar_registration_page")
+    marketing_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

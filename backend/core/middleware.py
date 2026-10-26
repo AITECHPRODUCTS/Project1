@@ -52,7 +52,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         if method in {"GET", "HEAD", "OPTIONS", "TRACE"}:
             return await call_next(request)
         path = request.url.path
-        if path in self.EXEMPT_EXACT or path.startswith("/api/webhooks/") or path.startswith("/unsubscribe/"):
+        if path in self.EXEMPT_EXACT or path.startswith("/api/public/webinars/") or path.startswith("/api/webhooks/") or path.startswith("/unsubscribe/"):
             return await call_next(request)
         session = request.scope.get("session") or {}
         if session.get("user"):

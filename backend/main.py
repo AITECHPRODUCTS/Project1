@@ -23,9 +23,9 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -1465,6 +1465,122 @@ async def landing_guarantee_draft(
     return {**generated, "asset_id": asset.id}
 
 
+
+def _webinar_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _webinar_iso(value: datetime | None) -> str | None:
+    return _webinar_utc(value).isoformat() if value is not None else None
+
+
+@api.post("/webinars", status_code=201)
+async def create_webinar(payload: WebinarCreateRequest, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating a webinar")
+    if user.get("workspace_role") not in {"owner", "admin"} and user.get("is_admin") is not True:
+        raise HTTPException(403, "Workspace owner/admin approval is required to create a public webinar page")
+    workspace_id = str(workspace_id)
+    public_id = secrets.token_urlsafe(24)
+    with workspace_scope(workspace_id):
+        row = WebinarEvent(
+            workspace_id=workspace_id, public_id=public_id, title=payload.title,
+            summary=payload.summary, description=payload.description, host_name=payload.host_name,
+            host_bio=payload.host_bio, start_at=payload.start_at, end_at=payload.end_at,
+            timezone_name=payload.timezone_name, registration_deadline=payload.registration_deadline,
+            capacity=payload.capacity, agenda_json=[item.model_dump() for item in payload.agenda_items],
+            privacy_policy_url=payload.privacy_policy_url, consent_text=payload.consent_text,
+            affiliate_disclosure=payload.affiliate_disclosure, status="draft",
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="webinar.registration_page.created", resource_type="webinar_event",
+            resource_id=row.id, outcome="draft",
+            details_json={"public_id": public_id, "capacity_limited": payload.capacity is not None,
+                          "external_webinar_provider": "not_configured", "public_registration_open": False},
+        ))
+        await db.commit()
+    return {"id": row.id, "public_id": row.public_id, "title": row.title, "status": row.status,
+            "public_path": f"/webinar/{row.public_id}", "start_at": _webinar_iso(row.start_at),
+            "end_at": _webinar_iso(row.end_at), "timezone_name": row.timezone_name,
+            "registration_deadline": _webinar_iso(row.registration_deadline), "capacity": row.capacity,
+            "public_registration_open": False, "external_webinar_provider": "not_configured",
+            "confirmation_email_sent": False}
+
+
+@api.get("/webinars")
+async def list_webinars(limit: int = Query(default=100, ge=1, le=300), user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before listing webinars")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(select(WebinarEvent).where(WebinarEvent.workspace_id == workspace_id).order_by(WebinarEvent.start_at.asc()).limit(limit))).all())
+        result = []
+        for row in rows:
+            count = await db.scalar(select(func.count(WebinarRegistration.id)).where(
+                WebinarRegistration.workspace_id == workspace_id, WebinarRegistration.webinar_id == row.id))
+            result.append({"id": row.id, "public_id": row.public_id, "title": row.title, "status": row.status,
+                "start_at": _webinar_iso(row.start_at), "end_at": _webinar_iso(row.end_at),
+                "timezone_name": row.timezone_name, "capacity": row.capacity,
+                "registration_count": int(count or 0), "public_path": f"/webinar/{row.public_id}",
+                "external_webinar_provider": "not_configured"})
+    return {"count": len(result), "data": result}
+
+
+@api.post("/webinars/{webinar_id}/open")
+async def open_webinar_registrations(webinar_id: str, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before opening registrations")
+    if user.get("workspace_role") not in {"owner", "admin"} and user.get("is_admin") is not True:
+        raise HTTPException(403, "Workspace owner/admin approval is required to open registrations")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(WebinarEvent).where(WebinarEvent.id == webinar_id, WebinarEvent.workspace_id == workspace_id))
+        if row is None:
+            raise HTTPException(404, "Webinar not found in the active workspace")
+        if row.status == "closed":
+            raise HTTPException(409, "A closed webinar cannot be reopened; create a new registration page")
+        if _webinar_utc(row.start_at) <= datetime.now(timezone.utc):
+            raise HTTPException(409, "Webinar start time has passed")
+        if row.registration_deadline and _webinar_utc(row.registration_deadline) <= datetime.now(timezone.utc):
+            raise HTTPException(409, "Registration deadline has passed")
+        row.status = "open"
+        db.add(AuditLog(workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="webinar.registration_page.opened", resource_type="webinar_event",
+            resource_id=row.id, outcome="public_registration_open",
+            details_json={"public_id": row.public_id, "external_provider_write": False}))
+        await db.commit()
+        return {"id": row.id, "public_id": row.public_id, "status": row.status,
+                "public_path": f"/webinar/{row.public_id}", "external_provider_write": False}
+
+
+@api.post("/webinars/{webinar_id}/close")
+async def close_webinar_registrations(webinar_id: str, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before closing registrations")
+    if user.get("workspace_role") not in {"owner", "admin"} and user.get("is_admin") is not True:
+        raise HTTPException(403, "Workspace owner/admin approval is required to close registrations")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(WebinarEvent).where(WebinarEvent.id == webinar_id, WebinarEvent.workspace_id == workspace_id))
+        if row is None:
+            raise HTTPException(404, "Webinar not found in the active workspace")
+        row.status = "closed"
+        db.add(AuditLog(workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="webinar.registration_page.closed", resource_type="webinar_event",
+            resource_id=row.id, outcome="registrations_closed", details_json={"public_id": row.public_id}))
+        await db.commit()
+        return {"id": row.id, "public_id": row.public_id, "status": row.status, "public_registration_open": False}
+
+
 @api.post("/landing/page")
 async def landing_page(
     payload: LandingPageRequest,
@@ -1775,6 +1891,101 @@ async def public_lead_capture(request: Request, db: AsyncSession = Depends(get_s
         "<h1>You're on the list</h1><p>Your consent-based email sequence was queued.</p></body></html>",
         status_code=201,
     )
+
+@app.get("/api/public/webinars/{public_id}")
+async def public_webinar_page(public_id: str, db: AsyncSession = Depends(get_session)):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{20,80}", public_id):
+        raise HTTPException(404, "Webinar registration page not found")
+    with workspace_scope(None):
+        row = await db.scalar(select(WebinarEvent).where(WebinarEvent.public_id == public_id))
+    if row is None or row.status != "open":
+        raise HTTPException(404, "Webinar registration page not found")
+    if _webinar_utc(row.start_at) <= datetime.now(timezone.utc):
+        raise HTTPException(410, "Registration is closed because the webinar has started")
+    if row.registration_deadline and _webinar_utc(row.registration_deadline) <= datetime.now(timezone.utc):
+        raise HTTPException(410, "Webinar registration deadline has passed")
+    with workspace_scope(str(row.workspace_id)):
+        registered = await db.scalar(select(func.count(WebinarRegistration.id)).where(
+            WebinarRegistration.workspace_id == str(row.workspace_id), WebinarRegistration.webinar_id == row.id))
+    count = int(registered or 0)
+    if row.capacity is not None and count >= row.capacity:
+        raise HTTPException(410, "Webinar registration is full")
+    return {"public_id": row.public_id, "title": row.title, "summary": row.summary,
+        "description": row.description, "host_name": row.host_name, "host_bio": row.host_bio,
+        "start_at": _webinar_iso(row.start_at), "end_at": _webinar_iso(row.end_at),
+        "timezone_name": row.timezone_name, "registration_deadline": _webinar_iso(row.registration_deadline),
+        "agenda_items": row.agenda_json or [], "privacy_policy_url": row.privacy_policy_url,
+        "consent_text": row.consent_text, "affiliate_disclosure": row.affiliate_disclosure,
+        "capacity": row.capacity, "registration_count": count,
+        "remaining_spots": max(0, row.capacity - count) if row.capacity is not None else None,
+        "registration_open": True, "external_webinar_provider": "not_configured", "confirmation_email_sent": False}
+
+
+@app.post("/api/public/webinars/{public_id}/register", status_code=201)
+async def public_webinar_register(public_id: str, request: Request, db: AsyncSession = Depends(get_session)):
+    await public_rate_limit(request)
+    body = await request.body()
+    if len(body) > 16 * 1024:
+        raise HTTPException(413, "Webinar registration request exceeds the 16 KiB size limit")
+    if "application/json" not in request.headers.get("content-type", "").lower():
+        raise HTTPException(415, "Submit a JSON webinar registration form")
+    try:
+        payload = WebinarRegistrationRequest.model_validate(json.loads(body))
+    except Exception as exc:
+        raise HTTPException(422, "Webinar registration contains invalid fields or consent") from exc
+    if not re.fullmatch(r"[A-Za-z0-9_-]{20,80}", public_id):
+        raise HTTPException(404, "Webinar registration page not found")
+    with workspace_scope(None):
+        candidate = await db.scalar(select(WebinarEvent).where(WebinarEvent.public_id == public_id))
+    if candidate is None or not candidate.workspace_id:
+        raise HTTPException(404, "Webinar registration page not found")
+    workspace_id = str(candidate.workspace_id)
+    now = datetime.now(timezone.utc)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(WebinarEvent).where(WebinarEvent.id == candidate.id, WebinarEvent.public_id == public_id).with_for_update())
+        if row is None or row.status != "open":
+            raise HTTPException(404, "Webinar registration page not found")
+        if _webinar_utc(row.start_at) <= now:
+            raise HTTPException(410, "Registration is closed because the webinar has started")
+        if row.registration_deadline and _webinar_utc(row.registration_deadline) <= now:
+            raise HTTPException(410, "Webinar registration deadline has passed")
+        existing = await db.scalar(select(WebinarRegistration).where(
+            WebinarRegistration.workspace_id == workspace_id, WebinarRegistration.webinar_id == row.id,
+            WebinarRegistration.email == payload.email))
+        if existing is not None:
+            return {"registration_id": existing.id, "status": "already_registered",
+                    "confirmation_email_sent": False, "email_delivery": "not_configured"}
+        count = await db.scalar(select(func.count(WebinarRegistration.id)).where(
+            WebinarRegistration.workspace_id == workspace_id, WebinarRegistration.webinar_id == row.id))
+        if row.capacity is not None and int(count or 0) >= row.capacity:
+            raise HTTPException(409, "Webinar registration capacity has been reached")
+        registration = WebinarRegistration(
+            workspace_id=workspace_id, webinar_id=row.id, email=payload.email, full_name=payload.full_name,
+            consent_at=now, consent_text_snapshot=row.consent_text, consent_source="webinar_registration_page",
+            marketing_consent=payload.marketing_consent)
+        db.add(registration)
+        await db.flush()
+        db.add(AuditLog(workspace_id=workspace_id, actor="public_webinar_registrant",
+            action="webinar.registration.created", resource_type="webinar_registration",
+            resource_id=registration.id, outcome="registered",
+            details_json={"webinar_id": row.id, "public_id": row.public_id, "consent_recorded": True,
+                "marketing_consent": payload.marketing_consent, "email_confirmation_sent": False}))
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            existing = await db.scalar(select(WebinarRegistration).where(
+                WebinarRegistration.workspace_id == workspace_id, WebinarRegistration.webinar_id == row.id,
+                WebinarRegistration.email == payload.email))
+            if existing is not None:
+                return {"registration_id": existing.id, "status": "already_registered",
+                        "confirmation_email_sent": False, "email_delivery": "not_configured"}
+            raise HTTPException(409, "Registration could not be persisted safely")
+        return {"registration_id": registration.id, "status": "registered", "consent_recorded": True,
+            "marketing_consent": registration.marketing_consent, "confirmation_email_sent": False,
+            "email_delivery": "not_configured", "external_webinar_provider": "not_configured"}
+
+
 @api.get("/leads")
 async def leads(
     user: dict[str, Any] = Depends(require_auth),

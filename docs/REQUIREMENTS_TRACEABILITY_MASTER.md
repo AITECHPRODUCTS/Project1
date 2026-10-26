@@ -150,4 +150,11 @@
 
 ## 2026-10-26 external-publish guard candidate
 - Base `31826a37d7494050457606c963aefba3421dceb9` is verified green in push [40270284075](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270284075) and PR [40270289947](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270289947).
-- Candidate restricts global-credential social/CMS writes to platform super-admins with explicit workspace context, requires explicit live-publish confirmation, audits success/failure by workspace and binds landing capture tokens to the authenticated workspace. Await new push/PR CI.
+- Verified exact implementation SHA `6f3994096e502911b23fb54e8cb94c3f2181a16d`: push [40270795625](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625) and PR [40270800499](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499) both passed.
+
+
+## 2026-10-26 external publishing authorization — exact-SHA evidence
+- `6f3994096e502911b23fb54e8cb94c3f2181a16d`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499 both completed successfully.
+- All push jobs passed: Python 250 passed/2 skipped, SQLite migration/drift, PostgreSQL migration/concurrency, 9 AI/RAG imports, frontend production build, dependency audits, 53-skill repo guard, and lockfile sync.
+- External social/CMS writes are platform-super-admin-only with explicit workspace context, live confirmation and workspace-scoped audit events; landing capture tokens are minted only for the authenticated active workspace.
+- Next: audit workflow runner side effects. ChromaDB advisories and remaining production release evidence still block certification.

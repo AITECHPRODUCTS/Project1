@@ -73,4 +73,7 @@ These additive rules apply to every future Project1 build session.
 
 
 
-32. P0 external publishing and landing-token issuance candidate on base `31826a37d7494050457606c963aefba3421dceb9`: social/CMS routes need platform-super-admin and selected workspace because credentials are global; live actions require explicit confirmation; outcomes must be audited per workspace; landing-token issuance must bind explicitly to authenticated workspace. Regression tests and exact-SHA CI are pending.
+32. P0 external publishing/landing-token boundary is verified on `6f3994096e502911b23fb54e8cb94c3f2181a16d`; push [40270795625](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625) and PR [40270800499](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499) both passed. Social/CMS writes require Platform Super Admin + selected workspace; live actions require `confirm_live_publish=true`; workspace-scoped audit records capture outcome; landing capture token issuance is explicitly bound to the authenticated workspace. Six regression tests passed.
+
+
+33. Next P0: inspect workflow runner step handlers and any remaining provider-integration endpoints for external mutations. Confirm human approval, idempotency, durable audit events, explicit provider scopes and dry-run behavior. The four documented ChromaDB advisory exceptions and remaining release evidence remain blockers.

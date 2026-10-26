@@ -72,4 +72,11 @@
 ## P0 — social/CMS external-publish authorization and landing-token issuance (2026-10-26)
 - Source audit at `31826a37d7494050457606c963aefba3421dceb9` found unauthenticated social publishing, ambient-only landing token issuance, and CMS publishing authorized by workspace admin despite global provider credentials.
 - Candidate requires platform-super-admin plus selected workspace for global provider writes; live social/CMS actions require `confirm_live_publish=true`; success/failure outcomes are written to workspace audit logs; landing token issuance uses the authenticated workspace explicitly.
-- Six new regression tests are pending full exact-SHA hosted CI.
+- Six new regression tests and full exact-SHA CI passed at `6f3994096e502911b23fb54e8cb94c3f2181a16d`: push [40270795625](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625) and PR [40270800499](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499) both green.
+
+
+## P0 — external-publishing authorization and landing token binding verified (2026-10-26)
+- Verified at `6f3994096e502911b23fb54e8cb94c3f2181a16d`, push [40270795625](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625) and PR [40270800499](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499) both passed.
+- Social and CMS writes with shared global credentials require Platform Super Admin and active workspace; live publishing requires `confirm_live_publish=true`; CMS also preserves the `CMS_PUBLISH_EXECUTE` gate. Success/failure metadata is audited under the selected workspace.
+- Landing-page token issuance requires an authenticated active workspace and explicit workspace scope. Six new tests cover the auth/role/workspace/approval/audit behavior; Python reported 250 passed and 2 skipped.
+- Next P0: audit workflow runner step handlers and remaining provider mutation endpoints for approvals, idempotency, audit evidence and dry-run enforcement. ChromaDB advisories and release/UAT evidence remain open.

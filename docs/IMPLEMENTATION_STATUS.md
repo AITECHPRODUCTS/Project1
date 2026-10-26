@@ -386,8 +386,19 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Six new regression tests cover cross-workspace subscriber isolation and sequence idempotency, no-workspace denial, blog asset ownership, private capture denial, public-token rejection and acceptance, and unscoped email helper denial.
 - Next P0 audit: review remaining externally impactful routes, especially the social-publish endpoint, landing-page token issuance, and any direct publishing/provider writes. Production remains blocked by the four documented ChromaDB advisory exceptions and outstanding release/UAT gates.
 
-## 2026-10-26 external-publishing and landing-token boundary — candidate
+## 2026-10-26 external-publishing and landing-token boundary — verified
 - Base SHA: `31826a37d7494050457606c963aefba3421dceb9`. The base push [40270284075](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270284075) and PR [40270289947](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270289947) both passed; that SHA was documentation-only after the verified blog/lead/email change.
 - Audit confirmed `/social/publish` can make live Reddit/Pinterest writes when `PUBLISHING_DRY_RUN=false`, yet had no direct auth/workspace guard. `/landing/page` issued a signed token from ambient context without an explicit authenticated workspace check. CMS credentials are global settings but CMS publish only used the workspace-admin role guard.
 - Candidate gates social/CMS writes behind platform-super-admin and selected workspace; requires `confirm_live_publish=true` for live publication; creates workspace-scoped audit records for success/failure; and issues landing-page capture tokens only for an authenticated workspace.
-- Six regression tests cover authentication, workspace-admin denial for global credentials, selected-workspace token issuance, live-confirmation gating and audit persistence. **Pending** new exact-SHA push and PR CI.
+- Six regression tests cover authentication, workspace-admin denial for global credentials, selected-workspace token issuance, live-confirmation gating and audit persistence. Exact-SHA push [40270795625](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625) and PR [40270800499](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499) both passed.
+
+
+## 2026-10-26 external-publishing and landing-token boundary — verified
+- Exact implementation SHA: `6f3994096e502911b23fb54e8cb94c3f2181a16d`.
+- Push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625 — **success**. PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499 — **success**. All seven push jobs and all required PR jobs passed.
+- Python suite: **250 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG imports (9 imports), frontend typecheck/build, dependency security audit, 53-skill repository guard and push lockfile reproducibility all passed.
+- `/social/publish` and `/cms/publish` now require explicit Platform Super Admin authorization and an active workspace because their provider credentials are global configuration. Live social/CMS publishing requires `confirm_live_publish=true`; CMS also keeps the existing `CMS_PUBLISH_EXECUTE` configuration gate. Success/failure provider results are recorded in workspace-scoped AuditLog events without storing post bodies or credentials.
+- `/landing/page` now requires an authenticated user with an active workspace and generates the signed `lead_capture` token against that explicit workspace under `workspace_scope`.
+- Six regression tests prove unauthenticated denial, workspace-admin denial for shared global provider credentials, missing-workspace token issuance denial, workspace-bound token issuance, explicit live-confirmation enforcement, and audit event persistence.
+- Production remains **not release-ready**: the documented four ChromaDB advisory exceptions remain unresolved, as do remaining provider authorization verification, comprehensive external-side-effect UAT, SBOM/license/secret checks, deployment smoke and backup/restore evidence.
+- Next P0 audit: workflow runner step implementations and remaining provider integration routes for external mutations, explicit approvals, idempotency, audit recording and dry-run behavior.

@@ -85,3 +85,10 @@
 ## 2026-10-26 external publishing authorization — candidate
 - Base `31826a37d7494050457606c963aefba3421dceb9` passed push [40270284075](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270284075) and PR [40270289947](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270289947).
 - Candidate regressions cover missing authentication, workspace-admin denial for global credentials, live-confirmation enforcement, audit persistence and explicit workspace binding for landing tokens. The candidate is not verified until its own push and PR runs both pass.
+
+
+## 2026-10-26 external-publishing authorization — verified
+- Exact SHA `6f3994096e502911b23fb54e8cb94c3f2181a16d`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499 both passed.
+- Six new route tests prove authentication and role restriction for global social/CMS provider credentials, explicit workspace binding for landing token issuance, live confirmation, and workspace-scoped audit persistence.
+- Existing `PUBLISHING_DRY_RUN=true` default and `CMS_PUBLISH_EXECUTE=false` default remain in force; live operations additionally require the explicit request confirmation.
+- Next: review workflow step execution and remaining provider mutation endpoints. The four ChromaDB advisory exceptions, broader provider UAT, deployment smoke and backup/restore remain open release gates.

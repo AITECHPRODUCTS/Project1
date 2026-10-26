@@ -254,3 +254,10 @@
 - In-process quotas can be bypassed across workers/replicas. Production uses Redis for shared atomic fixed-window limits; Redis failure returns 503 rather than degrading to process-local enforcement.
 - Expensive LLM and video routes now require an authenticated workspace and receive per-IP/workspace caps. Keyword O(n²) clustering and public lead/tracking input lengths are bounded.
 - Exact-SHA regression tests and push/PR CI remain pending.
+
+
+## 2026-10-26 public abuse-control checkpoint — verified
+- Exact SHA `e3fb2fd8e159bae71f84fdd1bb3c4df50bc9d96a`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283974722 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283978789 both passed.
+- Python 289 passed/2 skipped; SQLite and PostgreSQL migration/concurrency, AI/RAG, frontend, dependency audit, skill parity and push lockfile checks passed.
+- Public auth/lead-capture quotas are distributed Redis atomic windows in production and fail closed on Redis errors; expensive generation/render requires authentication and an active workspace with IP/workspace quotas. Payload sizes and quadratic keyword clustering are bounded.
+- Next: inspect outbound URL fetching and media-render SSRF/abuse boundaries before another feature.

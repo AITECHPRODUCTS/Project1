@@ -161,7 +161,13 @@
 - Keep release blocked until the ChromaDB advisories and production UAT/SBOM/license/secret/deployment/restore gates are closed.
 
 
-## P0 — public-route abuse controls and generation budgets (2026-10-26)
+## P0 — public-route abuse controls and generation budgets verified (2026-10-26)
 - Baseline verified at `96402915bc857035a859e068810f5d23f58ecca7` in push [40283105487](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283105487) and PR [40283111955](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283111955).
 - Candidate hardens the existing signup/login/public-lead limiter with Redis atomic fixed windows in production, fails closed on Redis failure, adds workspace/IP budgets for LLM and video generation, requires authenticated workspace on expensive generation endpoints, caps keyword clustering at 500 values and public capture bodies at 32 KiB, and caps stateless tracking input at 8,192 characters.
 - Regression tests and exact-SHA CI pending.
+
+
+## Next P0 — outbound fetch and render abuse/SSRF boundaries
+- Review all public outbound requests in research URL fetch, OpenAffiliate offer discovery, generic provider adapters and Pexels video download. Confirm safe DNS/IP resolution on every connection, redirects disabled or revalidated, byte caps, timeouts and rate budgets.
+- Existing `backend/services/url_safety.py` and `backend/services/video_engine.py` already have controls; inspect their exact semantics and add only verified regression gaps. Note trusted proxy behaviour explicitly.
+- Production remains blocked by ChromaDB advisories and provider/UAT/SBOM/license/secret/deployment/restore evidence.

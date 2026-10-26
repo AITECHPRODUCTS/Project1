@@ -168,7 +168,7 @@ async def learning_job():
   for workspace_id in workspace_ids:
    with workspace_scope(workspace_id):
     async with SessionLocal() as db:
-     result=await self_improver_loop(db,lookback_days=30)
+     result=await self_improver_loop(db,lookback_days=30,workspace_id=workspace_id)
      logger.info("Performance-memory workspace %s: %s",workspace_id[:8],result)
  except Exception:
   logger.exception("Performance-memory job failed")
@@ -1262,9 +1262,22 @@ async def record_ab_test_event(
         "variant": assignment.variant,
     }
 @api.post("/analytics/self-improve")
-async def learn(lookback_days:int=Query(30,ge=1,le=180)):return await self_improver_loop(lookback_days=lookback_days)
+async def learn(
+    lookback_days: int = Query(30, ge=1, le=180),
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before running performance learning")
+    return await self_improver_loop(lookback_days=lookback_days, workspace_id=str(workspace_id))
+
+
 @api.get("/resource-budget")
-async def resource_budget():return await budget_status()
+async def resource_budget(user: dict[str, Any] = Depends(require_auth)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing resource usage")
+    return await budget_status(workspace_id=str(workspace_id))
 @api.get("/campaigns")
 async def campaigns(db:AsyncSession=Depends(get_session)):
  rows=list((await db.scalars(select(Campaign).order_by(Campaign.created_at.desc()).limit(200))).all());return {"count":len(rows),"data":[{"id":x.id,"name":x.name,"niche":x.niche,"primary_destination":x.primary_destination,"fallback_destination":x.fallback_destination,"is_active":x.is_active,"primary_healthy":x.primary_healthy,"fallback_healthy":x.fallback_healthy,"health_last_error":x.health_last_error} for x in rows]}

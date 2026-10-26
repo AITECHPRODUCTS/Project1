@@ -340,3 +340,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Shared doctrine ingestion now requires the explicit Platform Super Admin permission, the UI hides the action from non-platform admins, and knowledge status no longer returns the server's absolute RAG storage path. The tests cover workspace-owner denial, platform-admin success, and path non-disclosure.
 - Security boundary still outstanding: four explicitly documented ChromaDB advisories remain conditionally excepted by the embedded/local-only guard; this is not a clean optional-AI security scan or production approval.
 - Next P0 review: tenant-scoping of resource-budget and self-learning summaries, including any scheduled/background calls that run without a request workspace context.
+
+
+## 2026-10-26 resource-budget and performance-learning tenant boundary — candidate
+- Resumed from verified head `a8cd236426a34ce8852b1e5ef4128e9c0199ca7b`; push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266554499 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266557903 both passed before this change.
+- The resource-budget and self-learning service helpers could be invoked without an active workspace context. Because their models rely on ORM tenant filters driven by that context, an unscoped invocation could aggregate rows across tenants.
+- Candidate changes now fail closed without an authorized workspace, explicitly scope budget reserve/finalize/status and self-learning queries, pass workspace identity from the API and scheduled learning job, and reject a requested workspace that conflicts with the active context.
+- Added regression tests are intended to cover unscoped denial, cross-workspace aggregate isolation, self-learning isolation, and API denial when no authorized workspace is selected. This candidate remains **pending** until the exact-SHA push and PR CI runs are verified.

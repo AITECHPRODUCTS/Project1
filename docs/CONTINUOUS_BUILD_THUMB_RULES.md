@@ -53,3 +53,6 @@ These additive rules apply to every future Project1 build session.
 
 
 24. P0 shared knowledge-index mutation: the shared RAG ingestion endpoint is platform-admin-only; non-platform workspace owners receive 403, the UI hides the action unless `isPlatformAdmin` is true, and knowledge status does not disclose an absolute filesystem path. Verified on exact SHA `743e404e63b7c3a54423a18b1cf17af1338c5abf` by successful push [40266330644](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644) and PR [40266336192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192). Keep the documented Chroma advisory exception as a production blocker; next audit resource-budget and learning aggregates for tenant scope.
+
+
+25. P0 resource-budget / learning tenant boundary: `ResourceUsage` and `PerformanceMemory` are tenant-scoped. Resource-budget reserve/finalize/status and performance-learning helpers must fail closed without an authorized workspace, must reject a mismatched requested workspace, and must scope database reads/writes. API routes and scheduled jobs must pass the tenant explicitly. The regression-test commit is pending full exact-SHA CI.

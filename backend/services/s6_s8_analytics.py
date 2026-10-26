@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
 from backend.database import SessionLocal
 from backend.models import ClickEvent, Conversion, PerformanceMemory
+from backend.tenancy import get_workspace_id, workspace_scope
 
 
-async def self_improver_loop(
+async def _self_improver_loop_scoped(
     session: AsyncSession | None = None,
     *,
     lookback_days: int = 30,
@@ -116,3 +117,20 @@ async def self_improver_loop(
     finally:
         if owns_session:
             await session.close()
+
+
+async def self_improver_loop(
+    session: AsyncSession | None = None,
+    *,
+    lookback_days: int = 30,
+    workspace_id: str | None = None,
+) -> dict[str, Any]:
+    active_workspace_id = get_workspace_id()
+    requested_workspace_id = str(workspace_id).strip() if workspace_id else None
+    if requested_workspace_id and active_workspace_id and requested_workspace_id != active_workspace_id:
+        raise ValueError("Learning workspace does not match the active workspace context")
+    owner_workspace_id = requested_workspace_id or active_workspace_id
+    if not owner_workspace_id:
+        raise ValueError("Authorized workspace context required for performance learning")
+    with workspace_scope(owner_workspace_id):
+        return await _self_improver_loop_scoped(session, lookback_days=lookback_days)

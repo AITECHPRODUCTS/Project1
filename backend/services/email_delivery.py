@@ -294,7 +294,7 @@ async def send_due_emails(
 
      # Keep the RFC List-Unsubscribe target stable across retries so Resend sees
      # the same request payload for the same Idempotency-Key.
-     unsubscribe_match = re.search(r"Unsubscribe:\\s*(https?://\\S+)", message.body_text)
+     unsubscribe_match = re.search(r"Unsubscribe:\s*(https?://\S+)", message.body_text)
      if unsubscribe_match:
       unsubscribe_url = unsubscribe_match.group(1).rstrip(".,)")
      else:

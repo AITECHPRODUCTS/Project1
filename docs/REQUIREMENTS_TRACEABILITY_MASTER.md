@@ -101,3 +101,9 @@
 - Push [40264037056](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056) and PR [40264040473](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473) both completed successfully at `668b33670ea11e30f97ccc3c6e50180124609207`.
 - Passed gates include the full Python suite, SQLite and PostgreSQL migration/drift, PostgreSQL concurrency, AI/RAG imports, 53-skill registry parity, frontend typecheck/build, dependency audit, clean `npm ci`, and lockfile reproducibility.
 - Security caveat remains material: four exact ChromaDB advisory IDs are conditionally excepted only behind the documented local-only guard. The current result is not production security clearance. Provider authorization, browser UAT, SBOM/license/secret scan, deployment and restore evidence remain pending.
+
+
+## 2026-10-26 next P0 auth/tenancy verification item
+- The full CI matrix and CI-runtime action upgrade passed at `70dd041a8c27607467f8605d1eabad09f815d2bf` (https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264278741).
+- Added direct regression tests for workspace-membership revocation, static-token scope denial and the workspace-member/admin boundary. These assert existing enforcement behavior and do not weaken or replace existing assertions.
+- Status remains pending until the full exact-SHA CI run for the test addition succeeds.

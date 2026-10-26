@@ -38,3 +38,8 @@
 
 ## 2026-10-26 CI runtime maintenance
 - Workflow actions were using old releases with Node 20 runtime warnings. Node 20 was removed from GitHub-hosted Actions on 23 September 2026; action releases must support Node 24. This checkpoint updates those action versions; validate the exact updated workflow before advancing.
+
+
+## 2026-10-26 CI runtime update verified
+- Exact SHA `70dd041a8c27607467f8605d1eabad09f815d2bf`: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264278741 — success using Node 24-compatible `checkout@v7`, `setup-python@v7`, `setup-node@v7`, `upload-artifact@v7`, and `download-artifact@v8`.
+- Next: the newly added auth/tenancy regression tests are not yet verified; require full CI on their commit. The Chroma exception remains a production security blocker.

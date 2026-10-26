@@ -26,3 +26,8 @@
 | R-19 | P0 — reproducible frontend dependencies | `frontend/package-lock.json` (npm lockfile v3, 141 packages); `npm ci` typecheck/build on exact SHA `e6e6eb4e552b4887da252db0df172dd25ee79561` | implemented and CI-verified on push/PR; lockfile-sync passed on push | Continue running `npm ci`; add SBOM/license/secret scans and keep dependency audit findings remediated |
 
 | R-20 | P0 — dependency security audits | `.github/workflows/ci.yml` `security-audit`; core/test and AI/RAG `pip-audit`; frontend `npm audit`; `docs/SECURITY_EXCEPTIONS.md` | Push run [40264037056](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056) and PR run [40264040473](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473) passed on `668b33670ea11e30f97ccc3c6e50180124609207`, including core/test audit, guarded AI/RAG audit, and frontend `npm audit --audit-level=high`. Next.js 16.4.3 and patched PostCSS/parser resolutions are locked. Four documented Chroma IDs remain conditionally excepted after local-only guard | Remove the Chroma exception after an upstream fix/vector-store replacement; add SBOM/license/secret-scan evidence and rerun every audit on each release candidate |
+
+
+## P0 security acceptance follow-up (2026-10-26)
+- Test addition: `tests/test_auth_tenancy_guards.py` covers session invalidation when workspace membership is revoked, denial of unscoped static bearer tokens for tenant data, and workspace member denial from admin authorization.
+- Verification status: pending the full hosted CI run on the commit containing these tests. Existing route coverage and DB tenant-filter tests do not replace a passing test for this specific auth contract.

@@ -41,3 +41,6 @@ These additive rules apply to every future Project1 build session.
 
 
 20. 2026-10-26 verified checkpoint: full push run [40264037056](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056) and PR run [40264040473](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473) passed on exact SHA `668b33670ea11e30f97ccc3c6e50180124609207`. The frontend npm audit and standard/AI-RAG audits passed, with only the four precisely documented Chroma advisories conditionally excepted by the embedded-only guard. Preserve this as a verified checkpoint. Next: move GitHub Actions dependencies off retired Node 20 releases to current Node 24-capable action majors, then rerun the full matrix; production is still blocked by the Chroma exception and provider/UAT/deploy/restore gates.
+
+
+21. P0 tenant-auth regression tests: add and run an explicit test for a signed session whose workspace membership has been deactivated (must return 403 and clear the session), a static bearer API token attempt against workspace-scoped access (must return 403 because it has no workspace scope), and workspace-member denial for admin permissions. Do not claim this test slice complete until the new exact-SHA hosted test suite passes. This does not substitute for broad route-by-route authorization, WebSocket/export/background-job tests, or production release gates.

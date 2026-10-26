@@ -301,3 +301,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The frontend dependency fix includes Next.js `16.4.3`, PostCSS `8.5.31`, and postcss-selector-parser `7.1.6`. The previous dependency-audit failure is resolved in this full matrix.
 - Explicit outstanding security limitation: the four ChromaDB advisory IDs documented in `docs/SECURITY_EXCEPTIONS.md` are still temporary exceptions behind the local-only guard; this is not a clean AI/RAG scan or production release approval.
 - Current next P0 hygiene action: migrate workflow actions off retired Node 20 releases, then rerun the complete matrix on the new exact SHA. Provider live authorization, SBOM/license/secret scans, browser UAT, deployment smoke and backup/restore remain separate release gates.
+
+
+## 2026-10-26 P0 auth/tenant regression tests added
+- Previous checkpoint SHA `70dd041a8c27607467f8605d1eabad09f815d2bf` has a fully successful push workflow: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264278741. The workflow now uses Node 24-capable first-party actions.
+- Added `tests/test_auth_tenancy_guards.py` to pin three existing security contracts: a session whose workspace membership was revoked is invalidated (HTTP 403 and session cleared), a static bearer API token cannot be used for workspace-scoped access, and a workspace member cannot call workspace-admin authorization.
+- The new tests are not yet verified; the commit-triggered full CI run must pass before this item is called complete. They supplement—not replace—the broader route-by-route IDOR, WebSocket, exports and worker authorization tests in the release gate.
+- Production remains blocked by the conditional ChromaDB audit exception and by external provider authorization, browser UAT, SBOM/license/secret scan, deployment smoke, and backup/restore evidence.

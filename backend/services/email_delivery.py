@@ -3,7 +3,7 @@ import asyncio,hashlib,hmac,html,json,re,time
 from datetime import datetime,timedelta,timezone
 from typing import Any
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
 from backend.database import SessionLocal
@@ -177,6 +177,7 @@ async def send_due_emails(
    return {
     "sent": 0,
     "attempted": 0,
+    "skipped": 0,
     "provider_configured": False,
     "reason": "Configure RESEND_API_KEY and RESEND_FROM_EMAIL",
    }
@@ -184,9 +185,48 @@ async def send_due_emails(
   if owns_session:
    session = SessionLocal()
   assert session is not None
-  sent = skipped = 0
+  sent = skipped = attempted = 0
   now = datetime.now(timezone.utc)
+  stale_lease_before = now - timedelta(minutes=15)
+  safe_retry_before = now - timedelta(hours=23)
   try:
+   # Recover interrupted claims while the provider's 24-hour idempotency window
+   # is still open. Older ambiguous sends need manual reconciliation, not a
+   # potentially duplicate automatic delivery.
+   await session.execute(
+    update(ScheduledEmail)
+    .where(
+     ScheduledEmail.workspace_id == owner_workspace_id,
+     ScheduledEmail.status == "sending",
+     ScheduledEmail.claimed_at.is_not(None),
+     ScheduledEmail.claimed_at < safe_retry_before,
+    )
+    .values(
+     status="delivery_unknown",
+     claimed_at=None,
+     last_error="Delivery claim exceeded the safe provider idempotency retry window; manual reconciliation required.",
+    )
+    .execution_options(synchronize_session=False)
+   )
+   await session.execute(
+    update(ScheduledEmail)
+    .where(
+     ScheduledEmail.workspace_id == owner_workspace_id,
+     ScheduledEmail.status == "sending",
+     ScheduledEmail.claimed_at.is_not(None),
+     ScheduledEmail.claimed_at < stale_lease_before,
+     ScheduledEmail.claimed_at >= safe_retry_before,
+    )
+    .values(
+     status="retry",
+     claimed_at=None,
+     send_at=now,
+     last_error="Recovered stale delivery claim; retry will reuse the stable provider idempotency key.",
+    )
+    .execution_options(synchronize_session=False)
+   )
+   await session.commit()
+
    statement = select(ScheduledEmail).where(
     ScheduledEmail.workspace_id == owner_workspace_id,
     ScheduledEmail.status.in_(["scheduled", "retry"]),
@@ -197,8 +237,36 @@ async def send_due_emails(
      statement.order_by(ScheduledEmail.send_at).limit(max(1, min(limit, 200)))
     )
    ).all())
+   # End the read transaction before the conditional claim UPDATE. That lets
+   # parallel workers race on one atomic status transition rather than holding
+   # stale read snapshots while attempting to write.
+   await session.commit()
+
    async with httpx.AsyncClient(timeout=20) as client:
     for message in messages:
+     claim = await session.execute(
+      update(ScheduledEmail)
+      .where(
+       ScheduledEmail.id == message.id,
+       ScheduledEmail.workspace_id == owner_workspace_id,
+       ScheduledEmail.status.in_(["scheduled", "retry"]),
+       ScheduledEmail.send_at <= now,
+      )
+      .values(
+       status="sending",
+       attempts=ScheduledEmail.attempts + 1,
+       claimed_at=now,
+       last_error="Delivery claim active",
+      )
+      .execution_options(synchronize_session=False)
+     )
+     if claim.rowcount != 1:
+      skipped += 1
+      continue
+     await session.commit()
+     await session.refresh(message)
+     attempted += 1
+
      lead = await session.scalar(
       select(Lead).where(
        Lead.id == message.lead_id,
@@ -207,18 +275,33 @@ async def send_due_emails(
      )
      if not lead or lead.unsubscribed_at:
       message.status = "suppressed"
+      message.claimed_at = None
+      message.last_error = "Lead is missing or has unsubscribed"
       skipped += 1
       continue
      if message.condition_json.get("skip_days_3_4_if_purchased") and lead.purchased_at:
       message.status = "suppressed_purchased"
+      message.claimed_at = None
+      message.last_error = "Lead purchased before the scheduled email was sent"
       skipped += 1
       continue
-     message.attempts += 1
      if message.attempts > 4:
       message.status = "failed_permanent"
+      message.claimed_at = None
+      message.last_error = "Maximum delivery attempts exceeded"
       skipped += 1
       continue
-     unsubscribe_url = _unsubscribe_url(lead.id)
+
+     # Keep the RFC List-Unsubscribe target stable across retries so Resend sees
+     # the same request payload for the same Idempotency-Key.
+     unsubscribe_match = re.search(r"Unsubscribe:\\s*(https?://\\S+)", message.body_text)
+     if unsubscribe_match:
+      unsubscribe_url = unsubscribe_match.group(1).rstrip(".,)")
+     else:
+      created_at = message.created_at
+      if created_at is not None and created_at.tzinfo is None:
+       created_at = created_at.replace(tzinfo=timezone.utc)
+      unsubscribe_url = _unsubscribe_url(lead.id, int(created_at.timestamp()) if created_at else int(now.timestamp()))
      try:
       response = await client.post(
        "https://api.resend.com/emails",
@@ -230,22 +313,27 @@ async def send_due_emails(
         "text": message.body_text,
         "headers": {"List-Unsubscribe": f"<{unsubscribe_url}>"},
        },
-       headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+       headers={
+        "Authorization": f"Bearer {settings.resend_api_key}",
+        "Idempotency-Key": f"scheduled-email/{owner_workspace_id}/{message.id}",
+       },
       )
       response.raise_for_status()
       message.status = "sent"
+      message.claimed_at = None
       message.provider_message_id = response.json().get("id")
       message.last_error = None
       sent += 1
      except Exception as exc:
       message.status = "retry" if message.attempts < 4 else "failed_permanent"
+      message.claimed_at = None
       message.last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
       message.send_at = now + timedelta(minutes=min(2 ** message.attempts * 5, 180))
    await session.commit()
    return {
     "sent": sent,
     "skipped": skipped,
-    "attempted": len(messages),
+    "attempted": attempted,
     "provider_configured": True,
     "workspace_id": owner_workspace_id,
    }

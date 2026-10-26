@@ -269,7 +269,10 @@ class Lead(TenantScopedMixin, Base):
 
 class ScheduledEmail(TenantScopedMixin, Base):
     __tablename__ = "scheduled_emails"
-    __table_args__ = (UniqueConstraint("lead_id", "sequence_day", name="uq_scheduled_email_lead_day"),)
+    __table_args__ = (
+        UniqueConstraint("lead_id", "sequence_day", name="uq_scheduled_email_lead_day"),
+        Index("ix_scheduled_email_workspace_claim", "workspace_id", "status", "claimed_at"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     lead_id: Mapped[str] = mapped_column(ForeignKey("leads.id"), index=True)
     sequence_day: Mapped[int] = mapped_column(Integer)
@@ -279,6 +282,7 @@ class ScheduledEmail(TenantScopedMixin, Base):
     condition_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str] = mapped_column(String(60), default="scheduled", index=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)

@@ -306,7 +306,7 @@ The GitHub Actions run linked from the repository is the authoritative check res
 ## 2026-10-26 P0 auth/tenant regression tests added
 - Previous checkpoint SHA `70dd041a8c27607467f8605d1eabad09f815d2bf` has a fully successful push workflow: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264278741. The workflow now uses Node 24-capable first-party actions.
 - Added `tests/test_auth_tenancy_guards.py` to pin three existing security contracts: a session whose workspace membership was revoked is invalidated (HTTP 403 and session cleared), a static bearer API token cannot be used for workspace-scoped access, and a workspace member cannot call workspace-admin authorization.
-- The new tests are not yet verified; the commit-triggered full CI run must pass before this item is called complete. They supplement—not replace—the broader route-by-route IDOR, WebSocket, exports and worker authorization tests in the release gate.
+- Verified on exact SHA `e715878c76fb6f1876c2ff1769653fa72ad51396`; push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264570099 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264573970 both passed. They supplement—not replace—the broader route-by-route IDOR, WebSocket, exports and worker authorization tests in the release gate.
 - Production remains blocked by the conditional ChromaDB audit exception and by external provider authorization, browser UAT, SBOM/license/secret scan, deployment smoke, and backup/restore evidence.
 
 
@@ -314,4 +314,12 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The auth-guard regression test slice is verified on exact SHA `e715878c76fb6f1876c2ff1769653fa72ad51396`: push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264570099 completed successfully.
 - Source audit found a P0 tenant data-isolation defect: `EventHub` delivered workflow/HITL events to every connected socket; workflow event payloads lacked workspace identifiers, and the WebSocket endpoint did not revalidate active workspace membership.
 - Candidate remediation binds workflow event metadata to the workspace, routes events only to sockets subscribed to the same verified workspace, drops unscoped/legacy events, restores tenant metadata after paused-workflow recovery, and rechecks active membership before accepting WebSocket connections.
-- Added `tests/test_websocket_tenant_isolation.py` for scoped delivery, scope-less event dropping, workflow event scope, and revoked-membership denial. This fix is **pending** the full hosted CI run on its exact new SHA.
+- Added `tests/test_websocket_tenant_isolation.py` for scoped delivery, scope-less event dropping, workflow event scope, and revoked-membership denial. Verified on exact SHA `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440 both completed successfully. All seven push jobs passed.
+
+
+## 2026-10-26 WebSocket tenant-isolation verified
+- Exact candidate SHA: `65a5a884acf0195a2720cb6de76a5279fd4e5dde`.
+- Push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592: **success**. PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440: **success**.
+- Seven push jobs passed: Python suite including all four new WebSocket isolation tests; SQLite migration/drift; PostgreSQL migration/concurrency; AI/RAG imports; 53-skill repository guard; frontend `npm ci`, typecheck and production build; security audit; lockfile reproducibility.
+- The WebSocket tenant isolation issue is addressed by this patch and test suite. This does not establish production readiness: the four ChromaDB advisory IDs remain a conditional exception; authorized live provider verification, broad route/worker/export/WebSocket UAT, SBOM/license/secret scans, deployment smoke and backup/restore remain.
+- Next P0 candidate for code audit: verify that workflow run status/pause/resume/retry endpoints and background worker actions enforce actor + workspace ownership, not just session presence or a guessable run/session ID.

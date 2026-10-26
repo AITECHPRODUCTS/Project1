@@ -36,4 +36,4 @@
 ## P0 — WebSocket/event tenant isolation (2026-10-26)
 - Finding: workflow/HITL events previously lacked workspace IDs, and EventHub broadcast them to every connected WebSocket. The endpoint also did not revalidate active workspace membership at connect time.
 - Candidate fix binds event payloads to workspace scope, routes only to same-workspace sockets, rejects scope-less events, and validates membership on connect and recovery.
-- Four regression tests added in `tests/test_websocket_tenant_isolation.py`. Status: **pending** full exact-SHA CI; do not call fixed until all required jobs pass.
+- Four regression tests added in `tests/test_websocket_tenant_isolation.py`. Verified on exact SHA `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push [40265255592](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592) and PR [40265259440](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440) both succeeded.

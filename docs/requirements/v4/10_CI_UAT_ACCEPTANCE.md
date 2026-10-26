@@ -48,3 +48,9 @@
 ## 2026-10-26 WebSocket tenancy P0 regression gate
 - Require passing tests showing workflow/HITL events reach only sockets registered to the matching workspace, scope-less event payloads reach no client, and a connection using a revoked workspace membership is rejected.
 - This candidate source fix and tests are not complete until the full Python, PostgreSQL, AI/RAG, frontend, repository guard and security-audit jobs pass on the exact new commit SHA.
+
+
+## 2026-10-26 WebSocket tenant isolation — exact-SHA verification
+- Verified fix and tests on `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440 both passed.
+- Required test assertions include workspace-matched event delivery only, scope-less event dropping, workflow emitter scope propagation, and denied connection for revoked membership.
+- Next: workflow run status/pause/resume/retry/cancel must verify actor and workspace ownership, with negative cross-tenant tests.

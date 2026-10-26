@@ -113,3 +113,9 @@
 - Root cause: `backend/core/events.py` delivered every workflow/HITL event to every socket, `backend/core/state_machine.py` published events without workspace scope, and `/ws` checked session presence but did not revalidate the user's current membership.
 - Candidate fix adds workspace-bound event metadata, fail-closed event delivery, recovery-state tenant metadata, and active membership validation on WebSocket connection. Four regression tests cover delivery isolation, unscoped event dropping, event-emitter scope, and revoked-membership denial.
 - Status: pending full hosted CI on the resulting commit SHA.
+
+
+## 2026-10-26 WebSocket tenant isolation — verified
+- Exact SHA `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440 both passed.
+- Test coverage proves same-workspace event routing, dropping scope-less events, scoped event emission, and denying WebSocket connections after workspace membership revocation. All seven push jobs passed, including PostgreSQL, AI/RAG imports and the dependency audit.
+- Next P0: audit and enforce workspace ownership for workflow status, pause, resume, retry, cancel and background-worker recovery endpoints/actions.

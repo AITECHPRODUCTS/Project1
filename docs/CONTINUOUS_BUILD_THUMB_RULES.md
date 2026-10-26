@@ -62,3 +62,6 @@ These additive rules apply to every future Project1 build session.
 
 
 27. P0 campaign/conversion handler workspace binding: campaign list/create/health and API-submitted conversions must check `user.workspace_id`, run under an explicit `workspace_scope`, and assign `workspace_id` consistently to tenant rows and conversion ledger entries. Duplicate checks must include workspace ID so two tenants can use the same provider event ID without cross-tenant disclosure. Regression tests are pending exact-SHA hosted CI.
+
+
+28. The initial campaign/conversion candidate CI failed one legacy fixture: `test_conversion_create_api_records_decimal_but_unverified_evidence` expected development fallback authentication with no workspace, but the handler intentionally denies missing workspace. The test fixture is corrected to provide a selected authorized workspace and to assert both rows are tenant-bound. Re-run the full exact-SHA CI matrix; keep #27 pending until push and PR both pass.

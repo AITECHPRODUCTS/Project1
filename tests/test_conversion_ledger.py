@@ -128,6 +128,20 @@ def test_conversion_create_api_records_decimal_but_unverified_evidence(monkeypat
         rollback=AsyncMock(),
     )
     main.app.dependency_overrides[get_session] = _override_session(session)
+
+    async def authorized_workspace():
+        # This API now requires an explicit tenant. Stub the authenticated
+        # workspace instead of relying on the development fallback, whose
+        # workspace lookup would use this test's fake session.
+        return {
+            "email": "operator-import@example.invalid",
+            "user_id": "operator-import-user",
+            "workspace_id": "test-workspace",
+            "workspace_role": "owner",
+            "is_admin": False,
+        }
+
+    main.app.dependency_overrides[main.require_auth] = authorized_workspace
     body = {
         "network": "operator-import",
         "external_event_id": "imported-event-1",
@@ -145,11 +159,14 @@ def test_conversion_create_api_records_decimal_but_unverified_evidence(monkeypat
         added = [call.args[0] for call in session.add.call_args_list]
         conversion = next(value for value in added if isinstance(value, Conversion))
         ledger_entry = next(value for value in added if isinstance(value, ConversionLedgerEntry))
+        assert conversion.workspace_id == "test-workspace"
+        assert ledger_entry.workspace_id == "test-workspace"
         assert conversion.commission == pytest.approx(0.1)
         assert ledger_entry.commission_amount == Decimal("0.100000")
         assert ledger_entry.revenue_amount == Decimal("1.230000")
         assert ledger_entry.evidence_status == "api_submitted_unverified"
     finally:
+        main.app.dependency_overrides.pop(main.require_auth, None)
         main.app.dependency_overrides.pop(get_session, None)
 
 

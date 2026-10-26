@@ -361,3 +361,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Audit found campaign list/create/health and API-submitted conversion handlers relied on ambient workspace context instead of validating and passing the authenticated workspace explicitly.
 - Candidate fix checks the selected workspace, scopes campaign reads/writes, includes workspace ID in conversion duplicate checks, and assigns the same workspace ID to both Conversion and ConversionLedgerEntry.
 - Added `tests/test_campaign_conversion_workspace_routes.py` for no-workspace denial, cross-tenant campaign hiding/health denial and same provider event IDs being independent per workspace. This candidate is **pending** exact-SHA hosted CI.
+
+
+## 2026-10-26 campaign/conversion route test-fixture correction — pending re-verification
+- The first hosted run for candidate `5cf7d3305b33e003fefaf4c1e56c25d8c0cc0834` exposed one regression in the pre-existing `tests/test_conversion_ledger.py::test_conversion_create_api_records_decimal_but_unverified_evidence`: it returned 403 because the test stubbed the DB session (including the development workspace lookup) but did not stub an authenticated workspace. The new handler's 403 was the intended fail-closed behavior; weakening the handler would be incorrect.
+- Updated the pre-existing test to provide an explicit authorized workspace through `require_auth` and assert both Conversion and ConversionLedgerEntry carry that workspace ID.
+- This fixture fix and the new campaign/conversion route tests must pass a new full push and PR CI run before the route-boundary candidate is marked verified.

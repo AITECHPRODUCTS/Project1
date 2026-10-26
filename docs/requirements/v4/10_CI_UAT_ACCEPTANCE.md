@@ -267,3 +267,10 @@
 ## 2026-10-26 supply-chain automation — candidate
 - CI candidate generates CycloneDX SBOMs and package license inventories for Python core/test, optional AI/RAG and frontend packages, applies a scriptable license-policy gate, and scans full Git history for secrets using pinned Gitleaks with report redaction.
 - Reports are uploaded as artifacts with the candidate commit SHA and 30-day retention. The scan is not complete until the exact-SHA push/PR checks pass; false-positive handling must use narrow, reviewed exceptions, never blanket path exclusions.
+
+
+## 2026-10-26 supply-chain scanner first-run result and correction
+- Initial code candidate `4331d2c5f848d5580dc93990191fc01a7c80b2cb`: push [40346076313](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40346076313), PR [40346091684](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40346091684). Core/test Python license report passed (76 packages), but the new Gitleaks job found one historical false positive in preserved skill wording and the frontend license gate found two transitive LGPL libvips components.
+- Candidate correction suppresses only the exact Gitleaks fingerprint associated with “conversational tone” at the cited historical line; a regression test constrains the file to that single fingerprint.
+- License-policy exception file matches only the two exact @img/sharp-libvips package names, version 1.3.4 and license LGPL-3.0-or-later. Expiry is 2026-11-02. License reports explicitly set `release_approved=false` when these exceptions are used. This is not production/legal clearance.
+- New exact-SHA push + PR results and artifact review are pending.

@@ -347,3 +347,10 @@
 - Added deterministic SBOM/license tooling and full-history secret scanning to CI on push and pull request. Reports carry the candidate SHA; Gitleaks report redaction is enabled.
 - Exact-SHA CI and report review are pending. License policy blocks unknown metadata and GPL/AGPL/LGPL/SSPL, proprietary/commercial-source and noncommercial licenses until legal review.
 - Separate external release gates remain: real staging proxy spoof/identity behavior, live provider authorization/UAT, deployment smoke, production monitoring/SLO evidence and database backup/restore.
+
+
+## 2026-10-26 supply-chain gate corrections — candidate
+- Candidate `4331d2c5f848d5580dc93990191fc01a7c80b2cb` failed only two newly introduced supply-chain steps: Gitleaks detected one ordinary-text false positive (“conversational tone”) and frontend license policy found two LGPL libvips components. Other CI jobs, including Python, PostgreSQL, frontend build, AI/RAG SBOM/imports, repository guard and lockfile sync passed.
+- Added a single exact .gitleaksignore fingerprint backed by tests; no whole-file/path or broad rule suppression.
+- Added time-limited exact component/version/license exceptions only for CI inventory of two `@img/sharp-libvips-*` 1.3.4 binaries. Every report marks these as release blockers pending legal review and the exception file expires 2026-11-02.
+- Corrective source/test patch is pending new push/PR workflow evidence; do not count this supply-chain task green before both runs and their artifact reports are inspected.

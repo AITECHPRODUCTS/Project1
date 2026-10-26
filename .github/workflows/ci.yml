@@ -123,7 +123,7 @@ jobs:
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           .scan-tools/bin/cyclonedx-py environment "$(command -v python)" --output-file artifacts/sbom-python-ai.json --output-reproducible
           .scan-tools/bin/pip-licenses --python="$(command -v python)" --from=mixed --format=json --with-urls --output-file=artifacts/python-licenses-ai.json
-          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-ai.json
+          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-ai.json --exceptions docs/license-policy-exceptions.json --report-output artifacts/license-policy-python-ai.json
           printf '{"commit_sha":"%s","profile":"python-ai-rag"}\n' "$GITHUB_SHA" > artifacts/sbom-metadata.json
       - name: Upload AI/RAG SBOM and license evidence
         if: always()
@@ -266,13 +266,13 @@ jobs:
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           .scan-tools/bin/cyclonedx-py environment "$(command -v python)" --output-file artifacts/sbom-python-core.json --output-reproducible
           .scan-tools/bin/pip-licenses --python="$(command -v python)" --from=mixed --format=json --with-urls --output-file=artifacts/python-licenses-core.json
-          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-core.json
+          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-core.json --exceptions docs/license-policy-exceptions.json --report-output artifacts/license-policy-python-core.json
           printf '{"commit_sha":"%s","profile":"python-core-test"}\n' "$GITHUB_SHA" > artifacts/sbom-metadata.json
       - name: Generate frontend CycloneDX SBOM from the installed lockfile tree
         working-directory: frontend
         run: npm ci --no-audit --no-fund && npm sbom --sbom-format=cyclonedx > ../artifacts/sbom-frontend.json
       - name: Enforce frontend dependency license policy
-        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend.json
+        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend.json --exceptions docs/license-policy-exceptions.json --report-output artifacts/license-policy-frontend.json
       - name: Upload core/frontend SBOM and license evidence
         if: always()
         uses: actions/upload-artifact@v7

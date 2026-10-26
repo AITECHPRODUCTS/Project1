@@ -32,3 +32,9 @@ The code-level Uvicorn middleware compatibility tests passed on `da36211099ba277
 - CI creates CycloneDX inventories for core Python/test, optional AI/RAG and frontend dependencies, records the exact candidate SHA, and enforces no unknown/unreviewed prohibited license classes.
 - A full-history Gitleaks scan runs against a pinned Linux/AMD64 OCI image digest and uses report redaction. Scan reports do not include the unredacted secret values.
 - Artifacts are retained 30 days for candidate review. If a real secret is detected, halt promotion, revoke/rotate it, remove it from active use and follow the repository's incident procedure; do not add broad allowlists to bypass findings.
+
+
+## Software supply-chain scan exceptions — candidate review only
+- The Gitleaks report match in `viral-post-writer/SKILL.md` was verified to be ordinary phrase “conversational tone”, not a credential. Only the exact historic fingerprint is ignored; the full-history scan remains enabled.
+- Frontend SBOM found two version-pinned libvips components with LGPL-3.0-or-later licensing. The repository's temporary exact-package exceptions are for CI inventory only and expire 2026-11-02. Before release, review LGPL notice, relinking and redistribution obligations; either record a documented legal decision or remove/replace those components. CI reports release approval false while any temporary exception is used.
+- Secret-scan and supply-chain SBOM/license reports must be checked for the new exact SHA. This document does not certify a real-world secret-clean result until the corrected scan passes.

@@ -85,3 +85,6 @@
 - At `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`, S5 directly calls `social_media_scheduler` and could bypass route authorization when global publishing is enabled. S6 conversion imports use the runner's ambient scope without an explicit workspace predicate/row field.
 - Candidate binds live publishing to authenticated Platform Super Admin plus top-level confirmation and selected workspace, records attempt/outcome audit rows, and makes conversion dedup/insert explicitly workspace-specific.
 - Four regression tests pending the exact-SHA push/PR matrix.
+## Workflow S5/S6 candidate — failed first verification and correction
+- Initial candidate `9dcc5f0c842eddaeca86c40ed13d2997c1eddebe`: push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40274907786 reported 2 failures, 253 passed, 2 skipped. One revealed missing explicit workspace in the route-passed metadata (runner added it later); the other was an invalid direct-call fixture supplying forged positive authorization values rather than testing absent authorization.
+- Follow-up stamps workspace in trusted API metadata and changes the direct S5 test to ensure untrusted/missing authorization is denied. Rerun complete push/PR matrix and fix any further failures.

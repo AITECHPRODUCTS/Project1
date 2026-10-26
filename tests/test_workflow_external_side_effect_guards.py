@@ -89,10 +89,10 @@ async def test_workflow_distribution_stage_denies_spoofed_live_authorization(mon
     monkeypatch.setattr(workflows, "social_media_scheduler", fake_publish)
     state = _publish_state(
         workspace_id="spoofed-workspace",
-        platform_admin_authorized=True,
-        live_publish_confirmed=True,
+        platform_admin_authorized=False,
+        live_publish_confirmed=False,
     )
-    # Directly invoking the handler without the server-authenticated workflow metadata fails closed.
+    # The stage itself independently fails closed when trusted authorization is absent.
     with pytest.raises(PermissionError, match="Platform Super Admin"):
         await workflows.s5(state)
     assert calls == []

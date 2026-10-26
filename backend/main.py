@@ -572,6 +572,7 @@ async def start_workflow(payload: WorkflowStartRequest, user: dict[str, Any] = D
    raise HTTPException(409, "Live workflow publishing requires confirm_live_publish=true from an authorized operator")
  # Never trust authorization metadata supplied inside client workflow state.
  metadata.update({
+  "workspace_id": str(workspace_id),
   "initiated_by": str(user.get("email") or user.get("user_id") or "unknown")[:320],
   "platform_admin_authorized": user.get("is_admin") is True,
   "live_publish_confirmed": payload.confirm_live_publish is True and user.get("is_admin") is True,

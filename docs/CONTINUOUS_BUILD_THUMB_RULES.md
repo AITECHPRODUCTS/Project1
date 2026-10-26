@@ -181,3 +181,6 @@ These additive rules apply to every future Project1 build session.
 
 
 71. P0 release-evidence automation: add CI SBOM generation, license-policy reporting/enforcement, and secret scanning with exact-SHA artifacts and no secret-value output. Keep external trusted-proxy ingress tests, authorized provider UAT, deployment smoke, monitoring/SLO and backup/restore evidence as separate gates.
+
+
+72. P0 SBOM/license/secret scan automation: workflow candidate adds Python core/test and AI/RAG CycloneDX SBOMs, frontend CycloneDX SBOM, package license reports and strict blocked/unknown-license enforcement, plus full-history Gitleaks using pinned image digest and redacted findings. All artifacts are keyed to `github.sha`. Do not mark verified until exact-SHA push and PR workflows pass and the artifact reports are checked. The actual staging ingress, provider UAT, deploy, monitoring and backup/restore remain separate open release gates.

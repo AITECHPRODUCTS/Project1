@@ -341,3 +341,9 @@
 - Exact SHA `da36211099ba27732510706189a267e9860b090e`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341045895 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341061656 both passed.
 - The new middleware regressions passed against actual Uvicorn implementation. Deployment trust remains unverified until the actual staging ingress strips/replaces forwarding headers.
 - Next P0 delivery improvement: automate SBOM generation, license-policy checks, and secret scanning in push/PR CI; create auditable artifacts keyed to the candidate SHA.
+
+
+## 2026-10-26 supply-chain evidence automation — candidate
+- Added deterministic SBOM/license tooling and full-history secret scanning to CI on push and pull request. Reports carry the candidate SHA; Gitleaks report redaction is enabled.
+- Exact-SHA CI and report review are pending. License policy blocks unknown metadata and GPL/AGPL/LGPL/SSPL, proprietary/commercial-source and noncommercial licenses until legal review.
+- Separate external release gates remain: real staging proxy spoof/identity behavior, live provider authorization/UAT, deployment smoke, production monitoring/SLO evidence and database backup/restore.

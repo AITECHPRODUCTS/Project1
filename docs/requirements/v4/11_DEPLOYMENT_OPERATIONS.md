@@ -26,3 +26,9 @@ The repository now includes Dockerfile/Compose and an Alembic baseline/gate. A r
 
 ## Trusted-proxy staging evidence (still open)
 The code-level Uvicorn middleware compatibility tests passed on `da36211099ba27732510706189a267e9860b090e`, with push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341045895 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341061656. Before live release, exercise spoofed Forwarded/X-Forwarded-For/X-Forwarded-Proto through the actual deployed staging ingress. Record staging URL, image digest/SHA, proxy source CIDR, timestamps, app/proxy-observed client identity/scheme and rate-limit behavior using sanitized logs. Do not infer this runtime result from unit tests.
+
+
+## Software supply-chain CI evidence
+- CI creates CycloneDX inventories for core Python/test, optional AI/RAG and frontend dependencies, records the exact candidate SHA, and enforces no unknown/unreviewed prohibited license classes.
+- A full-history Gitleaks scan runs against a pinned Linux/AMD64 OCI image digest and uses report redaction. Scan reports do not include the unredacted secret values.
+- Artifacts are retained 30 days for candidate review. If a real secret is detected, halt promotion, revoke/rotate it, remove it from active use and follow the repository's incident procedure; do not add broad allowlists to bypass findings.

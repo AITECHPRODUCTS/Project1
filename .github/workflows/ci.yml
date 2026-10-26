@@ -115,6 +115,24 @@ jobs:
           pip install --no-cache-dir -r requirements-ai.txt
       - name: Verify AI/RAG dependency imports
         run: python scripts/verify_ai_profile.py
+      - name: Generate reproducible AI/RAG SBOM and license inventory with isolated tooling
+        run: |
+          mkdir -p artifacts
+          python -m venv .scan-tools
+          .scan-tools/bin/python -m pip install --upgrade pip cyclonedx-bom==7.5.0 pip-licenses==5.5.5
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          .scan-tools/bin/cyclonedx-py environment "$(command -v python)" --output-file artifacts/sbom-python-ai.json --output-reproducible
+          .scan-tools/bin/pip-licenses --python="$(command -v python)" --from=mixed --format=json --with-urls --output-file=artifacts/python-licenses-ai.json
+          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-ai.json
+          printf '{"commit_sha":"%s","profile":"python-ai-rag"}\n' "$GITHUB_SHA" > artifacts/sbom-metadata.json
+      - name: Upload AI/RAG SBOM and license evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: supply-chain-ai-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
 
   frontend:
     runs-on: ubuntu-latest
@@ -201,6 +219,33 @@ jobs:
           fi
 
 
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Prepare redacted secret-scan report directory
+        run: mkdir -p artifacts
+      - name: Scan full repository history with pinned Gitleaks (all findings redacted)
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -w /repo \
+            ghcr.io/gitleaks/gitleaks@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb \
+            git . --redact --report-format json --report-path artifacts/gitleaks-report.json --exit-code 1
+      - name: Upload redacted secret-scan report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: secret-scan-${{ github.sha }}
+          path: artifacts/gitleaks-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   security-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -211,6 +256,31 @@ jobs:
           python-version: "3.11"
       - name: Install Python dependency audit tool
         run: python -m pip install --upgrade pip pip-audit
+      - name: Install core/test dependencies for complete environment inventory
+        run: pip install -r requirements-dev.txt
+      - name: Generate reproducible Python SBOM and license inventory with isolated pinned tooling
+        run: |
+          mkdir -p artifacts
+          python -m venv .scan-tools
+          .scan-tools/bin/python -m pip install --upgrade pip cyclonedx-bom==7.5.0 pip-licenses==5.5.5
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          .scan-tools/bin/cyclonedx-py environment "$(command -v python)" --output-file artifacts/sbom-python-core.json --output-reproducible
+          .scan-tools/bin/pip-licenses --python="$(command -v python)" --from=mixed --format=json --with-urls --output-file=artifacts/python-licenses-core.json
+          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-core.json
+          printf '{"commit_sha":"%s","profile":"python-core-test"}\n' "$GITHUB_SHA" > artifacts/sbom-metadata.json
+      - name: Generate frontend CycloneDX SBOM from the installed lockfile tree
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund && npm sbom --sbom-format=cyclonedx > ../artifacts/sbom-frontend.json
+      - name: Enforce frontend dependency license policy
+        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend.json
+      - name: Upload core/frontend SBOM and license evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: supply-chain-core-frontend-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Audit core runtime and test dependency graph
         run: pip-audit -r requirements-dev.txt
       - name: Verify local SQLite vector-store security boundary

@@ -262,3 +262,8 @@
 - Add deterministic software bill of materials (SBOM) output for Python runtime/test/AI profiles and frontend lockfile, with the candidate SHA recorded alongside results.
 - Add license report/policy check and repository secret scan to push + pull-request CI. Scans must not print detected secret contents; failing reports should identify only file/line or rule metadata.
 - Keep proxy staging, live provider authorization/UAT, deployment smoke, operational monitoring and database backup/restore as explicit external acceptance evidence.
+
+
+## 2026-10-26 supply-chain automation — candidate
+- CI candidate generates CycloneDX SBOMs and package license inventories for Python core/test, optional AI/RAG and frontend packages, applies a scriptable license-policy gate, and scans full Git history for secrets using pinned Gitleaks with report redaction.
+- Reports are uploaded as artifacts with the candidate commit SHA and 30-day retention. The scan is not complete until the exact-SHA push/PR checks pass; false-positive handling must use narrow, reviewed exceptions, never blanket path exclusions.

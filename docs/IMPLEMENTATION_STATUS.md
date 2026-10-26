@@ -433,3 +433,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Source review found social/CMS routes have authentication, Platform Super Admin and live-confirmation gates but no durable request-level idempotency. A repeated HTTP request after a lost client response could issue a second provider write.
 - Candidate adds workspace/type/key uniqueness with canonical request hashing, response replay for completed actions, conflict for key reuse with a changed payload, durable `in_progress/completed/failed/unknown` states, and an unknown-outcome lock that also blocks an alternate key for the same unresolved payload.
 - Live social publishing and CMS writes (including remote draft creation) require an `Idempotency-Key`; ambiguous network/5xx failures are marked unknown instead of retried. Four new API regressions cover replay, key conflict, missing keys and unknown-outcome protection. Exact-SHA CI pending.
+
+
+
+## CI correction follow-up — provider-write idempotency
+- Initial implementation SHA `b3495a58202f944621f43063efbe9d293323ee24` exposed a stale social-publish regression fixture: it tested the newly confirmed live request without the now-required `Idempotency-Key`. PR run [40278241892](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278241892) Python suite reported **1 failed, 263 passed, 2 skipped**. The failing test expected 200 but correctly received 428 Precondition Required.
+- The route's 428 is the intended contract; the regression fixture is being corrected to supply a valid key. No production auth/idempotency guard is weakened. Full push and PR CI for the correction remain pending.

@@ -188,11 +188,15 @@ async def test_social_live_publish_requires_explicit_confirmation_and_writes_aud
                 "platform": "reddit",
                 "post": {"subreddit": "test", "title": "Reviewed", "text": "Body"},
             })
-            approved = client.post("/api/social/publish", json={
-                "platform": "reddit",
-                "post": {"subreddit": "test", "title": "Reviewed", "text": "Body"},
-                "confirm_live_publish": True,
-            })
+            approved = client.post(
+                "/api/social/publish",
+                json={
+                    "platform": "reddit",
+                    "post": {"subreddit": "test", "title": "Reviewed", "text": "Body"},
+                    "confirm_live_publish": True,
+                },
+                headers={"Idempotency-Key": "social-publish-test-key-0001"},
+            )
 
         assert denied.status_code == 409
         assert approved.status_code == 200

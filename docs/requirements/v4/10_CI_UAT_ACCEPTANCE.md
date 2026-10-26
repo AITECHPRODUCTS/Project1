@@ -110,3 +110,7 @@
 ## 2026-10-26 external-action idempotency — candidate
 - Validate migration 0009, database idempotency key uniqueness, payload fingerprint mismatch conflicts, completed-response replay, 428 for missing live-write key, and ambiguous-result quarantine under same and alternate keys.
 - Do not mark verified until exact-SHA push/PR Python, SQLite/PostgreSQL migration/drift/concurrency, AI/RAG, frontend, security, repo guard and lockfile jobs pass.
+
+
+## Provider-write idempotency candidate — CI correction
+- Corrected an existing live-social authorization test to supply `Idempotency-Key`, which is now required for live external provider writes. The initial candidate run failed only this fixture expectation (1 failed, 263 passed, 2 skipped); exact-SHA CI rerun pending.

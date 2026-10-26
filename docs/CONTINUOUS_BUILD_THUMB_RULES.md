@@ -90,3 +90,6 @@ These additive rules apply to every future Project1 build session.
 39. Next P0: durable request-level idempotency for manually retried live social/CMS publishing requests. Workflow retry suppression protects the runner's automatic retry, but does not yet prevent duplicate external writes when an operator/client repeats a live request.
 
 40. P0 external provider-write idempotency candidate: require `Idempotency-Key` for live social posts and all CMS writes; persist workspace-scoped action claims before provider calls; hash normalized payloads; replay completed results for the same key; reject changed payload under an existing key; never automatically repeat unknown provider outcomes and block alternate-key replay of the same unresolved payload. Four regressions and exact-SHA CI pending.
+
+
+41. CI correction follow-up for provider-write idempotency: base `b3495a58202f944621f43063efbe9d293323ee24` correctly returned 428 because the legacy live-social confirmation test omitted `Idempotency-Key` (PR [40278241892](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278241892): 1 failed, 263 passed, 2 skipped). Fixture now supplies a valid key; rerun full push/PR CI before marking P0 complete.

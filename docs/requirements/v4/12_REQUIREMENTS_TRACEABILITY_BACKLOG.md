@@ -107,3 +107,8 @@
 ## P0 — manual provider-write idempotency candidate (2026-10-26)
 - Route auth and confirmation do not prevent duplicate external requests after a client loses the response. Social/CMS requests should require an idempotency key for live writes, persist a workspace/type/key claim before the call, and replay stored success.
 - Key/payload mismatch is a 409. Network or 5xx ambiguity is stored as unknown and blocked for the same payload even if the client attempts a new key until reconciliation. Four regression tests pending hosted CI.
+
+
+## CI correction — live social confirmation test now supplies the idempotency key
+- Initial candidate `b3495a58202f944621f43063efbe9d293323ee24` had one test-only failure because the older authorization regression test omitted `Idempotency-Key`; the endpoint's 428 response is intended and the test must exercise the complete provider-write contract.
+- Corrected the fixture, keeping production enforcement unchanged. Full exact-SHA push and PR CI are pending.

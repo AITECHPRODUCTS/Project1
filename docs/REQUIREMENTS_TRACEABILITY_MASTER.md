@@ -176,3 +176,8 @@
 ## 2026-10-26 manual provider-write idempotency — candidate
 - Candidate migration adds a tenant-scoped durable external-action registry. Live social and CMS calls require an idempotency key; canonical payload hashes prevent accidental key reuse for a different request.
 - Completed responses replay from persistence; unresolved operations are blocked on retries, including alternate-key retries for an identical request hash. Four tests and full CI pending.
+
+
+## Provider write idempotency — CI fixture correction pending verification
+- Initial SHA `b3495a58202f944621f43063efbe9d293323ee24`'s Python test job had 1 failure, 263 passed, 2 skipped: a pre-existing social confirmation test omitted the new mandatory `Idempotency-Key`, and received the expected 428.
+- Added the key to the regression fixture; full CI must pass on the corrected SHA before verification is claimed.

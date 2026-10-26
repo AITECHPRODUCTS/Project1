@@ -83,3 +83,9 @@
 ## 2026-10-25 AI/RAG audit findings and compensating control
 - Hosted `pip-audit -r requirements-dev.txt` passed on the fixed dependency candidate. The optional AI/RAG audit found LangChain package advisories and ChromaDB 1.5.9 IDs `PYSEC-2026-311`, `PYSEC-2026-3814`, `PYSEC-2026-3815`, and `PYSEC-2026-3813`; reviewed upstream records indicate no fixed PyPI release for those Chroma findings as of 25 October 2026.
 - The remediation upgrades LangChain to compatible 1.x releases, migrates `RetrievalQA` to `langchain-classic`, and adds a CI-enforced test that Project1 uses only local embedded Chroma persistence with no HTTP client/server or `trust_remote_code=True`. Those four exact IDs may be excepted for CI only after that guard passes. The warning/exception is not a clean scan and remains a production-release blocker until a patched Chroma version is available or the vector backend is replaced.
+
+
+## 2026-10-26 resume checkpoint — npm audit is the only failing CI job
+- Inspected the exact current branch/head and recent runs rather than restarting from a historical snapshot. On `565c76bd7d6931721ce66cb0a84fc25129997c52`, Python tests, SQLite migrations, PostgreSQL migration/concurrency tests, repo/source guard, 53-skill parity, AI/RAG imports, and frontend typecheck/build all passed in push and PR CI.
+- Push run [40215636414](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40215636414) and PR run [40215641152](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40215641152) failed only the frontend dependency audit. Its logs identify a nested Next.js/PostCSS path and postcss-selector-parser; do not count the run as green.
+- The fix is on this same existing branch and includes a guarded lock refresh plus a required clean npm audit and clean-install/typecheck/build. The resulting SHA and logs must be rechecked before the backlog item can be marked complete.

@@ -199,6 +199,42 @@ jobs:
           fi
 
 
+  dependency-remediation:
+    # One-shot dependency lock refresh. It only runs for the explicitly named remediation commit
+    # on the existing implementation branch, then self-disables for subsequent commits.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/build/omni-affiliate-os-production' && github.event.head_commit.message == 'chore: remediate frontend dependency advisories'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Resolve patched frontend dependency graph
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Require a clean frontend dependency audit
+        working-directory: frontend
+        run: npm audit
+      - name: Revalidate clean install, types, and production build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: npm ci --no-audit --no-fund && npm run typecheck && npm run build
+      - name: Commit refreshed lockfile on the existing branch
+        run: |
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Expected the patched dependency graph to change the lockfile, but no changes were produced."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh patched frontend dependency lockfile"
+          git push origin HEAD:build/omni-affiliate-os-production
+
   security-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 30

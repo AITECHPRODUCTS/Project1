@@ -155,3 +155,6 @@ These additive rules apply to every future Project1 build session.
 
 
 63. P0 Chroma dependency removal verified on `3ba90e4cb2fcb72494c0fda71e1d535398229c22`: push [40304270245](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245) and PR [40304278972](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972) passed. The local SQLite vector index, no-Chroma static guard, unignored AI dependency audit and 10-import AI/RAG check are green. Do not delete old Chroma index files; back up and re-ingest from the approved sources, then verify retrieval in staging before switching production.
+
+
+64. P1 durable workflow queue/recovery candidate: keep workflow checkpoints in PostgreSQL and add lease owner, lease expiry, heartbeat, attempt counter, PostgreSQL `FOR UPDATE SKIP LOCKED` claims, periodic restart recovery for queued/running work, and paused-session recovery. Resume read-only stages from the persisted checkpoint. An expired live-publication stage must be stopped for manual reconciliation rather than automatically replayed. Require successful SQLite and PostgreSQL migration/drift, SQLite recovery tests, dedicated concurrent PostgreSQL claim test, and full exact-SHA push + PR CI before marking verified. HITL response payload persistence/redistributed resume remains a separate limitation until explicitly solved.

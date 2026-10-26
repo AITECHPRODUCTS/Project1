@@ -167,11 +167,19 @@ def _guard_conversion_ledger_append_only(session: Session, flush_context, instan
 
 class WorkflowRun(TenantScopedMixin, Base):
     __tablename__ = "workflow_runs"
+    __table_args__ = (
+        Index("ix_workflow_runs_status_lease_expiry", "status", "lease_expires_at"),
+        Index("ix_workflow_runs_workspace_status_lease_expiry", "workspace_id", "status", "lease_expires_at"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     workflow_name: Mapped[str] = mapped_column(String(180), index=True)
     status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
     current_step: Mapped[int] = mapped_column(Integer, default=0)
     execution_mode: Mapped[str] = mapped_column(String(40), default="SEMI_AUTONOMOUS")
+    lease_owner: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     state_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     result_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

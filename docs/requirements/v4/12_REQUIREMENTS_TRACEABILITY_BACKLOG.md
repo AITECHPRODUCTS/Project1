@@ -236,3 +236,11 @@
 - Removed `chromadb` and `langchain-chroma` from active AI requirements, replaced the retrieval index with local SQLite storage, removed the four dependency-audit ignores, and guarded against package/runtime reintroduction.
 - The candidate's first AI-profile failure was a verifier import-path issue and was fixed without weakening the check. The new verifier reports 10 successful AI/RAG imports; unignored `pip-audit -r requirements-ai.txt` is green.
 - Deployment still needs a preserved-index backup, re-ingestion with `python -m ai_memory.ingester`, count/source/retrieval validation in staging, and separate release UAT/security/backup evidence.
+
+
+## P1 — durable workflow lease/recovery candidate (2026-10-26)
+- Models/migration: `WorkflowRun.lease_owner`, `lease_expires_at`, `heartbeat_at`, `attempt_count`; Alembic migration `0010_durable_workflow_leases`.
+- Runtime: process-unique worker ID, periodic heartbeat, expired lease claim with PostgreSQL row locking, recovery loop for queued/running/paused workflow checkpoints.
+- Safety: only a read-only checkpoint is resumed after lease expiry; expired live S5 publication is marked `unknown` and requires manual provider reconciliation. No automatic duplicate external write is attempted.
+- Tests: four SQLite recovery tests plus a PostgreSQL-only concurrent claim test added to the explicit integration job.
+- Status: **pending** the exact-SHA push/PR runs and migration/drift/concurrency results. Multi-replica HITL response routing remains unverified; response payload is not persisted and may need resubmission after interruption.

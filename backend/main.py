@@ -235,12 +235,20 @@ async def threshold_job():
    logger.exception("Payout threshold worker failed for workspace %s",str(workspace_id)[:8])
 @asynccontextmanager
 async def lifespan(app:FastAPI):
- await init_db();await hub.start(settings.redis_url);await bootstrap_admin();runner.set_resolver(resolve_steps);count=await runner.recover_paused();logger.info("Recovered paused sessions: %s",count)
+ await init_db()
+ await hub.start(settings.redis_url)
+ await bootstrap_admin()
+ runner.set_resolver(resolve_steps)
+ recovered=await runner.recover_interrupted()
+ paused=await runner.recover_paused()
+ await runner.start_recovery_worker()
+ logger.info("Recovered interrupted workflows: %s; paused sessions: %s",recovered,paused)
  scheduler.add_job(campaign_health_job,CronTrigger(minute="*/10"),id="campaign-health",replace_existing=True,max_instances=1)
  scheduler.add_job(learning_job,CronTrigger(hour=3,minute=15),id="learning",replace_existing=True,max_instances=1)
  scheduler.add_job(email_job,"interval",minutes=5,id="email-send",replace_existing=True,max_instances=1)
  scheduler.add_job(threshold_job,CronTrigger(day_of_week="mon",hour=4),id="thresholds",replace_existing=True,max_instances=1);scheduler.start()
  yield
+ await runner.stop_recovery_worker()
  scheduler.shutdown(wait=False);await hub.stop();await close_public_rate_limiter();await close_db()
 docs_url="/docs" if settings.app_env != "production" else None
 redoc_url="/redoc" if settings.app_env != "production" else None

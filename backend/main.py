@@ -25,7 +25,7 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -42,6 +42,7 @@ from backend.services.seo_audit import audit_public_page as audit_public_page_se
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
 from backend.services.skill_finder import find_skills as find_skills_service
+from backend.services.proprietary_data_generator import build_proprietary_dataset as build_proprietary_dataset_service
 from backend.services.cms_publisher import publish_article
 from backend.services.external_action_registry import EXTERNAL_IDEMPOTENCY_KEY_RE, claim_external_action as _claim_external_action, external_action_failure_status as _external_action_failure_status, finish_external_action as _finish_external_action
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
@@ -536,6 +537,93 @@ async def skills_find(
         raise HTTPException(422, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(503, "Skill parity inventory is not packaged in this deployment") from exc
+
+
+@api.post("/learning/proprietary-dataset", status_code=201)
+async def generate_proprietary_dataset(
+    payload: ProprietaryDatasetRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Persist a review-only dataset snapshot from the active workspace experiment ledger."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating a learning dataset")
+    workspace_id = str(workspace_id)
+    assignments = list((await db.scalars(
+        select(ExperimentAssignment)
+        .where(ExperimentAssignment.workspace_id == workspace_id)
+        .order_by(ExperimentAssignment.assigned_at.desc())
+        .limit(payload.max_assignments)
+    )).all())
+    events = list((await db.scalars(
+        select(ExperimentEvent)
+        .where(ExperimentEvent.workspace_id == workspace_id)
+        .order_by(ExperimentEvent.occurred_at.desc())
+        .limit(payload.max_events)
+    )).all())
+    dataset = build_proprietary_dataset_service(
+        assignments, events,
+        min_impressions=payload.min_impressions,
+        min_conversions=payload.min_conversions,
+    )
+    eligible_rows = [row for row in dataset["rows"] if row["eligible_for_human_review"]]
+    jsonl_body = "\n".join(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for row in eligible_rows
+    )
+    source_truncated = len(assignments) >= payload.max_assignments or len(events) >= payload.max_events
+    asset = ContentAsset(
+        workspace_id=workspace_id,
+        asset_type="proprietary_training_dataset",
+        title=payload.dataset_name,
+        body=jsonl_body,
+        status="review_required",
+        source_urls=[],
+        metadata_json={
+            "dataset_version": dataset["dataset_version"],
+            "dataset_format": dataset["dataset_format"],
+            "source": "workspace_experiment_event_ledger",
+            "summary": dataset["summary"],
+            "thresholds": dataset["thresholds"],
+            "eligible_rows_persisted": len(eligible_rows),
+            "source_truncated": source_truncated,
+            "visitor_identifiers_included": False,
+            "provider_attested": False,
+            "training_started": False,
+            "model_updated": False,
+            "requires_human_review": True,
+        },
+    )
+    db.add(asset)
+    await db.flush()
+    db.add(AuditLog(
+        workspace_id=workspace_id,
+        actor=str(user.get("email") or "unknown"),
+        action="learning.proprietary_dataset.generated",
+        resource_type="content_asset",
+        resource_id=asset.id,
+        outcome="review_required",
+        details_json={
+            "eligible_rows_persisted": len(eligible_rows),
+            "candidate_rows": len(dataset["rows"]),
+            "excluded_low_sample": dataset["summary"]["excluded_low_sample"],
+            "excluded_data_quality": dataset["summary"]["excluded_data_quality"],
+            "source_truncated": source_truncated,
+            "training_started": False,
+            "model_updated": False,
+        },
+    ))
+    await db.commit()
+    dataset.update({
+        "asset_id": asset.id,
+        "asset_title": asset.title,
+        "asset_status": asset.status,
+        "eligible_rows_persisted": len(eligible_rows),
+        "source_truncated": source_truncated,
+        "publishing_started": False,
+    })
+    return dataset
 
 
 @api.get("/capabilities")

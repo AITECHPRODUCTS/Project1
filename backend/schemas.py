@@ -1018,3 +1018,17 @@ class InternalLinkingRequest(BaseModel):
         if len(origins) != 1:
             raise ValueError("All supplied pages must share the same public HTTP(S) origin")
         return normalized
+
+
+class ProprietaryDatasetRequest(BaseModel):
+    """Controls for a review-required dataset snapshot from the experiment ledger."""
+
+    dataset_name: str = Field(
+        default="Proprietary experiment learning candidates",
+        min_length=3,
+        max_length=180,
+    )
+    min_impressions: int = Field(default=100, ge=1, le=1_000_000)
+    min_conversions: int = Field(default=5, ge=1, le=100_000)
+    max_assignments: int = Field(default=5000, ge=1, le=10_000)
+    max_events: int = Field(default=50000, ge=1, le=100_000)

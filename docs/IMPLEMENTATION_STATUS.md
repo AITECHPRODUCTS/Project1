@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 47 partial and 6 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 48 partial and 5 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -753,3 +753,12 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The first implementation SHA `47bd006c665ba490d2cbd0c0a87c57c8350ef0f4` failed four tests because the synthetic source strings used literal backslash-n text. The guard correctly rejected invalid syntax; the guard was not relaxed. Commit `393e12760762993e70a862af9b4c3ab61d308739` corrected the fixture escapes and both subsequent workflows passed.
 - This is source/CI verification, **not** proof that a real model artifact has been staged, license-reviewed, benchmarked, or loaded against a deployed index. Production still requires artifact provenance/license approval, staged cache-only load, RAG re-ingestion and retrieval-golden tests, plus staging egress/proxy checks, live provider UAT, LGPL exception resolution, deployment smoke, monitoring/SLO and backup/restore.
 - Next P0: verify and document staged model provenance plus runtime cache-only load/recall checks; then continue the remaining egress/provider/deployment release gates.
+
+
+## 2026-10-26 implementation update — proprietary learning dataset candidate generator
+- Added workspace-scoped `POST /api/learning/proprietary-dataset` and dashboard controls to produce a JSONL snapshot from the persisted A/B experiment assignment/event ledger.
+- The builder pairs stable A/B headline snapshots, aggregates persisted impression/conversion events, ignores duplicate event IDs, and excludes experiments without both variants or with inconsistent headline snapshots.
+- Configurable per-variant impression and recorded-conversion gates label rows as eligible for human review or excluded for low sample. Visitor IDs are not included in dataset rows or exports.
+- Snapshots persist as review-required ContentAsset records with an audit event. Only rows passing the sample gate enter the JSONL body.
+- Events are internal app-recorded observations and are not provider-attested; observed rates are not causal proof. No model training, fine-tuning, promotion, publishing, or external action is performed.
+- Tests cover aggregation, sample gates, variant/snapshot integrity, duplicate event IDs, ignored event types, invalid thresholds, and endpoint persistence. Hosted CI must pass on the exact commit before this slice is considered verified.

@@ -375,3 +375,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Campaign list/create/health requires an active workspace and isolates reads/writes. API-submitted conversion idempotency is scoped to `(workspace_id, network, external_event_id)`, and both Conversion and ConversionLedgerEntry receive the authenticated workspace ID. Cross-tenant campaign health returns not found; the same event ID can be independently recorded by different tenants.
 - Production remains blocked by the documented four ChromaDB advisory exceptions and outstanding provider verification, broader endpoint/worker/export UAT, SBOM/license/secret scans, deployment smoke, and backup/restore.
 - Next P0 audit: remaining tenant-owned endpoints, especially content assets, leads/email queue/worker controls, and public lead-capture token binding.
+
+
+## 2026-10-26 blog and lead/email tenant boundary — candidate
+- Source audit confirmed `/content/blog` persisted a `ContentAsset` without requiring a selected workspace, and private `/leads/capture` accepted requests without explicit authentication/workspace ownership.
+- Candidate requires an authenticated workspace for blog generation and the private lead endpoint; keeps public form capture bound to its signed `lead_capture` workspace token; lead creation/scheduling requires an explicit workspace and filters lead/email identity by workspace; email delivery rejects unscoped calls and queries only messages/leads in the selected workspace.
+- New regression tests cover missing-workspace denial, blog asset ownership, public-token enforcement, lead dedup isolation across workspaces, and unscoped email-delivery denial.
+- This change is **pending** until exact-SHA push and PR workflows both pass.

@@ -995,9 +995,39 @@ async def atomize_content_route(
 
 
 @api.post("/content/blog")
-async def blog(p:BlogRequest,db:AsyncSession=Depends(get_session)):
- result=await affiliate_blog_builder(p.topic,product=p.product,canonical_url=p.canonical_url,minimum_words=p.minimum_words)
- asset=ContentAsset(asset_type="affiliate_blog",title=result["title"],body=result["html"],status="draft",source_urls=result["rag_sources"],metadata_json={"word_count":result["word_count"],"schema_types":result["schema_types"],"provider":result["provider"]});db.add(asset);await db.commit();result["asset_id"]=asset.id;return result
+async def blog(
+    payload: BlogRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating blog content")
+    owner_workspace_id = str(workspace_id)
+    with workspace_scope(owner_workspace_id):
+        result = await affiliate_blog_builder(
+            payload.topic,
+            product=payload.product,
+            canonical_url=payload.canonical_url,
+            minimum_words=payload.minimum_words,
+        )
+        asset = ContentAsset(
+            workspace_id=owner_workspace_id,
+            asset_type="affiliate_blog",
+            title=result["title"],
+            body=result["html"],
+            status="draft",
+            source_urls=result["rag_sources"],
+            metadata_json={
+                "word_count": result["word_count"],
+                "schema_types": result["schema_types"],
+                "provider": result["provider"],
+            },
+        )
+        db.add(asset)
+        await db.commit()
+        result["asset_id"] = asset.id
+        return result
 @api.post("/content/video")
 async def video(p:VideoRequest):return await render_vertical_video(p.script,broll_query=p.broll_query,voice=p.voice,captions=p.captions)
 @api.post("/landing/offer")
@@ -1072,27 +1102,72 @@ async def public_rate_limit(request:Request):
   if len(_public_hits)>5000:
    for key in list(_public_hits)[:1000]:
     if not _public_hits[key] or now-_public_hits[key][-1]>=3600:_public_hits.pop(key,None)
-async def create_lead(payload:LeadCaptureRequest,db:AsyncSession):
- try:return await capture_lead_and_schedule(db,email_address=payload.email,consent=payload.consent,lead_magnet=payload.lead_magnet,audience=payload.audience,offer=payload.offer)
- except ValueError as exc:raise HTTPException(422,str(exc)) from exc
-@api.post("/leads/capture",status_code=201)
-async def lead_capture(p:LeadCaptureRequest,db:AsyncSession=Depends(get_session)):return await create_lead(p,db)
-@app.post("/api/public/leads/capture",status_code=201)
-async def public_lead_capture(request:Request,db:AsyncSession=Depends(get_session)):
- await public_rate_limit(request);ctype=request.headers.get("content-type","").lower()
- if "application/json" in ctype:raw=await request.json()
- elif "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
-  form=await request.form();raw=dict(form)
- else:raise HTTPException(415,"Submit JSON or an HTML form")
- consent=raw.get("consent");raw["consent"]=consent is True or str(consent or "").lower() in {"1","true","yes","on"}
- try:p=LeadCaptureRequest.model_validate(raw)
- except Exception as exc:raise HTTPException(422,"Signup form contains invalid fields") from exc
- workspace_id = verify_workspace_token(p.workspace_token, "lead_capture")
- if not workspace_id: raise HTTPException(403, "A valid workspace landing token is required for public lead capture")
- with workspace_scope(workspace_id):
-  result=await create_lead(p,db)
- if "application/json" in request.headers.get("accept",""):return result
- return HTMLResponse("<!doctype html><html><body style='font-family:system-ui;background:#f8fafc;padding:48px;color:#1e293b'><h1>You're on the list</h1><p>Your consent-based email sequence was queued.</p></body></html>",status_code=201)
+async def create_lead(
+    payload: LeadCaptureRequest,
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+):
+    owner_workspace_id = str(workspace_id).strip() if workspace_id else ""
+    if not owner_workspace_id:
+        raise HTTPException(403, "An authorized workspace is required to capture a lead")
+    try:
+        with workspace_scope(owner_workspace_id):
+            return await capture_lead_and_schedule(
+                db,
+                email_address=payload.email,
+                consent=payload.consent,
+                lead_magnet=payload.lead_magnet,
+                audience=payload.audience,
+                offer=payload.offer,
+                consent_source=payload.consent_source,
+                workspace_id=owner_workspace_id,
+            )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@api.post("/leads/capture", status_code=201)
+async def lead_capture(
+    payload: LeadCaptureRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before capturing a lead")
+    return await create_lead(payload, db, workspace_id=str(workspace_id))
+
+
+@app.post("/api/public/leads/capture", status_code=201)
+async def public_lead_capture(request: Request, db: AsyncSession = Depends(get_session)):
+    await public_rate_limit(request)
+    content_type = request.headers.get("content-type", "").lower()
+    if "application/json" in content_type:
+        raw = await request.json()
+    elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        form = await request.form()
+        raw = dict(form)
+    else:
+        raise HTTPException(415, "Submit JSON or an HTML form")
+    consent = raw.get("consent")
+    raw["consent"] = consent is True or str(consent or "").lower() in {"1", "true", "yes", "on"}
+    try:
+        payload = LeadCaptureRequest.model_validate(raw)
+    except Exception as exc:
+        raise HTTPException(422, "Signup form contains invalid fields") from exc
+    workspace_id = verify_workspace_token(payload.workspace_token, "lead_capture")
+    if not workspace_id:
+        raise HTTPException(403, "A valid workspace landing token is required for public lead capture")
+    with workspace_scope(workspace_id):
+        result = await create_lead(payload, db, workspace_id=workspace_id)
+    if "application/json" in request.headers.get("accept", ""):
+        return result
+    return HTMLResponse(
+        "<!doctype html><html><body style='font-family:system-ui;background:#f8fafc;padding:48px;color:#1e293b'>"
+        "<h1>You're on the list</h1><p>Your consent-based email sequence was queued.</p></body></html>",
+        status_code=201,
+    )
 @api.get("/leads")
 async def leads(
     user: dict[str, Any] = Depends(require_auth),

@@ -59,3 +59,9 @@
 - Campaign list/create/health fail closed without a selected workspace and scope reads/writes to the authenticated tenant. API conversion duplicate checks include workspace ID, and both Conversion and ConversionLedgerEntry are explicitly tenant-bound.
 - Regression tests deny users without a workspace, prove cross-workspace campaigns are hidden and cross-workspace health is not found, and prove the same provider event ID can be recorded independently in separate workspaces. The older conversion-ledger test now stubs an authorized workspace rather than relying on development fallback while using a fake DB session.
 - Next: audit remaining ContentAsset/Lead/ScheduledEmail routes and public lead-capture token binding.
+
+
+## P0 — blog and lead/email tenant boundary candidate (2026-10-26)
+- Tenant-owned blog assets and lead/email sequences must never be created or enumerated from an unscoped request.
+- Private lead capture requires a selected workspace. Public lead capture must validate the signed token purpose and expiration before opening the selected workspace scope. Email helpers fail closed with no workspace and use explicit workspace filters for leads and queued messages.
+- Added tests are pending exact-SHA CI; verify push and PR before this item is marked complete.

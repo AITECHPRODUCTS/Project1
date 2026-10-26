@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import WebSocket
 logger=logging.getLogger(__name__)
 class EventHub:
- def __init__(self):self.connections:set[WebSocket]=set();self.lock=asyncio.Lock();self.redis=None;self.pubsub=None;self.listener=None;self.channel="affiliate_os:events:v1"
+ def __init__(self):self.connections:dict[WebSocket,str|None]={};self.lock=asyncio.Lock();self.redis=None;self.pubsub=None;self.listener=None;self.channel="affiliate_os:events:v1"
  async def start(self,url:str):
   try:
    from redis.asyncio import Redis
@@ -18,21 +18,26 @@ class EventHub:
      except (ValueError,TypeError,KeyError):logger.warning("Malformed Redis event ignored")
   except asyncio.CancelledError:raise
   except Exception as exc:logger.error("Redis event listener ended: %s",type(exc).__name__)
- async def connect(self,ws:WebSocket):
+ async def connect(self,ws:WebSocket,workspace_id:str|None=None):
   await ws.accept()
-  async with self.lock:self.connections.add(ws)
+  async with self.lock:self.connections[ws]=workspace_id
  async def disconnect(self,ws:WebSocket):
-  async with self.lock:self.connections.discard(ws)
+  async with self.lock:self.connections.pop(ws,None)
  async def _deliver(self,payload:dict[str,Any],publish:bool):
+  workspace_id=payload.get("workspace_id")
+  if not isinstance(workspace_id,str) or not workspace_id.strip():
+   logger.warning("Unscoped workspace event dropped")
+   return
   message=json.dumps(payload,default=str)
-  async with self.lock:connections=list(self.connections)
+  async with self.lock:connections=list(self.connections.items())
   dead=[]
-  for ws in connections:
+  for ws,subscriber_workspace_id in connections:
+   if subscriber_workspace_id!=workspace_id:continue
    try:await ws.send_text(message)
    except Exception:dead.append(ws)
   if dead:
    async with self.lock:
-    for ws in dead:self.connections.discard(ws)
+    for ws in dead:self.connections.pop(ws,None)
   if publish and self.redis:
    try:await self.redis.publish(self.channel,message)
    except Exception as exc:logger.warning("Redis event publish failed: %s",type(exc).__name__)

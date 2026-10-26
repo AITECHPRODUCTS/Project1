@@ -30,4 +30,10 @@
 
 ## P0 security acceptance follow-up (2026-10-26)
 - Test addition: `tests/test_auth_tenancy_guards.py` covers session invalidation when workspace membership is revoked, denial of unscoped static bearer tokens for tenant data, and workspace member denial from admin authorization.
-- Verification status: pending the full hosted CI run on the commit containing these tests. Existing route coverage and DB tenant-filter tests do not replace a passing test for this specific auth contract.
+- Verification passed on exact SHA `e715878c76fb6f1876c2ff1769653fa72ad51396`: push run [40264570099](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264570099) completed successfully. Existing route coverage and DB tenant-filter tests do not replace these auth-contract assertions.
+
+
+## P0 — WebSocket/event tenant isolation (2026-10-26)
+- Finding: workflow/HITL events previously lacked workspace IDs, and EventHub broadcast them to every connected WebSocket. The endpoint also did not revalidate active workspace membership at connect time.
+- Candidate fix binds event payloads to workspace scope, routes only to same-workspace sockets, rejects scope-less events, and validates membership on connect and recovery.
+- Four regression tests added in `tests/test_websocket_tenant_isolation.py`. Status: **pending** full exact-SHA CI; do not call fixed until all required jobs pass.

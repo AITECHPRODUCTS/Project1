@@ -308,3 +308,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added `tests/test_auth_tenancy_guards.py` to pin three existing security contracts: a session whose workspace membership was revoked is invalidated (HTTP 403 and session cleared), a static bearer API token cannot be used for workspace-scoped access, and a workspace member cannot call workspace-admin authorization.
 - The new tests are not yet verified; the commit-triggered full CI run must pass before this item is called complete. They supplement—not replace—the broader route-by-route IDOR, WebSocket, exports and worker authorization tests in the release gate.
 - Production remains blocked by the conditional ChromaDB audit exception and by external provider authorization, browser UAT, SBOM/license/secret scan, deployment smoke, and backup/restore evidence.
+
+
+## 2026-10-26 WebSocket tenant-isolation remediation added
+- The auth-guard regression test slice is verified on exact SHA `e715878c76fb6f1876c2ff1769653fa72ad51396`: push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264570099 completed successfully.
+- Source audit found a P0 tenant data-isolation defect: `EventHub` delivered workflow/HITL events to every connected socket; workflow event payloads lacked workspace identifiers, and the WebSocket endpoint did not revalidate active workspace membership.
+- Candidate remediation binds workflow event metadata to the workspace, routes events only to sockets subscribed to the same verified workspace, drops unscoped/legacy events, restores tenant metadata after paused-workflow recovery, and rechecks active membership before accepting WebSocket connections.
+- Added `tests/test_websocket_tenant_isolation.py` for scoped delivery, scope-less event dropping, workflow event scope, and revoked-membership denial. This fix is **pending** the full hosted CI run on its exact new SHA.

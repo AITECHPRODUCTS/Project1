@@ -2056,9 +2056,40 @@ async def redirect_campaign(campaign_id:str,request:Request,db:AsyncSession=Depe
  final=urlunparse(url._replace(query=urlencode(query)));return RedirectResponse(final,status_code=302,headers={"Cache-Control":"no-store","Referrer-Policy":"strict-origin-when-cross-origin"})
 @app.websocket("/ws")
 async def websocket(ws:WebSocket):
- if settings.app_env=="production" and not ws.scope.get("session",{}).get("user"):
-  await ws.close(code=1008,reason="Authentication required");return
- await hub.connect(ws)
+ session=ws.scope.get("session") or {}
+ user=session.get("user") if isinstance(session,dict) else None
+ workspace_id=user.get("workspace_id") if isinstance(user,dict) else None
+ user_id=user.get("user_id") if isinstance(user,dict) else None
+ if not isinstance(user,dict):
+  if settings.app_env=="production":
+   await ws.close(code=1008,reason="Authentication required");return
+  with workspace_scope(None):
+   async with SessionLocal() as db:
+    workspace=await db.scalar(select(Workspace).where(Workspace.slug=="local-development"))
+  workspace_id=workspace.id if workspace else None
+ elif not workspace_id or not user_id:
+  await ws.close(code=1008,reason="Workspace authentication required");return
+ elif user_id=="local":
+  if settings.app_env=="production":
+   await ws.close(code=1008,reason="Workspace membership required");return
+  with workspace_scope(None):
+   async with SessionLocal() as db:
+    workspace=await db.scalar(select(Workspace).where(Workspace.id==str(workspace_id),Workspace.slug=="local-development"))
+  if workspace is None:
+   await ws.close(code=1008,reason="Workspace membership required");return
+  workspace_id=workspace.id
+ else:
+  with workspace_scope(None):
+   async with SessionLocal() as db:
+    membership=await db.scalar(select(WorkspaceMembership).where(
+     WorkspaceMembership.workspace_id==str(workspace_id),
+     WorkspaceMembership.user_id==str(user_id),
+     WorkspaceMembership.is_active.is_(True),
+    ))
+  if membership is None:
+   await ws.close(code=1008,reason="Workspace membership is no longer active");return
+  workspace_id=membership.workspace_id
+ await hub.connect(ws,str(workspace_id) if workspace_id else None)
  try:
   while True:
    if await ws.receive_text()=="ping":await ws.send_text(json.dumps({"event":"PONG","time":utcnow().isoformat()}))

@@ -107,3 +107,9 @@
 - The full CI matrix and CI-runtime action upgrade passed at `70dd041a8c27607467f8605d1eabad09f815d2bf` (https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264278741).
 - Added direct regression tests for workspace-membership revocation, static-token scope denial and the workspace-member/admin boundary. These assert existing enforcement behavior and do not weaken or replace existing assertions.
 - Status remains pending until the full exact-SHA CI run for the test addition succeeds.
+
+
+## 2026-10-26 P0 WebSocket tenant-isolation finding and candidate fix
+- Root cause: `backend/core/events.py` delivered every workflow/HITL event to every socket, `backend/core/state_machine.py` published events without workspace scope, and `/ws` checked session presence but did not revalidate the user's current membership.
+- Candidate fix adds workspace-bound event metadata, fail-closed event delivery, recovery-state tenant metadata, and active membership validation on WebSocket connection. Four regression tests cover delivery isolation, unscoped event dropping, event-emitter scope, and revoked-membership denial.
+- Status: pending full hosted CI on the resulting commit SHA.

@@ -43,3 +43,8 @@
 ## 2026-10-26 CI runtime update verified
 - Exact SHA `70dd041a8c27607467f8605d1eabad09f815d2bf`: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264278741 — success using Node 24-compatible `checkout@v7`, `setup-python@v7`, `setup-node@v7`, `upload-artifact@v7`, and `download-artifact@v8`.
 - Next: the newly added auth/tenancy regression tests are not yet verified; require full CI on their commit. The Chroma exception remains a production security blocker.
+
+
+## 2026-10-26 WebSocket tenancy P0 regression gate
+- Require passing tests showing workflow/HITL events reach only sockets registered to the matching workspace, scope-less event payloads reach no client, and a connection using a revoked workspace membership is rejected.
+- This candidate source fix and tests are not complete until the full Python, PostgreSQL, AI/RAG, frontend, repository guard and security-audit jobs pass on the exact new commit SHA.

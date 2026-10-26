@@ -228,7 +228,7 @@ async def test_cms_live_publish_requires_explicit_confirmation_and_writes_audit(
         payload = _cms_payload(status="publish")
         with TestClient(main.app) as client:
             denied = client.post("/api/cms/publish", json=payload)
-            approved = client.post("/api/cms/publish", json={**payload, "confirm_live_publish": True})
+            approved = client.post("/api/cms/publish", json={**payload, "confirm_live_publish": True}, headers={"Idempotency-Key": "cms-publish-test-key-0001"})
 
         assert denied.status_code == 409
         assert approved.status_code == 200

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio,base64,hashlib,hmac,json,logging,re,secrets,time
+import httpx
 from contextlib import asynccontextmanager
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
@@ -22,7 +23,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExternalAction,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
@@ -311,6 +312,138 @@ async def require_platform_admin(user: dict[str, Any] = Depends(require_auth)) -
     if user.get("is_admin") is not True:
         raise HTTPException(403, "Platform Super Admin permission required")
     return user
+
+
+EXTERNAL_IDEMPOTENCY_KEY_RE = re.compile(r"[A-Za-z0-9._:-]{8,255}")
+
+
+def _external_action_fingerprint(action_type: str, provider: str, request_payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        {"action_type": action_type, "provider": provider, "request": request_payload},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _external_action_failure_status(exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if isinstance(exc, (TimeoutError, ConnectionError, httpx.TransportError)):
+        return "unknown"
+    if isinstance(status_code, int) and status_code >= 500:
+        return "unknown"
+    return "failed"
+
+
+async def _claim_external_action(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    action_type: str,
+    provider: str,
+    idempotency_key: str | None,
+    request_payload: dict[str, Any],
+) -> tuple[str | None, dict[str, Any] | None]:
+    key = (idempotency_key or "").strip()
+    if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(key):
+        raise HTTPException(428, "A valid Idempotency-Key header (8-255 letters, digits, period, underscore, colon or hyphen) is required for provider writes")
+    request_hash = _external_action_fingerprint(action_type, provider, request_payload)
+    with workspace_scope(workspace_id):
+        existing = await db.scalar(
+            select(ExternalAction).where(
+                ExternalAction.workspace_id == workspace_id,
+                ExternalAction.action_type == action_type,
+                ExternalAction.idempotency_key == key,
+            )
+        )
+        if existing is None:
+            unresolved = await db.scalar(
+                select(ExternalAction).where(
+                    ExternalAction.workspace_id == workspace_id,
+                    ExternalAction.action_type == action_type,
+                    ExternalAction.request_hash == request_hash,
+                    ExternalAction.status.in_(["in_progress", "unknown"]),
+                ).order_by(ExternalAction.created_at.desc())
+            )
+            if unresolved is not None:
+                if unresolved.status == "in_progress":
+                    created = unresolved.created_at
+                    if created is not None and created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    if created is not None and utcnow() - created > timedelta(minutes=15):
+                        unresolved.status = "unknown"
+                        unresolved.error_type = "StaleInProgress"
+                        await db.commit()
+                raise HTTPException(409, "An earlier matching provider action is in progress or has an unknown outcome; reconcile it before retrying")
+            record = ExternalAction(
+                workspace_id=workspace_id,
+                action_type=action_type,
+                idempotency_key=key,
+                request_hash=request_hash,
+                provider=provider[:80],
+                status="in_progress",
+                result_json={},
+            )
+            db.add(record)
+            try:
+                await db.commit()
+                return record.id, None
+            except IntegrityError:
+                await db.rollback()
+                existing = await db.scalar(
+                    select(ExternalAction).where(
+                        ExternalAction.workspace_id == workspace_id,
+                        ExternalAction.action_type == action_type,
+                        ExternalAction.idempotency_key == key,
+                    )
+                )
+                if existing is None:
+                    raise HTTPException(409, "Could not claim provider action; retry with the same Idempotency-Key")
+        if existing.request_hash != request_hash:
+            raise HTTPException(409, "Idempotency-Key was already used for a different request")
+        if existing.status == "completed":
+            return None, dict(existing.result_json or {})
+        if existing.status == "in_progress":
+            created = existing.created_at
+            if created is not None and created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if created is not None and utcnow() - created > timedelta(minutes=15):
+                existing.status = "unknown"
+                existing.error_type = "StaleInProgress"
+                await db.commit()
+                raise HTTPException(409, "Previous provider action may have completed; reconcile before submitting again")
+            raise HTTPException(409, "Provider action is still in progress; repeat the same Idempotency-Key after it finishes")
+        if existing.status == "unknown":
+            raise HTTPException(409, "Provider outcome is unknown; reconcile the provider before submitting another request")
+        raise HTTPException(409, "Previous provider action failed; resolve it and use a new Idempotency-Key")
+
+
+async def _finish_external_action(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    action_id: str,
+    status: str,
+    result: dict[str, Any] | None = None,
+    error_type: str | None = None,
+) -> None:
+    with workspace_scope(workspace_id):
+        record = await db.scalar(select(ExternalAction).where(
+            ExternalAction.id == action_id,
+            ExternalAction.workspace_id == workspace_id,
+        ))
+        if record is None:
+            raise RuntimeError("External action idempotency record disappeared during provider execution")
+        record.status = status
+        record.error_type = error_type[:120] if error_type else None
+        if result is not None:
+            record.result_json = result
+            remote_id = result.get("remote_id")
+            record.remote_id = str(remote_id)[:255] if remote_id is not None else None
+        await db.commit()
 
 
 async def _record_external_publish_audit(
@@ -1168,6 +1301,7 @@ async def drip(payload: dict[str, Any]):
 @api.post("/social/publish")
 async def social_publish(
     payload: dict[str, Any],
+    request: Request,
     user: dict[str, Any] = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_session),
 ):
@@ -1177,30 +1311,49 @@ async def social_publish(
         raise HTTPException(403, "Select an authorized workspace before social publishing")
     platform = str(payload.get("platform") or "").strip().lower()
     post = dict(payload.get("post") or {})
-    if not settings.publishing_dry_run and payload.get("confirm_live_publish") is not True:
+    live = not settings.publishing_dry_run
+    if live and payload.get("confirm_live_publish") is not True:
         raise HTTPException(409, "Live publishing requires confirm_live_publish=true from an authorized operator")
     owner_workspace_id = str(workspace_id)
+    action_id: str | None = None
+    if live:
+        action_id, replay = await _claim_external_action(
+            db, workspace_id=owner_workspace_id, action_type="social_publish",
+            provider=platform or "unknown", idempotency_key=request.headers.get("Idempotency-Key"),
+            request_payload={"platform": platform, "post": post},
+        )
+        if replay is not None:
+            await _record_external_publish_audit(
+                db, user=user, workspace_id=owner_workspace_id,
+                action="social_publish_idempotency_replay", platform=platform or "unknown",
+                outcome="replayed", remote_id=replay.get("remote_id"),
+            )
+            return replay
     try:
         with workspace_scope(owner_workspace_id):
             result = await social_media_scheduler(platform, post)
     except Exception as exc:
+        action_outcome = _external_action_failure_status(exc)
+        if action_id:
+            try:
+                await _finish_external_action(
+                    db, workspace_id=owner_workspace_id, action_id=action_id,
+                    status=action_outcome, error_type=type(exc).__name__,
+                )
+            except Exception:
+                logger.exception("Could not persist social action outcome for workspace %s", owner_workspace_id[:8])
         await _record_external_publish_audit(
-            db,
-            user=user,
-            workspace_id=owner_workspace_id,
-            action="social_publish",
+            db, user=user, workspace_id=owner_workspace_id, action="social_publish",
             platform=platform or "unknown",
-            outcome="failed",
+            outcome="outcome_unknown" if action_outcome == "unknown" else "failed",
             error_type=type(exc).__name__,
         )
         raise
+    if action_id:
+        await _finish_external_action(db, workspace_id=owner_workspace_id, action_id=action_id, status="completed", result=result)
     await _record_external_publish_audit(
-        db,
-        user=user,
-        workspace_id=owner_workspace_id,
-        action="social_publish",
-        platform=platform or "unknown",
-        outcome=str(result.get("status") or "unknown"),
+        db, user=user, workspace_id=owner_workspace_id, action="social_publish",
+        platform=platform or "unknown", outcome=str(result.get("status") or "unknown"),
         remote_id=result.get("remote_id"),
     )
     return result
@@ -2195,6 +2348,7 @@ async def ads_evaluate(
 @api.post("/cms/publish")
 async def cms(
     payload: CMSPublishRequest,
+    request: Request,
     user: dict[str, Any] = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_session),
 ):
@@ -2206,35 +2360,45 @@ async def cms(
     if payload.status == "publish" and payload.confirm_live_publish is not True:
         raise HTTPException(409, "Live CMS publishing requires confirm_live_publish=true from an authorized operator")
     owner_workspace_id = str(workspace_id)
+    action_id, replay = await _claim_external_action(
+        db, workspace_id=owner_workspace_id, action_type="cms_publish",
+        provider=payload.provider, idempotency_key=request.headers.get("Idempotency-Key"),
+        request_payload=payload.model_dump(mode="json"),
+    )
+    if replay is not None:
+        await _record_external_publish_audit(
+            db, user=user, workspace_id=owner_workspace_id,
+            action="cms_publish_idempotency_replay", platform=payload.provider,
+            outcome="replayed", remote_id=replay.get("remote_id"),
+        )
+        return replay
     try:
         with workspace_scope(owner_workspace_id):
             result = await publish_article(
-                provider=payload.provider,
-                title=payload.title,
-                article_html=payload.article_html,
-                canonical_url=payload.canonical_url,
-                status=payload.status,
-                tags=payload.tags,
-                disclosure=payload.disclosure,
+                provider=payload.provider, title=payload.title, article_html=payload.article_html,
+                canonical_url=payload.canonical_url, status=payload.status,
+                tags=payload.tags, disclosure=payload.disclosure,
             )
     except Exception as exc:
+        action_outcome = _external_action_failure_status(exc)
+        try:
+            await _finish_external_action(
+                db, workspace_id=owner_workspace_id, action_id=action_id,
+                status=action_outcome, error_type=type(exc).__name__,
+            )
+        except Exception:
+            logger.exception("Could not persist CMS action outcome for workspace %s", owner_workspace_id[:8])
         await _record_external_publish_audit(
-            db,
-            user=user,
-            workspace_id=owner_workspace_id,
-            action="cms_publish",
+            db, user=user, workspace_id=owner_workspace_id, action="cms_publish",
             platform=payload.provider,
-            outcome="failed",
+            outcome="outcome_unknown" if action_outcome == "unknown" else "failed",
             error_type=type(exc).__name__,
         )
         raise
+    await _finish_external_action(db, workspace_id=owner_workspace_id, action_id=action_id, status="completed", result=result)
     await _record_external_publish_audit(
-        db,
-        user=user,
-        workspace_id=owner_workspace_id,
-        action="cms_publish",
-        platform=payload.provider,
-        outcome=str(result.get("status") or payload.status),
+        db, user=user, workspace_id=owner_workspace_id, action="cms_publish",
+        platform=payload.provider, outcome=str(result.get("status") or payload.status),
         remote_id=result.get("remote_id"),
     )
     return result

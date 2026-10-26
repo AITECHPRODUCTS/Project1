@@ -172,3 +172,7 @@
 - Exact SHA `3dc01b9b954bf0ec392aafed522c4ec968faffa9`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277040070 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277047842 both succeeded. Python reported 260 passed/2 skipped, PostgreSQL migration/concurrency passed, frontend production build/security/repo guard passed, AI/RAG 9 imports passed, and push lockfile reproducibility passed.
 - WorkflowStep now distinguishes side-effecting stages and marks S5. For timeout/connection errors on S5, the runner suppresses automatic retry, stores a workspace-scoped `workflow.side_effect_outcome_unknown` audit event (provider result may be ambiguous; manual reconciliation required), and marks the workflow stage failed. Read-only stages retain configured retries.
 - Two regression tests cover the ambiguous side-effect path and unchanged read-only retry behavior. Next: durable idempotency for manually repeated live publish requests.
+
+## 2026-10-26 manual provider-write idempotency — candidate
+- Candidate migration adds a tenant-scoped durable external-action registry. Live social and CMS calls require an idempotency key; canonical payload hashes prevent accidental key reuse for a different request.
+- Completed responses replay from persistence; unresolved operations are blocked on retries, including alternate-key retries for an identical request hash. Four tests and full CI pending.

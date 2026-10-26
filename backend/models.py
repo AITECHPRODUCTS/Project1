@@ -203,6 +203,30 @@ class AuditLog(TenantScopedMixin, Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+class ExternalAction(TenantScopedMixin, Base):
+    """Durable idempotency registry for provider writes made with global credentials."""
+
+    __tablename__ = "external_actions"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "action_type", "idempotency_key",
+            name="uq_external_action_ws_type_key",
+        ),
+        Index("ix_external_actions_workspace_status_created", "workspace_id", "status", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    action_type: Mapped[str] = mapped_column(String(100))
+    idempotency_key: Mapped[str] = mapped_column(String(255))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    provider: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(40), default="in_progress", index=True)
+    result_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    remote_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class ContentAsset(TenantScopedMixin, Base):
     __tablename__ = "content_assets"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

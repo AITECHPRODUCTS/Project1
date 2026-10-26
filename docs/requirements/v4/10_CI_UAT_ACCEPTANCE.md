@@ -106,3 +106,7 @@
 - Python 260 passed/2 skipped, SQLite and PostgreSQL migrations/drift/concurrency passed, AI/RAG 9 imports, frontend production build, dependency audit, repository guard and push lockfile sync passed.
 - Regression test verifies a side-effecting S5 timeout/connection failure is attempted once, produces the durable `workflow.side_effect_outcome_unknown` audit event, and instructs reconciliation. A read-only stage still retries transient connection failures per configuration.
 - Production remains blocked by documented ChromaDB advisory exceptions and outstanding comprehensive provider UAT, SBOM/license/secret checks, deployment smoke, and backup/restore evidence.
+
+## 2026-10-26 external-action idempotency — candidate
+- Validate migration 0009, database idempotency key uniqueness, payload fingerprint mismatch conflicts, completed-response replay, 428 for missing live-write key, and ambiguous-result quarantine under same and alternate keys.
+- Do not mark verified until exact-SHA push/PR Python, SQLite/PostgreSQL migration/drift/concurrency, AI/RAG, frontend, security, repo guard and lockfile jobs pass.

@@ -96,7 +96,10 @@
 
 
 
-## P0 — workflow side-effect retry safety candidate (2026-10-26)
+## P0 — workflow side-effect retry safety verified (2026-10-26)
 - Runner currently retries timeout/connection errors generically, including external publishing in S5; an ambiguous provider result could be duplicated.
 - Candidate marks S5 as side-effecting, suppresses transient automatic retries and writes a tenant-scoped reconciliation event. Read-only retry behavior should remain unchanged.
 - Two regression tests pending exact-SHA push/PR.
+
+- At `3dc01b9b954bf0ec392aafed522c4ec968faffa9`, the workflow runner marks S5 as side-effecting and suppresses automatic retries after timeout/connection errors that may have occurred after an external provider accepted a post. It persists `workflow.side_effect_outcome_unknown` scoped to the workspace and requires reconciliation before any manual re-submit. Read-only transient retries remain.
+- Two regression tests passed and full exact-SHA CI is green. Verified implementation SHA `3dc01b9b954bf0ec392aafed522c4ec968faffa9`: push [40277040070](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277040070) and PR [40277047842](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277047842) both passed. Python suite: **260 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG profile (**9 imports**), frontend typecheck/production build, dependency security audit, 53-skill guard and push lockfile reproducibility all passed.

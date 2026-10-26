@@ -85,4 +85,6 @@ These additive rules apply to every future Project1 build session.
 
 
 
-38. P0 workflow retry safety candidate: the runner must not blindly retry external side-effect stages when timeout/connection failure leaves provider outcome ambiguous. S5 is explicitly marked side-effecting; such failures require an unknown-outcome audit + reconciliation, while read-only transient failures keep retry policy. Two regression tests pending CI.
+38. P0 workflow retry safety is verified at `3dc01b9b954bf0ec392aafed522c4ec968faffa9`: push [40277040070](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277040070) and PR [40277047842](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277047842) both passed; Python 260 passed/2 skipped; AI/RAG 9 imports passed. S5 is marked side-effecting. A timeout/connection failure records a workspace-scoped `workflow.side_effect_outcome_unknown` event and fails closed without automatic retry; read-only transient failures preserve the configured retries. Two regression tests passed.
+
+39. Next P0: durable request-level idempotency for manually retried live social/CMS publishing requests. Workflow retry suppression protects the runner's automatic retry, but does not yet prevent duplicate external writes when an operator/client repeats a live request.

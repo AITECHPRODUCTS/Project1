@@ -100,3 +100,9 @@
 - Exact SHA `fedd1f74dbaa33e210b0587c774bc2ad63d92b8d`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276085004 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276090006 both passed.
 - Alembic revision `0008_scheduled_email_delivery_claims` adds a nullable claim timestamp and workspace/status/claim index. Conditional update claims ensure only one worker transitions a due row from scheduled/retry into sending. Provider requests use stable idempotency keys and stored unsubscribe links.
 - Python passed 258 tests with 2 skipped; PostgreSQL migration/concurrency, SQLite migration/drift, AI/RAG 9 imports, frontend build, security audit, repo guard and push lockfile sync passed. Stale ambiguous sends outside the 23-hour automatic retry window require manual reconciliation.
+
+## 2026-10-26 workflow side-effect retry safety — verified
+- Exact SHA `3dc01b9b954bf0ec392aafed522c4ec968faffa9`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277040070 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277047842 both passed.
+- Python 260 passed/2 skipped, SQLite and PostgreSQL migrations/drift/concurrency passed, AI/RAG 9 imports, frontend production build, dependency audit, repository guard and push lockfile sync passed.
+- Regression test verifies a side-effecting S5 timeout/connection failure is attempted once, produces the durable `workflow.side_effect_outcome_unknown` audit event, and instructs reconciliation. A read-only stage still retries transient connection failures per configuration.
+- Production remains blocked by documented ChromaDB advisory exceptions and outstanding comprehensive provider UAT, SBOM/license/secret checks, deployment smoke, and backup/restore evidence.

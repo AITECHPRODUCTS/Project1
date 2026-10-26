@@ -135,3 +135,8 @@
 - Two regressions passed: private/loopback endpoint is rejected before a client can open; valid provider requests use the validated URL. Python 273 passed / 2 skipped and all required CI jobs passed.
 - Next P0 audit: other API routes and provider-configuration/public-read surfaces.
 
+
+
+## P0 — shared commission mailbox import authorization candidate
+- The IMAP host/user/password and sender allowlist are global config. The endpoint previously relied on `require_admin`, which permits workspace admins, and would import messages from the shared mailbox into the caller-selected workspace.
+- Candidate requires Platform Super Admin plus workspace context and audits success/failure counts or error type without message contents. Four regression tests and exact-SHA CI pending.

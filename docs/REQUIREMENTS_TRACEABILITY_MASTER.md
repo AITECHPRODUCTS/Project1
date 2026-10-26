@@ -226,3 +226,8 @@
 - Two regressions prove a loopback/private base URL is rejected before HTTP client construction, and valid-provider requests use the validated URL with redirects disabled.
 - Next P0 audit: review remaining API routes and provider-configuration surfaces for public-read leaks, unsafe network destinations, global write authorization, and shared catalog/tenant boundaries. Production remains **not release-ready** because the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates remain unresolved.
 
+
+
+## 2026-10-26 shared IMAP commission import — candidate
+- The endpoint uses global IMAP credentials; workspace-admin access is too broad because it can trigger reads from a shared mailbox and tenant-bound persistence.
+- Candidate requires Platform Super Admin, selected workspace, and workspace-scoped audit of success/failure. Four tests pending exact-SHA CI.

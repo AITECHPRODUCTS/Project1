@@ -2697,14 +2697,72 @@ async def websocket(ws:WebSocket):
  except WebSocketDisconnect:await hub.disconnect(ws)
  except Exception:await hub.disconnect(ws)
 
-@api.post("/finance/email-import",dependencies=[Depends(require_admin)])
-async def commission_email_import(user: dict[str, Any] = Depends(require_auth)):
- from backend.services.commission_mail_importer import import_commission_emails
- workspace_id = user.get("workspace_id")
- if not workspace_id:
-  raise HTTPException(403, "Select an authorized workspace before importing commission evidence")
- try:return await import_commission_emails(workspace_id=str(workspace_id))
- except Exception as exc:raise HTTPException(502,f"Mail import failed: {type(exc).__name__}: {str(exc)[:200]}") from exc
+async def _record_finance_email_import_audit(
+    db: AsyncSession,
+    *,
+    user: dict[str, Any],
+    workspace_id: str,
+    outcome: str,
+    result: dict[str, Any] | None = None,
+    error_type: str | None = None,
+) -> None:
+    details: dict[str, Any] = {"provider": "imap", "mailbox": "INBOX"}
+    if result is not None:
+        details.update({
+            "messages_matched": int(result.get("messages_matched") or 0),
+            "rows_created": int(result.get("rows_created") or 0),
+        })
+    if error_type:
+        details["error_type"] = error_type[:120]
+    with workspace_scope(workspace_id):
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="finance.email_import",
+            resource_type="commission_mail_import",
+            outcome=outcome[:80],
+            details_json=details,
+        ))
+        await db.commit()
+
+
+@api.post("/finance/email-import")
+async def commission_email_import(
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    # IMAP credentials and sender allowlist are global deployment settings.
+    # Restrict access to the platform operator; workspace admins must not import
+    # a shared mailbox into their own tenant.
+    from backend.services.commission_mail_importer import import_commission_emails
+
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before importing commission evidence")
+    owner_workspace_id = str(workspace_id)
+    try:
+        result = await import_commission_emails(workspace_id=owner_workspace_id)
+    except Exception as exc:
+        try:
+            await _record_finance_email_import_audit(
+                db,
+                user=user,
+                workspace_id=owner_workspace_id,
+                outcome="failed",
+                error_type=type(exc).__name__,
+            )
+        except Exception:
+            logger.exception("Could not audit failed IMAP commission import for workspace %s", owner_workspace_id[:8])
+        raise HTTPException(502, f"Mail import failed: {type(exc).__name__}: {str(exc)[:200]}") from exc
+
+    await _record_finance_email_import_audit(
+        db,
+        user=user,
+        workspace_id=owner_workspace_id,
+        outcome="completed",
+        result=result,
+    )
+    return result
 
 @api.get("/finance/mail-commissions")
 async def mail_commissions(

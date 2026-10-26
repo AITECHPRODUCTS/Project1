@@ -485,3 +485,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Two regressions prove a loopback/private base URL is rejected before HTTP client construction, and valid-provider requests use the validated URL with redirects disabled.
 - Next P0 audit: review remaining API routes and provider-configuration surfaces for public-read leaks, unsafe network destinations, global write authorization, and shared catalog/tenant boundaries. Production remains **not release-ready** because the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates remain unresolved.
 
+
+
+
+## P0 — shared IMAP commission import authorization — candidate
+- Source audit at `11aa932e469b33d299b09a3dca5e5dfe56b1c821` found `/api/finance/email-import` uses global deployment-level IMAP credentials and an allowlist but only required workspace-admin permission. A workspace admin could trigger reads of the shared mailbox and import matching evidence into their selected tenant.
+- Candidate replaces workspace-admin authorization with Platform Super Admin, requires a selected workspace for accountability, and records success/failure audit metadata under that operator workspace without storing message bodies, subjects or credentials.
+- Four regressions cover workspace-admin denial before mailbox import, platform-admin-without-workspace denial, successful import/audit, and provider failure audit/502. Exact-SHA CI pending.

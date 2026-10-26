@@ -105,3 +105,6 @@ These additive rules apply to every future Project1 build session.
 
 
 45. P0 OpenAffiliate URL safety is verified at `49043acd6e71841c7d365a97a9d8ca31168cc8da`; push [40280504806](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280504806) and PR [40280508646](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280508646) both passed. Python 273 passed/2 skipped; SQLite/PostgreSQL migration gates, AI/RAG imports, frontend, security audit, repo guard, and push lockfile passed. `_get` now validates the composed URL before HTTP client creation on cache misses, rejects private/loopback destinations, and preserves disabled redirects. Two URL-safety regressions passed.
+
+
+47. P0 global IMAP import: `/api/finance/email-import` uses shared configured mailbox credentials but workspace-admin permission was enough to trigger the importer. Candidate restricts it to Platform Super Admin and writes a workspace-scoped audit record with counts/error type only. Four route tests and exact-SHA CI pending.

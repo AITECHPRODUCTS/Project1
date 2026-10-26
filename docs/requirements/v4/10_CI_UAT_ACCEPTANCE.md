@@ -138,3 +138,8 @@
 - Two new URL-safety tests passed. Python 273 passed/2 skipped; frontend, security, repository guard, SQLite/PostgreSQL migration/concurrency, AI/RAG and push lockfile jobs all passed.
 - The OpenAffiliate client validates its composed URL before opening an HTTP client on cache misses and retains redirects disabled. Four ChromaDB advisory exceptions and production release gates remain open.
 
+
+
+## 2026-10-26 shared IMAP commission import — candidate
+- The endpoint uses global IMAP credentials; workspace-admin access is too broad because it can trigger reads from the shared mailbox and tenant-bound persistence.
+- Candidate requires Platform Super Admin, selected workspace, and workspace-scoped audit of success/failure. Four tests pending exact-SHA CI.

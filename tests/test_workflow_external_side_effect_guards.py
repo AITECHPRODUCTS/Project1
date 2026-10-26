@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main, workflows
 from backend.database import Base
-from backend.models import AuditLog, Conversion, Workspace
+from backend.models import AuditLog, Conversion, ExternalAction, Workspace
 from backend.tenancy import workspace_scope
 
 
@@ -63,11 +63,21 @@ def test_workflow_live_publish_requires_platform_admin_and_explicit_confirmation
     assert calls == []
 
     with TestClient(main.app) as client:
-        approved = client.post("/api/workflows/run", json={
+        missing_key = client.post("/api/workflows/run", json={
             "workflow_name": "S5",
             "state": _publish_state(platform_admin_authorized=False, live_publish_confirmed=False),
             "confirm_live_publish": True,
         })
+        approved = client.post(
+            "/api/workflows/run",
+            json={
+                "workflow_name": "S5",
+                "state": _publish_state(platform_admin_authorized=False, live_publish_confirmed=False),
+                "confirm_live_publish": True,
+            },
+            headers={"Idempotency-Key": "workflow-publish-test-key-0001"},
+        )
+    assert missing_key.status_code == 428
     assert approved.status_code == 202, approved.text
     assert len(calls) == 1
     trusted_metadata = calls[0][1]["metadata"]
@@ -189,3 +199,131 @@ async def test_workflow_conversion_import_deduplication_is_per_workspace(monkeyp
 async def test_workflow_conversion_import_rejects_missing_workspace():
     with pytest.raises(ValueError, match="Authorized workspace context required"):
         await workflows.s6({"conversion_events": [{"network": "example-network", "external_event_id": "event-1"}]})
+
+@pytest.mark.asyncio
+async def test_live_workflow_distribution_replays_completed_external_action(monkeypatch):
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        monkeypatch.setattr(workflows, "SessionLocal", sessions)
+        monkeypatch.setattr(workflows, "get_settings", lambda: SimpleNamespace(publishing_dry_run=False))
+        workspace_id = "workflow-idempotency-workspace"
+        async with sessions() as db:
+            db.add(Workspace(id=workspace_id, name="Workflow idempotency", slug="workflow-idempotency"))
+            await db.commit()
+        calls = []
+
+        async def fake_publish(platform, post):
+            calls.append((platform, post))
+            return {"status": "published", "platform": platform, "remote_id": "workflow-post-123"}
+
+        monkeypatch.setattr(workflows, "social_media_scheduler", fake_publish)
+        state = _publish_state(
+            workspace_id=workspace_id,
+            workflow="S5",
+            execution_mode="SEMI_AUTONOMOUS",
+            initiated_by="operator@example.invalid",
+            platform_admin_authorized=True,
+            live_publish_confirmed=True,
+            workflow_publish_idempotency_key="workflow-request-key-0001",
+        )
+        with workspace_scope(workspace_id):
+            first = await workflows.s5(state)
+            replay = await workflows.s5(state)
+
+        assert first["s5_result"]["publish_results"][0]["remote_id"] == "workflow-post-123"
+        assert replay["s5_result"]["publish_results"][0]["remote_id"] == "workflow-post-123"
+        assert len(calls) == 1
+        async with sessions() as db:
+            actions = list((await db.scalars(select(ExternalAction))).all())
+            replay_audit = await db.scalar(select(AuditLog).where(
+                AuditLog.action == "workflow.social_publish",
+                AuditLog.outcome == "replayed",
+            ))
+        assert len(actions) == 1
+        assert actions[0].status == "completed"
+        assert actions[0].workspace_id == workspace_id
+        assert replay_audit is not None and replay_audit.workspace_id == workspace_id
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_live_workflow_distribution_unknown_outcome_blocks_retry_and_alternate_key(monkeypatch):
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        monkeypatch.setattr(workflows, "SessionLocal", sessions)
+        monkeypatch.setattr(workflows, "get_settings", lambda: SimpleNamespace(publishing_dry_run=False))
+        workspace_id = "workflow-unknown-workspace"
+        async with sessions() as db:
+            db.add(Workspace(id=workspace_id, name="Workflow unknown", slug="workflow-unknown"))
+            await db.commit()
+        calls = 0
+
+        async def fail_after_request(platform, post):
+            nonlocal calls
+            calls += 1
+            raise ConnectionError("provider connection dropped after request")
+
+        monkeypatch.setattr(workflows, "social_media_scheduler", fail_after_request)
+        state = _publish_state(
+            workspace_id=workspace_id,
+            workflow="S5",
+            execution_mode="SEMI_AUTONOMOUS",
+            initiated_by="operator@example.invalid",
+            platform_admin_authorized=True,
+            live_publish_confirmed=True,
+            workflow_publish_idempotency_key="workflow-unknown-key-0001",
+        )
+        with workspace_scope(workspace_id):
+            with pytest.raises(ConnectionError):
+                await workflows.s5(state)
+            with pytest.raises(HTTPException) as same_key:
+                await workflows.s5(state)
+            state["metadata"]["workflow_publish_idempotency_key"] = "workflow-unknown-key-0002"
+            with pytest.raises(HTTPException) as alternate_key:
+                await workflows.s5(state)
+
+        assert same_key.value.status_code == 409
+        assert alternate_key.value.status_code == 409
+        assert calls == 1
+        async with sessions() as db:
+            action = await db.scalar(select(ExternalAction))
+        assert action is not None and action.status == "unknown"
+        assert action.error_type == "ConnectionError"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_live_workflow_distribution_requires_idempotency_key_even_if_called_directly(monkeypatch):
+    monkeypatch.setattr(workflows, "get_settings", lambda: SimpleNamespace(publishing_dry_run=False))
+    called = []
+
+    async def fake_publish(*args, **kwargs):
+        called.append((args, kwargs))
+        return {"status": "published"}
+
+    monkeypatch.setattr(workflows, "social_media_scheduler", fake_publish)
+    state = _publish_state(
+        workspace_id="workflow-without-key",
+        platform_admin_authorized=True,
+        live_publish_confirmed=True,
+    )
+    with pytest.raises(ValueError, match="Idempotency-Key"):
+        await workflows.s5(state)
+    assert called == []
+

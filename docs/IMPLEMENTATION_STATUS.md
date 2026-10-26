@@ -443,3 +443,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Initial implementation SHA `b3495a58202f944621f43063efbe9d293323ee24` exposed a stale social-publish regression fixture: it tested the newly confirmed live request without the now-required `Idempotency-Key`. PR run [40278241892](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278241892) Python suite reported **1 failed, 263 passed, 2 skipped**. The failing test expected 200 but correctly received 428 Precondition Required.
 - The route's 428 is the intended contract; the regression fixture is being corrected to supply a valid key. No production auth/idempotency guard is weakened. Full push and PR CI for the correction remain pending.
 
+
+
+
+## P0 — workflow S5 external-action registry integration — candidate
+- Base SHA `06f185a16f364ce297dc194df01c34b33b28caa8` includes verified direct social/CMS idempotency and passing push [40278503530](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278503530) / PR [40278508177](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278508177). Docs checkpoint verification is in progress at [40278868656](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278868656) and [40278873241](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278873241).
+- Source audit found S5 calls `social_media_scheduler` directly and bypasses the direct-route `ExternalAction` registry. Automatic runner retry suppression does not cover a workflow restarted by its caller.
+- Candidate extracts claim/finish/fingerprint helpers into `backend/services/external_action_registry.py`, derives a stable per-item key from a workflow-level `Idempotency-Key`, replays completed results without a second provider call, and records failed/unknown outcomes in the shared tenant-scoped registry. Live workflow publishing without a valid key is denied at both API and S5 service boundaries.
+- New regressions cover missing-key denial, completed S5 replay/no duplicate, and unknown-outcome rejection for same/alternate keys. Exact-SHA CI pending.

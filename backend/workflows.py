@@ -7,6 +7,7 @@ from backend.core.errors import VerificationRequiredError
 from backend.core.state_machine import WorkflowStep
 from backend.database import SessionLocal
 from backend.models import AuditLog,Conversion
+from backend.services.external_action_registry import EXTERNAL_IDEMPOTENCY_KEY_RE, claim_external_action, derive_workflow_action_key, external_action_failure_status, finish_external_action
 from backend.tenancy import workspace_scope
 
 logger = logging.getLogger(__name__)
@@ -81,45 +82,133 @@ async def _audit_distribution_attempt(
             await db.commit()
 
 
-async def s5(state:dict[str,Any])->dict[str,Any]:
- requests=state.get("publish_requests") or []
- if not requests:return {"s5_result":{"status":"skipped","reason":"No publish request supplied; outputs remain drafts."}}
- raw_metadata=state.get("metadata")
- metadata=raw_metadata if isinstance(raw_metadata,dict) else {}
- workspace_id=str(metadata.get("workspace_id") or "").strip()
- if not workspace_id:
-  raise ValueError("Authorized workspace context required for workflow publishing")
- settings=get_settings()
- if not settings.publishing_dry_run:
-  if metadata.get("platform_admin_authorized") is not True:
-   raise PermissionError("Platform Super Admin permission required for live workflow publishing")
-  if metadata.get("live_publish_confirmed") is not True:
-   raise PermissionError("Explicit live-publish confirmation required for workflow publishing")
- results=[]
- for item in requests[:10]:
-  if item.get("require_verification") and not state.get("_verification_response"):
-   raise VerificationRequiredError("Provider requires human verification before continuing.",action=str(item.get("verification_action") or "verification"))
-  platform=str(item.get("platform") or "").strip().lower()
-  # Persist an attempt record before a possible external side effect. If that
-  # write fails, the provider operation is not attempted.
-  await _audit_distribution_attempt(metadata=metadata,workspace_id=workspace_id,platform=platform or "unknown",outcome="requested")
-  try:
-   with workspace_scope(workspace_id):
-    result=await social_media_scheduler(platform,dict(item.get("post") or {}))
-  except Exception as exc:
-   try:
-    await _audit_distribution_attempt(metadata=metadata,workspace_id=workspace_id,platform=platform or "unknown",outcome="failed",error_type=type(exc).__name__)
-   except Exception:
-    logger.exception("Could not persist failed workflow publication audit for workspace %s",workspace_id[:8])
-   raise
-  results.append(result)
-  try:
-   await _audit_distribution_attempt(metadata=metadata,workspace_id=workspace_id,platform=platform or "unknown",outcome=str(result.get("status") or "unknown"),remote_id=result.get("remote_id"))
-  except Exception:
-   # The pre-side-effect "requested" event remains durable for reconciliation.
-   logger.exception("Could not persist completed workflow publication audit for workspace %s",workspace_id[:8])
- state.pop("_verification_response",None)
- return {"s5_result":{"status":"completed","publish_results":results}}
+async def s5(state: dict[str, Any]) -> dict[str, Any]:
+    requests = state.get("publish_requests") or []
+    if not requests:
+        return {"s5_result": {"status": "skipped", "reason": "No publish request supplied; outputs remain drafts."}}
+    raw_metadata = state.get("metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+    workspace_id = str(metadata.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise ValueError("Authorized workspace context required for workflow publishing")
+
+    settings = get_settings()
+    live = not settings.publishing_dry_run
+    base_idempotency_key = str(metadata.get("workflow_publish_idempotency_key") or "").strip()
+    if live:
+        if metadata.get("platform_admin_authorized") is not True:
+            raise PermissionError("Platform Super Admin permission required for live workflow publishing")
+        if metadata.get("live_publish_confirmed") is not True:
+            raise PermissionError("Explicit live-publish confirmation required for workflow publishing")
+        if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(base_idempotency_key):
+            raise ValueError("A valid Idempotency-Key is required for live workflow publishing")
+
+    results = []
+    for index, item in enumerate(requests[:10]):
+        if item.get("require_verification") and not state.get("_verification_response"):
+            raise VerificationRequiredError(
+                "Provider requires human verification before continuing.",
+                action=str(item.get("verification_action") or "verification"),
+            )
+        platform = str(item.get("platform") or "").strip().lower()
+        post = dict(item.get("post") or {})
+        action_id = None
+
+        if live:
+            item_key = derive_workflow_action_key(base_idempotency_key, index)
+            async with SessionLocal() as db:
+                action_id, replay = await claim_external_action(
+                    db,
+                    workspace_id=workspace_id,
+                    action_type="social_publish",
+                    provider=platform or "unknown",
+                    idempotency_key=item_key,
+                    request_payload={"platform": platform, "post": post},
+                )
+            if replay is not None:
+                try:
+                    await _audit_distribution_attempt(
+                        metadata=metadata,
+                        workspace_id=workspace_id,
+                        platform=platform or "unknown",
+                        outcome="replayed",
+                        remote_id=replay.get("remote_id"),
+                    )
+                except Exception:
+                    logger.exception("Could not persist workflow publication replay audit for workspace %s", workspace_id[:8])
+                results.append(replay)
+                continue
+
+        # The attempt record must persist before any external provider request.
+        try:
+            await _audit_distribution_attempt(
+                metadata=metadata,
+                workspace_id=workspace_id,
+                platform=platform or "unknown",
+                outcome="requested",
+            )
+        except Exception as exc:
+            if action_id:
+                async with SessionLocal() as db:
+                    await finish_external_action(
+                        db,
+                        workspace_id=workspace_id,
+                        action_id=action_id,
+                        status="failed",
+                        error_type=type(exc).__name__,
+                    )
+            raise
+
+        try:
+            with workspace_scope(workspace_id):
+                result = await social_media_scheduler(platform, post)
+        except Exception as exc:
+            if action_id:
+                async with SessionLocal() as db:
+                    await finish_external_action(
+                        db,
+                        workspace_id=workspace_id,
+                        action_id=action_id,
+                        status=external_action_failure_status(exc),
+                        error_type=type(exc).__name__,
+                    )
+            try:
+                await _audit_distribution_attempt(
+                    metadata=metadata,
+                    workspace_id=workspace_id,
+                    platform=platform or "unknown",
+                    outcome="outcome_unknown" if live and external_action_failure_status(exc) == "unknown" else "failed",
+                    error_type=type(exc).__name__,
+                )
+            except Exception:
+                logger.exception("Could not persist failed workflow publication audit for workspace %s", workspace_id[:8])
+            raise
+
+        if action_id:
+            async with SessionLocal() as db:
+                await finish_external_action(
+                    db,
+                    workspace_id=workspace_id,
+                    action_id=action_id,
+                    status="completed",
+                    result=result,
+                )
+        results.append(result)
+        try:
+            await _audit_distribution_attempt(
+                metadata=metadata,
+                workspace_id=workspace_id,
+                platform=platform or "unknown",
+                outcome=str(result.get("status") or "unknown"),
+                remote_id=result.get("remote_id"),
+            )
+        except Exception:
+            # The pre-side-effect "requested" event remains durable for reconciliation.
+            logger.exception("Could not persist completed workflow publication audit for workspace %s", workspace_id[:8])
+
+    state.pop("_verification_response", None)
+    return {"s5_result": {"status": "completed", "publish_results": results}}
+
 async def s6(state:dict[str,Any])->dict[str,Any]:
  url=state.get("tracking_url");out={"status":"completed","utm":conversion_tracker(str(url)) if url else None,"conversion_events_saved":0}
  raw_metadata=state.get("metadata")

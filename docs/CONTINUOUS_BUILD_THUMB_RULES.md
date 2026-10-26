@@ -93,3 +93,6 @@ These additive rules apply to every future Project1 build session.
 
 
 41. CI correction follow-up for provider-write idempotency: base `b3495a58202f944621f43063efbe9d293323ee24` correctly returned 428 because the legacy live-social confirmation test omitted `Idempotency-Key` (PR [40278241892](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278241892): 1 failed, 263 passed, 2 skipped). Fixture now supplies a valid key; rerun full push/PR CI before marking P0 complete.
+
+
+42. P0 workflow S5 must share the `ExternalAction` registry. Direct social/CMS routes now enforce request idempotency, but S5 still invoked the adapter directly. Candidate derives stable per-item keys from a required workflow `Idempotency-Key`, replays completed provider results and blocks unknown outcomes. Tests cover replay, missing key, and same/alternate-key unknown retry; exact-SHA CI pending.

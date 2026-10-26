@@ -120,3 +120,8 @@
 - SHA `1cc839bbf80d1a66e35b9e36f244b4fa13cb68af`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278503530 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278508177 both passed.
 - Four idempotency regressions passed; total Python suite 264 passed, 2 skipped. Migration 0009, PostgreSQL migration/concurrency, SQLite drift, AI/RAG 9 imports, front-end build, security audit, repository guard and lockfile sync all passed.
 - Next: include S5 workflow provider writes in the durable registry; verify manual workflow resubmissions cannot bypass direct-route idempotency.
+
+
+## 2026-10-26 workflow S5 request idempotency — candidate
+- Applies durable `ExternalAction` registry to workflow-stage publishing. Live workflow runs with publish requests require the header `Idempotency-Key`; S5 uses stable per-item keys and replay/unknown-outcome semantics.
+- Tests cover missing key, duplicate S5 replay and unknown-outcome blocking; full exact-SHA push/PR verification pending.

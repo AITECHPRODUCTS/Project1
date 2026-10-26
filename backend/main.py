@@ -23,7 +23,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExternalAction,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
+from backend.models import AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.schemas import ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
@@ -43,6 +43,7 @@ from backend.services.internal_linking import recommend_internal_links as recomm
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
 from backend.services.skill_finder import find_skills as find_skills_service
 from backend.services.cms_publisher import publish_article
+from backend.services.external_action_registry import EXTERNAL_IDEMPOTENCY_KEY_RE, claim_external_action as _claim_external_action, external_action_failure_status as _external_action_failure_status, finish_external_action as _finish_external_action
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
 from backend.services.integration_registry import build_network_registry
 from backend.services.capability_matrix import build_capability_matrix
@@ -314,138 +315,6 @@ async def require_platform_admin(user: dict[str, Any] = Depends(require_auth)) -
     return user
 
 
-EXTERNAL_IDEMPOTENCY_KEY_RE = re.compile(r"[A-Za-z0-9._:-]{8,255}")
-
-
-def _external_action_fingerprint(action_type: str, provider: str, request_payload: dict[str, Any]) -> str:
-    canonical = json.dumps(
-        {"action_type": action_type, "provider": provider, "request": request_payload},
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        default=str,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _external_action_failure_status(exc: Exception) -> str:
-    response = getattr(exc, "response", None)
-    status_code = getattr(response, "status_code", None)
-    if isinstance(exc, (TimeoutError, ConnectionError, httpx.TransportError)):
-        return "unknown"
-    if isinstance(status_code, int) and status_code >= 500:
-        return "unknown"
-    return "failed"
-
-
-async def _claim_external_action(
-    db: AsyncSession,
-    *,
-    workspace_id: str,
-    action_type: str,
-    provider: str,
-    idempotency_key: str | None,
-    request_payload: dict[str, Any],
-) -> tuple[str | None, dict[str, Any] | None]:
-    key = (idempotency_key or "").strip()
-    if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(key):
-        raise HTTPException(428, "A valid Idempotency-Key header (8-255 letters, digits, period, underscore, colon or hyphen) is required for provider writes")
-    request_hash = _external_action_fingerprint(action_type, provider, request_payload)
-    with workspace_scope(workspace_id):
-        existing = await db.scalar(
-            select(ExternalAction).where(
-                ExternalAction.workspace_id == workspace_id,
-                ExternalAction.action_type == action_type,
-                ExternalAction.idempotency_key == key,
-            )
-        )
-        if existing is None:
-            unresolved = await db.scalar(
-                select(ExternalAction).where(
-                    ExternalAction.workspace_id == workspace_id,
-                    ExternalAction.action_type == action_type,
-                    ExternalAction.request_hash == request_hash,
-                    ExternalAction.status.in_(["in_progress", "unknown"]),
-                ).order_by(ExternalAction.created_at.desc())
-            )
-            if unresolved is not None:
-                if unresolved.status == "in_progress":
-                    created = unresolved.created_at
-                    if created is not None and created.tzinfo is None:
-                        created = created.replace(tzinfo=timezone.utc)
-                    if created is not None and utcnow() - created > timedelta(minutes=15):
-                        unresolved.status = "unknown"
-                        unresolved.error_type = "StaleInProgress"
-                        await db.commit()
-                raise HTTPException(409, "An earlier matching provider action is in progress or has an unknown outcome; reconcile it before retrying")
-            record = ExternalAction(
-                workspace_id=workspace_id,
-                action_type=action_type,
-                idempotency_key=key,
-                request_hash=request_hash,
-                provider=provider[:80],
-                status="in_progress",
-                result_json={},
-            )
-            db.add(record)
-            try:
-                await db.commit()
-                return record.id, None
-            except IntegrityError:
-                await db.rollback()
-                existing = await db.scalar(
-                    select(ExternalAction).where(
-                        ExternalAction.workspace_id == workspace_id,
-                        ExternalAction.action_type == action_type,
-                        ExternalAction.idempotency_key == key,
-                    )
-                )
-                if existing is None:
-                    raise HTTPException(409, "Could not claim provider action; retry with the same Idempotency-Key")
-        if existing.request_hash != request_hash:
-            raise HTTPException(409, "Idempotency-Key was already used for a different request")
-        if existing.status == "completed":
-            return None, dict(existing.result_json or {})
-        if existing.status == "in_progress":
-            created = existing.created_at
-            if created is not None and created.tzinfo is None:
-                created = created.replace(tzinfo=timezone.utc)
-            if created is not None and utcnow() - created > timedelta(minutes=15):
-                existing.status = "unknown"
-                existing.error_type = "StaleInProgress"
-                await db.commit()
-                raise HTTPException(409, "Previous provider action may have completed; reconcile before submitting again")
-            raise HTTPException(409, "Provider action is still in progress; repeat the same Idempotency-Key after it finishes")
-        if existing.status == "unknown":
-            raise HTTPException(409, "Provider outcome is unknown; reconcile the provider before submitting another request")
-        raise HTTPException(409, "Previous provider action failed; resolve it and use a new Idempotency-Key")
-
-
-async def _finish_external_action(
-    db: AsyncSession,
-    *,
-    workspace_id: str,
-    action_id: str,
-    status: str,
-    result: dict[str, Any] | None = None,
-    error_type: str | None = None,
-) -> None:
-    with workspace_scope(workspace_id):
-        record = await db.scalar(select(ExternalAction).where(
-            ExternalAction.id == action_id,
-            ExternalAction.workspace_id == workspace_id,
-        ))
-        if record is None:
-            raise RuntimeError("External action idempotency record disappeared during provider execution")
-        record.status = status
-        record.error_type = error_type[:120] if error_type else None
-        if result is not None:
-            record.result_json = result
-            remote_id = result.get("remote_id")
-            record.remote_id = str(remote_id)[:255] if remote_id is not None else None
-        await db.commit()
-
-
 async def _record_external_publish_audit(
     db: AsyncSession,
     *,
@@ -690,33 +559,43 @@ async def flywheel_status(user: dict[str, Any] = Depends(require_auth), db: Asyn
  elif run.status=="running" and run.current_step<len(stage_keys):active=stage_keys[run.current_step];stages[run.current_step]["status"]="running"
  return {"active_session":run.id,"workflow_name":run.workflow_name,"workflow_status":run.status,"current_step":run.current_step,"active_stage":active,"execution_mode":run.execution_mode,"stages":stages}
 @api.post("/workflows/run",status_code=202)
-async def start_workflow(payload: WorkflowStartRequest, user: dict[str, Any] = Depends(require_auth)):
- workspace_id = user.get("workspace_id")
- if not workspace_id:
-  raise HTTPException(403, "Select an authorized workspace before starting a workflow")
- state = dict(payload.state)
- raw_metadata = state.get("metadata")
- metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
- has_publish_requests = bool(state.get("publish_requests"))
- if has_publish_requests and not settings.publishing_dry_run:
-  if user.get("is_admin") is not True:
-   raise HTTPException(403, "Platform Super Admin permission required for live workflow publishing")
-  if payload.confirm_live_publish is not True:
-   raise HTTPException(409, "Live workflow publishing requires confirm_live_publish=true from an authorized operator")
- # Never trust authorization metadata supplied inside client workflow state.
- metadata.update({
-  "workspace_id": str(workspace_id),
-  "initiated_by": str(user.get("email") or user.get("user_id") or "unknown")[:320],
-  "platform_admin_authorized": user.get("is_admin") is True,
-  "live_publish_confirmed": payload.confirm_live_publish is True and user.get("is_admin") is True,
- })
- state["metadata"] = metadata
- try:
-  with workspace_scope(str(workspace_id)):
-   sid = await runner.start(payload.workflow_name, state, resolve_steps(payload.workflow_name), payload.execution_mode)
- except ValueError as exc:
-  raise HTTPException(422, str(exc)) from exc
- return {"session_id":sid,"status":"queued","workflow_name":payload.workflow_name,"execution_mode":payload.execution_mode or settings.execution_mode,"status_url":f"/api/workflows/{sid}"}
+async def start_workflow(
+    payload: WorkflowStartRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before starting a workflow")
+    state = dict(payload.state)
+    raw_metadata = state.get("metadata")
+    metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+    has_publish_requests = bool(state.get("publish_requests"))
+    supplied_publish_key = str(request.headers.get("Idempotency-Key") or "").strip()
+    if has_publish_requests and not settings.publishing_dry_run:
+        if user.get("is_admin") is not True:
+            raise HTTPException(403, "Platform Super Admin permission required for live workflow publishing")
+        if payload.confirm_live_publish is not True:
+            raise HTTPException(409, "Live workflow publishing requires confirm_live_publish=true from an authorized operator")
+        if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(supplied_publish_key):
+            raise HTTPException(428, "A valid Idempotency-Key header is required for live workflow publishing")
+    # Never trust authorization or idempotency metadata supplied inside client workflow state.
+    metadata.update({
+        "workspace_id": str(workspace_id),
+        "initiated_by": str(user.get("email") or user.get("user_id") or "unknown")[:320],
+        "platform_admin_authorized": user.get("is_admin") is True,
+        "live_publish_confirmed": payload.confirm_live_publish is True and user.get("is_admin") is True,
+        "workflow_publish_idempotency_key": supplied_publish_key or None,
+    })
+    state["metadata"] = metadata
+    try:
+        with workspace_scope(str(workspace_id)):
+            sid = await runner.start(payload.workflow_name, state, resolve_steps(payload.workflow_name), payload.execution_mode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"session_id": sid, "status": "queued", "workflow_name": payload.workflow_name,
+            "execution_mode": payload.execution_mode or settings.execution_mode,
+            "status_url": f"/api/workflows/{sid}"}
 
 @api.get("/workflows/{session_id}")
 async def workflow_status(session_id: str, user: dict[str, Any] = Depends(require_auth)):

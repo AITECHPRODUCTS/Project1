@@ -114,3 +114,9 @@
 ## CI correction — live social confirmation test now supplies the idempotency key
 - Initial candidate `b3495a58202f944621f43063efbe9d293323ee24` had one test-only failure because the older authorization regression test omitted `Idempotency-Key`; the endpoint's 428 response is intended and the test must exercise the complete provider-write contract.
 - Corrected the fixture, keeping production enforcement unchanged. Full exact-SHA push and PR CI are pending.
+
+
+## P0 — S5 workflow idempotency candidate (2026-10-26)
+- S5 directly invoked the distribution adapter and bypassed the verified direct-route `ExternalAction` idempotency registry.
+- Candidate extracts shared claim/finish/fingerprint logic and uses stable per-item keys derived from a workflow-level `Idempotency-Key`. Completed actions replay; unknown outcomes block retries even when the caller changes the key. Live workflows fail closed without a key.
+- Regression tests and full exact-SHA push/PR CI pending.

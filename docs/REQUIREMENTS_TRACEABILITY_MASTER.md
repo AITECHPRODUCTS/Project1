@@ -188,3 +188,9 @@
 - Durable ExternalAction claims now protect direct social/CMS writes with request fingerprinting, key uniqueness, completed response replay, payload mismatch rejection, and unknown-outcome blocks. Migration 0009 is part of the validated migration chain.
 - Corrected one legacy authorization test to include the newly mandatory idempotency key; the initial failure was test-contract drift, not a reason to relax the guard.
 - Next: bring S5 workflow publishing under the same registry; otherwise direct-route and workflow-run duplication have inconsistent protection.
+
+
+## 2026-10-26 workflow distribution idempotency — candidate
+- Source review after direct provider-write idempotency passed found S5 still called `social_media_scheduler` directly, bypassing request-level claims/replay for workflow-triggered posts.
+- Candidate reuses a shared `external_action_registry` service. Each live S5 item gets a stable bounded key derived from the workflow request key; completed responses replay and ambiguous provider results remain locked as `unknown`. API and S5 service boundaries reject missing keys in live mode.
+- Regression tests and full exact-SHA CI pending.

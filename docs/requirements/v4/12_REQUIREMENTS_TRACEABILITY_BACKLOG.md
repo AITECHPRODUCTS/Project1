@@ -251,3 +251,9 @@
 - Four SQLite recovery/lease tests passed as part of Python (330 passed, 3 skipped). PostgreSQL job applied migration `0010_durable_workflow_leases`, ran drift checks through downgrade/re-upgrade, and passed 3 integration tests including concurrent workflow claim.
 - Expired worker leases are claimed through PostgreSQL row locks. Read-only work resumes from the persisted current-step checkpoint. Potentially accepted live S5 publication is marked unknown and requires manual reconciliation.
 - Remaining limitation: HITL response data is not persisted and must be re-submitted after a process death; multi-replica response routing, durable outbox/queue semantics, crash/fault load tests and production operational validation remain open.
+
+
+## P1 — durable encrypted HITL response and multi-worker resume (2026-10-26)
+- The previous recovery checkpoint acknowledged resume requests while the response existed only in process memory. This meant process loss or a different API replica could drop an acknowledged response.
+- Candidate migration adds `paused_sessions.verification_response_encrypted`; Fernet encryption uses a key derived from the stable shared `APP_SESSION_SECRET`. The scheduler loop polls for resume requests for its own lease and wakes the local task. Recovery retains encrypted queued responses and consumes them before emitting a new HITL alert.
+- Regression tests cover a non-owner API instance submitting the response and the lease owner waking, as well as process restart, lease claim and response consumption. Status remains pending until the full exact-SHA CI matrix passes.

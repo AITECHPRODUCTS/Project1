@@ -196,6 +196,7 @@ class PausedSession(TenantScopedMixin, Base):
     current_step: Mapped[int] = mapped_column(Integer, default=0)
     required_action: Mapped[str] = mapped_column(String(100), default="verification")
     state_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    verification_response_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

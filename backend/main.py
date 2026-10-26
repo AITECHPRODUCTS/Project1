@@ -632,7 +632,12 @@ async def resume(session_id: str, payload: ResumeRequest, user: dict[str, Any] =
   raise HTTPException(403, "Select an authorized workspace before resuming a workflow")
  try:
   with workspace_scope(str(workspace_id)):
-   return await runner.resume(session_id, payload.verification_code, workspace_id=str(workspace_id))
+   return await runner.resume(
+    session_id,
+    payload.verification_code,
+    workspace_id=str(workspace_id),
+    actor=str(user.get("email") or user.get("user_id") or "operator"),
+   )
  except KeyError as exc:
   raise HTTPException(404, "Workflow session not found") from exc
  except ValueError as exc:

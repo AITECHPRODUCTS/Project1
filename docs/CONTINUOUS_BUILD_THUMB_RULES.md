@@ -161,3 +161,6 @@ These additive rules apply to every future Project1 build session.
 
 
 65. Durable workflow lease/recovery verified at `03d967e97b1993b80f853cc2fec72cf9e6b5f392`. No automatic replay of a potentially accepted live external write; a live S5 stage with an expired lease is marked unknown and sent to manual reconciliation. Keep the limitation visible: HITL response payloads are not persisted, multi-replica resume routing is not yet verified, and this is not a replacement for the remaining durable queue/outbox and release-readiness work.
+
+
+66. P1 durable HITL response: persist human verification responses encrypted at rest (Fernet, key derived from shared stable `APP_SESSION_SECRET`), never in workflow JSON or audit details. Any API replica can durably submit; the lease owner polls and wakes its in-process task; a new owner consumes an encrypted pending response during recovery. Clear only after the retried stage checkpoint is persisted. Decryption/configuration mismatch fails closed with a workspace audit event. New migration and two end-to-end tests are pending CI.

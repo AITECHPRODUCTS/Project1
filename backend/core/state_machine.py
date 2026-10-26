@@ -1,5 +1,6 @@
 from __future__ import annotations
-import asyncio,copy,logging,uuid
+import asyncio,base64,copy,hashlib,logging,uuid
+from cryptography.fernet import Fernet,InvalidToken
 from dataclasses import dataclass
 from datetime import datetime,timedelta,timezone
 from typing import Any,Awaitable,Callable
@@ -15,6 +16,22 @@ WORKFLOW_LEASE_SECONDS=60
 WORKFLOW_HEARTBEAT_SECONDS=10
 WORKFLOW_RECOVERY_INTERVAL_SECONDS=3
 TERMINAL_WORKFLOW_STATUSES={"completed","failed","cancelled"}
+
+
+def _resume_response_cipher() -> Fernet:
+ secret=get_settings().app_session_secret
+ if not isinstance(secret,str) or len(secret)<32:
+  raise RuntimeError("APP_SESSION_SECRET must be configured to encrypt workflow verification responses")
+ material=hashlib.sha256(b"omni-affiliate-os/hitl-response/v1\\x00"+secret.encode("utf-8")).digest()
+ return Fernet(base64.urlsafe_b64encode(material))
+
+
+def _encrypt_resume_response(value: str) -> str:
+ return _resume_response_cipher().encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def _decrypt_resume_response(value: str) -> str:
+ return _resume_response_cipher().decrypt(value.encode("ascii")).decode("utf-8")
 
 class WorkflowLeaseLost(RuntimeError):
  """Raised when a worker no longer owns the durable workflow lease."""
@@ -93,6 +110,7 @@ class WorkflowRunner:
    row=await db.get(PausedSession,sid)
    if row is None:row=PausedSession(session_id=sid,workflow_name=name);db.add(row)
    row.status="paused";row.current_step=index;row.required_action=exc.action;row.state_json=safe;row.last_error=str(exc)[:800]
+   row.verification_response_encrypted=None
    run=await db.get(WorkflowRun,sid)
    if run:
     if worker_id is not None and run.lease_owner!=worker_id:raise WorkflowLeaseLost("Workflow lease was claimed while pausing")
@@ -113,11 +131,16 @@ class WorkflowRunner:
     while True:
      try:
       result=await asyncio.wait_for(step.handler(state),timeout=int(settings.load_yaml().get("app",{}).get("workflow_step_timeout_seconds",120)))
+      verification_response_used="_verification_response" in state
+      if verification_response_used:state.pop("_verification_response",None)
       nested=[v.get("status") for k,v in (result or {}).items() if k.endswith("_result") and isinstance(v,dict) and v.get("status")]
       stage_status="skipped" if nested and all(x=="skipped" for x in nested) else "completed"
       state.setdefault("stages",{})[step.key]={"status":stage_status,"result":result or {},"completed_at":datetime.now(timezone.utc).isoformat()}
       if isinstance(result,dict):state.update({k:v for k,v in result.items() if k not in {"metadata","stages"}})
       await self._save(sid,"running",i+1,state,worker_id=worker_id)
+      if verification_response_used:
+       response_workspace_id=str(state.get("metadata",{}).get("workspace_id") or "").strip()
+       if response_workspace_id:await self._clear_persisted_resume_response(sid,response_workspace_id,worker_id=worker_id)
       await self._emit(state, {"event":"STAGE_STATUS","session_id":sid,"stage":step.key,"stage_label":step.label,"status":stage_status,"current_step":i+1,"total_steps":len(steps)});break
      except VerificationRequiredError as exc:
       if mode=="FULL_AUTONOMOUS":
@@ -179,20 +202,37 @@ class WorkflowRunner:
    # Lease-owned work is left recoverable; shutdown or lease loss must not
    # mislabel an interrupted execution as a completed cancellation.
    raise
- async def resume(self,sid:str,code:str,workspace_id:str)->dict[str,Any]:
+ async def resume(self,sid:str,code:str,workspace_id:str,actor:str|None=None)->dict[str,Any]:
   if not isinstance(workspace_id,str) or not workspace_id.strip():raise KeyError("Paused session not found")
-  if not code.strip() or len(code)>512:raise ValueError("Verification response must be 1..512 characters")
+  normalized=code.strip()
+  if not normalized or len(normalized)>512:raise ValueError("Verification response must be 1..512 characters")
+  encrypted=_encrypt_resume_response(normalized)
+  signal_local=False
   with workspace_scope(workspace_id):
    async with SessionLocal() as db:
     paused=await db.get(PausedSession,sid);run=await db.get(WorkflowRun,sid)
     if not paused or not run:raise KeyError("Paused session not found")
     if paused.workspace_id!=workspace_id or run.workspace_id!=workspace_id:raise KeyError("Paused session not found")
-    if paused.status!="paused" or run.status!="paused":raise ValueError("Workflow is not paused")
-    if sid not in self.tasks or run.lease_owner!=self.worker_id:
-     raise ValueError("Workflow is not owned by this worker; recovery or owner routing is required before resume")
-    paused.status="resume_requested";await db.commit()
-  self.responses[sid]=code.strip();self.events.setdefault(sid,asyncio.Event()).set()
-  return {"session_id":sid,"status":"resume_requested","verification_code_persisted":False}
+    if paused.status in {"resume_requested","resuming"} and paused.verification_response_encrypted:
+     return {"session_id":sid,"status":paused.status,"verification_response_persisted":True,"duplicate":True,"detail":"An earlier response is already queued or being processed; it was not replaced."}
+    if paused.status!="paused" or run.status!="paused":raise ValueError(f"Workflow is not paused ({run.status})")
+    paused.status="resume_requested"
+    paused.verification_response_encrypted=encrypted
+    signal_local=run.lease_owner==self.worker_id
+    db.add(AuditLog(
+     workspace_id=workspace_id,
+     actor=str(actor or "operator")[:320],
+     action="workflow.resume_requested",
+     resource_type="workflow",
+     resource_id=sid,
+     outcome="requested",
+     details_json={"verification_response_persisted":True,"encrypted_at_rest":True},
+    ))
+    await db.commit()
+  if signal_local and sid in self.tasks and not self.tasks[sid].done():
+   self.responses[sid]=normalized
+   self.events.setdefault(sid,asyncio.Event()).set()
+  return {"session_id":sid,"status":"resume_requested","verification_response_persisted":True,"duplicate":False}
  async def status(self,sid:str,workspace_id:str|None=None)->dict[str,Any]|None:
   if not isinstance(workspace_id,str) or not workspace_id.strip():return None
   with workspace_scope(workspace_id):
@@ -201,15 +241,112 @@ class WorkflowRunner:
     if not run or run.workspace_id!=workspace_id:return None
     paused=await db.get(PausedSession,sid)
     return {"session_id":sid,"workflow_name":run.workflow_name,"status":run.status,"current_step":run.current_step,"execution_mode":run.execution_mode,"state":run.state_json,"result":run.result_json,"error":run.error_message,"paused_session":{"status":paused.status,"required_action":paused.required_action,"stage_index":paused.current_step} if paused and paused.workspace_id==workspace_id else None}
+ async def _clear_persisted_resume_response(self,sid:str,workspace_id:str,worker_id:str|None=None)->None:
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    paused=await db.get(PausedSession,sid)
+    run=await db.get(WorkflowRun,sid)
+    if paused is None or paused.workspace_id!=workspace_id:return
+    if worker_id is not None and (run is None or run.lease_owner!=worker_id):
+     raise WorkflowLeaseLost("Workflow lease was lost before clearing its verification response")
+    paused.verification_response_encrypted=None
+    await db.commit()
+
+ async def _load_persisted_resume_response(self,sid:str,workspace_id:str)->str|None:
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    paused=await db.get(PausedSession,sid)
+    if paused is None or paused.workspace_id!=workspace_id:return None
+    encrypted=paused.verification_response_encrypted
+    status=paused.status
+  if not encrypted or status not in {"resume_requested","resuming"}:return None
+  return _decrypt_resume_response(encrypted)
+
+ async def _fail_corrupt_resume_response(self,sid:str,workspace_id:str)->None:
+  now=datetime.now(timezone.utc)
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    paused=await db.get(PausedSession,sid)
+    run=await db.get(WorkflowRun,sid)
+    if paused is None or run is None or paused.workspace_id!=workspace_id or run.workspace_id!=workspace_id:return
+    paused.status="failed"
+    paused.verification_response_encrypted=None
+    run.status="failed"
+    run.error_message="Stored verification response could not be decrypted; verify APP_SESSION_SECRET consistency across workers."
+    run.finished_at=now
+    run.lease_owner=None
+    run.lease_expires_at=None
+    db.add(AuditLog(
+     workspace_id=workspace_id,
+     actor="system",
+     action="workflow.resume_payload_decryption_failed",
+     resource_type="workflow",
+     resource_id=sid,
+     outcome="failed",
+     details_json={"manual_intervention_required":True,"secret_consistency_required":True},
+    ))
+    await db.commit()
+  current=asyncio.current_task()
+  task=self.tasks.get(sid)
+  if task is not None and task is not current and not task.done():task.cancel()
+
+ async def wake_pending_responses(self)->int:
+  with workspace_scope(None):
+   async with SessionLocal() as db:
+    stmt=select(PausedSession,WorkflowRun).join(
+     WorkflowRun,WorkflowRun.id==PausedSession.session_id
+    ).where(
+     PausedSession.status=="resume_requested",
+     PausedSession.verification_response_encrypted.is_not(None),
+     WorkflowRun.status=="paused",
+     WorkflowRun.lease_owner==self.worker_id,
+    ).order_by(WorkflowRun.created_at.asc()).limit(100)
+    pairs=(await db.execute(stmt)).all()
+  woke=0
+  for paused,run in pairs:
+   sid=run.id
+   task=self.tasks.get(sid)
+   if task is None or task.done():continue
+   event=self.events.setdefault(sid,asyncio.Event())
+   if event.is_set() or sid in self.responses:continue
+   workspace_id=str(run.workspace_id or paused.workspace_id or "").strip()
+   if not workspace_id:continue
+   try:
+    response=_decrypt_resume_response(paused.verification_response_encrypted)
+   except (InvalidToken,UnicodeDecodeError,ValueError,RuntimeError):
+    logger.error("Workflow verification response decryption failed for %s; failing closed",sid)
+    await self._fail_corrupt_resume_response(sid,workspace_id)
+    continue
+   self.responses[sid]=response
+   event.set()
+   woke+=1
+  return woke
+
  async def _wait_recovered_pause(self,sid:str,name:str,state:dict[str,Any],steps:list[WorkflowStep],index:int,mode:str,action:str,error:str|None,worker_id:str|None=None):
   event=self.events.setdefault(sid,asyncio.Event())
-  await self._emit(state, {"event":"HITL_ALERT","session_id":sid,"workflow_name":name,"stage":steps[index].key if index<len(steps) else None,"stage_label":steps[index].label if index<len(steps) else None,"required_action":action,"message":error or "Workflow recovered paused; human response required."})
-  await event.wait();event.clear();state["_verification_response"]=self.responses.pop(sid,"")
-  with workspace_scope(str(state.get("metadata",{}).get("workspace_id") or "")):
+  metadata=state.get("metadata",{})
+  workspace_id=str(metadata.get("workspace_id") or "").strip() if isinstance(metadata,dict) else ""
+  if not workspace_id:raise ValueError("Authorized workspace context required to recover a paused workflow")
+  try:
+   response=await self._load_persisted_resume_response(sid,workspace_id)
+  except (InvalidToken,UnicodeDecodeError,ValueError,RuntimeError):
+   logger.error("Workflow verification response decryption failed for %s during recovery; failing closed",sid)
+   await self._fail_corrupt_resume_response(sid,workspace_id)
+   return
+  if response is None:
+   await self._emit(state, {"event":"HITL_ALERT","session_id":sid,"workflow_name":name,"stage":steps[index].key if index<len(steps) else None,"stage_label":steps[index].label if index<len(steps) else None,"required_action":action,"message":error or "Workflow recovered paused; human response required."})
+   await event.wait()
+   event.clear()
+   response=self.responses.pop(sid,"")
+  else:
+   self.responses.pop(sid,None)
+  state["_verification_response"]=response
+  with workspace_scope(workspace_id):
    async with SessionLocal() as db:
     row=await db.get(PausedSession,sid)
-    if row:row.status="resuming";await db.commit()
+    if row and row.workspace_id==workspace_id:row.status="resuming";await db.commit()
   await self._drive(sid,name,state,steps,index,mode,worker_id=worker_id)
+
  async def _heartbeat(self,sid:str,worker_id:str,workspace_id:str)->bool:
   while True:
    await asyncio.sleep(WORKFLOW_HEARTBEAT_SECONDS)
@@ -362,9 +499,10 @@ class WorkflowRunner:
     if not isinstance(metadata,dict):metadata={}
     metadata["workspace_id"]=workspace_id;state["metadata"]=metadata
     with workspace_scope(workspace_id):
-     # Resume payloads are intentionally not persisted. If the process died after
-     # acknowledgement, require the user to resubmit the human response.
-     if paused.status in {"resuming","resume_requested"}:paused.status="paused"
+     # Preserve queued encrypted responses after a lease changes. The new
+     # owner consumes that response before asking the operator to resubmit.
+     if paused.status in {"resuming","resume_requested"}:
+      paused.status="resume_requested" if paused.verification_response_encrypted else "paused"
      run.lease_owner=self.worker_id
      run.lease_expires_at=now+timedelta(seconds=WORKFLOW_LEASE_SECONDS)
      run.heartbeat_at=now
@@ -394,8 +532,10 @@ class WorkflowRunner:
  async def _recovery_loop(self)->None:
   while True:
    try:
+    await self.wake_pending_responses()
     await self.recover_interrupted()
     await self.recover_paused()
+    await self.wake_pending_responses()
    except asyncio.CancelledError:
     raise
    except Exception:

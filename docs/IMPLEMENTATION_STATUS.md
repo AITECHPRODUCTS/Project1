@@ -637,3 +637,13 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The workflow runner now persists lease owner, expiry, heartbeat and attempt count; claims expired rows through PostgreSQL `FOR UPDATE SKIP LOCKED`; resumes queued/running read-only work from the stored stage checkpoint; and reclaims paused sessions through the lease path. The periodic worker and app lifespan start/stop hooks are included.
 - Safety guard: an expired running live S5 external-publication stage is marked failed/outcome-unknown and audited for manual provider reconciliation; it is never blindly re-executed after a lost lease.
 - Explicit limitations remain: the HITL verification response is still process-memory only and must be resubmitted if the process dies after a resume request; multi-replica resume routing has not been proven. Lease support improves restart recovery but is not a complete durable queue/outbox/at-least-once delivery guarantee or production certification.
+
+
+
+## 2026-10-26 durable HITL response persistence — candidate
+- Resumed from verified exact SHA `b6a83feaa279e8e2ff7e345b3713c63b2de673a5`; push [40307225678](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40307225678) and PR [40307237277](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40307237277) both passed before this change.
+- The previous lease-recovery checkpoint still stored `verification_code` only in process memory and returned `verification_code_persisted: false`; a crash or request routed to a different replica could lose the acknowledged response.
+- Candidate change adds nullable `paused_sessions.verification_response_encrypted`, encrypted using a Fernet key derived from the stable `APP_SESSION_SECRET`; no plaintext response enters state JSON or audit details. The response stays encrypted until its stage checkpoint succeeds.
+- Resume requests can be accepted by any authenticated API instance. The lease-owning worker polls the durable `resume_requested` row and wakes its local task; after worker loss, a new lease owner loads the encrypted response before asking for another response. Decryption mismatch fails closed and records a workspace-scoped audit event.
+- Migration `0011_durable_hitl_resume_responses` and two end-to-end regressions cover active cross-worker delivery and process-restart recovery. This candidate is **pending** exact-SHA SQLite migration, full Python, PostgreSQL migration/concurrency, AI/RAG, frontend, dependency-audit, repository-guard and PR CI.
+- Operational requirement: all replicas must use the same stable `APP_SESSION_SECRET`; key rotation during an outstanding resume request must be planned. Production release remains blocked by other documented security and UAT gates.

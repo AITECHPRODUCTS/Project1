@@ -45,7 +45,7 @@ def test_license_policy_accepts_permissive_python_licenses(tmp_path, license_val
 )
 def test_license_policy_rejects_unknown_or_review_required_python_licenses(tmp_path, license_value):
     report = _python_report(tmp_path, [{"Name": "sample", "Version": "1.0", "License": license_value}])
-    count, findings = verify_reports(python_reports=[report])
+    count, findings, notices = verify_reports(python_reports=[report])
     assert count == 1
     assert len(findings) == 1
     assert notices == []
@@ -68,7 +68,7 @@ def test_license_policy_checks_cyclonedx_license_expressions(tmp_path):
 
 def test_license_policy_rejects_missing_cyclonedx_metadata(tmp_path):
     report = _cyclonedx_report(tmp_path, [{"name": "unlicensed-package", "version": "1.0"}])
-    count, findings = verify_reports(cyclonedx_reports=[report])
+    count, findings, notices = verify_reports(cyclonedx_reports=[report])
     assert count == 1
     assert "missing/unknown license metadata" in findings[0]
     assert notices == []

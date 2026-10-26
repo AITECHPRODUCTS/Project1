@@ -126,3 +126,9 @@
 - Exact implementation SHA `e7ca02df933c3028489e8c3ba1abbfba3d82ae90`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279412060 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279416167 both passed.
 - Python 267 passed/2 skipped; PostgreSQL migration/concurrency, SQLite drift, AI/RAG 9 imports, frontend build, dependency audit, 53-skill guard and push lockfile sync all passed.
 - S5 shares the tenant-scoped ExternalAction registry, requires live workflow keys at both API and service boundaries, derives stable per-item keys, replays completed actions and blocks unknown outcomes until reconciliation.
+
+
+## 2026-10-26 global offer sync authorization — verified
+- Exact SHA `498c0b595a8dd158b06eae2924f87d3897a8525b`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279967742 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279972611 both passed.
+- Four route tests verify ordinary workspace members and platform admins lacking an active workspace cannot trigger the upstream sync, successful sync updates the global catalog and audits the actor's workspace, and provider failure is audited with a 502 response.
+- Python 271 passed/2 skipped; SQLite, PostgreSQL migration/concurrency, AI/RAG profile, frontend production build, dependency audit, repository guard, and push lockfile sync passed.

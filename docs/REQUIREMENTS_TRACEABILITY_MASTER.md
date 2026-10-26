@@ -208,3 +208,12 @@
 ## 2026-10-26 global offer sync authorization — candidate
 - The shared Offer catalog is not workspace-scoped, and `/api/offers/sync` previously allowed workspace members to request an upstream fetch and mutate global catalog records.
 - Candidate requires Platform Super Admin + workspace context for accountability, adds audit metadata for successful/failed sync and four regression tests. Full push/PR CI pending.
+
+
+## P0 — global offer catalog sync authorization — verified
+- Implementation SHA: `498c0b595a8dd158b06eae2924f87d3897a8525b`.
+- Push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279967742 — **success**. PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279972611 — **success**. All seven push jobs and all required PR jobs passed.
+- Python suite: **271 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG import profile, frontend typecheck/production build, dependency security audit, 53-skill repository guard, and push lockfile reproducibility passed.
+- `/api/offers/sync` now requires explicit Platform Super Admin authorization and an active workspace. This is deliberately a platform-level operation because `Offer` is the shared global catalog, not a tenant-owned model. Non-admin/no-workspace callers are denied before calling OpenAffiliate.
+- Success and failure paths write workspace-scoped `offers.sync` AuditLog metadata including provider, error type or created/updated counts, requested limit, and whether a query was supplied; full provider payloads and credentials are not logged. Four regression tests cover member denial, no-workspace denial, successful catalog refresh plus audit, and provider failure audit/502.
+- Next P0 audit: inspect global provider/catalog configuration operations and other integration routes for appropriate role boundaries, audit trails, request limits, and safe failure behavior. Production remains **not release-ready** due to the four documented ChromaDB advisories and remaining provider/UAT/SBOM/license/secret/deployment/backup gates.

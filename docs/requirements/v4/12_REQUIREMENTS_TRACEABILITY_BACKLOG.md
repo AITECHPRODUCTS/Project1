@@ -123,7 +123,8 @@
 - Next: review remaining provider adapters and externally impactful workflow/worker paths for authorization, idempotency and safe retries.
 
 
-## P0 — global offer registry sync — candidate
-- Source-derived gap: `/api/offers/sync` mutates shared catalog rows and performs provider calls while only relying on router-level authentication. Offer is a global Base model, not a tenant-owned table.
-- Candidate requires Platform Super Admin and an active audit workspace; adds success/failure AuditLog records and tests denial before provider invocation plus success/failure audit paths.
-- Exact-SHA CI pending.
+## P0 — global offer registry sync — verified (2026-10-26)
+- Verified at `498c0b595a8dd158b06eae2924f87d3897a8525b`: push [40279967742](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279967742) and PR [40279972611](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279972611) both green.
+- `/api/offers/sync` calls OpenAffiliate and updates the global shared `Offer` catalog; it now requires Platform Super Admin and an active workspace used for audit accountability. Unauthorized callers cannot trigger the upstream provider call.
+- Audit records include provider, created/updated counts or error type, request limit and query-presence metadata. Four regression tests passed; Python suite 271 passed/2 skipped and full required CI passed.
+- Next: review remaining global provider integration/configuration routes for equivalent authorization and audit controls.

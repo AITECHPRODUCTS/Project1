@@ -277,3 +277,10 @@
 - Added `scripts/verify_outbound_transport_boundary.py`, a standard-library AST check for raw provider HTTP client creation outside `backend/services/url_safety.py`; CI runs it in the fast repository guard.
 - Added regression tests for aliased HTTPX/requests/aiohttp/urllib/urllib3 clients, the allowed transport module, helper-based requests and syntax errors.
 - Status: pending exact-SHA push/PR CI. This does not close the live staging proxy trust gate.
+
+
+## P0 — outbound transport boundary guard verified (2026-10-26)
+- Exact SHA `1725afcfc17acc8b890d8ccbc4bf04114638458d`; push [40338107674](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674) and PR [40338115729](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729) both green.
+- Six regression tests and fast CI guard pass. Runtime code in `backend/` and `ai_memory/` may not create raw HTTP clients outside the DNS-pinned approved transport. Transport SNI/pinning/redirect/proxy invariants are checked.
+- Python 338 passed, 3 skipped, 1 warning; AI/RAG profile verified 10 imports; SQLite/PostgreSQL migration/concurrency, frontend, security audit, skill parity and lockfile sync passed.
+- Still open: real staging ingress test for spoofed `Forwarded`/`X-Forwarded-For`; authorized provider UAT, SBOM/license/secret scans, deployment smoke, backup/restore, monitoring/SLO evidence.

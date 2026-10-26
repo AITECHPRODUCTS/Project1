@@ -245,3 +245,9 @@
 - Gate the repository against raw provider clients outside `backend/services/url_safety.py`. The allowed helper owns DNS admission and actual socket pinning, disables redirect following and ambient proxy configuration, preserves TLS SNI, and bounds response bodies.
 - Candidate adds `scripts/verify_outbound_transport_boundary.py`, runs it in `repo-guard`, and tests HTTPX/requests/aiohttp/urllib/urllib3 alias detection. Await new exact-SHA push/PR CI.
 - Staging trust proxy gate remains open until spoofed `Forwarded`/`X-Forwarded-For` tests are run through the real proxy and sanitized source IP, deployment SHA/image and timestamps are recorded.
+
+
+## 2026-10-26 outbound HTTP transport boundary — verified
+- Exact SHA `1725afcfc17acc8b890d8ccbc4bf04114638458d`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729 both passed.
+- Static AST guard prevents new raw HTTP client call sites outside the sole DNS-pinned outbound transport. Six targeted tests passed, along with the full CI matrix (Python 338 passed/3 skipped, PostgreSQL integration/concurrency, AI/RAG 10 imports, frontend, dependency audit, repo guard and push lockfile sync).
+- Release gate still open: test proxy spoofing and allowlisted/non-allowlisted client IP behavior through the actual staging ingress. Record sanitized evidence; do not replace with config-unit-test claims.

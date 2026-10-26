@@ -173,3 +173,6 @@ These additive rules apply to every future Project1 build session.
 
 
 69. P0 outbound transport boundary guard: all runtime provider HTTP must use `backend/services/url_safety.py`; new raw HTTP clients in `backend/` or `ai_memory/` are rejected by `scripts/verify_outbound_transport_boundary.py` and its tests. CI runs the guard before package installation. Candidate status remains pending exact-SHA push/PR CI. Live trusted-proxy ingress spoofing verification is still an external staging gate.
+
+
+69. P0 outbound transport guard verified at `1725afcfc17acc8b890d8ccbc4bf04114638458d`; push [40338107674](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674) and PR [40338115729](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729) both passed all required jobs. Python 338 passed/3 skipped/1 warning; AI/RAG 10 imports passed; PostgreSQL and frontend gates passed. The AST guard blocks raw provider HTTP clients outside `backend/services/url_safety.py`. Actual staging-proxy spoofing/client-IP verification remains open and cannot be inferred from CI.

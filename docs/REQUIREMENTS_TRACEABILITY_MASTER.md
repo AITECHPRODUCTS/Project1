@@ -324,3 +324,9 @@
 - Current live branch head before this change: `a1c11b197d3c81a0c6ed077bda9048f96048fdb8`, with push [40334257428](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40334257428) and PR [40334262387](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40334262387) passing.
 - New AST guard restricts raw outbound HTTP client construction to the approved DNS-pinned transport, and runs in `repo-guard` without waiting for dependencies. The test suite checks multiple import aliases and a fail-closed parse error.
 - Exact-SHA test evidence is pending. Actual reverse-proxy header stripping/client-IP trust must still be verified through the deployed staging ingress.
+
+
+## 2026-10-26 outbound transport static guard — exact-SHA verification
+- Implementation SHA `1725afcfc17acc8b890d8ccbc4bf04114638458d`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729 both succeeded.
+- A new AST scanner is part of the fast CI source guard and six tests cover aliasing of HTTPX/requests/aiohttp/urllib/urllib3, use of the approved helper, the allowed transport module, and parse failures. No raw outbound client was found outside `backend/services/url_safety.py`.
+- CI does not establish live staging reverse-proxy trust; the deployment runbook's real spoofed-header test remains required.

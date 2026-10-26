@@ -22,3 +22,7 @@ The repository now includes Dockerfile/Compose and an Alembic baseline/gate. A r
 ## Trusted-proxy middleware tests and staging gate
 - CI regression tests exercise Uvicorn's actual ProxyHeadersMiddleware with trusted/untrusted peers and CIDR lists. Runtime dependency requires uvicorn[standard]>=0.31,<1.0.
 - These in-process tests do not prove the deployed proxy strips attacker-supplied forwarding headers. Before release, run spoofed Forwarded/X-Forwarded-For through the staging ingress, test a non-allowlisted peer, and record staging URL, deployed SHA/image digest, proxy source CIDR, timestamps and sanitized proxy/app logs plus rate-limit behavior. No staging result is claimed here.
+
+
+## Trusted-proxy staging evidence (still open)
+The code-level Uvicorn middleware compatibility tests passed on `da36211099ba27732510706189a267e9860b090e`, with push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341045895 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341061656. Before live release, exercise spoofed Forwarded/X-Forwarded-For/X-Forwarded-Proto through the actual deployed staging ingress. Record staging URL, image digest/SHA, proxy source CIDR, timestamps, app/proxy-observed client identity/scheme and rate-limit behavior using sanitized logs. Do not infer this runtime result from unit tests.

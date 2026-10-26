@@ -335,3 +335,9 @@
 - The app setting accepts CIDRs, so the runtime dependency minimum is raised to uvicorn[standard]>=0.31,<1.0 to guarantee IP-network trusted-proxy support.
 - New tests exercise the actual Uvicorn ProxyHeadersMiddleware: headers from untrusted peers must not alter ASGI client/scheme, while trusted CIDR peers and chains are normalized correctly.
 - These are in-process middleware tests only. Deployed staging must prove proxy header stripping/replacement end-to-end.
+
+
+## 2026-10-26 trusted-proxy middleware code gate — verified
+- Exact SHA `da36211099ba27732510706189a267e9860b090e`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341045895 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341061656 both passed.
+- The new middleware regressions passed against actual Uvicorn implementation. Deployment trust remains unverified until the actual staging ingress strips/replaces forwarding headers.
+- Next P0 delivery improvement: automate SBOM generation, license-policy checks, and secret scanning in push/PR CI; create auditable artifacts keyed to the candidate SHA.

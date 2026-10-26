@@ -257,3 +257,8 @@
 - The previous recovery checkpoint acknowledged resume requests while the response existed only in process memory. This meant process loss or a different API replica could drop an acknowledged response.
 - Candidate migration adds `paused_sessions.verification_response_encrypted`; Fernet encryption uses a key derived from the stable shared `APP_SESSION_SECRET`. The scheduler loop polls for resume requests for its own lease and wakes the local task. Recovery retains encrypted queued responses and consumes them before emitting a new HITL alert.
 - Regression tests cover a non-owner API instance submitting the response and the lease owner waking, as well as process restart, lease claim and response consumption. Status remains pending until the full exact-SHA CI matrix passes.
+
+
+## HITL response encryption dependency audit correction (2026-10-26)
+- The first candidate CI reported seven cryptography 46.0.7 advisories; that range is rejected and not waived.
+- Change `requirements.txt` to `cryptography>=50,<51` and rerun the full exact-SHA CI. Release status remains pending until `pip-audit -r requirements-dev.txt` and all other required jobs pass.

@@ -164,3 +164,6 @@ These additive rules apply to every future Project1 build session.
 
 
 66. P1 durable HITL response: persist human verification responses encrypted at rest (Fernet, key derived from shared stable `APP_SESSION_SECRET`), never in workflow JSON or audit details. Any API replica can durably submit; the lease owner polls and wakes its in-process task; a new owner consumes an encrypted pending response during recovery. Clear only after the retried stage checkpoint is persisted. Decryption/configuration mismatch fails closed with a workspace audit event. New migration and two end-to-end tests are pending CI.
+
+
+67. HITL encryption dependency security correction: the first hosted audit found seven vulnerabilities in cryptography 46.0.7 from the range `>=44,<47`. The requirement is tightened to `>=50,<51` using the audit's fixed-version data. Do not waive this scan; require a new full push + PR matrix and confirm the resolved installed version plus a clean `pip-audit`.

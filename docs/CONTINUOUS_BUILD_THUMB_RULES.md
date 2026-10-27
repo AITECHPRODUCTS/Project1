@@ -235,3 +235,6 @@ These additive rules apply to every future Project1 build session.
 
 
 88. Signed ad collector ingestion is exact-SHA CI verified on 13700e8076641ae3dca1244f37b878e890ec6723: push 40528436803 and PR 40528445045 succeeded; Python 420 passed/3 skipped; PostgreSQL 3 passed; migration 0017 drift and downgrade/re-upgrade passed; frontend/AI/security/secret/repo/lockfile jobs passed. HMAC keys remain workspace + platform scoped; only a separately authorized trusted collector can assert source verification, and the application explicitly does not claim a native platform signature. Production license review and real collector/platform UAT remain open.
+
+
+89. Scheduled guardrail evaluation is a candidate until exact-SHA push/PR CI passes. Enumerate workspaces intentionally, scope every tenant query/write to that workspace, lock policy rows, use provider-verified evidence only, audit status transitions/breaches, and isolate failures by policy/workspace. A scheduled monitor must never imply that a remote ad campaign was paused.

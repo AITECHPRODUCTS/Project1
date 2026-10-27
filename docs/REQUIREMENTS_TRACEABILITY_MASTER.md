@@ -442,3 +442,9 @@
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
 | Signed ad performance collector ingestion | AD_PERFORMANCE_WEBHOOK_SECRETS; AdPerformanceWebhookAdapter; migration 0017; POST /api/webhooks/ad-performance/{workspace_id}/{platform}; tests/test_ad_performance_webhooks.py | implemented and exact-SHA push/PR CI verified on 13700e8076641ae3dca1244f37b878e890ec6723 (420 Python passed, 3 skipped; SQLite/PostgreSQL migration/drift; PostgreSQL integration 3 passed; frontend/AI/security/secret/lockfile passed) | Staging key provisioning/rotation, source-provider normalization/native verification, signed collector UAT and alerting remain open. Collector HMAC must not be misrepresented as native provider signature verification. |
+
+
+## Scheduled ad guardrail evaluation (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Scheduled spend/ROAS/CPA safety checks | APScheduler job ad-guardrails every 5 minutes; ad_guardrail_monitor_job; AdBudgetGuardrail and ad_guardrails evaluator; tests/test_ad_guardrail_scheduler.py | candidate: evaluates non-latched policies within concrete workspace scopes, persists latest state, latches internal stop state on verified-evidence breaches, and audits status transitions | Exact-SHA tests and migration/CI pass, scheduler runtime/log/metrics, concurrency tests and production SLO/UAT. This is an internal latch only, not a provider pause or live spend stop. |

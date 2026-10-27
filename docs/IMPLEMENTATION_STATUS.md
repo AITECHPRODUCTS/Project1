@@ -854,3 +854,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Python suite: 420 passed, 3 skipped, one existing Starlette/httpx deprecation warning. The 0017 migration passed SQLite and PostgreSQL upgrade/downgrade/re-upgrade and Alembic drift checks; PostgreSQL integration: 3 passed. Frontend, AI/RAG SBOM/import profile, security audit, secret scan, repo/skill guard and push lockfile jobs passed.
 - Added workspace/platform-scoped HMAC, exact-body verification, request-size bounds, unique event idempotency, raw-body digest provenance, an audit event, timestamp and platform validation, and regression tests including end-to-end stop-latch triggering from a signed observation.
 - HMAC authenticates the configured trusted collector, not a native platform signature. Only mark evidence provider_verified when the separately provisioned collector independently validates the source; native ad-account authorization, provider-native verification, live pause/scale actions and live spending remain not configured. Production release is still blocked by the LGPL license exceptions noted above.
+
+
+## 2026-10-27 scheduled ad guardrail monitor — candidate
+- Added an APScheduler job at a five-minute interval. It enumerates known workspaces, evaluates only non-latched policies inside each workspace context, locks the policy row, records evaluation state and writes an audit event when status changes or a breach is detected.
+- The job only latches internal stop state; it never invokes remote ad APIs, publishes content or authorizes spend. Workspace-level failures are logged and isolated so one tenant does not prevent processing the remaining workspaces.
+- Candidate pending exact-SHA Python, SQLite/PostgreSQL, frontend, AI/security, secret scan, repo-guard and lockfile checks. Live provider pause remains unavailable until a provider-specific, explicitly authorized adapter is implemented and UATed.

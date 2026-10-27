@@ -238,6 +238,91 @@ async def threshold_job():
      await db.commit()
   except Exception:
    logger.exception("Payout threshold worker failed for workspace %s",str(workspace_id)[:8])
+async def ad_guardrail_monitor_job() -> dict[str, int]:
+ """Periodically evaluate non-latched guardrails; this job never calls ad providers."""
+ summary = {"workspaces_processed": 0, "guardrails_evaluated": 0, "guardrails_latched": 0, "guardrails_failed": 0}
+ for workspace_id in await _background_workspace_ids():
+  try:
+   with workspace_scope(workspace_id):
+    async with SessionLocal() as db:
+     policy_ids = list((await db.scalars(
+      select(AdBudgetGuardrail.id)
+      .where(AdBudgetGuardrail.stop_latched.is_(False))
+      .order_by(AdBudgetGuardrail.created_at.asc())
+     )).all())
+   for guardrail_id in policy_ids:
+    try:
+     with workspace_scope(workspace_id):
+      async with SessionLocal() as db:
+       row = await db.scalar(select(AdBudgetGuardrail).where(
+        AdBudgetGuardrail.id == guardrail_id,
+        AdBudgetGuardrail.workspace_id == workspace_id,
+       ).with_for_update())
+       if row is None or row.stop_latched:
+        continue
+       plan = await db.scalar(select(AdCampaignPlanRecord).where(
+        AdCampaignPlanRecord.id == row.campaign_plan_id,
+        AdCampaignPlanRecord.workspace_id == workspace_id,
+       ))
+       if plan is None:
+        logger.warning("Ad guardrail %s skipped: plan missing in workspace %s", guardrail_id[:8], workspace_id[:8])
+        continue
+       observations = list((await db.scalars(
+        select(AdPerformanceObservation)
+        .where(
+         AdPerformanceObservation.workspace_id == workspace_id,
+         AdPerformanceObservation.campaign_plan_id == plan.id,
+        )
+        .order_by(AdPerformanceObservation.observed_at.asc())
+       )).all())
+       now = utcnow()
+       previous_status = str((row.last_evaluation_json or {}).get("status") or "")
+       evaluation = evaluate_ad_budget_guardrail(
+        policy=row,
+        observations=observations,
+        now=now,
+        plan_daily_budget_usd=Decimal(plan.daily_budget_usd or 0),
+       )
+       row.last_evaluated_at = now
+       row.last_evaluation_json = evaluation
+       breached = bool(evaluation.get("breaches"))
+       if breached:
+        row.stop_latched = True
+        row.kill_switch_engaged = True
+       if row.stop_latched:
+        row.kill_switch_engaged = True
+       if previous_status != evaluation.get("status") or breached:
+        db.add(AuditLog(
+         workspace_id=workspace_id,
+         actor="system:ad_guardrail_monitor",
+         action="ads.guardrail.scheduled_evaluation",
+         resource_type="ad_budget_guardrail",
+         resource_id=row.id,
+         outcome=evaluation.get("status", "unknown"),
+         details_json={
+          "breaches": evaluation.get("breaches", []),
+          "verified_observation_count": evaluation.get("verified_observation_count", 0),
+          "reported_observation_count": evaluation.get("reported_observation_count", 0),
+          "kill_switch_engaged": row.kill_switch_engaged,
+          "stop_latched": row.stop_latched,
+          "provider_action_executed": False,
+         },
+        ))
+       await db.commit()
+       summary["guardrails_evaluated"] += 1
+       if breached:
+        summary["guardrails_latched"] += 1
+    except Exception:
+     summary["guardrails_failed"] += 1
+     logger.exception("Ad guardrail monitor failed for workspace %s, policy %s", workspace_id[:8], guardrail_id[:8])
+   summary["workspaces_processed"] += 1
+  except Exception:
+   summary["guardrails_failed"] += 1
+   logger.exception("Ad guardrail monitor failed for workspace %s", str(workspace_id)[:8])
+ logger.info("Ad guardrail monitor summary: %s", summary)
+ return summary
+
+
 @asynccontextmanager
 async def lifespan(app:FastAPI):
  await init_db()
@@ -251,7 +336,8 @@ async def lifespan(app:FastAPI):
  scheduler.add_job(campaign_health_job,CronTrigger(minute="*/10"),id="campaign-health",replace_existing=True,max_instances=1)
  scheduler.add_job(learning_job,CronTrigger(hour=3,minute=15),id="learning",replace_existing=True,max_instances=1)
  scheduler.add_job(email_job,"interval",minutes=5,id="email-send",replace_existing=True,max_instances=1)
- scheduler.add_job(threshold_job,CronTrigger(day_of_week="mon",hour=4),id="thresholds",replace_existing=True,max_instances=1);scheduler.start()
+ scheduler.add_job(threshold_job,CronTrigger(day_of_week="mon",hour=4),id="thresholds",replace_existing=True,max_instances=1)
+ scheduler.add_job(ad_guardrail_monitor_job,"interval",minutes=5,id="ad-guardrails",replace_existing=True,max_instances=1,coalesce=True,misfire_grace_time=300);scheduler.start()
  yield
  await runner.stop_recovery_worker()
  scheduler.shutdown(wait=False);await hub.stop();await close_public_rate_limiter();await close_db()

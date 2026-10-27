@@ -23,9 +23,9 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -938,6 +938,7 @@ def _merchant_offer_dict(row: MerchantOffer) -> dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "affiliate_network_approval_status": row.affiliate_network_approval_status,
+        "marketplace_listed": row.marketplace_listed is True,
         "affiliate_network_approved": False,
         "provider_submission_performed": False,
     }
@@ -1110,6 +1111,7 @@ async def review_merchant_offer(
         else:
             row.status = "suspended"
             row.activation_allowed = False
+            row.marketplace_listed = False
         row.reviewer_notes = payload.reviewer_notes
         row.reviewed_by = reviewer
         row.reviewed_at = datetime.now(timezone.utc)
@@ -1132,6 +1134,329 @@ async def review_merchant_offer(
     return _merchant_offer_dict(row)
 
 
+
+
+
+def _marketplace_offer_public_dict(row: MerchantOffer) -> dict[str, Any]:
+    """Return only fields intended for discovery; hide seller authorization and internal review notes."""
+    return {
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
+        "category": row.category,
+        "commission_type": row.commission_type,
+        "commission_value": format(Decimal(row.commission_value), "f"),
+        "commission_currency": row.commission_currency,
+        "terms_version": row.terms_version,
+        "commission_terms_url": row.commission_terms_url,
+        "allowed_regions": row.allowed_regions_json or [],
+        "restricted_traffic_sources": row.restricted_traffic_sources_json or [],
+        "affiliate_disclosure": row.affiliate_disclosure,
+        "marketplace_listed": row.marketplace_listed is True,
+        "internal_status": row.status,
+        "affiliate_network_approval_status": row.affiliate_network_approval_status,
+        "affiliate_network_approved": False,
+        "provider_submission_performed": False,
+    }
+
+
+def _marketplace_application_dict(row: MarketplaceApplication) -> dict[str, Any]:
+    snapshot = row.terms_snapshot_json or {}
+    return {
+        "id": row.id,
+        "merchant_offer_id": row.merchant_offer_id,
+        "merchant_workspace_id": row.merchant_workspace_id,
+        "publisher_workspace_id": row.workspace_id,
+        "offer_name": str(snapshot.get("name") or "Marketplace offer"),
+        "terms_snapshot": snapshot,
+        "applicant_email": row.applicant_email,
+        "publisher_website_url": row.publisher_website_url,
+        "audience_description": row.audience_description,
+        "traffic_sources": row.traffic_sources_json or [],
+        "intended_regions": row.intended_regions_json or [],
+        "promotion_plan": row.promotion_plan,
+        "compliance_answers": row.compliance_answers_json or {},
+        "status": row.status,
+        "reviewer_notes": row.reviewer_notes,
+        "reviewed_by": row.reviewed_by,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "provider_submission_status": "not_configured",
+        "affiliate_network_approved": False,
+        "provider_submission_performed": False,
+    }
+
+
+@api.post("/merchant/offers/{offer_id}/list")
+async def list_merchant_offer_in_marketplace(
+    offer_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """List an internally approved offer on this application's marketplace, not on an external network."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before listing a merchant offer")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        if row.status != "approved" or row.activation_allowed is not True:
+            raise HTTPException(409, "Only an internally approved offer with activation enabled can be listed")
+        if row.terms_verified is not True or row.seller_authorization_verified is not True:
+            raise HTTPException(409, "Verified merchant terms and seller authorization are required")
+        row.marketplace_listed = True
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.offer.marketplace_listed", resource_type="merchant_offer", resource_id=row.id,
+            outcome="listed",
+            details_json={"marketplace_listing": True, "external_provider_write": False,
+                          "affiliate_network_approval_status": "not_configured"},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _merchant_offer_dict(row)
+
+
+@api.post("/merchant/offers/{offer_id}/unlist")
+async def unlist_merchant_offer_from_marketplace(
+    offer_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before unlisting a merchant offer")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        row.marketplace_listed = False
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.offer.marketplace_unlisted", resource_type="merchant_offer", resource_id=row.id,
+            outcome="unlisted",
+            details_json={"marketplace_listing": False, "external_provider_write": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _merchant_offer_dict(row)
+
+
+@api.get("/marketplace/offers")
+async def list_published_marketplace_offers(
+    limit: int = Query(default=100, ge=1, le=200),
+    category: str | None = Query(default=None, max_length=160),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Read the explicitly listed, internally approved catalog across workspaces."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before browsing marketplace offers")
+    workspace_id = str(workspace_id)
+    with workspace_scope(None):
+        query = select(MerchantOffer).where(
+            MerchantOffer.marketplace_listed.is_(True),
+            MerchantOffer.status == "approved",
+            MerchantOffer.activation_allowed.is_(True),
+            MerchantOffer.terms_verified.is_(True),
+            MerchantOffer.seller_authorization_verified.is_(True),
+            MerchantOffer.workspace_id != workspace_id,
+        )
+        if category:
+            query = query.where(MerchantOffer.category == category.strip())
+        rows = list((await db.scalars(query.order_by(MerchantOffer.created_at.desc()).limit(limit))).all())
+    return {
+        "count": len(rows),
+        "data": [_marketplace_offer_public_dict(row) for row in rows],
+        "note": "Only merchant-approved internal listings are shown. Listings do not imply external affiliate-network authorization or approval.",
+    }
+
+
+@api.post("/marketplace/offers/{offer_id}/applications", status_code=201)
+async def create_marketplace_application(
+    offer_id: str,
+    payload: MarketplaceApplicationCreateRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    publisher_workspace_id = user.get("workspace_id")
+    if not publisher_workspace_id:
+        raise HTTPException(403, "Select an authorized publisher workspace before applying")
+    publisher_workspace_id = str(publisher_workspace_id)
+    with workspace_scope(None):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.marketplace_listed.is_(True),
+            MerchantOffer.status == "approved",
+            MerchantOffer.activation_allowed.is_(True),
+            MerchantOffer.terms_verified.is_(True),
+            MerchantOffer.seller_authorization_verified.is_(True),
+        ))
+        if offer is None:
+            raise HTTPException(404, "Marketplace offer is not listed or is no longer eligible")
+        merchant_workspace_id = str(offer.workspace_id)
+        if merchant_workspace_id == publisher_workspace_id:
+            raise HTTPException(409, "A workspace cannot apply to its own merchant offer")
+        snapshot = {
+            "id": offer.id,
+            "name": offer.name,
+            "category": offer.category,
+            "commission_type": offer.commission_type,
+            "commission_value": format(Decimal(offer.commission_value), "f"),
+            "commission_currency": offer.commission_currency,
+            "terms_version": offer.terms_version,
+            "commission_terms_url": offer.commission_terms_url,
+            "allowed_regions": list(offer.allowed_regions_json or []),
+            "restricted_traffic_sources": list(offer.restricted_traffic_sources_json or []),
+            "affiliate_disclosure": offer.affiliate_disclosure,
+            "terms_verified": True,
+            "seller_authorization_verified": True,
+        }
+    with workspace_scope(publisher_workspace_id):
+        existing = await db.scalar(select(MarketplaceApplication).where(
+            MarketplaceApplication.workspace_id == publisher_workspace_id,
+            MarketplaceApplication.merchant_offer_id == offer_id,
+        ))
+        if existing is not None:
+            raise HTTPException(409, "This publisher workspace already has an application record for the offer")
+        row = MarketplaceApplication(
+            workspace_id=publisher_workspace_id,
+            merchant_workspace_id=merchant_workspace_id,
+            merchant_offer_id=offer_id,
+            applicant_email=str(user.get("email") or "unknown")[:320],
+            publisher_website_url=payload.publisher_website_url,
+            audience_description=payload.audience_description,
+            traffic_sources_json=payload.traffic_sources,
+            intended_regions_json=payload.intended_regions,
+            promotion_plan=payload.promotion_plan,
+            compliance_answers_json={
+                "offer_terms_reviewed": payload.offer_terms_reviewed,
+                "traffic_restrictions_reviewed": payload.traffic_restrictions_reviewed,
+                "affiliate_disclosure_ready": payload.affiliate_disclosure_ready,
+                "contact_sharing_consent": payload.contact_sharing_consent,
+            },
+            terms_snapshot_json=snapshot,
+            status="pending_review",
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=publisher_workspace_id, actor=str(user.get("email") or "unknown"),
+            action="marketplace.application.created", resource_type="marketplace_application",
+            resource_id=row.id, outcome="pending_review",
+            details_json={"merchant_offer_id": offer_id, "merchant_workspace_id": merchant_workspace_id,
+                          "terms_version": snapshot["terms_version"], "provider_submission_performed": False,
+                          "contact_sharing_consent": True},
+        ))
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(409, "This publisher workspace already has an application record for the offer") from exc
+        await db.refresh(row)
+    return _marketplace_application_dict(row)
+
+
+@api.get("/marketplace/applications")
+async def list_publisher_marketplace_applications(
+    limit: int = Query(default=100, ge=1, le=300),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized publisher workspace before listing applications")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(MarketplaceApplication)
+            .where(MarketplaceApplication.workspace_id == workspace_id)
+            .order_by(MarketplaceApplication.created_at.desc())
+            .limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [_marketplace_application_dict(row) for row in rows]}
+
+
+@api.get("/merchant/applications")
+async def list_merchant_incoming_applications(
+    limit: int = Query(default=100, ge=1, le=300),
+    status: str | None = Query(default=None, max_length=40),
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    merchant_workspace_id = user.get("workspace_id")
+    if not merchant_workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before listing applications")
+    merchant_workspace_id = str(merchant_workspace_id)
+    valid_statuses = {"pending_review", "approved", "rejected"}
+    if status is not None and status not in valid_statuses:
+        raise HTTPException(422, "Unsupported marketplace application status")
+    # Intentional cross-workspace read, constrained to the authenticated merchant's own offers.
+    with workspace_scope(None):
+        query = select(MarketplaceApplication).where(
+            MarketplaceApplication.merchant_workspace_id == merchant_workspace_id
+        )
+        if status is not None:
+            query = query.where(MarketplaceApplication.status == status)
+        rows = list((await db.scalars(
+            query.order_by(MarketplaceApplication.created_at.desc()).limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [_marketplace_application_dict(row) for row in rows]}
+
+
+@api.post("/merchant/applications/{application_id}/review")
+async def review_incoming_marketplace_application(
+    application_id: str,
+    payload: MarketplaceApplicationReviewRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    merchant_workspace_id = user.get("workspace_id")
+    if not merchant_workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before reviewing applications")
+    merchant_workspace_id = str(merchant_workspace_id)
+    reviewer = str(user.get("email") or "unknown")[:320]
+    with workspace_scope(None):
+        row = await db.scalar(select(MarketplaceApplication).where(
+            MarketplaceApplication.id == application_id,
+            MarketplaceApplication.merchant_workspace_id == merchant_workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Marketplace application not found for a merchant offer owned by this workspace")
+        if row.status != "pending_review":
+            raise HTTPException(409, "Only pending marketplace applications can be reviewed")
+        publisher_workspace_id = str(row.workspace_id)
+        with workspace_scope(publisher_workspace_id):
+            row.status = "approved" if payload.decision == "approve" else "rejected"
+            row.reviewer_notes = payload.reviewer_notes
+            row.reviewed_by = reviewer
+            row.reviewed_at = datetime.now(timezone.utc)
+            db.add(AuditLog(
+                workspace_id=publisher_workspace_id, actor=reviewer,
+                action="marketplace.application.reviewed", resource_type="marketplace_application",
+                resource_id=row.id, outcome=row.status,
+                details_json={
+                    "decision": payload.decision,
+                    "merchant_workspace_id": merchant_workspace_id,
+                    "merchant_offer_id": row.merchant_offer_id,
+                    "external_affiliate_network_approval": False,
+                    "provider_submission_performed": False,
+                },
+            ))
+            await db.commit()
+            await db.refresh(row)
+    return _marketplace_application_dict(row)
 
 def _program_application_readiness(evidence_urls: list[str], compliance_answers: dict[str, bool]) -> dict[str, Any]:
     required = {

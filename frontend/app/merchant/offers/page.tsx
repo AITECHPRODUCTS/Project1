@@ -10,7 +10,7 @@ type MerchantOffer={
   restricted_traffic_sources:string[];affiliate_disclosure:string;status:string;
   terms_verified:boolean;seller_authorization_verified:boolean;activation_allowed:boolean;
   reviewer_notes:string|null;reviewed_by:string|null;created_by:string;created_at:string|null;
-  affiliate_network_approval_status:string;affiliate_network_approved:boolean;provider_submission_performed:boolean;
+  affiliate_network_approval_status:string;affiliate_network_approved:boolean;provider_submission_performed:boolean;marketplace_listed:boolean;
 };
 const inputClass="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm";
 const labelClass="block text-sm font-bold text-slate-700";
@@ -88,7 +88,7 @@ export default function MerchantOffersPage(){
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Merchant offers</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">Create an offer packet, submit it for a second-person review, and record explicit evidence checks before internal activation. Saving URLs is not independent verification and does not connect the offer to an affiliate network.</p>
         </div>
-        <button onClick={()=>void load()} disabled={!!busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh offers</button>
+        <div className="flex flex-wrap gap-2"><a href="/merchant/applications" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher applications</a><a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Browse marketplace</a><button onClick={()=>void load()} disabled={!!busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh offers</button></div>
       </header>
 
       {error&&<div role="alert" className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>}
@@ -132,6 +132,9 @@ export default function MerchantOffersPage(){
               {offer.status==="draft"&&<button onClick={()=>void act("submit","/api/merchant/offers/"+encodeURIComponent(offer.id)+"/submit")} disabled={!!busy} className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">Submit for review</button>}
               {offer.status==="submitted_for_review"&&userEmail!==offer.created_by.toLowerCase()&&<><button onClick={()=>void review(offer,"approve")} disabled={!!busy} className="rounded-xl bg-emerald-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">Approve with checked evidence</button><button onClick={()=>void review(offer,"reject")} disabled={!!busy} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-50">Reject</button></>}
               {offer.status==="approved"&&userEmail!==offer.created_by.toLowerCase()&&<button onClick={()=>void review(offer,"suspend")} disabled={!!busy} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-50">Suspend internal activation</button>}
+              {offer.status==="approved"&&offer.activation_allowed&&!offer.marketplace_listed&&<button onClick={()=>void act("list","/api/merchant/offers/"+encodeURIComponent(offer.id)+"/list")} disabled={!!busy} className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">List in publisher marketplace</button>}
+              {offer.marketplace_listed&&<button onClick={()=>void act("unlist","/api/merchant/offers/"+encodeURIComponent(offer.id)+"/unlist")} disabled={!!busy} className="rounded-xl border border-amber-200 px-3 py-2 text-sm font-bold text-amber-800 disabled:opacity-50">Unlist from marketplace</button>}
+              <span className="self-center text-xs text-slate-500">Marketplace listed: {offer.marketplace_listed?"yes":"no"} · Affiliate network: {offer.affiliate_network_approval_status}</span>
             </div>
           </article>)}
         </div>

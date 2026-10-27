@@ -816,3 +816,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added a workspace-scoped merchant offer packet with typed Decimal commission terms, allowed regions, restricted traffic-source declarations, source references and affiliate disclosure; draft, submit, second-person evidence review, reject and suspend routes write audit events.
 - Regression tests cover workspace isolation, self-review denial, explicit evidence attestations, suspension, non-admin denial, private-URL rejection, commission percentage bounds, and the invariant that internal approval never implies affiliate-network approval or provider submission.
 - **Not production release approval:** the frontend SBOM/license report still says \`release_approved=false\` due to two temporary LGPL-3.0-or-later sharp/libvips inventory exceptions expiring 2026-11-02. External provider authorization, human verification of evidence, browser UAT, staging ingress/egress, deployment smoke, monitoring/SLO and backup/restore remain open.
+
+
+## 2026-10-27 internal publisher marketplace and cross-workspace applications — candidate
+- Added an explicit internal marketplace listing state separate from merchant approval and external affiliate-network approval. Applications capture a publisher terms snapshot, declared traffic/regions, promotion plan and explicit contact-sharing/compliance attestations.
+- Publisher catalog queries return only listed and internally approved offers from other workspaces and omit seller-authorization references/internal reviewer notes. Merchant incoming-application queries/review are scoped to the authenticated owning merchant workspace; publisher applications remain scoped to the publisher workspace.
+- Added migration \`0015_marketplace_applications\`, publisher and merchant application pages, listing/unlisting controls, audit events and cross-workspace regression tests.
+- Candidate only: require exact-SHA push/PR CI, SQLite/PostgreSQL migration and drift checks, frontend build and security jobs. Internal approval remains separate from external affiliate-network authorization or provider submission.

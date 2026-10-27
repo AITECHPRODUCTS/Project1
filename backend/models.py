@@ -557,6 +557,44 @@ class MerchantOffer(TenantScopedMixin, Base):
     affiliate_network_approval_status: Mapped[str] = mapped_column(
         String(40), default="not_configured", nullable=False
     )
+    marketplace_listed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class MarketplaceApplication(TenantScopedMixin, Base):
+    """Publisher application to an internally reviewed marketplace offer; not a network application."""
+    __tablename__ = "marketplace_applications"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "merchant_offer_id", name="uq_marketplace_application_publisher_offer"),
+        Index("ix_marketplace_apps_workspace_status_created", "workspace_id", "status", "created_at"),
+        Index("ix_marketplace_apps_merchant_status_created", "merchant_workspace_id", "status", "created_at"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    merchant_workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    merchant_offer_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("merchant_offers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    applicant_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    publisher_website_url: Mapped[str] = mapped_column(Text, nullable=False)
+    audience_description: Mapped[str] = mapped_column(Text, nullable=False)
+    traffic_sources_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    intended_regions_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    promotion_plan: Mapped[str] = mapped_column(Text, nullable=False)
+    compliance_answers_json: Mapped[dict[str, bool]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    terms_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="pending_review", nullable=False, index=True)
+    reviewer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

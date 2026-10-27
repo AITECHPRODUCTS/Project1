@@ -1313,3 +1313,73 @@ class MerchantOfferReviewRequest(BaseModel):
     @classmethod
     def normalize_merchant_review_notes(cls, value: str) -> str:
         return value.strip()
+
+
+class MarketplaceApplicationCreateRequest(BaseModel):
+    publisher_website_url: str = Field(min_length=8, max_length=2048)
+    audience_description: str = Field(min_length=30, max_length=3000)
+    traffic_sources: list[Literal["seo", "blog", "organic_social", "paid_search", "paid_social", "email_opt_in", "video", "influencer", "community", "referral", "other"]] = Field(min_length=1, max_length=11)
+    intended_regions: list[str] = Field(min_length=1, max_length=50)
+    promotion_plan: str = Field(min_length=80, max_length=6000)
+    offer_terms_reviewed: bool = False
+    traffic_restrictions_reviewed: bool = False
+    affiliate_disclosure_ready: bool = False
+    contact_sharing_consent: bool = False
+
+    @field_validator("publisher_website_url")
+    @classmethod
+    def validate_marketplace_publisher_url(cls, value: str) -> str:
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Publisher website must be an absolute HTTP(S) URL without embedded credentials")
+        host = parsed.hostname.lower().rstrip(".")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local or internal publisher URLs are not valid")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private or reserved publisher URLs are not valid")
+        return value.strip()
+
+    @field_validator("audience_description", "promotion_plan")
+    @classmethod
+    def normalize_marketplace_application_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("This field must not be blank")
+        return normalized
+
+    @field_validator("traffic_sources")
+    @classmethod
+    def normalize_marketplace_traffic_sources(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().lower() for value in values if value and value.strip()))
+        if not normalized or any(len(value) > 80 for value in normalized):
+            raise ValueError("Choose one or more valid traffic-source identifiers")
+        return normalized
+
+    @field_validator("intended_regions")
+    @classmethod
+    def normalize_marketplace_regions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().upper() for value in values if value and value.strip()))
+        if not normalized or any(len(value) > 80 for value in normalized):
+            raise ValueError("Provide one or more non-empty region identifiers")
+        return normalized
+
+    @field_validator("offer_terms_reviewed", "traffic_restrictions_reviewed", "affiliate_disclosure_ready", "contact_sharing_consent")
+    @classmethod
+    def require_marketplace_readiness_attestations(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("Offer terms, traffic restrictions, disclosure readiness and contact-sharing consent are required")
+        return value
+
+
+class MarketplaceApplicationReviewRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+    reviewer_notes: str = Field(default="", max_length=3000)
+
+    @field_validator("reviewer_notes")
+    @classmethod
+    def normalize_marketplace_review_notes(cls, value: str) -> str:
+        return value.strip()

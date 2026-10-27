@@ -412,3 +412,9 @@
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
 | Merchant-owned offer packet and internal activation gate | \`backend/models.py\` (\`MerchantOffer\`); migration \`0014_merchant_offers\`; \`backend/schemas.py\`; \`backend/main.py\` (\`/api/merchant/offers*\`); \`frontend/app/merchant/offers/page.tsx\`; \`tests/test_merchant_offers_api.py\` | **implemented code + hosted CI verified at** \`fd712d411269a251b5fc70c912e2731c55c39a0a\`; both push run 40517947381 and PR run 40517953771 succeeded | Independent human review of real seller authorization and commission terms, product/merchant identity model, browser accessibility/UAT and production role-policy review remain. Affiliate-network approval/listing is explicitly \`not_configured\`; no external submission or network approval is claimed. |
+
+
+## Internal publisher marketplace and cross-workspace applications (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Merchant-controlled internal catalog listing and publisher application | \`MerchantOffer.marketplace_listed\`; \`MarketplaceApplication\`; migration \`0015_marketplace_applications\`; \`/api/marketplace/offers*\`; \`/api/merchant/applications*\`; publisher and merchant application pages; \`tests/test_marketplace_applications_api.py\` | candidate: explicit listing state, terms snapshot, compliance/contact-sharing attestations, publisher-scoped outgoing applications, merchant-workspace-scoped incoming review and sanitized cross-workspace catalog | Exact-SHA CI, PostgreSQL read/write isolation checks, browser UAT, seller identity/legal review and production data retention acceptance. External provider authorization/application submission is not configured. |

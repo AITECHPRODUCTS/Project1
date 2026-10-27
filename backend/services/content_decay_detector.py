@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+import math
 from typing import Any
 from urllib.parse import urlparse
 
@@ -8,6 +9,21 @@ from urllib.parse import urlparse
 _PRIORITY_ORDER = {"P0-critical": 0, "P1-high": 1, "P2-medium": 2, "P3-low": 3}
 _REVENUE_SCORE = {"high": 5, "medium": 3, "low": 1, "unknown": 3}
 _TIMEFRAME_LABEL = {"30d": "30 days", "90d": "90 days", "6m": "six months", "1y": "one year"}
+
+
+_METRIC_FIELDS = ("previous_clicks", "current_clicks", "previous_impressions", "current_impressions", "previous_avg_position", "current_avg_position")
+
+
+def _validate_page_inputs(page: dict[str, Any], index: int) -> None:
+    """Reject malformed direct-service inputs instead of silently ranking corrupted metrics."""
+    for field in _METRIC_FIELDS + ("refresh_effort_hours",):
+        value = page.get(field)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"pages[{index}].{field} must be a finite non-negative number")
+        if not math.isfinite(float(value)) or value < 0:
+            raise ValueError(f"pages[{index}].{field} must be a finite non-negative number")
 
 
 def _paired_decline(previous: int | float | None, current: int | float | None) -> float | None:
@@ -89,7 +105,8 @@ def build_content_decay_report(
     healthy: list[str] = []
     needs_data: list[dict[str, Any]] = []
 
-    for page in pages:
+    for page_index, page in enumerate(pages):
+        _validate_page_inputs(page, page_index)
         url = str(page.get("url") or "").strip()
         title = _title(page)
         clicks_decline = _paired_decline(page.get("previous_clicks"), page.get("current_clicks"))

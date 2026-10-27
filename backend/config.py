@@ -2,6 +2,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+from uuid import UUID
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -61,6 +62,8 @@ class Settings(BaseSettings):
     tracking_hmac_secret: str = ""
     affiliate_webhook_secret: str = ""
     affiliate_webhook_secrets: dict[str, str] = Field(default_factory=dict)
+    # Workspace/platform keyed secrets for an explicitly trusted reporting collector.
+    ad_performance_webhook_secrets: dict[str, str] = Field(default_factory=dict)
     mail_imap_host: str = "imap.gmail.com"
     mail_imap_port: int = 993
     mail_imap_user: str = ""
@@ -121,6 +124,35 @@ class Settings(BaseSettings):
             if not isinstance(raw_secret, str) or len(raw_secret) < 32:
                 raise ValueError("Each per-network affiliate webhook secret must contain at least 32 characters")
             normalized[network] = raw_secret
+        return normalized
+
+
+    @field_validator("ad_performance_webhook_secrets", mode="before")
+    @classmethod
+    def normalize_ad_performance_webhook_secrets(cls, value):
+        if value is None or value == "":
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("AD_PERFORMANCE_WEBHOOK_SECRETS must be a JSON object keyed by '<workspace UUID>:<platform>'")
+        platforms = {
+            "google_search", "google_display", "meta", "instagram", "tiktok", "youtube_shorts",
+            "pinterest", "reddit", "quora", "x", "linkedin", "snapchat", "native",
+        }
+        normalized: dict[str, str] = {}
+        for raw_key, raw_secret in value.items():
+            parts = str(raw_key).strip().lower().split(":")
+            if len(parts) != 2 or parts[1] not in platforms:
+                raise ValueError("Ad webhook keys must be '<workspace UUID>:<supported platform>'")
+            try:
+                workspace_id = str(UUID(parts[0]))
+            except (ValueError, AttributeError) as exc:
+                raise ValueError("Ad webhook keys must contain a valid workspace UUID") from exc
+            key = f"{workspace_id}:{parts[1]}"
+            if key in normalized:
+                raise ValueError("Ad webhook keys must be unique after normalization")
+            if not isinstance(raw_secret, str) or len(raw_secret) < 32:
+                raise ValueError("Each workspace/platform ad webhook secret must contain at least 32 characters")
+            normalized[key] = raw_secret
         return normalized
 
     @model_validator(mode="after")

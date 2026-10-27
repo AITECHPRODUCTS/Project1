@@ -415,6 +415,10 @@ class AdPerformanceObservation(TenantScopedMixin, Base):
             "campaign_plan_id",
             "creative_id",
         ),
+        UniqueConstraint(
+            "workspace_id", "platform", "provider_event_id",
+            name="uq_ad_perf_observation_workspace_platform_event",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -427,6 +431,8 @@ class AdPerformanceObservation(TenantScopedMixin, Base):
     creative_id: Mapped[str] = mapped_column(String(180), index=True)
     source_type: Mapped[str] = mapped_column(String(40), index=True)
     source_reference_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_signature_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     impressions: Mapped[int] = mapped_column(Integer, default=0)
     clicks: Mapped[int] = mapped_column(Integer, default=0)
     conversions: Mapped[int] = mapped_column(Integer, default=0)

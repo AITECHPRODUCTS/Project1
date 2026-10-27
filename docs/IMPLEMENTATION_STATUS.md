@@ -845,3 +845,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added per-plan daily/campaign USD caps, ROAS/CPA thresholds, evidence sample gates, provider-verified-only evaluation, creative/day snapshot deduplication, stop-latch state, manual kill switch/reset audit events and an ad safety console.
 - No provider mutation, ad launch, live spend authorization or automatic remote pause is performed. The current observation endpoint deliberately marks submitted metrics unverified, so evaluation fails closed until an approved provider-verification path exists.
 - Candidate only until exact-SHA push/PR CI, SQLite/PostgreSQL migration and drift checks, test suite, frontend typecheck/build, security/dependency checks and lockfile workflow complete.
+
+
+## 2026-10-27 signed ad performance ingestion — candidate
+- Added a separate bounded-body, workspace/platform-keyed HMAC-SHA256 endpoint for normalized daily ad metrics from an explicitly trusted collector. A collector key is configured only for one workspace and one platform; no global shared key is accepted for this route.
+- Added event-id idempotency, exact raw-body SHA-256 provenance, audit events, timezone-aware observations and explicit markers that the collector signature is not the native platform signature. The guardrail evaluator can consume the resulting provider-verified rows; ordinary manual/provider-export submissions remain unverified.
+- Candidate only until exact-SHA push/PR Python tests, SQLite/PostgreSQL migration and drift gates, frontend build, AI/security/secret/lockfile workflows pass. This contract authenticates the trusted collector only; native provider authentication and live provider integration remain external prerequisites.

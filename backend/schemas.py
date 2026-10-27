@@ -1412,3 +1412,66 @@ class AdGuardrailResetRequest(BaseModel):
         if len(normalized) < 20:
             raise ValueError("Provide a specific reset rationale of at least 20 characters")
         return normalized
+
+
+class SignedAdPerformanceWebhookPayload(BaseModel):
+    """Normalized event sent by a configured trusted collector after platform-side verification."""
+    provider_event_id: str = Field(min_length=1, max_length=255)
+    campaign_plan_id: str = Field(min_length=1, max_length=36)
+    platform: AdPlatform
+    creative_id: str = Field(min_length=1, max_length=180)
+    source_reference_url: str | None = Field(default=None, max_length=2048)
+    impressions: int = Field(default=0, ge=0, le=1_000_000_000_000)
+    clicks: int = Field(default=0, ge=0, le=1_000_000_000_000)
+    conversions: int = Field(default=0, ge=0, le=1_000_000_000_000)
+    spend_usd: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
+    commission_usd: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    observed_at: datetime
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("provider_event_id", "campaign_plan_id", "creative_id")
+    @classmethod
+    def normalize_signed_event_identifiers(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Identifier must not be blank")
+        return normalized
+
+    @field_validator("currency")
+    @classmethod
+    def normalize_signed_ad_currency(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", normalized):
+            raise ValueError("Currency must be a three-letter alphabetic code")
+        return normalized
+
+    @field_validator("observed_at")
+    @classmethod
+    def require_signed_event_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("observed_at must include an explicit timezone offset")
+        return value.astimezone(timezone.utc)
+
+    @field_validator("source_reference_url")
+    @classmethod
+    def validate_signed_source_reference(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        normalized = value.strip()
+        try:
+            parsed = urlparse(normalized)
+            host = (parsed.hostname or "").lower().rstrip(".")
+        except ValueError as exc:
+            raise ValueError("Source reference must be a valid public HTTP(S) URL") from exc
+        if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password:
+            raise ValueError("Source reference must be an absolute HTTP(S) URL without credentials")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local/private source references are not allowed")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private, loopback, link-local, multicast or reserved source references are not allowed")
+        return normalized

@@ -30,3 +30,8 @@ The base `requirements.txt` installs the FastAPI/database/security runtime witho
 - Optional local Transformers/LoRA runtime: install the desired CPU/CUDA PyTorch build, then `pip install -r requirements-local-model.txt`
 
 The Docker image enables the AI/RAG and video profiles by default. Set the corresponding `INSTALL_*_PROFILE` build arguments to opt out; local-model dependencies are disabled by default. GitHub Actions validates core behavior and checks AI/RAG imports in a separate CPU-only job.
+
+
+### Signed ad performance collector
+
+See docs/SIGNED_AD_PERFORMANCE_INGESTION.md. A per-workspace/per-platform HMAC key authenticates a trusted collector-provided normalized daily report. The collector must independently verify the underlying ad-platform source before signing. The endpoint does not establish a native provider account connection and does not execute ad changes.

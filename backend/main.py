@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio,base64,hashlib,hmac,json,logging,re,secrets,time
 import httpx
+from uuid import UUID
 from contextlib import asynccontextmanager
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
@@ -17,6 +18,7 @@ from sqlalchemy import func,select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
+from pydantic import ValidationError
 from backend.tenancy import WorkspaceContextMiddleware, get_workspace_id, set_workspace_id, workspace_scope
 from backend.config import get_settings
 from backend.core.events import hub
@@ -25,7 +27,8 @@ from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import AdBudgetGuardrail,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
+from backend.schemas import AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -3907,6 +3910,180 @@ async def reset_ad_budget_kill_switch(
         await db.commit()
         await db.refresh(row)
     return _ad_guardrail_dict(row)
+
+
+
+
+MAX_AD_PERFORMANCE_WEBHOOK_BODY_BYTES = 256 * 1024
+
+
+async def read_limited_ad_performance_body(request: Request, limit: int = MAX_AD_PERFORMANCE_WEBHOOK_BODY_BYTES) -> bytes:
+    """Read the exact signed collector payload with a hard cap, including chunked requests."""
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "Invalid Content-Length") from exc
+        if declared_length < 0:
+            raise HTTPException(400, "Invalid Content-Length")
+        if declared_length > limit:
+            raise HTTPException(413, "Ad performance webhook body exceeds the size limit")
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > limit:
+            raise HTTPException(413, "Ad performance webhook body exceeds the size limit")
+        body.extend(chunk)
+    return bytes(body)
+
+
+@app.post("/api/webhooks/ad-performance/{workspace_id}/{platform}", status_code=201)
+async def receive_signed_ad_performance(
+    workspace_id: str,
+    platform: str,
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Accept HMAC-authenticated normalized daily metrics from a provisioned trusted collector.
+
+    The collector must verify the underlying native ad-provider data before signing.
+    This endpoint authenticates the collector and does not claim to validate a native
+    Meta/Google/TikTok signature or to connect an external account itself.
+    """
+    try:
+        workspace_id = str(UUID(workspace_id.strip()))
+    except (ValueError, AttributeError) as exc:
+        raise HTTPException(422, "workspace_id must be a canonical UUID") from exc
+    platform = platform.strip().lower()
+    allowed_platforms = {
+        "google_search", "google_display", "meta", "instagram", "tiktok", "youtube_shorts",
+        "pinterest", "reddit", "quora", "x", "linkedin", "snapchat", "native",
+    }
+    if platform not in allowed_platforms:
+        raise HTTPException(422, "Unsupported ad performance platform")
+    secrets_by_key = settings.ad_performance_webhook_secrets or {}
+    secret = secrets_by_key.get(f"{workspace_id}:{platform}")
+    if not isinstance(secret, str) or len(secret) < 32:
+        raise HTTPException(503, "Signed ad performance collector is not configured for this workspace/platform")
+
+    raw_body = await read_limited_ad_performance_body(request)
+    signature = request.headers.get("X-Ad-Performance-Signature", "")
+    try:
+        adapter = AdPerformanceWebhookAdapter(secret)
+    except ValueError as exc:
+        raise HTTPException(503, "Signed ad performance collector is not configured") from exc
+    if not adapter.verify(raw_body, signature):
+        raise HTTPException(401, "Invalid ad performance collector signature")
+
+    try:
+        decoded = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(400, "Signed ad performance payload must contain valid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise HTTPException(422, "Signed ad performance payload must be a JSON object")
+    try:
+        payload = SignedAdPerformanceWebhookPayload.model_validate(decoded)
+    except ValidationError as exc:
+        raise HTTPException(422, detail=exc.errors(include_input=False)) from exc
+    if payload.platform != platform:
+        raise HTTPException(422, "Payload platform must match the signed endpoint platform")
+
+    with workspace_scope(workspace_id):
+        plan = await db.scalar(select(AdCampaignPlanRecord).where(
+            AdCampaignPlanRecord.id == payload.campaign_plan_id,
+            AdCampaignPlanRecord.workspace_id == workspace_id,
+        ))
+        if plan is None:
+            raise HTTPException(404, "Ad plan not found in the signed webhook's workspace")
+        existing = await db.scalar(select(AdPerformanceObservation).where(
+            AdPerformanceObservation.workspace_id == workspace_id,
+            AdPerformanceObservation.platform == platform,
+            AdPerformanceObservation.provider_event_id == payload.provider_event_id,
+        ))
+        if existing is not None:
+            return JSONResponse(status_code=200, content={
+                "status": "duplicate_ignored",
+                "observation_id": existing.id,
+                "provider_event_id": payload.provider_event_id,
+                "evidence_status": existing.evidence_status,
+                "provider_action_executed": False,
+            })
+
+        row = AdPerformanceObservation(
+            workspace_id=workspace_id,
+            campaign_plan_id=plan.id,
+            platform=platform,
+            creative_id=payload.creative_id,
+            source_type="provider_api",
+            source_reference_url=payload.source_reference_url,
+            provider_event_id=payload.provider_event_id,
+            source_signature_sha256=hashlib.sha256(raw_body).hexdigest(),
+            impressions=payload.impressions,
+            clicks=payload.clicks,
+            conversions=payload.conversions,
+            spend_usd=payload.spend_usd,
+            commission_usd=payload.commission_usd,
+            currency=payload.currency,
+            evidence_status="provider_verified",
+            observed_at=payload.observed_at,
+            note=payload.note,
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor="signed_ad_performance_collector",
+            action="ads.performance.signed_webhook_received",
+            resource_type="ad_performance_observation",
+            resource_id=row.id,
+            outcome="provider_verified_by_trusted_collector",
+            details_json={
+                "provider_event_id": payload.provider_event_id,
+                "platform": platform,
+                "campaign_plan_id": plan.id,
+                "evidence_status": "provider_verified",
+                "verification_method": "workspace_platform_hmac_signed_collector",
+                "collector_signature_verified": True,
+                "native_provider_signature_checked_by_project1": False,
+                "raw_body_sha256": row.source_signature_sha256,
+                "provider_action_executed": False,
+            },
+        ))
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            with workspace_scope(workspace_id):
+                existing = await db.scalar(select(AdPerformanceObservation).where(
+                    AdPerformanceObservation.workspace_id == workspace_id,
+                    AdPerformanceObservation.platform == platform,
+                    AdPerformanceObservation.provider_event_id == payload.provider_event_id,
+                ))
+            if existing is not None:
+                return JSONResponse(status_code=200, content={
+                    "status": "duplicate_ignored",
+                    "observation_id": existing.id,
+                    "provider_event_id": payload.provider_event_id,
+                    "evidence_status": existing.evidence_status,
+                    "provider_action_executed": False,
+                })
+            raise HTTPException(409, "Signed ad performance event could not be persisted due to an integrity conflict") from exc
+        await db.refresh(row)
+
+    return {
+        "status": "recorded",
+        "observation_id": row.id,
+        "provider_event_id": row.provider_event_id,
+        "campaign_plan_id": row.campaign_plan_id,
+        "platform": row.platform,
+        "creative_id": row.creative_id,
+        "evidence_status": row.evidence_status,
+        "verification_method": "workspace_platform_hmac_signed_collector",
+        "collector_signature_verified": True,
+        "native_provider_signature_checked_by_project1": False,
+        "source_signature_sha256": row.source_signature_sha256,
+        "provider_action_executed": False,
+    }
 
 
 

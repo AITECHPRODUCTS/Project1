@@ -436,3 +436,9 @@
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
 | Per-plan spend caps and stop-loss/kill state | \`AdBudgetGuardrail\`; migration \`0016_ad_budget_guardrails\`; \`backend/services/ad_guardrails.py\`; \`/api/ads/plans/{plan_id}/guardrails\`, \`/api/ads/guardrails*\`; \`frontend/app/ads/guardrails/page.tsx\`; \`tests/test_ad_budget_guardrails.py\` | candidate: persists daily/campaign caps, ROAS/CPA and sample gates, requires provider-verified evidence, latches stop state on breaches and requires explicit reset/audit | Exact-SHA CI/SQLite+PostgreSQL drift, test and build jobs. Actual ad-provider verification, provider kill/pause integration, authorized live account UAT and spend execution remain disabled/not configured. |
+
+
+## Signed ad performance collector ingestion (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Evidence-backed paid-media guardrails | AD_PERFORMANCE_WEBHOOK_SECRETS; AdPerformanceWebhookAdapter; migration 0017_signed_ad_performance_events; POST /api/webhooks/ad-performance/{workspace_id}/{platform}; tests/test_ad_performance_webhooks.py | candidate: workspace/platform HMAC, request-size limit, explicit timestamp, event replay dedupe, verified-evidence provenance and guardrail end-to-end trigger | Exact-SHA CI including SQLite/PostgreSQL migration/drift, secret/negative-path tests, and staged collector integration. The service does not authenticate native ad-provider signatures; collector must validate source evidence. |

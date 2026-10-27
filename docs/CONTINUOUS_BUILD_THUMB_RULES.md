@@ -231,3 +231,6 @@ These additive rules apply to every future Project1 build session.
 
 
 87. 2026-10-27 paid-media safety vertical slice is a candidate until exact-SHA push and PR workflows pass. Guardrail evaluation must use provider-verified observations only, deduplicate incremental creative/day snapshots, block mixed evidence, enforce the lesser of configured and plan daily caps, and audit any stop latch/reset. Provider mutation, spending, publishing and automatic pausing must remain disabled until a separately authorized provider adapter explicitly enforces the latch.
+
+
+88. 2026-10-27 signed ad performance ingestion is a candidate until exact-SHA push/PR CI passes. HMAC keys must be workspace + platform scoped and >=32 characters; sign exact raw bodies; limit request size; reject invalid signature, payload platform mismatch, naive timestamps, unknown workspace/plan and replay event IDs. Keep manual reports unverified. Record only a trusted-collector verification claim, not a native provider signature claim, and never enable spend or live provider writes as a side effect.

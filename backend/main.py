@@ -956,7 +956,8 @@ async def flywheel_status(user: dict[str, Any] = Depends(require_auth), db: Asyn
  stage_keys=list(LABELS);active=None
  if run.status=="paused" and run.current_step<len(stage_keys):active=stage_keys[run.current_step];stages[run.current_step]["status"]="waiting_for_human"
  elif run.status=="running" and run.current_step<len(stage_keys):active=stage_keys[run.current_step];stages[run.current_step]["status"]="running"
- return {"active_session":run.id,"workflow_name":run.workflow_name,"workflow_status":run.status,"current_step":run.current_step,"active_stage":active,"execution_mode":run.execution_mode,"stages":stages}
+ control=(run.state_json or {}).get("control",{})
+ return {"active_session":run.id,"workflow_name":run.workflow_name,"workflow_status":run.status,"cancel_requested":isinstance(control,dict) and control.get("cancel_requested") is True,"current_step":run.current_step,"active_stage":active,"execution_mode":run.execution_mode,"stages":stages}
 @api.post("/workflows/run",status_code=202)
 async def start_workflow(
     payload: WorkflowStartRequest,
@@ -1005,6 +1006,23 @@ async def workflow_status(session_id: str, user: dict[str, Any] = Depends(requir
  if data is None:
   raise HTTPException(404, "Workflow session not found")
  return data
+
+@api.post("/workflows/{session_id}/cancel")
+async def cancel_workflow(session_id: str, user: dict[str, Any] = Depends(require_auth)):
+ workspace_id = user.get("workspace_id")
+ if not workspace_id:
+  raise HTTPException(403, "Select an authorized workspace before cancelling a workflow")
+ try:
+  with workspace_scope(str(workspace_id)):
+   return await runner.request_cancel(
+    session_id,
+    workspace_id=str(workspace_id),
+    actor=str(user.get("email") or user.get("user_id") or "operator"),
+   )
+ except KeyError as exc:
+  raise HTTPException(404, "Workflow session not found") from exc
+ except ValueError as exc:
+  raise HTTPException(409, str(exc)) from exc
 
 @api.post("/resume/{session_id}")
 async def resume(session_id: str, payload: ResumeRequest, user: dict[str, Any] = Depends(require_auth)):

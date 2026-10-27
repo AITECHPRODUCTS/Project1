@@ -95,6 +95,16 @@ class WorkflowRunner:
     return
    if worker_id is not None and row.lease_owner!=worker_id:
     raise WorkflowLeaseLost("Workflow lease was claimed by another worker")
+   # Merge durable operator control state; a worker's older in-memory snapshot
+   # must never erase a cancellation request written by another request/worker.
+   stored_state=row.state_json if isinstance(row.state_json,dict) else {}
+   stored_control=stored_state.get("control") if isinstance(stored_state.get("control"),dict) else {}
+   new_control=safe.get("control") if isinstance(safe.get("control"),dict) else {}
+   if stored_control:
+    safe["control"]={**stored_control,**new_control}
+   # A stale worker may not move a terminal run back into an active state.
+   if row.status in TERMINAL_WORKFLOW_STATUSES and status not in TERMINAL_WORKFLOW_STATUSES:
+    return
    row.status=status;row.current_step=index;row.state_json=safe
    if error is not None:row.error_message=error[:2000]
    if result is not None:row.result_json=result
@@ -109,26 +119,36 @@ class WorkflowRunner:
   async with SessionLocal() as db:
    row=await db.get(PausedSession,sid)
    if row is None:row=PausedSession(session_id=sid,workflow_name=name);db.add(row)
-   row.status="paused";row.current_step=index;row.required_action=exc.action;row.state_json=safe;row.last_error=str(exc)[:800]
-   row.verification_response_encrypted=None
    run=await db.get(WorkflowRun,sid)
    if run:
     if worker_id is not None and run.lease_owner!=worker_id:raise WorkflowLeaseLost("Workflow lease was claimed while pausing")
+    stored_state=run.state_json if isinstance(run.state_json,dict) else {}
+    stored_control=stored_state.get("control") if isinstance(stored_state.get("control"),dict) else {}
+    new_control=safe.get("control") if isinstance(safe.get("control"),dict) else {}
+    if stored_control:safe["control"]={**stored_control,**new_control}
     run.status="paused";run.current_step=index;run.state_json=safe
     if worker_id:
      run.heartbeat_at=datetime.now(timezone.utc)
      run.lease_expires_at=datetime.now(timezone.utc)+timedelta(seconds=WORKFLOW_LEASE_SECONDS)
+   row.status="paused";row.current_step=index;row.required_action=exc.action;row.state_json=safe;row.last_error=str(exc)[:800]
+   row.verification_response_encrypted=None
    db.add(AuditLog(actor="system",action="workflow.paused_for_verification",resource_type="workflow",resource_id=sid,workspace_id=run.workspace_id if run else None,details_json={"index":index,"action":exc.action}))
    await db.commit()
  async def _drive(self,sid:str,name:str,state:dict[str,Any],steps:list[WorkflowStep],start:int,mode:str,worker_id:str|None=None):
   settings=get_settings();event=self.events.setdefault(sid,asyncio.Event());await self._save(sid,"running",start,state,worker_id=worker_id)
   await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"workflow_name":name,"status":"running","current_step":start,"total_steps":len(steps)})
   try:
+   if await self._has_cancel_request(sid,state):
+    await self._finish_cancelled(sid,start,state,worker_id=worker_id);return
    for i in range(start,len(steps)):
+    if await self._has_cancel_request(sid,state):
+     await self._finish_cancelled(sid,i,state,worker_id=worker_id);return
     step=steps[i];await self._save(sid,"running",i,state,worker_id=worker_id)
     await self._emit(state, {"event":"STAGE_STATUS","session_id":sid,"stage":step.key,"stage_label":step.label,"status":"running","current_step":i,"total_steps":len(steps)})
     attempts=0
     while True:
+     if await self._has_cancel_request(sid,state):
+      await self._finish_cancelled(sid,i,state,worker_id=worker_id);return
      try:
       result=await asyncio.wait_for(step.handler(state),timeout=int(settings.load_yaml().get("app",{}).get("workflow_step_timeout_seconds",120)))
       verification_response_used="_verification_response" in state
@@ -137,17 +157,33 @@ class WorkflowRunner:
       stage_status="skipped" if nested and all(x=="skipped" for x in nested) else "completed"
       state.setdefault("stages",{})[step.key]={"status":stage_status,"result":result or {},"completed_at":datetime.now(timezone.utc).isoformat()}
       if isinstance(result,dict):state.update({k:v for k,v in result.items() if k not in {"metadata","stages"}})
+      if await self._has_cancel_request(sid,state):
+       await self._finish_cancelled(sid,i+1,state,worker_id=worker_id);return
       await self._save(sid,"running",i+1,state,worker_id=worker_id)
       if verification_response_used:
        response_workspace_id=str(state.get("metadata",{}).get("workspace_id") or "").strip()
        if response_workspace_id:await self._clear_persisted_resume_response(sid,response_workspace_id,worker_id=worker_id)
       await self._emit(state, {"event":"STAGE_STATUS","session_id":sid,"stage":step.key,"stage_label":step.label,"status":stage_status,"current_step":i+1,"total_steps":len(steps)});break
      except VerificationRequiredError as exc:
+      if await self._has_cancel_request(sid,state):
+       await self._finish_cancelled(sid,i,state,worker_id=worker_id);return
       if mode=="FULL_AUTONOMOUS":
        await self._save(sid,"failed",i,state,f"Human verification required in FULL_AUTONOMOUS mode: {exc}",True,worker_id=worker_id);return
       await self._pause(sid,name,i,state,exc,worker_id=worker_id)
+      if await self._has_cancel_request(sid,state):
+       await self._finish_cancelled(sid,i,state,worker_id=worker_id);return
       await self._emit(state, {"event":"HITL_ALERT","session_id":sid,"workflow_name":name,"stage":step.key,"stage_label":step.label,"required_action":exc.action,"message":str(exc)})
-      await event.wait();event.clear();state["_verification_response"]=self.responses.pop(sid,"")
+      while True:
+       try:
+        await asyncio.wait_for(event.wait(),timeout=1.0)
+        break
+       except asyncio.TimeoutError:
+        if await self._has_cancel_request(sid,state):
+         await self._finish_cancelled(sid,i,state,worker_id=worker_id);return
+      event.clear()
+      if await self._has_cancel_request(sid,state):
+       await self._finish_cancelled(sid,i,state,worker_id=worker_id);return
+      state["_verification_response"]=self.responses.pop(sid,"")
       async with SessionLocal() as db:
        paused=await db.get(PausedSession,sid)
        if paused:paused.status="resuming";await db.commit()
@@ -194,6 +230,8 @@ class WorkflowRunner:
       await self._save(sid,"failed",i,state,failure_message,True,worker_id=worker_id)
       await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"status":"failed","stage":step.key,"message":failure_message[:300]})
       return
+   if await self._has_cancel_request(sid,state):
+    await self._finish_cancelled(sid,len(steps),state,worker_id=worker_id);return
    state.setdefault("metadata",{})["finished_at"]=datetime.now(timezone.utc).isoformat();await self._save(sid,"completed",len(steps),state,done=True,result=state,worker_id=worker_id)
    async with SessionLocal() as db:db.add(AuditLog(actor="system",action="workflow.completed",resource_type="workflow",resource_id=sid,details_json={"name":name}));await db.commit()
    await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"workflow_name":name,"status":"completed","current_step":len(steps),"total_steps":len(steps)})
@@ -202,6 +240,135 @@ class WorkflowRunner:
    # Lease-owned work is left recoverable; shutdown or lease loss must not
    # mislabel an interrupted execution as a completed cancellation.
    raise
+ async def _has_cancel_request(self,sid:str,state:dict[str,Any])->bool:
+  metadata=state.get("metadata",{}) if isinstance(state,dict) else {}
+  workspace_id=str(metadata.get("workspace_id") or "").strip() if isinstance(metadata,dict) else ""
+  if not workspace_id:return False
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    row=await db.get(WorkflowRun,sid)
+    if row is None or row.workspace_id!=workspace_id:return False
+    stored_state=row.state_json if isinstance(row.state_json,dict) else {}
+    control=stored_state.get("control") if isinstance(stored_state.get("control"),dict) else {}
+    return row.status=="cancelled" or control.get("cancel_requested") is True
+
+ async def request_cancel(self,sid:str,workspace_id:str,actor:str|None=None)->dict[str,Any]:
+  if not isinstance(workspace_id,str) or not workspace_id.strip():raise KeyError("Workflow session not found")
+  signal_local=False
+  duplicate=False
+  requested_status="queued"
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    row=await db.get(WorkflowRun,sid)
+    if row is None or row.workspace_id!=workspace_id:raise KeyError("Workflow session not found")
+    if row.status=="cancelled":
+     return {"session_id":sid,"status":"cancelled","cancel_requested":True,"duplicate":True}
+    if row.status in {"completed","failed"}:
+     raise ValueError(f"Workflow is already {row.status}; a terminal workflow cannot be cancelled")
+    requested_status=row.status
+    state=copy.deepcopy(row.state_json or {})
+    stored_control=state.get("control") if isinstance(state.get("control"),dict) else {}
+    if stored_control.get("cancel_requested") is True:
+     duplicate=True
+    else:
+     now=datetime.now(timezone.utc)
+     state["control"]={
+      **stored_control,
+      "cancel_requested":True,
+      "cancel_requested_at":now.isoformat(),
+      "cancel_requested_by":str(actor or "operator")[:320],
+      "cancel_requested_from_status":row.status,
+     }
+     row.state_json=state
+     db.add(AuditLog(
+      workspace_id=workspace_id,
+      actor=str(actor or "operator")[:320],
+      action="workflow.cancel_requested",
+      resource_type="workflow",
+      resource_id=sid,
+      outcome="requested",
+      details_json={
+       "from_status":row.status,
+       "safe_boundary":"after the current stage finishes; in-flight provider calls are not interrupted",
+      },
+     ))
+    paused=await db.get(PausedSession,sid)
+    signal_local=bool(
+     row.status=="paused" and sid in self.tasks and
+     self.tasks[sid] is not None and not self.tasks[sid].done()
+    )
+    if row.status=="paused" and paused is not None and paused.workspace_id==workspace_id:
+     # A cancel request supersedes an encrypted, not-yet-consumed HITL response.
+     paused.verification_response_encrypted=None
+    await db.commit()
+  if signal_local:
+   self.responses.pop(sid,None)
+   self.events.setdefault(sid,asyncio.Event()).set()
+  return {
+   "session_id":sid,
+   "status":"cancel_requested" if requested_status!="paused" or not signal_local else "cancel_requested",
+   "cancel_requested":True,
+   "duplicate":duplicate,
+   "current_status":requested_status,
+   "detail":"The current stage will finish safely; no later stage will start. A provider outcome already in flight is not rolled back.",
+  }
+
+ async def _finish_cancelled(self,sid:str,index:int,state:dict[str,Any],worker_id:str|None=None)->bool:
+  metadata=state.get("metadata",{}) if isinstance(state,dict) else {}
+  workspace_id=str(metadata.get("workspace_id") or "").strip() if isinstance(metadata,dict) else ""
+  if not workspace_id:raise ValueError("Authorized workspace context is required to cancel a workflow")
+  safe=copy.deepcopy(state);safe.pop("_verification_response",None)
+  now=datetime.now(timezone.utc)
+  actor="operator"
+  already_cancelled=False
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    row=await db.get(WorkflowRun,sid)
+    if row is None or row.workspace_id!=workspace_id:
+     if worker_id:raise WorkflowLeaseLost("Workflow row disappeared while cancelling")
+     return False
+    if worker_id is not None and row.lease_owner!=worker_id:
+     raise WorkflowLeaseLost("Workflow lease was claimed before cancellation could be persisted")
+    if row.status in {"completed","failed"}:return False
+    if row.status=="cancelled":
+     already_cancelled=True
+    stored_state=row.state_json if isinstance(row.state_json,dict) else {}
+    stored_control=stored_state.get("control") if isinstance(stored_state.get("control"),dict) else {}
+    new_control=safe.get("control") if isinstance(safe.get("control"),dict) else {}
+    control={**stored_control,**new_control}
+    control["cancel_requested"]=True
+    control.setdefault("cancel_requested_at",now.isoformat())
+    control["cancelled_at"]=control.get("cancelled_at") or now.isoformat()
+    actor=str(control.get("cancel_requested_by") or actor)[:320]
+    safe["control"]=control
+    row.status="cancelled";row.current_step=index;row.state_json=safe;row.result_json=safe
+    row.error_message="Workflow cancelled by operator at a safe checkpoint."
+    row.finished_at=row.finished_at or now
+    paused=await db.get(PausedSession,sid)
+    if paused is not None and paused.workspace_id==workspace_id:
+     paused.status="cancelled"
+     paused.verification_response_encrypted=None
+    if not already_cancelled:
+     db.add(AuditLog(
+      workspace_id=workspace_id,
+      actor=actor,
+      action="workflow.cancelled",
+      resource_type="workflow",
+      resource_id=sid,
+      outcome="cancelled",
+      details_json={
+       "current_step":index,
+       "safe_boundary":True,
+       "in_flight_external_action_rolled_back":False,
+      },
+     ))
+    await db.commit()
+  self.responses.pop(sid,None)
+  event=self.events.get(sid)
+  if event is not None:event.clear()
+  await self._emit(safe,{"event":"WORKFLOW_STATUS","session_id":sid,"status":"cancelled","current_step":index,"total_steps":len(safe.get("stages",{})) if isinstance(safe.get("stages"),dict) else None})
+  return True
+
  async def resume(self,sid:str,code:str,workspace_id:str,actor:str|None=None)->dict[str,Any]:
   if not isinstance(workspace_id,str) or not workspace_id.strip():raise KeyError("Paused session not found")
   normalized=code.strip()
@@ -213,6 +380,10 @@ class WorkflowRunner:
     paused=await db.get(PausedSession,sid);run=await db.get(WorkflowRun,sid)
     if not paused or not run:raise KeyError("Paused session not found")
     if paused.workspace_id!=workspace_id or run.workspace_id!=workspace_id:raise KeyError("Paused session not found")
+    stored_state=run.state_json if isinstance(run.state_json,dict) else {}
+    control=stored_state.get("control") if isinstance(stored_state.get("control"),dict) else {}
+    if run.status=="cancelled" or control.get("cancel_requested") is True:
+     raise ValueError("Workflow cancellation has been requested; verification responses are no longer accepted")
     if paused.status in {"resume_requested","resuming"} and paused.verification_response_encrypted:
      return {"session_id":sid,"status":paused.status,"verification_response_persisted":True,"duplicate":True,"detail":"An earlier response is already queued or being processed; it was not replaced."}
     if paused.status!="paused" or run.status!="paused":raise ValueError(f"Workflow is not paused ({run.status})")
@@ -240,7 +411,9 @@ class WorkflowRunner:
     run=await db.get(WorkflowRun,sid)
     if not run or run.workspace_id!=workspace_id:return None
     paused=await db.get(PausedSession,sid)
-    return {"session_id":sid,"workflow_name":run.workflow_name,"status":run.status,"current_step":run.current_step,"execution_mode":run.execution_mode,"state":run.state_json,"result":run.result_json,"error":run.error_message,"paused_session":{"status":paused.status,"required_action":paused.required_action,"stage_index":paused.current_step} if paused and paused.workspace_id==workspace_id else None}
+    state=run.state_json if isinstance(run.state_json,dict) else {}
+    control=state.get("control") if isinstance(state.get("control"),dict) else {}
+    return {"session_id":sid,"workflow_name":run.workflow_name,"status":run.status,"cancel_requested":control.get("cancel_requested") is True,"current_step":run.current_step,"execution_mode":run.execution_mode,"state":run.state_json,"result":run.result_json,"error":run.error_message,"paused_session":{"status":paused.status,"required_action":paused.required_action,"stage_index":paused.current_step} if paused and paused.workspace_id==workspace_id else None}
  async def _clear_persisted_resume_response(self,sid:str,workspace_id:str,worker_id:str|None=None)->None:
   with workspace_scope(workspace_id):
    async with SessionLocal() as db:
@@ -335,8 +508,16 @@ class WorkflowRunner:
    return
   if response is None:
    await self._emit(state, {"event":"HITL_ALERT","session_id":sid,"workflow_name":name,"stage":steps[index].key if index<len(steps) else None,"stage_label":steps[index].label if index<len(steps) else None,"required_action":action,"message":error or "Workflow recovered paused; human response required."})
-   await event.wait()
+   while True:
+    try:
+     await asyncio.wait_for(event.wait(),timeout=1.0)
+     break
+    except asyncio.TimeoutError:
+     if await self._has_cancel_request(sid,state):
+      await self._finish_cancelled(sid,index,state,worker_id=worker_id);return
    event.clear()
+   if await self._has_cancel_request(sid,state):
+    await self._finish_cancelled(sid,index,state,worker_id=worker_id);return
    response=self.responses.pop(sid,"")
   else:
    self.responses.pop(sid,None)
@@ -425,6 +606,24 @@ class WorkflowRunner:
      row.finished_at=now;row.lease_owner=None;row.lease_expires_at=None
      await db.commit()
      return {"reconciliation_only":True,"session_id":row.id}
+    control=state.get("control") if isinstance(state.get("control"),dict) else {}
+    if control.get("cancel_requested") is True:
+     now_cancelled=datetime.now(timezone.utc)
+     control["cancelled_at"]=control.get("cancelled_at") or now_cancelled.isoformat()
+     state["control"]=control
+     row.status="cancelled";row.state_json=state;row.result_json=state
+     row.error_message="Workflow cancellation completed during worker recovery."
+     row.finished_at=now_cancelled;row.lease_owner=None;row.lease_expires_at=None
+     paused=await db.get(PausedSession,row.id)
+     if paused is not None:
+      paused.status="cancelled";paused.verification_response_encrypted=None
+     db.add(AuditLog(
+      workspace_id=workspace_id,actor=str(control.get("cancel_requested_by") or "workflow-recovery")[:320],
+      action="workflow.cancelled",resource_type="workflow",resource_id=row.id,outcome="cancelled",
+      details_json={"recovered":True,"safe_boundary":True,"in_flight_external_action_rolled_back":False},
+     ))
+     await db.commit()
+     return {"reconciliation_only":True,"session_id":row.id}
     if row.status=="running" and row.current_step<len(steps):
      step=steps[row.current_step]
      metadata=state.get("metadata",{}) if isinstance(state.get("metadata",{}),dict) else {}
@@ -495,6 +694,23 @@ class WorkflowRunner:
       await db.commit()
      return {"reconciliation_only":True,"session_id":run.id}
     state=copy.deepcopy(run.state_json or paused.state_json or {})
+    control=state.get("control") if isinstance(state.get("control"),dict) else {}
+    if control.get("cancel_requested") is True:
+     cancelled_at=datetime.now(timezone.utc)
+     control["cancelled_at"]=control.get("cancelled_at") or cancelled_at.isoformat()
+     state["control"]=control
+     with workspace_scope(workspace_id):
+      run.status="cancelled";run.state_json=state;run.result_json=state
+      run.error_message="Workflow cancellation completed during paused-worker recovery."
+      run.finished_at=cancelled_at;run.lease_owner=None;run.lease_expires_at=None
+      paused.status="cancelled";paused.verification_response_encrypted=None
+      db.add(AuditLog(
+       workspace_id=workspace_id,actor=str(control.get("cancel_requested_by") or "workflow-recovery")[:320],
+       action="workflow.cancelled",resource_type="workflow",resource_id=run.id,outcome="cancelled",
+       details_json={"recovered_paused":True,"safe_boundary":True,"in_flight_external_action_rolled_back":False},
+      ))
+      await db.commit()
+     return {"reconciliation_only":True,"session_id":run.id}
     metadata=state.get("metadata")
     if not isinstance(metadata,dict):metadata={}
     metadata["workspace_id"]=workspace_id;state["metadata"]=metadata

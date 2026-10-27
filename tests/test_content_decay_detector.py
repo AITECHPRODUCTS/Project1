@@ -227,3 +227,29 @@ def test_one_stable_metric_pair_is_not_enough_to_mark_page_healthy():
     )
     assert report["healthy_pages"] == []
     assert report["pages_needing_more_data"][0]["url"] == "https://example.com/partial-metrics"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("previous_clicks", float("nan")),
+        ("current_impressions", float("inf")),
+        ("previous_avg_position", float("-inf")),
+        ("refresh_effort_hours", float("nan")),
+        ("refresh_effort_hours", -1),
+        ("current_clicks", "not-a-number"),
+    ],
+)
+def test_service_rejects_non_finite_negative_or_malformed_numeric_inputs(field, value):
+    page = {
+        "url": "https://example.com/article",
+        "previous_clicks": 100,
+        "current_clicks": 50,
+    }
+    page[field] = value
+    with pytest.raises(ValueError, match=r"pages\[0\]"):
+        build_content_decay_report(
+            site_url="https://example.com",
+            timeframe="90d",
+            pages=[page],
+        )

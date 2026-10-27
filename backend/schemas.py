@@ -1383,3 +1383,32 @@ class MarketplaceApplicationReviewRequest(BaseModel):
     @classmethod
     def normalize_marketplace_review_notes(cls, value: str) -> str:
         return value.strip()
+
+
+class AdBudgetGuardrailCreateRequest(BaseModel):
+    daily_spend_cap_usd: Decimal = Field(gt=0, le=Decimal("1000000.00"), max_digits=12, decimal_places=2)
+    campaign_spend_cap_usd: Decimal = Field(gt=0, le=Decimal("10000000.00"), max_digits=12, decimal_places=2)
+    minimum_roas: Decimal = Field(default=Decimal("1.20"), ge=0, le=Decimal("100.0000"), max_digits=8, decimal_places=4)
+    maximum_cpa_usd: Decimal | None = Field(default=None, gt=0, le=Decimal("1000000.00"), max_digits=12, decimal_places=2)
+    minimum_verified_impressions: int = Field(default=1000, ge=1, le=1_000_000)
+    minimum_verified_clicks: int = Field(default=30, ge=1, le=100_000)
+    minimum_verified_conversions: int = Field(default=3, ge=1, le=100_000)
+
+    @model_validator(mode="after")
+    def campaign_cap_not_below_daily_cap(self):
+        if self.campaign_spend_cap_usd < self.daily_spend_cap_usd:
+            raise ValueError("Campaign spend cap must be at least the daily spend cap")
+        return self
+
+
+class AdGuardrailResetRequest(BaseModel):
+    confirm_reset: bool = False
+    reason: str = Field(min_length=20, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reset_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 20:
+            raise ValueError("Provide a specific reset rationale of at least 20 characters")
+        return normalized

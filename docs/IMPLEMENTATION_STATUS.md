@@ -839,3 +839,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The publisher form pre-populates eligible regions and selects safe default traffic sources from the displayed merchant offer; the backend remains authoritative.
 - Regression tests cover disallowed regions, restricted traffic, no application row on rejection, and a compliant application path.
 - This source candidate is not verified until both exact-SHA push and PR workflows pass, including SQLite/PostgreSQL migration/drift, frontend build, security and 53-skill guard jobs.
+
+
+## 2026-10-27 paid-media budget guardrails — implementation candidate
+- Added per-plan daily/campaign USD caps, ROAS/CPA thresholds, evidence sample gates, provider-verified-only evaluation, creative/day snapshot deduplication, stop-latch state, manual kill switch/reset audit events and an ad safety console.
+- No provider mutation, ad launch, live spend authorization or automatic remote pause is performed. The current observation endpoint deliberately marks submitted metrics unverified, so evaluation fails closed until an approved provider-verification path exists.
+- Candidate only until exact-SHA push/PR CI, SQLite/PostgreSQL migration and drift checks, test suite, frontend typecheck/build, security/dependency checks and lockfile workflow complete.

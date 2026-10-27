@@ -23,13 +23,14 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import AdBudgetGuardrail,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
+from backend.services.ad_guardrails import evaluate_ad_budget_guardrail
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
 from backend.services.infographic_generator import build_infographic as build_infographic_service
 from backend.services.guarantee_draft import build_guarantee_draft as build_guarantee_draft_service
@@ -3626,6 +3627,289 @@ async def ads_evaluate(
  try:d=evaluate_roas(str(p["campaign_id"]),float(p["spend"]),float(p["commission"]),float(p.get("threshold",1.2)))
  except (KeyError,ValueError,TypeError) as exc:raise HTTPException(422,"campaign_id, spend and commission are required numeric values") from exc
  return {"campaign_id":d.campaign_id,"roas":d.roas,"threshold":d.threshold,"pause_recommended":d.pause_recommended,"executed":False,"reason":d.reason}
+def _ad_guardrail_dict(row: AdBudgetGuardrail) -> dict[str, Any]:
+    last = row.last_evaluation_json or {}
+    return {
+        "id": row.id,
+        "campaign_plan_id": row.campaign_plan_id,
+        "daily_spend_cap_usd": format(Decimal(row.daily_spend_cap_usd), "f"),
+        "campaign_spend_cap_usd": format(Decimal(row.campaign_spend_cap_usd), "f"),
+        "minimum_roas": format(Decimal(row.minimum_roas), "f"),
+        "maximum_cpa_usd": format(Decimal(row.maximum_cpa_usd), "f") if row.maximum_cpa_usd is not None else None,
+        "minimum_verified_impressions": row.minimum_verified_impressions,
+        "minimum_verified_clicks": row.minimum_verified_clicks,
+        "minimum_verified_conversions": row.minimum_verified_conversions,
+        "kill_switch_engaged": row.kill_switch_engaged is True,
+        "stop_latched": row.stop_latched is True,
+        "last_evaluated_at": row.last_evaluated_at.isoformat() if row.last_evaluated_at else None,
+        "last_evaluation": last,
+        "created_by": row.created_by,
+        "updated_by": row.updated_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "live_spend_authorized": False,
+        "external_campaign_changes_executed": False,
+        "execution_note": "This API evaluates guardrails only. Live ad-provider execution is not configured or authorized.",
+    }
+
+
+@api.post("/ads/plans/{plan_id}/guardrails", status_code=201)
+async def create_ad_budget_guardrail(
+    plan_id: str,
+    payload: AdBudgetGuardrailCreateRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before configuring ad budget guardrails")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        plan = await db.scalar(select(AdCampaignPlanRecord).where(
+            AdCampaignPlanRecord.id == plan_id,
+            AdCampaignPlanRecord.workspace_id == workspace_id,
+        ))
+        if plan is None:
+            raise HTTPException(404, "Ad plan not found in the active workspace")
+        existing = await db.scalar(select(AdBudgetGuardrail).where(
+            AdBudgetGuardrail.workspace_id == workspace_id,
+            AdBudgetGuardrail.campaign_plan_id == plan_id,
+        ))
+        if existing is not None:
+            raise HTTPException(409, "This ad plan already has guardrails; use the existing policy instead of creating a duplicate")
+        row = AdBudgetGuardrail(
+            workspace_id=workspace_id,
+            campaign_plan_id=plan_id,
+            daily_spend_cap_usd=payload.daily_spend_cap_usd,
+            campaign_spend_cap_usd=payload.campaign_spend_cap_usd,
+            minimum_roas=payload.minimum_roas,
+            maximum_cpa_usd=payload.maximum_cpa_usd,
+            minimum_verified_impressions=payload.minimum_verified_impressions,
+            minimum_verified_clicks=payload.minimum_verified_clicks,
+            minimum_verified_conversions=payload.minimum_verified_conversions,
+            kill_switch_engaged=False,
+            stop_latched=False,
+            last_evaluation_json={},
+            created_by=str(user.get("email") or "unknown")[:320],
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown"),
+            action="ads.guardrail.created",
+            resource_type="ad_budget_guardrail",
+            resource_id=row.id,
+            outcome="monitoring_only",
+            details_json={
+                "daily_spend_cap_usd": format(payload.daily_spend_cap_usd, "f"),
+                "campaign_spend_cap_usd": format(payload.campaign_spend_cap_usd, "f"),
+                "minimum_roas": format(payload.minimum_roas, "f"),
+                "maximum_cpa_usd": format(payload.maximum_cpa_usd, "f") if payload.maximum_cpa_usd is not None else None,
+                "live_spend_authorized": False,
+            },
+        ))
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(409, "This ad plan already has guardrails") from exc
+        await db.refresh(row)
+    return _ad_guardrail_dict(row)
+
+
+@api.get("/ads/guardrails")
+async def list_ad_budget_guardrails(
+    limit: int = Query(100, ge=1, le=300),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before listing ad guardrails")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(AdBudgetGuardrail)
+            .where(AdBudgetGuardrail.workspace_id == workspace_id)
+            .order_by(AdBudgetGuardrail.created_at.desc())
+            .limit(limit)
+        )).all())
+    return {"count": len(rows), "limit": limit, "data": [_ad_guardrail_dict(row) for row in rows]}
+
+
+@api.get("/ads/plans/{plan_id}/guardrails")
+async def get_ad_budget_guardrail(
+    plan_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reading ad guardrails")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(AdBudgetGuardrail).where(
+            AdBudgetGuardrail.workspace_id == workspace_id,
+            AdBudgetGuardrail.campaign_plan_id == plan_id,
+        ))
+    if row is None:
+        raise HTTPException(404, "Ad budget guardrails not found for this plan")
+    return _ad_guardrail_dict(row)
+
+
+@api.post("/ads/guardrails/{guardrail_id}/evaluate")
+async def evaluate_ad_budget_guardrails(
+    guardrail_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before evaluating ad guardrails")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(AdBudgetGuardrail).where(
+            AdBudgetGuardrail.id == guardrail_id,
+            AdBudgetGuardrail.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Ad budget guardrails not found in the active workspace")
+        plan = await db.scalar(select(AdCampaignPlanRecord).where(
+            AdCampaignPlanRecord.id == row.campaign_plan_id,
+            AdCampaignPlanRecord.workspace_id == workspace_id,
+        ))
+        if plan is None:
+            raise HTTPException(409, "The guardrail's ad plan is no longer available in this workspace")
+        observations = list((await db.scalars(
+            select(AdPerformanceObservation)
+            .where(
+                AdPerformanceObservation.workspace_id == workspace_id,
+                AdPerformanceObservation.campaign_plan_id == plan.id,
+            )
+            .order_by(AdPerformanceObservation.observed_at.asc())
+        )).all())
+        evaluated_at = utcnow()
+        evaluation = evaluate_ad_budget_guardrail(
+            policy=row,
+            observations=observations,
+            now=evaluated_at,
+            plan_daily_budget_usd=Decimal(plan.daily_budget_usd or 0),
+        )
+        row.last_evaluated_at = evaluated_at
+        row.last_evaluation_json = evaluation
+        if evaluation.get("breaches"):
+            row.stop_latched = True
+            row.kill_switch_engaged = True
+        if row.stop_latched:
+            row.kill_switch_engaged = True
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown"),
+            action="ads.guardrail.evaluated",
+            resource_type="ad_budget_guardrail",
+            resource_id=row.id,
+            outcome=evaluation.get("status", "unknown"),
+            details_json={
+                "breaches": evaluation.get("breaches", []),
+                "verified_observation_count": evaluation.get("verified_observation_count", 0),
+                "reported_observation_count": evaluation.get("reported_observation_count", 0),
+                "kill_switch_engaged": row.kill_switch_engaged,
+                "stop_latched": row.stop_latched,
+                "provider_action_executed": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return {**_ad_guardrail_dict(row), "evaluation": evaluation}
+
+
+@api.post("/ads/guardrails/{guardrail_id}/kill-switch")
+async def engage_ad_budget_kill_switch(
+    guardrail_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before engaging the ad kill switch")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(AdBudgetGuardrail).where(
+            AdBudgetGuardrail.id == guardrail_id,
+            AdBudgetGuardrail.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Ad budget guardrails not found in the active workspace")
+        row.kill_switch_engaged = True
+        row.stop_latched = True
+        row.updated_by = str(user.get("email") or "unknown")[:320]
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown"),
+            action="ads.guardrail.kill_switch_engaged",
+            resource_type="ad_budget_guardrail",
+            resource_id=row.id,
+            outcome="latched",
+            details_json={"manual_kill_switch": True, "provider_action_executed": False, "live_spend_authorized": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _ad_guardrail_dict(row)
+
+
+@api.post("/ads/guardrails/{guardrail_id}/reset")
+async def reset_ad_budget_kill_switch(
+    guardrail_id: str,
+    payload: AdGuardrailResetRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    if payload.confirm_reset is not True:
+        raise HTTPException(409, "Reset requires confirm_reset=true and an explicit review rationale")
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before resetting ad guardrails")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(AdBudgetGuardrail).where(
+            AdBudgetGuardrail.id == guardrail_id,
+            AdBudgetGuardrail.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Ad budget guardrails not found in the active workspace")
+        last = row.last_evaluation_json or {}
+        if last.get("breaches"):
+            raise HTTPException(409, "A fresh monitoring evaluation without active breaches is required before reset")
+        if last.get("status") in {"blocked_pending_provider_verification", "blocked_mixed_evidence"}:
+            raise HTTPException(409, "Guardrails cannot be reset while performance evidence is unverified or mixed")
+        row.kill_switch_engaged = False
+        row.stop_latched = False
+        row.updated_by = str(user.get("email") or "unknown")[:320]
+        row.last_evaluation_json = {
+            **last,
+            "reset_by": str(user.get("email") or "unknown"),
+            "reset_at": utcnow().isoformat(),
+            "reset_reason": payload.reason,
+            "live_spend_authorized": False,
+            "provider_action_executed": False,
+        }
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown"),
+            action="ads.guardrail.reset",
+            resource_type="ad_budget_guardrail",
+            resource_id=row.id,
+            outcome="reset",
+            details_json={"reset_reason": payload.reason, "live_spend_authorized": False,
+                          "provider_action_executed": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _ad_guardrail_dict(row)
+
+
+
 @api.post("/cms/publish")
 async def cms(
     payload: CMSPublishRequest,

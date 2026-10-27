@@ -228,3 +228,6 @@ These additive rules apply to every future Project1 build session.
 
 
 87. Marketplace eligibility candidate (2026-10-27): enforce merchant region and traffic restrictions on the server before writing applications; normalize whitespace/hyphen/underscore variants and test both rejection/no-row behavior and compliant success. The UI's default values are convenience only; the backend rule is authoritative. Exact-SHA push and PR CI must pass before status is verified.
+
+
+87. 2026-10-27 paid-media safety vertical slice is a candidate until exact-SHA push and PR workflows pass. Guardrail evaluation must use provider-verified observations only, deduplicate incremental creative/day snapshots, block mixed evidence, enforce the lesser of configured and plan daily caps, and audit any stop latch/reset. Provider mutation, spending, publishing and automatic pausing must remain disabled until a separately authorized provider adapter explicitly enforces the latch.

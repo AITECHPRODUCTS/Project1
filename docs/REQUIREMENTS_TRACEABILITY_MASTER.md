@@ -430,3 +430,9 @@
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
 | Enforce merchant allowed regions and restricted traffic on publisher applications | \`backend/main.py:create_marketplace_application\`; \`frontend/app/marketplace/page.tsx\`; \`tests/test_marketplace_applications_api.py\` | candidate: server rejects incompatible intended regions/traffic before persistence; UI preselects offer-compatible defaults | Exact-SHA CI, PostgreSQL integration, browser UAT, and review of provider-specific region/traffic-source mapping |
+
+
+## Paid-media spend policy and kill switch (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Per-plan spend caps and stop-loss/kill state | \`AdBudgetGuardrail\`; migration \`0016_ad_budget_guardrails\`; \`backend/services/ad_guardrails.py\`; \`/api/ads/plans/{plan_id}/guardrails\`, \`/api/ads/guardrails*\`; \`frontend/app/ads/guardrails/page.tsx\`; \`tests/test_ad_budget_guardrails.py\` | candidate: persists daily/campaign caps, ROAS/CPA and sample gates, requires provider-verified evidence, latches stop state on breaches and requires explicit reset/audit | Exact-SHA CI/SQLite+PostgreSQL drift, test and build jobs. Actual ad-provider verification, provider kill/pause integration, authorized live account UAT and spend execution remain disabled/not configured. |

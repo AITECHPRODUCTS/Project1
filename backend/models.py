@@ -439,6 +439,38 @@ class AdPerformanceObservation(TenantScopedMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
+class AdBudgetGuardrail(TenantScopedMixin, Base):
+    """Persist spend limits and a fail-closed stop latch for a draft ad plan."""
+    __tablename__ = "ad_budget_guardrails"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "campaign_plan_id", name="uq_ad_budget_guardrails_workspace_plan"),
+        Index("ix_ad_budget_guardrails_workspace_stop", "workspace_id", "kill_switch_engaged", "stop_latched"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campaign_plan_id: Mapped[str] = mapped_column(
+        ForeignKey("ad_campaign_plans.id", ondelete="CASCADE", name="fk_ad_budget_guardrails_campaign_plan"),
+        nullable=False, index=True,
+    )
+    daily_spend_cap_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    campaign_spend_cap_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    minimum_roas: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)
+    maximum_cpa_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    minimum_verified_impressions: Mapped[int] = mapped_column(Integer, default=1000, nullable=False)
+    minimum_verified_clicks: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    minimum_verified_conversions: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    kill_switch_engaged: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    stop_latched: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_evaluation_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 
 class WebinarEvent(TenantScopedMixin, Base):
     """Workspace-owned webinar registration page and current registration policy."""

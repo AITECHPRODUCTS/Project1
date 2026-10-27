@@ -474,6 +474,42 @@ class JurisdictionComplianceAssessment(TenantScopedMixin, Base):
     )
 
 
+
+class SkillPackage(TenantScopedMixin, Base):
+    """Versioned, reviewable declarative skill package; stored instructions are never executed as code."""
+    __tablename__ = "skill_packages"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "skill_id", "version", name="uq_skill_packages_workspace_skill_version"),
+        Index("ix_skill_packages_workspace_status_created", "workspace_id", "status", "created_at"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    skill_id: Mapped[str] = mapped_column(String(140), nullable=False, index=True)
+    display_name: Mapped[str] = mapped_column(String(180), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    stage: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    capabilities_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    input_schema_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    output_schema_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    instructions_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    fixtures_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    validation_report_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    package_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="draft", nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class AdBudgetGuardrail(TenantScopedMixin, Base):
     """Persist spend limits and a fail-closed stop latch for a draft ad plan."""
     __tablename__ = "ad_budget_guardrails"

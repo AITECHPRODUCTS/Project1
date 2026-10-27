@@ -25,10 +25,10 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -46,6 +46,7 @@ from backend.services.multi_program_manager import manage_program_portfolio as m
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
+from backend.services.skill_packager import build_skill_package
 from backend.services.skill_finder import find_skills as find_skills_service
 from backend.services.proprietary_data_generator import build_proprietary_dataset as build_proprietary_dataset_service
 from backend.services.cms_publisher import publish_article
@@ -628,6 +629,205 @@ async def skills_find(
         raise HTTPException(422, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(503, "Skill parity inventory is not packaged in this deployment") from exc
+
+
+
+
+
+def _skill_package_dict(row: SkillPackage, *, include_contract: bool = True) -> dict[str, Any]:
+    result = {
+        "id": row.id,
+        "skill_id": row.skill_id,
+        "display_name": row.display_name,
+        "version": row.version,
+        "description": row.description,
+        "stage": row.stage,
+        "capabilities": list(row.capabilities_json or []),
+        "validation_report": dict(row.validation_report_json or {}),
+        "package_sha256": row.package_sha256,
+        "status": row.status,
+        "created_by": row.created_by,
+        "reviewed_by": row.reviewed_by,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "reviewer_notes": row.reviewer_notes,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "execution_boundary": "Declarative package only; instructions are not executed and approval does not authorize external actions.",
+    }
+    if include_contract:
+        result.update({
+            "input_schema": dict(row.input_schema_json or {}),
+            "output_schema": dict(row.output_schema_json or {}),
+            "instructions_markdown": row.instructions_markdown,
+            "test_cases": list(row.fixtures_json or []),
+        })
+    return result
+
+
+@api.get("/skills/packages")
+async def list_skill_packages(
+    limit: int = Query(default=100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing skill packages")
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(SkillPackage)
+            .where(SkillPackage.workspace_id == workspace_id)
+            .order_by(SkillPackage.created_at.desc())
+            .limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [_skill_package_dict(row, include_contract=False) for row in rows]}
+
+
+@api.post("/skills/packages", status_code=201)
+async def create_skill_package(
+    payload: SkillPackageCreateRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating skill packages")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    package_payload = payload.model_dump(mode="json")
+    try:
+        built = build_skill_package(package_payload)
+    except ValueError as exc:
+        raise HTTPException(422, {"code": "SKILL_CONTRACT_SCHEMA_INVALID", "message": str(exc)}) from exc
+    report = built["validation_report"]
+    initial_status = "review_required" if report["all_fixtures_passed"] else "draft"
+    with workspace_scope(workspace_id):
+        existing = await db.scalar(select(SkillPackage.id).where(
+            SkillPackage.workspace_id == workspace_id,
+            SkillPackage.skill_id == payload.skill_id,
+            SkillPackage.version == payload.version,
+        ))
+        if existing:
+            raise HTTPException(409, "This skill identifier and version already exists in the active workspace")
+        row = SkillPackage(
+            workspace_id=workspace_id,
+            skill_id=payload.skill_id,
+            display_name=payload.display_name,
+            version=payload.version,
+            description=payload.description,
+            stage=payload.stage,
+            capabilities_json=payload.capabilities,
+            input_schema_json=payload.input_schema,
+            output_schema_json=payload.output_schema,
+            instructions_markdown=payload.instructions_markdown,
+            fixtures_json=[case.model_dump(mode="json") for case in payload.test_cases],
+            validation_report_json=report,
+            package_sha256=built["package_sha256"],
+            status=initial_status,
+            created_by=actor,
+        )
+        db.add(row)
+        try:
+            await db.flush()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=actor,
+                action="skill_package.created",
+                resource_type="skill_package",
+                resource_id=row.id,
+                outcome=initial_status,
+                details_json={
+                    "skill_id": row.skill_id,
+                    "version": row.version,
+                    "package_sha256": row.package_sha256,
+                    "fixtures_passed": report["fixtures_passed"],
+                    "fixtures_failed": report["fixtures_failed"],
+                    "declarative_only": True,
+                },
+            ))
+            await db.commit()
+            await db.refresh(row)
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(409, "This skill identifier and version already exists in the active workspace") from exc
+    return _skill_package_dict(row)
+
+
+@api.get("/skills/packages/{package_id}")
+async def get_skill_package(
+    package_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing skill packages")
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(SkillPackage).where(
+            SkillPackage.id == package_id,
+            SkillPackage.workspace_id == workspace_id,
+        ))
+    if row is None:
+        raise HTTPException(404, "Skill package not found in the active workspace")
+    return _skill_package_dict(row)
+
+
+@api.post("/skills/packages/{package_id}/review")
+async def review_skill_package(
+    package_id: str,
+    payload: SkillPackageReviewRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing skill packages")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(SkillPackage).where(
+            SkillPackage.id == package_id,
+            SkillPackage.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Skill package not found in the active workspace")
+        if row.status in {"approved", "rejected"}:
+            raise HTTPException(409, "Reviewed skill packages are immutable; create a new version to change the contract")
+        if payload.decision == "approve":
+            if payload.confirm_contract_reviewed is not True:
+                raise HTTPException(409, "Approval requires confirm_contract_reviewed=true after reviewing the manifest and fixtures")
+            if row.validation_report_json.get("all_fixtures_passed") is not True:
+                raise HTTPException(409, {
+                    "code": "SKILL_CONTRACT_FIXTURES_FAILED",
+                    "message": "Fix all input/output contract fixtures before approving this package version.",
+                    "validation_report": row.validation_report_json,
+                })
+            row.status = "approved"
+            outcome = "human_review_approved"
+        else:
+            row.status = "rejected"
+            outcome = "human_review_rejected"
+        row.reviewed_by = actor
+        row.reviewed_at = utcnow()
+        row.reviewer_notes = payload.reviewer_notes or None
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="skill_package.reviewed",
+            resource_type="skill_package",
+            resource_id=row.id,
+            outcome=outcome,
+            details_json={
+                "skill_id": row.skill_id,
+                "version": row.version,
+                "package_sha256": row.package_sha256,
+                "fixtures_passed": row.validation_report_json.get("fixtures_passed", 0),
+                "fixtures_failed": row.validation_report_json.get("fixtures_failed", 0),
+                "declarative_only": True,
+                "external_action_authorized": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _skill_package_dict(row)
 
 
 @api.post("/learning/proprietary-dataset", status_code=201)

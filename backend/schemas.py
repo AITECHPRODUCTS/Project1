@@ -1601,3 +1601,78 @@ class JurisdictionComplianceAssessmentReviewRequest(BaseModel):
     def normalize_compliance_reviewer_notes(cls, value: str) -> str:
         return value.strip()
 
+
+
+# Governed skill packaging. These schemas describe contracts; instructions remain declarative data.
+SkillStage = Literal["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]
+
+
+class SkillPackageFixture(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    input: Any
+    expected_output: Any
+
+    @field_validator("name")
+    @classmethod
+    def normalize_fixture_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Fixture name must not be blank")
+        return normalized
+
+
+class SkillPackageCreateRequest(BaseModel):
+    skill_id: str = Field(min_length=3, max_length=140)
+    display_name: str = Field(min_length=3, max_length=180)
+    version: str = Field(min_length=5, max_length=40)
+    description: str = Field(min_length=10, max_length=3000)
+    stage: SkillStage
+    capabilities: list[str] = Field(min_length=1, max_length=50)
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
+    instructions_markdown: str = Field(min_length=20, max_length=50000)
+    test_cases: list[SkillPackageFixture] = Field(min_length=1, max_length=50)
+
+    @field_validator("skill_id")
+    @classmethod
+    def normalize_skill_id(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9]+(?:[/-][a-z0-9]+)*", normalized):
+            raise ValueError("Use a lowercase skill identifier such as analytics/offer-ranker")
+        return normalized
+
+    @field_validator("display_name", "description", "instructions_markdown")
+    @classmethod
+    def normalize_skill_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Skill text must not be blank")
+        return normalized
+
+    @field_validator("version")
+    @classmethod
+    def validate_skill_semver(cls, value: str) -> str:
+        normalized = value.strip()
+        if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?", normalized):
+            raise ValueError("Use semantic versioning such as 1.0.0 or 1.0.0-rc.1")
+        return normalized
+
+    @field_validator("capabilities")
+    @classmethod
+    def normalize_capabilities(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().lower() for value in values if str(value).strip()))
+        if not normalized or any(not re.fullmatch(r"[a-z][a-z0-9_.:-]{1,119}", value) for value in normalized):
+            raise ValueError("Capabilities must be lowercase identifiers such as content.draft or analytics.read")
+        return normalized
+
+
+class SkillPackageReviewRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+    confirm_contract_reviewed: bool = False
+    reviewer_notes: str = Field(default="", max_length=4000)
+
+    @field_validator("reviewer_notes")
+    @classmethod
+    def normalize_skill_review_notes(cls, value: str) -> str:
+        return value.strip()
+\n

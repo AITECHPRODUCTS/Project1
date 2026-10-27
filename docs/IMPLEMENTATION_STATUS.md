@@ -1,5 +1,5 @@
 # Implementation status — Project1 / OmniAffiliateOS
-Updated: 2026-10-26
+Updated: 2026-10-27
 
 ## Repository/build
 - Canonical repository: https://github.com/AITECHPRODUCTS/Project1 (public).
@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 50 partial and 3 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 51 partial and 2 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -884,3 +884,12 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - New live social/CMS publication and S5 workflow actions are gated against current approved assessments covering the exact channel and every declared target jurisdiction. A completed idempotent replay remains replay-only and does not execute a new provider action. Drafts, previews, and dry-runs remain available without a legal assessment.
 - Added a responsive /compliance console for source evidence collection, coverage gaps, reviewer notes, and explicit human approval confirmation. No global law database or legal certification is claimed; reviewers must confirm current authoritative sources and jurisdictional applicability.
 - Candidate until exact-SHA push and PR tests, migration/drift, frontend typecheck/build, security/SBOM/license, secret scan, AI/RAG, PostgreSQL integration and lockfile checks all pass. Paid-media, email, lead-capture and tracking rule categories are catalogued, but corresponding external live actions remain separately gated/not enabled until their own execution paths are implemented.
+
+
+## 2026-10-27 implementation update — governed declarative skill packages
+- Added tenant-scoped, semver-versioned skill package records with a unique workspace/skill/version key, input/output JSON contract schemas, declared capabilities, Markdown instructions, fixture manifests, deterministic SHA-256 checksums, and review audit events.
+- Added a bounded JSON-schema subset validator. It rejects unsupported schema keywords (including remote references), checks fixture inputs and expected outputs, and labels the result explicitly as contract-fixture validation—not runtime execution or proof that the instructions behave correctly.
+- Added workspace API routes to create/list/detail skill packages and approve/reject individual versions. Approval requires explicit human confirmation and all contract fixtures to pass. Reviewed versions are immutable; changes require a new version. Capability names suggesting external writes, publishing, communications, financial actions, credentials or deployment are flagged for reviewer attention but do not execute.
+- Added the “Governed skill packages” UI for authoring declarative manifests, inspecting checksums and fixture failures, and recording review decisions.
+- Updated `docs/skill-parity-matrix.csv`: `meta/create-skill` is now partial because package authoring, static contract validation and review persistence exist. Runtime dispatch/sandboxing, execution-specific tests, and UAT remain open; this is not an end-to-end-complete skill.
+- Current skill inventory remains 53 rows: 51 partial, 2 not implemented, 0 fully implemented end-to-end. This is a skills inventory, not an overall product completion percentage.

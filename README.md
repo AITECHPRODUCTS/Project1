@@ -40,3 +40,6 @@ See docs/SIGNED_AD_PERFORMANCE_INGESTION.md. A per-workspace/per-platform HMAC k
 ### Frontend production dependency boundary
 
 The current UI does not import next/image, so the optimizer is disabled. The frontend Docker build prunes optional/native image packages before the final image layer is committed and verifies the actual runtime dependency tree. CI emits both a complete build/install SBOM and a separate production SBOM; only the production SBOM is evaluated as the shipped runtime, with the license checker invoked without exceptions. Do not add next/image until its dependency and license impact has been reviewed and the runtime policy/test is intentionally revised.
+
+
+The signed ad-performance collector can be configured with AD_PERFORMANCE_WEBHOOK_SECRETS in .env as a JSON map keyed by <workspace UUID>:<platform>. Start with {}; provision fresh per-workspace/platform secrets out of band. See docs/SIGNED_AD_PERFORMANCE_INGESTION.md. This HMAC authenticates a trusted collector, not the native ad network, and never enables live ad changes.

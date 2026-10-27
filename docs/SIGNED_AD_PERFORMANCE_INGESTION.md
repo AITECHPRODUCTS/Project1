@@ -31,3 +31,7 @@ The endpoint rejects payload/platform mismatch, unknown plans, absent workspace-
 - Stop-loss evaluation requires all plan-linked observations to have verified status. If a plan has mixed evidence, evaluation is blocked rather than combining it.
 - Stop-latch and kill-switch state are internal review controls only. This endpoint never starts, pauses, edits, or spends on a live ad account.
 - Before staging, test key rotation, deployment secret injection, event replay, concurrent duplicate delivery, provider export normalization to daily creative snapshots, and revocation.
+
+
+## Docker Compose deployment
+Set AD_PERFORMANCE_WEBHOOK_SECRETS in the deployment .env as a JSON object keyed by <workspace UUID>:<platform>, for example {} before configuring a collector. Compose forwards the value to the API container. Store real keys in the deployment secret store, not in the repository or frontend. A setting only enables HMAC authentication for a trusted collector; the collector must obtain and verify native provider data through an authorized provider path before signing.

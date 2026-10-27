@@ -864,8 +864,15 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The monitor test uses signed collector data and confirms the scheduled job latches a verified breach. The job never invokes remote provider actions. Production still lacks provider pause enforcement/UAT, and release remains blocked by the temporary LGPL sharp/libvips exceptions pending legal review.
 
 
-## 2026-10-27 frontend production dependency boundary — candidate
-- Source inspection found no current imports of next/image or use of the Next image optimizer in app/pages/components. The frontend explicitly configures images as unoptimized and includes a guard that prevents introducing next/image until the native image stack is reviewed again.
-- The frontend Dockerfile now performs npm ci, typecheck, build, npm prune --omit=dev --omit=optional and production-boundary verification within one RUN layer. This avoids leaving pruned native packages in an earlier shipped image layer. A production-server smoke step verifies / and /ads/guardrails after pruning.
-- CI retains a complete SBOM for the full install/build tree with narrowly scoped build-only inventory notices, then generates and scans a separate production-runtime SBOM with no license exceptions. The production SBOM gate must reject unknown or GPL-family licenses rather than treating build-only inventory as the shipped runtime.
-- Candidate only until exact-SHA push/PR workflows pass, the Docker build and production server smoke succeed, the production SBOM reports release_approved=true, and the full runtime/audit jobs remain green. Other production gates (provider authorization/UAT, browser accessibility, staged proxy/egress, deployment smoke, monitoring/SLO, artifact provenance and backup/restore) remain separate.
+## 2026-10-27 frontend production dependency boundary — exact-SHA CI verified
+- Implementation source and production-runtime policy are verified at commit bd103628f038401de73e14484088965fb29e0516: push workflow [40536193799](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40536193799) and PR workflow [40536200952](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40536200952) both succeeded.
+- Python suite: **423 passed, 3 skipped, 1 existing Starlette/httpx deprecation warning**. PostgreSQL integration: **3 passed**. Frontend typecheck/build, post-prune Next server smoke, actual Docker build and container smoke all passed.
+- The production runtime verifier found no next/image use, no installed sharp, and no installed @img/sharp-* / libvips package. The separate production CycloneDX SBOM contained **19 packages** and passed the license policy with no exceptions, unknown licenses or blocked licenses.
+- The complete npm build/install SBOM remains at 109 packages for traceability. It records two exact optional libvips components only as temporary-build-inventory-only; release_approved for that build inventory is indeterminate, and this report is not used to approve production distribution. The runtime SBOM was filtered from the actual pruned package manifests and scanned without an exceptions file.
+- This resolves the sharp/libvips runtime inventory blocker for the current frontend image, not overall product release approval. Authorized provider UAT, browser/accessibility UAT, staging proxy/egress, deployment smoke, monitoring/SLO, model-artifact provenance/retrieval validation, backup/restore and remaining external-provider capabilities remain open.
+
+
+## 2026-10-27 signed ad collector deployment configuration — candidate
+- Added the workspace/platform secret-map environment variable to Docker Compose and .env.example; a regression test parses the Compose YAML and asserts the variable is forwarded to the API without committing any real secret.
+- The example uses an empty JSON map by default. Operators must provision each workspace/platform secret out of band; this is collector authentication, not native provider signature verification.
+- Candidate until exact-SHA push/PR Python, repository guard, secret, frontend, security/SBOM/license, AI/RAG and PostgreSQL workflows pass.

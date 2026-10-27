@@ -76,7 +76,65 @@ class Settings(BaseSettings):
     word_press_application_password: str = ""
     ghost_site_url: str = ""
     ghost_admin_api_key: str = ""
+    # Branch-based GitHub Pages deployment is off until an explicit target and scoped token are configured.
+    github_pages_deploy_execute: bool = False
+    github_pages_repository: str = ""
+    github_pages_branch: str = "gh-pages"
+    github_pages_directory: str = ""
+    github_pages_token: str = ""
     config_yaml_path: str = "./config.yaml"
+
+    @field_validator("github_pages_repository", mode="before")
+    @classmethod
+    def normalize_github_pages_repository(cls, value):
+        repository = str(value or "").strip()
+        if not repository:
+            return ""
+        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,98}[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?", repository):
+            raise ValueError("GITHUB_PAGES_REPOSITORY must be a fixed owner/repository identifier, not a URL")
+        owner, name = repository.split("/", 1)
+        if owner in {".", ".."} or name in {".", ".."} or name.endswith(".git"):
+            raise ValueError("GITHUB_PAGES_REPOSITORY must be a GitHub owner/repository name")
+        return f"{owner.lower()}/{name.lower()}"
+
+    @field_validator("github_pages_branch", mode="before")
+    @classmethod
+    def validate_github_pages_branch(cls, value):
+        branch = str(value or "").strip()
+        if not branch or len(branch) > 255 or not re.fullmatch(r"[A-Za-z0-9._/-]+", branch):
+            raise ValueError("GITHUB_PAGES_BRANCH must be a valid, non-empty branch name")
+        segments = branch.split("/")
+        if (
+            branch.startswith("/") or branch.endswith("/") or "//" in branch or
+            any(segment in {"", ".", ".."} or segment.startswith(".") or segment.endswith(".") or segment.endswith(".lock") for segment in segments) or
+            "@{" in branch
+        ):
+            raise ValueError("GITHUB_PAGES_BRANCH contains a forbidden Git ref component")
+        return branch
+
+    @field_validator("github_pages_directory", mode="before")
+    @classmethod
+    def validate_github_pages_directory(cls, value):
+        directory = str(value or "").strip()
+        if not directory:
+            return ""
+        if (
+            len(directory) > 300 or directory.startswith("/") or directory.endswith("/") or
+            "\\" in directory or not re.fullmatch(r"[A-Za-z0-9._/-]+", directory) or
+            any(part in {"", ".", ".."} for part in directory.split("/"))
+        ):
+            raise ValueError("GITHUB_PAGES_DIRECTORY must be a safe relative path without traversal segments")
+        return directory
+
+    @model_validator(mode="after")
+    def github_pages_execution_configuration(self):
+        if self.github_pages_deploy_execute and (
+            not self.github_pages_repository or len(self.github_pages_token.strip()) < 20
+        ):
+            raise ValueError(
+                "GITHUB_PAGES_DEPLOY_EXECUTE=true requires a fixed GITHUB_PAGES_REPOSITORY and scoped GITHUB_PAGES_TOKEN"
+            )
+        return self
 
     @field_validator("forwarded_allow_ips", mode="before")
     @classmethod

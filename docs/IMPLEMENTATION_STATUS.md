@@ -823,3 +823,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Publisher catalog queries return only listed and internally approved offers from other workspaces and omit seller-authorization references/internal reviewer notes. Merchant incoming-application queries/review are scoped to the authenticated owning merchant workspace; publisher applications remain scoped to the publisher workspace.
 - Added migration \`0015_marketplace_applications\`, publisher and merchant application pages, listing/unlisting controls, audit events and cross-workspace regression tests.
 - Candidate only: require exact-SHA push/PR CI, SQLite/PostgreSQL migration and drift checks, frontend build and security jobs. Internal approval remains separate from external affiliate-network authorization or provider submission.
+
+
+## 2026-10-27 marketplace migration drift — corrective candidate
+- Initial marketplace candidate SHA \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed both push workflow [40521613901](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521613901) and PR workflow [40521622522](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521622522) at the SQLite and PostgreSQL Alembic drift gates. Exact error: \`modify_default\` on \`merchant_offers.marketplace_listed\`; the migration's server-side \`false\` default was not present in ORM metadata.
+- Correction adds the matching SQLAlchemy server default in \`backend/models.py\`. No migration guard or test was weakened. All other completed jobs on the failed SHA (frontend production build/typecheck, repository/source guard, AI/RAG, security audit, secret scan, and push lockfile reproducibility) passed.
+- Corrective SHA is not considered verified until both push and PR workflows complete successfully, including migration upgrade/downgrade/drift on SQLite and PostgreSQL.

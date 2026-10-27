@@ -418,3 +418,8 @@
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
 | Merchant-controlled internal catalog listing and publisher application | \`MerchantOffer.marketplace_listed\`; \`MarketplaceApplication\`; migration \`0015_marketplace_applications\`; \`/api/marketplace/offers*\`; \`/api/merchant/applications*\`; publisher and merchant application pages; \`tests/test_marketplace_applications_api.py\` | candidate: explicit listing state, terms snapshot, compliance/contact-sharing attestations, publisher-scoped outgoing applications, merchant-workspace-scoped incoming review and sanitized cross-workspace catalog | Exact-SHA CI, PostgreSQL read/write isolation checks, browser UAT, seller identity/legal review and production data retention acceptance. External provider authorization/application submission is not configured. |
+
+
+## Marketplace listing default drift — correction pending
+- Failed candidate \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\`: both push run 40521613901 and PR run 40521622522 failed the migration drift gate because \`merchant_offers.marketplace_listed\` had a server-side default in revision 0015 that was absent in ORM metadata. Other jobs passed.
+- Corrective source adds the equivalent SQLAlchemy \`server_default=false()\` to the model. Keep the guard and migration gate strict; validate correction on exact-SHA push and PR workflows.

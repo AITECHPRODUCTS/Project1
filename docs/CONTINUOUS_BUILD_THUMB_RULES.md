@@ -220,3 +220,6 @@ These additive rules apply to every future Project1 build session.
 
 
 85. 2026-10-27 internal publisher marketplace vertical slice is a candidate until the exact resulting SHA passes push and PR workflows. Cross-workspace listing/application reads must remain explicitly filtered by the offer's owning merchant workspace and publisher workspace. Do not leak seller authorization references, reviewer notes, unrelated publisher data, or claim external network approval. Application decisions remain internal to Project1; no provider submission is performed.
+
+
+86. 2026-10-27 marketplace migration drift correction: the first full candidate \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed SQLite and PostgreSQL \`alembic check\` because the added \`marketplace_listed\` database default was missing from ORM metadata. The frontend, source/skill guard, AI profile, security and secret scan passed, but the overall run is a failure. Match the ORM server default to the migration and rerun the full matrix on the exact correction; never suppress drift checks.

@@ -247,3 +247,6 @@ These additive rules apply to every future Project1 build session.
 
 
 92. Signed ad-metrics collector deployment wiring is a candidate until exact-SHA CI passes. Keep AD_PERFORMANCE_WEBHOOK_SECRETS forwarded through the supported Compose API container environment; .env.example must carry only {} and documentation, never real secrets. Continue to validate per-workspace UUID/platform mapping and >=32-character secrets; this HMAC authenticates the configured collector only, never native provider identity.
+
+
+93. **No unresolved GitHub Actions failures (standing rule, 2026-10-27):** For every code/documentation checkpoint, inspect push and pull-request Actions runs for the exact resulting SHA. A failure is not considered resolved merely because a later unrelated commit passes: identify the failed job and step from its logs, fix the root cause on this same branch, and rerun the failed job or complete workflow. Do not report a checkpoint as verified while required jobs are queued, running, failed, cancelled, or not inspected. Preserve a concise failure-to-fix-to-rerun evidence trail; if permissions, provider outage, or another external blocker prevents verification, state it explicitly and continue independent checks without claiming success.

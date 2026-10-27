@@ -841,13 +841,16 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - This source candidate is not verified until both exact-SHA push and PR workflows pass, including SQLite/PostgreSQL migration/drift, frontend build, security and 53-skill guard jobs.
 
 
-## 2026-10-27 paid-media budget guardrails — implementation candidate
-- Added per-plan daily/campaign USD caps, ROAS/CPA thresholds, evidence sample gates, provider-verified-only evaluation, creative/day snapshot deduplication, stop-latch state, manual kill switch/reset audit events and an ad safety console.
-- No provider mutation, ad launch, live spend authorization or automatic remote pause is performed. The current observation endpoint deliberately marks submitted metrics unverified, so evaluation fails closed until an approved provider-verification path exists.
-- Candidate only until exact-SHA push/PR CI, SQLite/PostgreSQL migration and drift checks, test suite, frontend typecheck/build, security/dependency checks and lockfile workflow complete.
+
+## 2026-10-27 paid-media budget guardrails — exact-SHA CI verified
+- Implementation commit: 8a32bfb8c6b948c0b9221a984920183ff609de82. Push workflow 40525971292 and pull-request workflow 40525978916 both succeeded.
+- Python suite: 416 passed, 3 skipped, one existing Starlette/httpx deprecation warning. PostgreSQL integration: 3 passed. The frontend production build includes /ads/guardrails. AI/RAG profile, secret scan, repository/skill guard, security audit and push lockfile reproducibility passed.
+- Migration 0016 supports per-plan daily/campaign caps, ROAS/CPA and evidence sample gates, verified-evidence-only evaluation, an auditable stop latch and manual kill switch. It never executes a provider pause or authorizes live spend.
+- Release remains blocked by two temporary LGPL-3.0-or-later sharp/libvips inventory exceptions expiring 2026-11-02 (license inventory records release_approved=false). Human legal review, provider authorization/UAT, browser acceptance and deployment/restore evidence remain required.
 
 
-## 2026-10-27 signed ad performance ingestion — candidate
-- Added a separate bounded-body, workspace/platform-keyed HMAC-SHA256 endpoint for normalized daily ad metrics from an explicitly trusted collector. A collector key is configured only for one workspace and one platform; no global shared key is accepted for this route.
-- Added event-id idempotency, exact raw-body SHA-256 provenance, audit events, timezone-aware observations and explicit markers that the collector signature is not the native platform signature. The guardrail evaluator can consume the resulting provider-verified rows; ordinary manual/provider-export submissions remain unverified.
-- Candidate only until exact-SHA push/PR Python tests, SQLite/PostgreSQL migration and drift gates, frontend build, AI/security/secret/lockfile workflows pass. This contract authenticates the trusted collector only; native provider authentication and live provider integration remain external prerequisites.
+## 2026-10-27 signed ad performance ingestion — exact-SHA CI verified
+- Implementation commit: 13700e8076641ae3dca1244f37b878e890ec6723. Push workflow 40528436803 and pull-request workflow 40528445045 both succeeded.
+- Python suite: 420 passed, 3 skipped, one existing Starlette/httpx deprecation warning. The 0017 migration passed SQLite and PostgreSQL upgrade/downgrade/re-upgrade and Alembic drift checks; PostgreSQL integration: 3 passed. Frontend, AI/RAG SBOM/import profile, security audit, secret scan, repo/skill guard and push lockfile jobs passed.
+- Added workspace/platform-scoped HMAC, exact-body verification, request-size bounds, unique event idempotency, raw-body digest provenance, an audit event, timestamp and platform validation, and regression tests including end-to-end stop-latch triggering from a signed observation.
+- HMAC authenticates the configured trusted collector, not a native platform signature. Only mark evidence provider_verified when the separately provisioned collector independently validates the source; native ad-account authorization, provider-native verification, live pause/scale actions and live spending remain not configured. Production release is still blocked by the LGPL license exceptions noted above.

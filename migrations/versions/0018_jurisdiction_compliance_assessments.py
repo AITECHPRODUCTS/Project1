@@ -34,10 +34,12 @@ def upgrade() -> None:
     op.create_index("ix_compliance_assessments_workspace_activity", "jurisdiction_compliance_assessments", ["workspace_id", "activity"])
     op.create_index("ix_jurisdiction_compliance_assessments_workspace_id", "jurisdiction_compliance_assessments", ["workspace_id"])
     op.create_index("ix_jurisdiction_compliance_assessments_activity", "jurisdiction_compliance_assessments", ["activity"])
+    op.create_index("ix_jurisdiction_compliance_assessments_status", "jurisdiction_compliance_assessments", ["status"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_jurisdiction_compliance_assessments_activity", table_name="jurisdiction_compliance_assessments")
+    op.drop_index("ix_jurisdiction_compliance_assessments_status", table_name="jurisdiction_compliance_assessments")
     op.drop_index("ix_jurisdiction_compliance_assessments_workspace_id", table_name="jurisdiction_compliance_assessments")
     op.drop_index("ix_compliance_assessments_workspace_activity", table_name="jurisdiction_compliance_assessments")
     op.drop_index("ix_compliance_assessments_workspace_status", table_name="jurisdiction_compliance_assessments")

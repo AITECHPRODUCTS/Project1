@@ -212,7 +212,7 @@ def test_bio_link_publish_uses_compliance_gate_and_idempotency(monkeypatch):
                 actions = list((await db.scalars(select(ExternalAction).where(ExternalAction.action_type == "bio_link_publish"))).all())
                 audits = list((await db.scalars(select(AuditLog).where(AuditLog.action.in_([
                     "bio_link_page.created", "bio_link_publish", "bio_link_publish_idempotency_replay"
-                ]))).all())
+                ])))).all())
                 return asset, actions, audits
         asset, actions, audits = asyncio.run(rows())
         assert asset is not None and asset.status == "published"

@@ -1675,4 +1675,4 @@ class SkillPackageReviewRequest(BaseModel):
     @classmethod
     def normalize_skill_review_notes(cls, value: str) -> str:
         return value.strip()
-\n
+

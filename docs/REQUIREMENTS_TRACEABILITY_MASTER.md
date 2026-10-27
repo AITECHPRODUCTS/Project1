@@ -407,7 +407,8 @@
 - The operator CLI validates staged artifact directory hashes, application SHA, Hub revision pin, license/acquisition metadata and runtime local-only policy. Its fixture tests do not prove any actual model has been downloaded, staged or licensed.
 - Production artifact/cache-only load, retrieval-golden testing, staging egress, provider UAT, legal exception resolution, deployment and restore evidence remain pending.
 
-## Merchant / product-owner offer lifecycle (2026-10-27 candidate)
+
+## Merchant / product-owner offer lifecycle (2026-10-27 verified code/CI)
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
-| Merchant-owned offer packet and internal activation gate | backend/models.py MerchantOffer; migration 0014_merchant_offers; backend/schemas.py; backend/main.py /api/merchant/offers routes; frontend/app/merchant/offers/page.tsx; tests/test_merchant_offers_api.py | candidate: workspace-scoped draft, submission, second-person review, evidence attestation, suspension and audit transitions | Exact-SHA CI/migration checks, browser UAT, authorized human review of seller authority/terms and production role-policy review; network approval and live listing remain not configured |
+| Merchant-owned offer packet and internal activation gate | \`backend/models.py\` (\`MerchantOffer\`); migration \`0014_merchant_offers\`; \`backend/schemas.py\`; \`backend/main.py\` (\`/api/merchant/offers*\`); \`frontend/app/merchant/offers/page.tsx\`; \`tests/test_merchant_offers_api.py\` | **implemented code + hosted CI verified at** \`fd712d411269a251b5fc70c912e2731c55c39a0a\`; both push run 40517947381 and PR run 40517953771 succeeded | Independent human review of real seller authorization and commission terms, product/merchant identity model, browser accessibility/UAT and production role-policy review remain. Affiliate-network approval/listing is explicitly \`not_configured\`; no external submission or network approval is claimed. |

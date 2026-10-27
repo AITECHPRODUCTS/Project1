@@ -808,9 +808,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Audit events record packet creation and internal review. Tests cover incomplete readiness, evidence/checklist-gated handoff, workspace role gate and the non-submission invariant.
 
 
-## 2026-10-27 merchant offer lifecycle — implementation candidate
-- Added a workspace-scoped merchant offer packet with typed commission terms, supported regions, restricted traffic-source declarations, seller-authorization/commission-terms references and explicit affiliate disclosure.
-- Added draft, submit-for-review, second-person approval/rejection and suspension APIs. Internal activation is blocked until a different workspace owner/admin explicitly attests to seller authorization and terms; state transitions create audit events.
-- Internal approval returns affiliate network status as not configured and does not imply network acceptance, live listing, tracking-link creation or provider submission.
-- Added a responsive merchant-offer console plus API tests for workspace isolation, self-review denial, evidence gates, suspension, role restrictions, private URL rejection and percentage bounds.
-- Candidate only: exact-SHA hosted CI, PostgreSQL migration/drift checks and frontend build are required before marking verified. No production deployment or provider approval is claimed.
+
+## 2026-10-27 merchant offer lifecycle — exact-SHA CI verified
+- Implementation commit: \`fd712d411269a251b5fc70c912e2731c55c39a0a\`.
+- Push workflow [40517947381](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40517947381) and pull-request workflow [40517953771](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40517953771) both completed successfully.
+- Exact-SHA evidence: Python suite 406 passed, 3 skipped, 1 existing Starlette/httpx deprecation warning; PostgreSQL integration suite 3 passed; frontend typecheck and production build passed and included the \`/merchant/offers\` route; AI/RAG import/SBOM, repo/source/53-skill guard, dependency and license inventory, Gitleaks secret scan, and push lockfile reproducibility jobs passed.
+- Added a workspace-scoped merchant offer packet with typed Decimal commission terms, allowed regions, restricted traffic-source declarations, source references and affiliate disclosure; draft, submit, second-person evidence review, reject and suspend routes write audit events.
+- Regression tests cover workspace isolation, self-review denial, explicit evidence attestations, suspension, non-admin denial, private-URL rejection, commission percentage bounds, and the invariant that internal approval never implies affiliate-network approval or provider submission.
+- **Not production release approval:** the frontend SBOM/license report still says \`release_approved=false\` due to two temporary LGPL-3.0-or-later sharp/libvips inventory exceptions expiring 2026-11-02. External provider authorization, human verification of evidence, browser UAT, staging ingress/egress, deployment smoke, monitoring/SLO and backup/restore remain open.

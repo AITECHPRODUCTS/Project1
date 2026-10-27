@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 52 partial and 1 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 53 partial and 0 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -903,3 +903,12 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added service/API tests for escaping, unsafe destinations, disclosure validation, UTM preservation, tenant isolation, preview, live compliance gating, and idempotent publish replay.
 - Updated `docs/skill-parity-matrix.csv`: `distribution/bio-link-deployer` is now partial. Actual connected-provider scope verification and deployed provider UAT remain unverified; a tracked partial state is not a production-ready claim.
 - Current skill inventory is 53 rows: 52 partial, 1 not implemented, 0 fully implemented end-to-end. This is not an overall product completion percentage.
+
+
+## 2026-10-27 implementation update — configured GitHub Pages deployment
+- Added environment-backed deployment controls: `GITHUB_PAGES_DEPLOY_EXECUTE` defaults off; repository, branch, relative directory and token are configured on the server. API requests cannot supply an arbitrary target repository or endpoint URL. Configuration validates owner/repository identifiers and rejects Git ref/path traversal.
+- Added a fixed-origin GitHub REST integration using the repository's DNS-pinned, redirect-disabled HTTPS client. It verifies the GitHub Pages branch source, resolves the configured root or `docs/` source, creates/updates a single generated `index.html` with the Contents API and uses the current file SHA as an optimistic concurrency guard. Matching remote content is a no-op instead of an extra commit.
+- Added platform-admin-only configuration readiness, deployment and read-only reconciliation endpoints. A provider timeout marks the external action outcome unknown; a reconciliation read verifies the exact generated HTML before resolving an uncertain action as published. Non-matching content stays unknown rather than being assumed to have failed.
+- Live deployment requires an explicit confirmation, configured execution flag/token/fixed target, a workspace-owned generated bio-link artifact whose SHA-256 matches stored metadata, a valid idempotency key and a current human-reviewed jurisdiction approval for channel `github_pages`. Requests do not accept raw arbitrary HTML or user-supplied GitHub API URLs.
+- Added mock-provider unit/API tests for target validation, branch source matching, write/no-op behavior, token redaction, cross-workspace isolation, compliance, idempotency and unknown-outcome reconciliation. Actual remote repository permissions and live Pages UAT still require customer credentials and remain unverified until an actual deployment is run against the configured target.
+- Updated the skill parity row to partial because the deployment code and tests now exist; provider credentials/repository configuration and remote UAT are not treated as completed. Current skill inventory: 53 partial, 0 not implemented, 0 fully implemented end-to-end.

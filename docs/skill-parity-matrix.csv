@@ -25,7 +25,7 @@ content/twitter-thread-writer,S2,partial,backend/services/content_atomizer.py; P
 content/viral-post-writer,S2,partial,backend/services/s2_s3_content.py,Viral outcomes are not predictable or guaranteed
 distribution/bio-link-deployer,S5,partial,"backend/services/bio_link_page.py; backend/main.py; backend/schemas.py; frontend/app/bio-links/page.tsx; POST /api/distribution/bio-links; POST /api/distribution/bio-links/{id}/publish; tests/test_bio_link_page.py","Disclosure-aware page generation, preview, UTM attribution, and idempotent CMS publishing; production provider credentials/scopes and end-to-end UAT remain"
 distribution/email-drip-sequence,S5,partial,backend/services/email_delivery.py,Deliverability and branch logic not verified
-distribution/github-pages-deployer,S5,not_implemented,,No authorized site deployment flow
+distribution/github-pages-deployer,S5,partial,"backend/services/github_pages_deployer.py; backend/main.py; backend/config.py; frontend/app/bio-links/page.tsx; POST /api/distribution/github-pages/deploy; POST /api/distribution/github-pages/{id}/reconcile; tests/test_github_pages_deployer.py; tests/test_github_pages_api.py","Configured-target branch-based deployment of generated static bio-link HTML with idempotency, remote-content no-op detection, compliance gates and ambiguous-outcome reconciliation; external token/repository setup and remote live UAT remain"
 distribution/social-media-scheduler,S5,partial,backend/services/s4_s5_landing.py,Only configured provider boundaries are supported
 landing/bonus-stack-builder,S4,partial,backend/services/s4_s5_landing.py,Deliverables need operator substantiation
 landing/grand-slam-offer,S4,partial,backend/services/s4_s5_landing.py,Claims proof review required

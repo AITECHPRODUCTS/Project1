@@ -25,10 +25,10 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -46,6 +46,7 @@ from backend.services.multi_program_manager import manage_program_portfolio as m
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
+from backend.services.github_pages_deployer import GitHubPagesConfigurationError,deploy_github_pages_html,github_pages_readiness,verify_github_pages_html
 from backend.services.bio_link_page import build_bio_link_page
 from backend.services.skill_packager import build_skill_package
 from backend.services.skill_finder import find_skills as find_skills_service
@@ -4734,6 +4735,7 @@ def _bio_link_asset_dict(row: ContentAsset, *, include_html: bool = False) -> di
         "publication": metadata.get("publication"),
         "execution_boundary": "Draft HTML is generated locally; CMS publishing uses the existing platform-admin, idempotency, and live-compliance gates.",
     }
+    result["github_pages_publication"] = metadata.get("github_pages_publication")
     if include_html:
         result["html"] = row.body
     return result
@@ -4970,6 +4972,313 @@ async def publish_bio_link_page(
         db, user=user, workspace_id=workspace_id, action="bio_link_publish",
         platform=payload.provider, outcome=asset_status, remote_id=remote.get("remote_id"),
     )
+    return result
+
+
+
+
+@api.get("/distribution/github-pages/status")
+async def github_pages_deployment_status(
+    user: dict[str, Any] = Depends(require_platform_admin),
+):
+    # This is configuration readiness, not a claim that the token or remote Pages source was verified.
+    return github_pages_readiness(settings)
+
+
+@api.post("/distribution/github-pages/deploy")
+async def deploy_bio_link_to_github_pages(
+    payload: GitHubPagesDeployRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before deploying a site")
+    if payload.confirm_live_publish is not True:
+        raise HTTPException(409, "GitHub Pages deployment requires confirm_live_publish=true.")
+    readiness = github_pages_readiness(settings)
+    if not readiness["deployment_enabled"]:
+        raise HTTPException(409, {
+            "code": "GITHUB_PAGES_DEPLOYMENT_DISABLED",
+            "message": "Live deployment is disabled. Configure GITHUB_PAGES_DEPLOY_EXECUTE after reviewing the target repository and token scope.",
+        })
+    if not readiness["configuration_ready"]:
+        raise HTTPException(503, {
+            "code": "GITHUB_PAGES_NOT_CONFIGURED",
+            "message": "A valid fixed GitHub repository and scoped deployment token must be configured on the server.",
+        })
+
+    with workspace_scope(workspace_id):
+        asset = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == payload.asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "bio_link_page",
+        ))
+    if asset is None:
+        raise HTTPException(404, "Bio-link page not found in the active workspace.")
+    metadata = dict(asset.metadata_json or {})
+    expected_checksum = str(metadata.get("page_sha256") or "")
+    actual_checksum = hashlib.sha256(asset.body.encode("utf-8")).hexdigest()
+    if not expected_checksum or expected_checksum != actual_checksum:
+        raise HTTPException(409, {
+            "code": "BIO_LINK_ARTIFACT_CHECKSUM_MISMATCH",
+            "message": "The saved page does not match its recorded checksum. Rebuild the bio-link artifact before deployment.",
+        })
+    prior_publication = metadata.get("github_pages_publication")
+    if isinstance(prior_publication, dict) and prior_publication.get("status") == "outcome_unknown":
+        raise HTTPException(409, {
+            "code": "GITHUB_PAGES_OUTCOME_UNKNOWN",
+            "message": "The previous provider outcome is unresolved. Reconcile the remote file before retrying.",
+        })
+
+    supplied_key = str(request.headers.get("Idempotency-Key") or "").strip()
+    if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(supplied_key):
+        raise HTTPException(428, "A valid Idempotency-Key header is required for GitHub Pages writes.")
+    action_payload = {
+        "asset_id": asset.id,
+        "page_sha256": actual_checksum,
+        "repository": readiness["repository"],
+        "branch": readiness["branch"],
+        "directory": readiness["directory"],
+        "target_jurisdictions": payload.target_jurisdictions,
+        "confirm_live_publish": True,
+    }
+    action_id, replay = await _claim_external_action(
+        db, workspace_id=workspace_id, action_type="github_pages_deploy",
+        provider="github_pages", idempotency_key=supplied_key,
+        request_payload=action_payload,
+    )
+    if replay is not None:
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="github_pages.deploy.idempotency_replay",
+            resource_type="content_asset", resource_id=asset.id,
+            outcome="replayed", details_json={"page_sha256": actual_checksum, "provider_action_executed": False},
+        ))
+        await db.commit()
+        return replay
+
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    try:
+        await _require_live_compliance_approval(
+            db, workspace_id=workspace_id, activity="content_publish",
+            jurisdictions=payload.target_jurisdictions, channel="github_pages",
+            actor=actor, action="github_pages_deploy",
+        )
+    except HTTPException:
+        await _finish_external_action(
+            db, workspace_id=workspace_id, action_id=action_id,
+            status="failed", error_type="ComplianceApprovalRequired",
+        )
+        raise
+
+    try:
+        with workspace_scope(workspace_id):
+            remote = await deploy_github_pages_html(
+                html_content=asset.body,
+                title=asset.title,
+                asset_id=asset.id,
+                settings=settings,
+            )
+    except Exception as exc:
+        action_outcome = _external_action_failure_status(exc)
+        try:
+            await _finish_external_action(
+                db, workspace_id=workspace_id, action_id=action_id,
+                status=action_outcome, error_type=type(exc).__name__,
+            )
+        except Exception:
+            logger.exception("Could not persist GitHub Pages action outcome for workspace %s", workspace_id[:8])
+        metadata = dict(asset.metadata_json or {})
+        metadata["github_pages_publication"] = {
+            "status": "outcome_unknown" if action_outcome == "unknown" else "failed",
+            "repository": readiness["repository"],
+            "branch": readiness["branch"],
+            "directory": readiness["directory"],
+            "page_sha256": actual_checksum,
+            "action_id": action_id,
+            "error_type": type(exc).__name__,
+            "last_attempt_at": utcnow().isoformat(),
+        }
+        asset.metadata_json = metadata
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=actor,
+            action="github_pages.deploy", resource_type="content_asset", resource_id=asset.id,
+            outcome="outcome_unknown" if action_outcome == "unknown" else "failed",
+            details_json={
+                "page_sha256": actual_checksum,
+                "repository": readiness["repository"],
+                "branch": readiness["branch"],
+                "error_type": type(exc).__name__,
+                "provider_outcome": action_outcome,
+            },
+        ))
+        await db.commit()
+        if isinstance(exc, GitHubPagesConfigurationError):
+            raise HTTPException(409, str(exc)) from exc
+        if isinstance(exc, httpx.HTTPStatusError):
+            raise HTTPException(502, {
+                "code": "GITHUB_PAGES_PROVIDER_REJECTED_REQUEST",
+                "message": "GitHub rejected the deployment request. Verify repository permissions, Pages source branch, and token scope.",
+                "provider_outcome": action_outcome,
+            }) from exc
+        raise HTTPException(502, {
+            "code": "GITHUB_PAGES_PROVIDER_ERROR",
+            "message": "GitHub Pages deployment did not complete. If the provider outcome is unknown, reconcile it before retrying.",
+            "provider_outcome": action_outcome,
+        }) from exc
+
+    deployment_status = "unchanged" if remote["status"] == "unchanged" else "published"
+    result = {
+        "asset_id": asset.id,
+        "status": "completed",
+        "deployment_status": deployment_status,
+        "repository": remote["repository"],
+        "branch": remote["branch"],
+        "content_path": remote["content_path"],
+        "published_url": remote["published_url"],
+        "page_sha256": remote["page_sha256"],
+        "file_sha": remote.get("file_sha"),
+        "commit_sha": remote.get("commit_sha"),
+        "commit_url": remote.get("commit_url"),
+    }
+    await _finish_external_action(
+        db, workspace_id=workspace_id, action_id=action_id,
+        status="completed", result=result,
+    )
+    metadata = dict(asset.metadata_json or {})
+    metadata["github_pages_publication"] = {
+        "status": "published",
+        "repository": remote["repository"],
+        "branch": remote["branch"],
+        "content_path": remote["content_path"],
+        "published_url": remote["published_url"],
+        "page_sha256": remote["page_sha256"],
+        "file_sha": remote.get("file_sha"),
+        "commit_sha": remote.get("commit_sha"),
+        "commit_url": remote.get("commit_url"),
+        "provider_status": deployment_status,
+        "verified_at": utcnow().isoformat(),
+        "action_id": action_id,
+    }
+    asset.metadata_json = metadata
+    db.add(AuditLog(
+        workspace_id=workspace_id, actor=actor,
+        action="github_pages.deploy", resource_type="content_asset", resource_id=asset.id,
+        outcome=deployment_status,
+        details_json={
+            "page_sha256": remote["page_sha256"],
+            "repository": remote["repository"],
+            "branch": remote["branch"],
+            "content_path": remote["content_path"],
+            "commit_sha": remote.get("commit_sha"),
+            "external_action_id": action_id,
+        },
+    ))
+    await db.commit()
+    return result
+
+
+@api.post("/distribution/github-pages/{asset_id}/reconcile")
+async def reconcile_github_pages_deployment(
+    asset_id: str,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reconciling a deployment.")
+    with workspace_scope(workspace_id):
+        asset = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "bio_link_page",
+        ))
+    if asset is None:
+        raise HTTPException(404, "Bio-link page not found in the active workspace.")
+    metadata = dict(asset.metadata_json or {})
+    publication = metadata.get("github_pages_publication")
+    if not isinstance(publication, dict) or publication.get("status") != "outcome_unknown":
+        raise HTTPException(409, "This page does not have an unresolved GitHub Pages outcome.")
+    action_id = str(publication.get("action_id") or "")
+    if not action_id:
+        raise HTTPException(409, "No external-action record is available for reconciliation.")
+    with workspace_scope(workspace_id):
+        action = await db.scalar(select(ExternalAction).where(
+            ExternalAction.id == action_id,
+            ExternalAction.workspace_id == workspace_id,
+            ExternalAction.action_type == "github_pages_deploy",
+        ))
+    if action is None or action.status != "unknown":
+        raise HTTPException(409, "The external-action record is not in an unknown state.")
+    try:
+        verified = await verify_github_pages_html(html_content=asset.body, settings=settings)
+    except Exception as exc:
+        if isinstance(exc, GitHubPagesConfigurationError):
+            raise HTTPException(409, str(exc)) from exc
+        raise HTTPException(502, "Could not verify the remote GitHub Pages file. The outcome remains unknown.") from exc
+
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    if verified["matches_expected_content"]:
+        result = {
+            "asset_id": asset.id,
+            "status": "completed",
+            "deployment_status": "published",
+            "reconciled": True,
+            "repository": verified["repository"],
+            "branch": verified["branch"],
+            "content_path": verified["content_path"],
+            "published_url": verified["published_url"],
+            "page_sha256": verified["page_sha256"],
+            "file_sha": verified.get("file_sha"),
+        }
+        action.status = "completed"
+        action.result_json = result
+        action.remote_id = str(verified.get("file_sha") or "")[:255] or None
+        action.error_type = None
+        metadata["github_pages_publication"] = {
+            **publication,
+            "status": "published",
+            "repository": verified["repository"],
+            "branch": verified["branch"],
+            "content_path": verified["content_path"],
+            "published_url": verified["published_url"],
+            "page_sha256": verified["page_sha256"],
+            "file_sha": verified.get("file_sha"),
+            "reconciled": True,
+            "verified_at": utcnow().isoformat(),
+        }
+        asset.metadata_json = metadata
+        outcome = "verified_match"
+    else:
+        # A different file does not prove that the original commit never landed;
+        # keep the action unknown until branch history is reviewed by an operator.
+        outcome = "still_unknown"
+        publication["last_reconciled_at"] = utcnow().isoformat()
+        publication["remote_file_matches_expected"] = False
+        metadata["github_pages_publication"] = publication
+        asset.metadata_json = metadata
+        result = {
+            "asset_id": asset.id,
+            "status": "outcome_unknown",
+            "reconciled": False,
+            "remote_file_matches_expected": False,
+            "message": "The remote file does not match this artifact. The action remains unresolved; inspect the configured branch commit history before retrying.",
+        }
+    db.add(AuditLog(
+        workspace_id=workspace_id, actor=actor,
+        action="github_pages.deploy.reconciled", resource_type="content_asset", resource_id=asset.id,
+        outcome=outcome,
+        details_json={
+            "action_id": action_id,
+            "page_sha256": verified["page_sha256"],
+            "remote_file_matches_expected": verified["matches_expected_content"],
+            "provider_action_executed": False,
+        },
+    ))
+    await db.commit()
     return result
 
 

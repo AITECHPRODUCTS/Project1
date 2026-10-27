@@ -1755,3 +1755,17 @@ class BioLinkPublishRequest(BaseModel):
     def normalize_bio_publish_tags(cls, values: list[str]) -> list[str]:
         return list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))[:20]
 
+class GitHubPagesDeployRequest(BaseModel):
+    """Deploy only an existing, generated bio-link asset to the server-configured target."""
+    asset_id: str = Field(min_length=1, max_length=36)
+    target_jurisdictions: list[str] = Field(min_length=1, max_length=50)
+    confirm_live_publish: bool = False
+
+    @field_validator("target_jurisdictions")
+    @classmethod
+    def normalize_github_pages_jurisdictions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().upper() for value in values if str(value).strip()))
+        if not normalized or any(not re.fullmatch(r"(?:[A-Z]{2}(?:-[A-Z0-9]{1,6})?|EU|EEA|GLOBAL)", value) for value in normalized):
+            raise ValueError("Choose target jurisdictions using ISO-style country/subdivision codes or EU, EEA, GLOBAL")
+        return normalized
+

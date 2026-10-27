@@ -37,6 +37,6 @@ def test_current_pinned_source_registry_matches_runtime_matrix():
     assert summary["source_skills"] == 53
     assert summary["matrix_rows"] == 53
     assert summary["vendored_files_checked"] == 72
-    assert summary["status_counts"]["partial"] == 52
-    assert summary["status_counts"]["not_implemented"] == 1
+    assert summary["status_counts"]["partial"] == 53
+    assert summary["status_counts"]["not_implemented"] == 0
     assert any("README says 52" in note for note in notes)

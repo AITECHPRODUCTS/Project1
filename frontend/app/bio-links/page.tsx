@@ -5,7 +5,7 @@ import {API_BASE,apiFetch} from "@/lib/api";
 
 type BioLink = {label:string;url:string;description:string;is_affiliate:boolean};
 type Publication = {provider:string;remote_id:string|null;url:string|null;status:string;published_at:string|null}|null;
-type PageAsset = {id:string;title:string;status:string;source_urls:string[];link_count:number;affiliate_link_count:number;page_sha256:string;created_at:string|null;publication:Publication;preview_url?:string;execution_boundary:string};
+type GithubPagesPublication = {status:string;repository?:string;branch?:string;content_path?:string;published_url?:string;commit_sha?:string;provider_status?:string;action_id?:string}|null;\ntype GithubPagesStatus = {configuration_ready:boolean;publish_ready:boolean;deployment_enabled:boolean;repository:string|null;branch:string|null;directory:string|null;token_configured:boolean;provider_connection_verified:boolean;site_source_verified:boolean;message:string};\ntype PageAsset = {id:string;title:string;status:string;source_urls:string[];link_count:number;affiliate_link_count:number;page_sha256:string;created_at:string|null;publication:Publication;github_pages_publication?:GithubPagesPublication;preview_url?:string;execution_boundary:string};
 type PageList = {count:number;data:PageAsset[]};
 const field="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
 const label="block text-sm font-semibold text-slate-700";
@@ -15,7 +15,7 @@ const initialLinks:BioLink[]=[
 ];
 function errorMessage(error:unknown){return error instanceof Error?error.message:"Request failed";}
 export default function BioLinksPage(){
- const [pages,setPages]=useState<PageAsset[]>([]);
+ const [pages,setPages]=useState<PageAsset[]>([]);\n const [githubPagesStatus,setGithubPagesStatus]=useState<GithubPagesStatus|null>(null);
  const [title,setTitle]=useState("Creator resource links");
  const [headline,setHeadline]=useState("Helpful tools and resources");
  const [subheadline,setSubheadline]=useState("A curated list of resources and products worth exploring.");
@@ -30,7 +30,7 @@ export default function BioLinksPage(){
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
- const load=useCallback(async()=>{setError("");try{const result=await apiFetch<PageList>("/api/distribution/bio-links?limit=50");setPages(result.data||[]);}catch(e){setError(errorMessage(e));}},[]);
+ const load=useCallback(async()=>{setError("");try{const result=await apiFetch<PageList>("/api/distribution/bio-links?limit=50");setPages(result.data||[]);}catch(e){setError(errorMessage(e));}try{const readiness=await apiFetch<GithubPagesStatus>("/api/distribution/github-pages/status");setGithubPagesStatus(readiness);}catch{setGithubPagesStatus(null);}},[]);
  useEffect(()=>{void load();},[load]);
  const create=async(e:FormEvent)=>{
   e.preventDefault();setBusy(true);setError("");setNotice("");
@@ -40,6 +40,33 @@ export default function BioLinksPage(){
     title,headline,subheadline,links,affiliate_disclosure:disclosure,footer_note:footer
    })});
    setNotice(`Saved ${result.title} as a draft · SHA-256 ${result.page_sha256.slice(0,12)}…`);
+   await load();
+  }catch(e){setError(errorMessage(e));}
+  finally{setBusy(false);}
+ };
+
+ const deployGithubPages=async(asset:PageAsset)=>{
+  setBusy(true);setError("");setNotice("");
+  try{
+   const result=await apiFetch<{deployment_status:string;published_url:string;repository:string;branch:string;content_path:string}>(
+    "/api/distribution/github-pages/deploy",
+    {method:"POST",headers:{"Idempotency-Key":`github-pages-${crypto.randomUUID()}`},body:JSON.stringify({
+     asset_id:asset.id,target_jurisdictions:jurisdictions.split(",").map(v=>v.trim()).filter(Boolean),confirm_live_publish:true
+    })}
+   );
+   setNotice(`GitHub Pages ${result.deployment_status}: ${result.repository} · ${result.branch}/${result.content_path} · ${result.published_url}`);
+   await load();
+  }catch(e){setError(errorMessage(e));}
+  finally{setBusy(false);}
+ };
+ const reconcileGithubPages=async(asset:PageAsset)=>{
+  setBusy(true);setError("");setNotice("");
+  try{
+   const result=await apiFetch<{deployment_status?:string;status:string;message?:string}>(
+    `/api/distribution/github-pages/${encodeURIComponent(asset.id)}/reconcile`,
+    {method:"POST",body:JSON.stringify({})}
+   );
+   setNotice(result.deployment_status==="published"?"GitHub Pages outcome verified against the configured remote file.":result.message||"Remote outcome remains unresolved; inspect the configured branch history before retrying.");
    await load();
   }catch(e){setError(errorMessage(e));}
   finally{setBusy(false);}
@@ -81,7 +108,8 @@ export default function BioLinksPage(){
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-xl font-bold">CMS publish settings</h2><p className="mt-1 text-sm text-slate-500">Publishing reuses the shared CMS adapters. Draft delivery does not make a public page; choose live publish only after compliance review and provider configuration.</p>
      <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className={label}>Provider<select className={field} value={provider} onChange={e=>setProvider(e.target.value as "wordpress"|"ghost")}><option value="wordpress">WordPress</option><option value="ghost">Ghost</option></select></label><label className={label}>CMS site URL for canonical check<input className={field} type="url" value={canonicalUrl} onChange={e=>setCanonicalUrl(e.target.value)} required/></label></div>
      <label className={label+" mt-3"}>Target jurisdictions<input className={field} value={jurisdictions} onChange={e=>setJurisdictions(e.target.value)} placeholder="US, GB, EU"/></label>
-     <label className="mt-3 flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmLive} onChange={e=>setConfirmLive(e.target.checked)} className="mt-1"/>I confirm this live publish is intentional and have reviewed the page, destinations, and compliance approval.</label>
+     <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><strong>GitHub Pages:</strong> {githubPagesStatus?.publish_ready?<>Configured target <code>{githubPagesStatus.repository}</code> on <code>{githubPagesStatus.branch}</code>{githubPagesStatus.directory?<> at <code>{githubPagesStatus.directory}/</code></>:null}. The remote Pages branch and token are verified during deployment.</>:githubPagesStatus?.message||"Configuration readiness is unavailable to this account; a platform super admin must check the server-side GitHub Pages settings."}</div>
+     <label className="mt-3 flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmLive} onChange={e=>setConfirmLive(e.target.checked)} className="mt-1"/>I confirm a live CMS or GitHub Pages publish is intentional and have reviewed the page, destinations, and jurisdiction compliance approval.</label>
     </div>
     <h2 className="text-xl font-bold">Saved pages ({pages.length})</h2>
     {pages.length===0&&<div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No bio-link pages in this workspace yet.</div>}
@@ -91,6 +119,12 @@ export default function BioLinksPage(){
       {asset.status!=="published"&&asset.status!=="publish_outcome_unknown"&&<><button type="button" disabled={busy} onClick={()=>void publish(asset,"draft")} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-50">Send as CMS draft</button><button type="button" disabled={busy||!confirmLive} onClick={()=>void publish(asset,"publish")} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-40">Live publish</button></>}
      </div>
      {asset.publication?.url&&<p className="mt-3 break-all text-sm text-emerald-700">Provider URL: {asset.publication.url}</p>}
+      {asset.github_pages_publication?.status==="outcome_unknown"&&<div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">GitHub Pages outcome is unresolved. Reconcile the remote HTML before retrying.</div>}
+      {asset.github_pages_publication?.status==="published"&&asset.github_pages_publication.published_url&&<p className="mt-2 break-all text-sm text-emerald-700">GitHub Pages: {asset.github_pages_publication.published_url} · {asset.github_pages_publication.provider_status}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+       <button type="button" disabled={busy||!githubPagesStatus?.publish_ready||!confirmLive} onClick={()=>void deployGithubPages(asset)} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-700 disabled:opacity-40">Deploy to GitHub Pages</button>
+       {asset.github_pages_publication?.status==="outcome_unknown"&&<button type="button" disabled={busy} onClick={()=>void reconcileGithubPages(asset)} className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-bold text-amber-800 disabled:opacity-40">Reconcile GitHub Pages</button>}
+      </div>
     </article>)}
    </section>
   </div>

@@ -414,12 +414,13 @@
 | Merchant-owned offer packet and internal activation gate | \`backend/models.py\` (\`MerchantOffer\`); migration \`0014_merchant_offers\`; \`backend/schemas.py\`; \`backend/main.py\` (\`/api/merchant/offers*\`); \`frontend/app/merchant/offers/page.tsx\`; \`tests/test_merchant_offers_api.py\` | **implemented code + hosted CI verified at** \`fd712d411269a251b5fc70c912e2731c55c39a0a\`; both push run 40517947381 and PR run 40517953771 succeeded | Independent human review of real seller authorization and commission terms, product/merchant identity model, browser accessibility/UAT and production role-policy review remain. Affiliate-network approval/listing is explicitly \`not_configured\`; no external submission or network approval is claimed. |
 
 
-## Internal publisher marketplace and cross-workspace applications (2026-10-27 candidate)
+
+## Internal publisher marketplace and cross-workspace applications (2026-10-27 exact-SHA verified)
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
-| Merchant-controlled internal catalog listing and publisher application | \`MerchantOffer.marketplace_listed\`; \`MarketplaceApplication\`; migration \`0015_marketplace_applications\`; \`/api/marketplace/offers*\`; \`/api/merchant/applications*\`; publisher and merchant application pages; \`tests/test_marketplace_applications_api.py\` | candidate: explicit listing state, terms snapshot, compliance/contact-sharing attestations, publisher-scoped outgoing applications, merchant-workspace-scoped incoming review and sanitized cross-workspace catalog | Exact-SHA CI, PostgreSQL read/write isolation checks, browser UAT, seller identity/legal review and production data retention acceptance. External provider authorization/application submission is not configured. |
+| Merchant-controlled internal catalog listing and publisher application | \`MerchantOffer.marketplace_listed\`; \`MarketplaceApplication\`; migration \`0015_marketplace_applications\`; \`/api/marketplace/offers*\`; \`/api/merchant/applications*\`; publisher and merchant application pages; \`tests/test_marketplace_applications_api.py\` | **Code + CI verified** at \`de8a59e2e86c6f318a7c9a789516d749debfb9ae\`; push 40522649663 and PR 40522660792 passed | Human seller identity/terms verification and provider-connected UAT; browser/accessibility UAT; data-retention review. Internal approval/listing is not external provider authorization or submission. |
 
 
-## Marketplace listing default drift — correction pending
-- Failed candidate \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\`: both push run 40521613901 and PR run 40521622522 failed the migration drift gate because \`merchant_offers.marketplace_listed\` had a server-side default in revision 0015 that was absent in ORM metadata. Other jobs passed.
-- Corrective source adds the equivalent SQLAlchemy \`server_default=false()\` to the model. Keep the guard and migration gate strict; validate correction on exact-SHA push and PR workflows.
+## Marketplace listing default drift — corrected and verified
+- Initial candidate \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed SQLite and PostgreSQL \`alembic check\` because the new database-level default for \`merchant_offers.marketplace_listed\` was missing from ORM metadata.
+- Added matching \`server_default=false()\` in \`backend/models.py\`. The corrected candidate \`de8a59e2e86c6f318a7c9a789516d749debfb9ae\` passed both migration drift gates in push run 40522649663 and PR run 40522660792. No test or security guard was weakened.

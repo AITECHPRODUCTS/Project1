@@ -818,14 +818,17 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - **Not production release approval:** the frontend SBOM/license report still says \`release_approved=false\` due to two temporary LGPL-3.0-or-later sharp/libvips inventory exceptions expiring 2026-11-02. External provider authorization, human verification of evidence, browser UAT, staging ingress/egress, deployment smoke, monitoring/SLO and backup/restore remain open.
 
 
-## 2026-10-27 internal publisher marketplace and cross-workspace applications — candidate
-- Added an explicit internal marketplace listing state separate from merchant approval and external affiliate-network approval. Applications capture a publisher terms snapshot, declared traffic/regions, promotion plan and explicit contact-sharing/compliance attestations.
-- Publisher catalog queries return only listed and internally approved offers from other workspaces and omit seller-authorization references/internal reviewer notes. Merchant incoming-application queries/review are scoped to the authenticated owning merchant workspace; publisher applications remain scoped to the publisher workspace.
-- Added migration \`0015_marketplace_applications\`, publisher and merchant application pages, listing/unlisting controls, audit events and cross-workspace regression tests.
-- Candidate only: require exact-SHA push/PR CI, SQLite/PostgreSQL migration and drift checks, frontend build and security jobs. Internal approval remains separate from external affiliate-network authorization or provider submission.
+
+## 2026-10-27 internal publisher marketplace and cross-workspace applications — exact-SHA CI verified
+- Implementation source is present on the existing branch and verified at exact SHA \`de8a59e2e86c6f318a7c9a789516d749debfb9ae\`.
+- Push workflow [40522649663](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40522649663) and PR workflow [40522660792](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40522660792) completed successfully.
+- Python suite: **410 passed, 3 skipped, 1 existing Starlette/httpx deprecation warning**. PostgreSQL integration: **3 passed**. SQLite and PostgreSQL migrations upgraded/downgraded/re-upgraded with \`alembic check\` reporting no new operations.
+- Frontend typecheck/production build passed and emitted \`/marketplace\`, \`/merchant/applications\`, and \`/merchant/offers\`. Repository/53-skill guard, AI/RAG imports and SBOM, dependency/license inventory, Gitleaks, and push lockfile reproducibility passed.
+- Added explicit internal-marketplace listing state, publish/unlist controls, safe catalog projection, terms snapshots, application compliance/contact-sharing attestations, publisher-scoped outgoing records and merchant-owner-scoped incoming reviews. Cross-workspace regression tests passed. No external affiliate-network submission/approval is claimed.
+- **Production is still blocked:** the security job says \`release_approved=false\` because two temporary LGPL-3.0-or-later sharp/libvips inventory exceptions expire on 2026-11-02. Authorized live provider UAT, browser/accessibility UAT, staging trusted-proxy/egress, production deploy smoke, monitoring/SLO and backup/restore remain separate release gates.
 
 
-## 2026-10-27 marketplace migration drift — corrective candidate
-- Initial marketplace candidate SHA \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed both push workflow [40521613901](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521613901) and PR workflow [40521622522](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521622522) at the SQLite and PostgreSQL Alembic drift gates. Exact error: \`modify_default\` on \`merchant_offers.marketplace_listed\`; the migration's server-side \`false\` default was not present in ORM metadata.
-- Correction adds the matching SQLAlchemy server default in \`backend/models.py\`. No migration guard or test was weakened. All other completed jobs on the failed SHA (frontend production build/typecheck, repository/source guard, AI/RAG, security audit, secret scan, and push lockfile reproducibility) passed.
-- Corrective SHA is not considered verified until both push and PR workflows complete successfully, including migration upgrade/downgrade/drift on SQLite and PostgreSQL.
+## 2026-10-27 marketplace migration drift — correction verified
+- Initial marketplace candidate SHA \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed both push [40521613901](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521613901) and PR [40521622522](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521622522) at SQLite/PostgreSQL drift checks because the column \`merchant_offers.marketplace_listed\` had a migration default not represented in ORM metadata.
+- The correction adds SQLAlchemy \`server_default=false()\` to match the migration. No migration guard or tests were weakened.
+- Corrected exact SHA \`de8a59e2e86c6f318a7c9a789516d749debfb9ae\` passed both push run 40522649663 and PR run 40522660792, including both migration drift gates. The original failed runs are retained as audit history.

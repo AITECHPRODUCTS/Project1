@@ -856,7 +856,9 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - HMAC authenticates the configured trusted collector, not a native platform signature. Only mark evidence provider_verified when the separately provisioned collector independently validates the source; native ad-account authorization, provider-native verification, live pause/scale actions and live spending remain not configured. Production release is still blocked by the LGPL license exceptions noted above.
 
 
-## 2026-10-27 scheduled ad guardrail monitor — candidate
-- Added an APScheduler job at a five-minute interval. It enumerates known workspaces, evaluates only non-latched policies inside each workspace context, locks the policy row, records evaluation state and writes an audit event when status changes or a breach is detected.
-- The job only latches internal stop state; it never invokes remote ad APIs, publishes content or authorizes spend. Workspace-level failures are logged and isolated so one tenant does not prevent processing the remaining workspaces.
-- Candidate pending exact-SHA Python, SQLite/PostgreSQL, frontend, AI/security, secret scan, repo-guard and lockfile checks. Live provider pause remains unavailable until a provider-specific, explicitly authorized adapter is implemented and UATed.
+
+## 2026-10-27 scheduled ad guardrail monitor — exact-SHA CI verified
+- Implementation commit: 798d4f60d212ba8d86dbc7d48e72dead52423a93. Push workflow 40529623563 and pull-request workflow 40529634466 both succeeded.
+- Python suite: 422 passed, 3 skipped, one existing Starlette/httpx deprecation warning. PostgreSQL integration: 3 passed. SQLite and PostgreSQL migration/drift checks passed; frontend, AI/RAG, security audit, secret scan, repository guard and push lockfile reproducibility passed.
+- A five-minute APScheduler job scans known workspaces using the existing background workspace enumerator. It rechecks non-latched policies under the owning workspace context and row lock, evaluates verified observations, persists the latest result, and audits status transitions and stop breaches.
+- The monitor test uses signed collector data and confirms the scheduled job latches a verified breach. The job never invokes remote provider actions. Production still lacks provider pause enforcement/UAT, and release remains blocked by the temporary LGPL sharp/libvips exceptions pending legal review.

@@ -459,4 +459,10 @@
 ## Signed ad collector deployment configuration (2026-10-27 candidate)
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
-| Provision per-workspace/platform signed ad-metrics secrets through the supported Compose deployment | docker-compose.yml API environment; .env.example; tests/test_deployment_environment.py | candidate: Compose forwards AD_PERFORMANCE_WEBHOOK_SECRETS and the example defaults to an empty JSON object; regression tests parse YAML and prohibit committing real secrets | Exact-SHA CI passes, staging secret injection/rotation test, signed collector UAT. Configured collector secrets do not replace native-provider authentication. |
+| Provision per-workspace/platform signed ad-metrics secrets through the supported Compose deployment | docker-compose.yml API environment; .env.example; tests/test_deployment_environment.py | Code + CI verified at 714d81b4518f6ac5fdd366dd8d536f9af8b3e728; push 40537147027 and PR 40537158642 succeeded | Staging secret injection/rotation test and signed collector UAT remain open. Configured collector secrets do not replace native-provider authentication. |
+
+
+## Jurisdiction compliance evidence register (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Capture evidence-backed international policy scope and require human approval before live content distribution | \`JurisdictionComplianceAssessment\`; migration \`0018_jurisdiction_compliance_assessments\`; \`backend/services/jurisdiction_compliance.py\`; \`/api/compliance/requirements\`, \`/api/compliance/assessments*\`; \`frontend/app/compliance/page.tsx\`; live social/CMS and workflow S5 guard; \`tests/test_jurisdiction_compliance.py\` | candidate: evidence coverage is jurisdiction × activity category; approved assessment is channel-scoped and expires; stale/missing review blocks new live action and is audited. Draft/dry-run remain available. | Exact-SHA CI/migration/drift; browser/accessibility UAT; human review quality and source-maintenance process. This is an evidence workflow, not an automatic law database or legal opinion. Paid media/email/lead/tracking external execution gates remain future slices. |

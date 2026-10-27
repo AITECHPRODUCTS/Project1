@@ -28,6 +28,7 @@ def _user(*, platform_admin: bool, workspace_id: str | None = "workflow-publish-
 
 
 def _publish_state(**metadata):
+    metadata.setdefault("target_jurisdictions", ["US"])
     return {
         "publish_requests": [{"platform": "reddit", "post": {"subreddit": "test", "title": "Reviewed draft", "text": "Draft text"}}],
         "metadata": metadata,
@@ -213,6 +214,11 @@ async def test_live_workflow_distribution_replays_completed_external_action(monk
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         monkeypatch.setattr(workflows, "SessionLocal", sessions)
         monkeypatch.setattr(workflows, "get_settings", lambda: SimpleNamespace(publishing_dry_run=False))
+
+        async def allow_compliance(*args, **kwargs):
+            return object()
+
+        monkeypatch.setattr(workflows, "find_current_assessment", allow_compliance)
         workspace_id = "workflow-idempotency-workspace"
         async with sessions() as db:
             db.add(Workspace(id=workspace_id, name="Workflow idempotency", slug="workflow-idempotency"))
@@ -267,6 +273,11 @@ async def test_live_workflow_distribution_unknown_outcome_blocks_retry_and_alter
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         monkeypatch.setattr(workflows, "SessionLocal", sessions)
         monkeypatch.setattr(workflows, "get_settings", lambda: SimpleNamespace(publishing_dry_run=False))
+
+        async def allow_compliance(*args, **kwargs):
+            return object()
+
+        monkeypatch.setattr(workflows, "find_current_assessment", allow_compliance)
         workspace_id = "workflow-unknown-workspace"
         async with sessions() as db:
             db.add(Workspace(id=workspace_id, name="Workflow unknown", slug="workflow-unknown"))

@@ -445,6 +445,35 @@ class AdPerformanceObservation(TenantScopedMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
+class JurisdictionComplianceAssessment(TenantScopedMixin, Base):
+    """Workspace-scoped evidence record for human-reviewed jurisdiction compliance decisions."""
+    __tablename__ = "jurisdiction_compliance_assessments"
+    __table_args__ = (
+        Index("ix_compliance_assessments_workspace_status", "workspace_id", "status"),
+        Index("ix_compliance_assessments_workspace_activity", "workspace_id", "activity"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    activity: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    channels_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    jurisdictions_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    rule_evidence_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    coverage_summary_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="draft", nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class AdBudgetGuardrail(TenantScopedMixin, Base):
     """Persist spend limits and a fail-closed stop latch for a draft ad plan."""
     __tablename__ = "ad_budget_guardrails"

@@ -7,6 +7,7 @@ from backend.core.errors import VerificationRequiredError
 from backend.core.state_machine import WorkflowStep
 from backend.database import SessionLocal
 from backend.models import AuditLog,Conversion
+from backend.services.jurisdiction_compliance import find_current_assessment,normalize_jurisdictions
 from backend.services.external_action_registry import EXTERNAL_IDEMPOTENCY_KEY_RE, claim_external_action, derive_workflow_action_key, external_action_failure_status, finish_external_action
 from backend.tenancy import workspace_scope
 
@@ -102,6 +103,18 @@ async def s5(state: dict[str, Any]) -> dict[str, Any]:
             raise PermissionError("Explicit live-publish confirmation required for workflow publishing")
         if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(base_idempotency_key):
             raise ValueError("A valid Idempotency-Key is required for live workflow publishing")
+        try:
+            target_jurisdictions = normalize_jurisdictions(metadata.get("target_jurisdictions") or [])
+        except ValueError as exc:
+            first_channel = str(requests[0].get("platform") or "unknown").strip().lower()
+            try:
+                await _audit_distribution_attempt(
+                    metadata=metadata, workspace_id=workspace_id, platform=first_channel,
+                    outcome="blocked_compliance_review",
+                )
+            except Exception:
+                logger.exception("Could not audit missing jurisdiction scope for workspace %s", workspace_id[:8])
+            raise PermissionError("Live distribution requires explicit target_jurisdictions and current compliance review") from exc
 
     results = []
     for index, item in enumerate(requests[:10]):
@@ -123,7 +136,7 @@ async def s5(state: dict[str, Any]) -> dict[str, Any]:
                     action_type="social_publish",
                     provider=platform or "unknown",
                     idempotency_key=item_key,
-                    request_payload={"platform": platform, "post": post},
+                    request_payload={"platform": platform, "post": post, "target_jurisdictions": target_jurisdictions},
                 )
             if replay is not None:
                 try:
@@ -138,6 +151,30 @@ async def s5(state: dict[str, Any]) -> dict[str, Any]:
                     logger.exception("Could not persist workflow publication replay audit for workspace %s", workspace_id[:8])
                 results.append(replay)
                 continue
+
+            try:
+                async with SessionLocal() as db:
+                    assessment = await find_current_assessment(
+                        db, workspace_id=workspace_id, activity="content_publish",
+                        jurisdictions=target_jurisdictions, channel=platform,
+                    )
+                if assessment is None:
+                    await _audit_distribution_attempt(
+                        metadata=metadata, workspace_id=workspace_id, platform=platform or "unknown",
+                        outcome="blocked_compliance_review",
+                    )
+                    raise PermissionError(
+                        "Live distribution is blocked until a current approved compliance assessment covers "
+                        "every target jurisdiction, channel and required rule category."
+                    )
+            except Exception:
+                if action_id:
+                    async with SessionLocal() as db:
+                        await finish_external_action(
+                            db, workspace_id=workspace_id, action_id=action_id,
+                            status="failed", error_type="ComplianceApprovalRequired",
+                        )
+                raise
 
         # The attempt record must persist before any external provider request.
         try:

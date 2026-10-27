@@ -25,15 +25,16 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AdBudgetGuardrail,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
 from backend.services.ad_guardrails import evaluate_ad_budget_guardrail
+from backend.services.jurisdiction_compliance import ASSESSMENT_VALIDITY_DAYS,evidence_coverage,find_current_assessment,normalize_jurisdictions,required_categories
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
 from backend.services.infographic_generator import build_infographic as build_infographic_service
 from backend.services.guarantee_draft import build_guarantee_draft as build_guarantee_draft_service
@@ -2444,11 +2445,22 @@ async def social_publish(
         raise HTTPException(409, "Live publishing requires confirm_live_publish=true from an authorized operator")
     owner_workspace_id = str(workspace_id)
     action_id: str | None = None
+    target_jurisdictions: list[str] = []
     if live:
+        supplied_key = str(request.headers.get("Idempotency-Key") or "").strip()
+        if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(supplied_key):
+            raise HTTPException(428, "A valid Idempotency-Key header is required for live social publishing")
+        try:
+            target_jurisdictions = normalize_jurisdictions(payload.get("target_jurisdictions") or [])
+        except ValueError as exc:
+            raise HTTPException(422, {
+                "code": "TARGET_JURISDICTIONS_REQUIRED",
+                "message": "Live publishing requires explicit target_jurisdictions.",
+            }) from exc
         action_id, replay = await _claim_external_action(
             db, workspace_id=owner_workspace_id, action_type="social_publish",
-            provider=platform or "unknown", idempotency_key=request.headers.get("Idempotency-Key"),
-            request_payload={"platform": platform, "post": post},
+            provider=platform or "unknown", idempotency_key=supplied_key,
+            request_payload={"platform": platform, "post": post, "target_jurisdictions": target_jurisdictions},
         )
         if replay is not None:
             await _record_external_publish_audit(
@@ -2457,6 +2469,20 @@ async def social_publish(
                 outcome="replayed", remote_id=replay.get("remote_id"),
             )
             return replay
+    if live:
+        try:
+            await _require_live_compliance_approval(
+                db, workspace_id=owner_workspace_id, activity="content_publish",
+                jurisdictions=target_jurisdictions, channel=platform,
+                actor=str(user.get("email") or user.get("user_id") or "unknown"), action="social_publish",
+            )
+        except HTTPException as exc:
+            if action_id:
+                await _finish_external_action(
+                    db, workspace_id=owner_workspace_id, action_id=action_id,
+                    status="failed", error_type="ComplianceApprovalRequired",
+                )
+            raise exc
     try:
         with workspace_scope(owner_workspace_id):
             result = await social_media_scheduler(platform, post)
@@ -4173,6 +4199,249 @@ async def receive_signed_ad_performance(
 
 
 
+
+def _jurisdiction_compliance_dict(row: JurisdictionComplianceAssessment) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "activity": row.activity,
+        "channels": list(row.channels_json or []),
+        "jurisdictions": list(row.jurisdictions_json or []),
+        "rule_evidence": list(row.rule_evidence_json or []),
+        "coverage_summary": dict(row.coverage_summary_json or {}),
+        "status": row.status,
+        "created_by": row.created_by,
+        "reviewed_by": row.reviewed_by,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "valid_until": row.valid_until.isoformat() if row.valid_until else None,
+        "reviewer_notes": row.reviewer_notes,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "legal_approval_boundary": "Human review of cited sources; not a legal opinion or guarantee of compliance.",
+    }
+
+
+async def _require_live_compliance_approval(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    activity: str,
+    jurisdictions: list[str],
+    channel: str,
+    actor: str,
+    action: str,
+) -> JurisdictionComplianceAssessment:
+    try:
+        normalized_jurisdictions = normalize_jurisdictions(jurisdictions)
+    except ValueError as exc:
+        raise HTTPException(422, {
+            "code": "TARGET_JURISDICTIONS_REQUIRED",
+            "message": "Choose the jurisdictions the audience/action will reach before live execution.",
+            "detail": str(exc),
+        }) from exc
+    assessment = await find_current_assessment(
+        db,
+        workspace_id=workspace_id,
+        activity=activity,
+        jurisdictions=normalized_jurisdictions,
+        channel=channel,
+    )
+    if assessment is None:
+        missing_categories = required_categories(activity)
+        with workspace_scope(workspace_id):
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=actor[:320] or "unknown",
+                action="compliance.live_action.blocked",
+                resource_type="jurisdiction_compliance_assessment",
+                outcome="blocked_review_required",
+                details_json={
+                    "activity": activity,
+                    "channel": channel,
+                    "target_jurisdictions": normalized_jurisdictions,
+                    "required_categories": missing_categories,
+                    "external_action": action,
+                    "provider_action_executed": False,
+                    "reason": "No current approved assessment covers this activity, channel and every target jurisdiction.",
+                },
+            ))
+            await db.commit()
+        raise HTTPException(409, {
+            "code": "COMPLIANCE_APPROVAL_REQUIRED",
+            "message": "Live execution needs a current approved assessment covering every target jurisdiction, channel and required rule category.",
+            "activity": activity,
+            "channel": channel,
+            "target_jurisdictions": normalized_jurisdictions,
+            "required_categories": missing_categories,
+            "provider_action_executed": False,
+        })
+    return assessment
+
+
+@api.get("/compliance/requirements")
+async def get_compliance_requirements(user: dict[str, Any] = Depends(require_admin)):
+    del user
+    labels = {
+        "affiliate_promotion": "Affiliate promotion",
+        "content_publish": "External content publishing",
+        "paid_media": "Paid media",
+        "email_marketing": "Email marketing",
+        "lead_capture": "Lead capture",
+        "tracking_analytics": "Tracking and analytics",
+        "merchant_marketplace": "Merchant marketplace",
+    }
+    return {
+        "activities": [
+            {"id": activity, "label": label, "required_categories": required_categories(activity)}
+            for activity, label in labels.items()
+        ],
+        "evidence_max_age_days": {
+            activity: (180 if activity in {"paid_media", "email_marketing", "tracking_analytics", "lead_capture"} else 365)
+            for activity in labels
+        },
+        "review_validity_days": ASSESSMENT_VALIDITY_DAYS,
+        "notice": "The system records jurisdiction-specific source evidence and a human decision. It does not generate legal rules, certify a country's law, or replace qualified local legal review. Unapproved or stale assessments affect live actions only; drafts and dry-runs remain available.",
+    }
+
+
+@api.get("/compliance/assessments")
+async def list_compliance_assessments(
+    limit: int = Query(default=100, ge=1, le=300),
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing compliance assessments")
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(JurisdictionComplianceAssessment)
+            .where(JurisdictionComplianceAssessment.workspace_id == workspace_id)
+            .order_by(JurisdictionComplianceAssessment.created_at.desc())
+            .limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [_jurisdiction_compliance_dict(row) for row in rows]}
+
+
+@api.post("/compliance/assessments", status_code=201)
+async def create_compliance_assessment(
+    payload: JurisdictionComplianceAssessmentCreateRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating a compliance assessment")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    jurisdictions = normalize_jurisdictions(payload.jurisdictions)
+    evidence = [item.model_dump(mode="json") for item in payload.rule_evidence]
+    coverage = evidence_coverage(payload.activity, jurisdictions, evidence)
+    row = JurisdictionComplianceAssessment(
+        workspace_id=workspace_id,
+        activity=payload.activity,
+        channels_json=payload.channels,
+        jurisdictions_json=jurisdictions,
+        rule_evidence_json=evidence,
+        coverage_summary_json=coverage,
+        status="review_required" if coverage["coverage_complete"] else "draft",
+        created_by=actor,
+        reviewer_notes=payload.operator_notes or None,
+    )
+    with workspace_scope(workspace_id):
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="compliance.assessment.created",
+            resource_type="jurisdiction_compliance_assessment",
+            resource_id=row.id,
+            outcome=row.status,
+            details_json={
+                "activity": row.activity,
+                "channels": row.channels_json,
+                "jurisdictions": row.jurisdictions_json,
+                "coverage_complete": coverage["coverage_complete"],
+                "missing_evidence_count": len(coverage["missing_evidence"]),
+                "legal_approval_granted": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _jurisdiction_compliance_dict(row)
+
+
+@api.post("/compliance/assessments/{assessment_id}/review")
+async def review_compliance_assessment(
+    assessment_id: str,
+    payload: JurisdictionComplianceAssessmentReviewRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing a compliance assessment")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(JurisdictionComplianceAssessment).where(
+            JurisdictionComplianceAssessment.id == assessment_id,
+            JurisdictionComplianceAssessment.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Compliance assessment not found in the active workspace")
+        if row.status in {"approved", "rejected", "expired"}:
+            raise HTTPException(409, "This assessment has already been reviewed; create a new version to change scope or evidence")
+        now = utcnow()
+        coverage = evidence_coverage(
+            row.activity, list(row.jurisdictions_json or []), list(row.rule_evidence_json or []), now=now
+        )
+        if payload.decision == "approve":
+            if payload.confirm_scope_reviewed is not True:
+                raise HTTPException(409, "Approval requires confirm_scope_reviewed=true after review of the cited sources and every target jurisdiction")
+            if not coverage["coverage_complete"]:
+                raise HTTPException(409, {
+                    "code": "COMPLIANCE_EVIDENCE_INCOMPLETE",
+                    "message": "Every required rule category must have recent, attested HTTPS source evidence for every target jurisdiction.",
+                    "coverage": coverage,
+                })
+            row.status = "approved"
+            row.reviewed_by = actor
+            row.reviewed_at = now
+            row.valid_until = now + timedelta(days=ASSESSMENT_VALIDITY_DAYS)
+            row.reviewer_notes = payload.reviewer_notes or None
+            outcome = "approved_human_review"
+        else:
+            row.status = "rejected"
+            row.reviewed_by = actor
+            row.reviewed_at = now
+            row.valid_until = None
+            row.reviewer_notes = payload.reviewer_notes or "Rejected during compliance review."
+            outcome = "rejected_human_review"
+        row.coverage_summary_json = coverage
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="compliance.assessment.reviewed",
+            resource_type="jurisdiction_compliance_assessment",
+            resource_id=row.id,
+            outcome=outcome,
+            details_json={
+                "activity": row.activity,
+                "channels": list(row.channels_json or []),
+                "jurisdictions": list(row.jurisdictions_json or []),
+                "coverage_complete": coverage["coverage_complete"],
+                "missing_evidence_count": len(coverage["missing_evidence"]),
+                "valid_until": row.valid_until.isoformat() if row.valid_until else None,
+                "human_legal_review_attested": payload.confirm_scope_reviewed is True,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _jurisdiction_compliance_dict(row)
+
+
+
+
+
 @api.post("/cms/publish")
 async def cms(
     payload: CMSPublishRequest,
@@ -4188,9 +4457,13 @@ async def cms(
     if payload.status == "publish" and payload.confirm_live_publish is not True:
         raise HTTPException(409, "Live CMS publishing requires confirm_live_publish=true from an authorized operator")
     owner_workspace_id = str(workspace_id)
+    live_cms_publish = payload.status == "publish" and settings.cms_publish_execute is True
+    supplied_key = str(request.headers.get("Idempotency-Key") or "").strip()
+    if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(supplied_key):
+        raise HTTPException(428, "A valid Idempotency-Key header is required for CMS provider writes")
     action_id, replay = await _claim_external_action(
         db, workspace_id=owner_workspace_id, action_type="cms_publish",
-        provider=payload.provider, idempotency_key=request.headers.get("Idempotency-Key"),
+        provider=payload.provider, idempotency_key=supplied_key,
         request_payload=payload.model_dump(mode="json"),
     )
     if replay is not None:
@@ -4200,6 +4473,20 @@ async def cms(
             outcome="replayed", remote_id=replay.get("remote_id"),
         )
         return replay
+    if live_cms_publish:
+        try:
+            await _require_live_compliance_approval(
+                db, workspace_id=owner_workspace_id, activity="content_publish",
+                jurisdictions=payload.target_jurisdictions, channel=payload.provider,
+                actor=str(user.get("email") or user.get("user_id") or "unknown"), action="cms_publish",
+            )
+        except HTTPException as exc:
+            if action_id:
+                await _finish_external_action(
+                    db, workspace_id=owner_workspace_id, action_id=action_id,
+                    status="failed", error_type="ComplianceApprovalRequired",
+                )
+            raise exc
     try:
         with workspace_scope(owner_workspace_id):
             result = await publish_article(

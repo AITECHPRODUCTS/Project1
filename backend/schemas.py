@@ -129,6 +129,7 @@ class LandingPageRequest(BaseModel):
 
 class CMSPublishRequest(BaseModel):
     provider: Literal["wordpress", "ghost"]
+    target_jurisdictions: list[str] = Field(default_factory=list, max_length=50)
     title: str = Field(min_length=3, max_length=300)
     article_html: str = Field(min_length=30, max_length=500000)
     canonical_url: str = Field(min_length=8, max_length=2048)
@@ -136,6 +137,14 @@ class CMSPublishRequest(BaseModel):
     confirm_live_publish: bool = False
     tags: list[str] = Field(default_factory=list, max_length=20)
     disclosure: str = Field(default="Disclosure: I may earn a commission from qualifying purchases through affiliate links.", max_length=1200)
+
+    @field_validator("target_jurisdictions")
+    @classmethod
+    def normalize_cms_target_jurisdictions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().upper() for value in values if str(value).strip()))
+        if any(not re.fullmatch(r"(?:[A-Z]{2}(?:-[A-Z0-9]{1,6})?|EU|EEA|GLOBAL)", value) for value in normalized):
+            raise ValueError("Use ISO-style country/subdivision codes or EU, EEA, GLOBAL")
+        return normalized
 
 
 class PayoutThresholdCreateRequest(BaseModel):

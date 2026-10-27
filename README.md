@@ -43,3 +43,8 @@ The current UI does not import next/image, so the optimizer is disabled. The fro
 
 
 The signed ad-performance collector can be configured with AD_PERFORMANCE_WEBHOOK_SECRETS in .env as a JSON map keyed by <workspace UUID>:<platform>. Start with {}; provision fresh per-workspace/platform secrets out of band. See docs/SIGNED_AD_PERFORMANCE_INGESTION.md. This HMAC authenticates a trusted collector, not the native ad network, and never enables live ad changes.
+
+
+### Jurisdiction compliance evidence
+
+Open \`/compliance\` to register cited source evidence per activity, channel and target jurisdiction, inspect missing/stale coverage, and record a human review decision. Newly initiated live social/CMS publications and S5 live distribution require current matching approval. Drafts and dry-runs remain available. The product does not automatically determine all countries' laws or provide legal advice; qualified reviewers must validate authoritative sources and applicability. Other paid-media, email, lead-capture and tracking integrations require separate live-action integration/UAT.

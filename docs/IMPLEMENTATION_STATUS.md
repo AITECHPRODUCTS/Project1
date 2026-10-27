@@ -872,7 +872,15 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - This resolves the sharp/libvips runtime inventory blocker for the current frontend image, not overall product release approval. Authorized provider UAT, browser/accessibility UAT, staging proxy/egress, deployment smoke, monitoring/SLO, model-artifact provenance/retrieval validation, backup/restore and remaining external-provider capabilities remain open.
 
 
-## 2026-10-27 signed ad collector deployment configuration — candidate
-- Added the workspace/platform secret-map environment variable to Docker Compose and .env.example; a regression test parses the Compose YAML and asserts the variable is forwarded to the API without committing any real secret.
-- The example uses an empty JSON map by default. Operators must provision each workspace/platform secret out of band; this is collector authentication, not native provider signature verification.
-- Candidate until exact-SHA push/PR Python, repository guard, secret, frontend, security/SBOM/license, AI/RAG and PostgreSQL workflows pass.
+## 2026-10-27 signed ad collector deployment configuration — exact-SHA CI verified
+- Implementation SHA: 714d81b4518f6ac5fdd366dd8d536f9af8b3e728. Push workflow [40537147027](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40537147027) and PR workflow [40537158642](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40537158642) completed successfully.
+- Compose forwards AD_PERFORMANCE_WEBHOOK_SECRETS to the API container; .env.example defaults to an empty JSON object and contains no live secret. The CI regression parses the deployment YAML.
+- This wiring configures a signed trusted collector only; it does not authenticate the underlying ad-network account or enable live ad changes.
+
+
+
+## 2026-10-27 jurisdiction compliance evidence register — candidate
+- Added a workspace-scoped assessment register with activity, channel, target jurisdiction, per-category HTTPS source evidence, reviewer attestation, evidence freshness checks, 180-day approval expiry, immutable reviewed/rejected decisions, and audit events.
+- New live social/CMS publication and S5 workflow actions are gated against current approved assessments covering the exact channel and every declared target jurisdiction. A completed idempotent replay remains replay-only and does not execute a new provider action. Drafts, previews, and dry-runs remain available without a legal assessment.
+- Added a responsive /compliance console for source evidence collection, coverage gaps, reviewer notes, and explicit human approval confirmation. No global law database or legal certification is claimed; reviewers must confirm current authoritative sources and jurisdictional applicability.
+- Candidate until exact-SHA push and PR tests, migration/drift, frontend typecheck/build, security/SBOM/license, secret scan, AI/RAG, PostgreSQL integration and lockfile checks all pass. Paid-media, email, lead-capture and tracking rule categories are catalogued, but corresponding external live actions remain separately gated/not enabled until their own execution paths are implemented.

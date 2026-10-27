@@ -45,6 +45,13 @@ async def _database(monkeypatch):
 
     monkeypatch.setitem(main.app.dependency_overrides, main.require_auth, platform_admin)
     monkeypatch.setattr(main.settings, "publishing_dry_run", False)
+
+    async def allow_compliance(*args, **kwargs):
+        return object()
+
+    # This module isolates provider-write idempotency; the real jurisdiction gate
+    # is covered by tests/test_jurisdiction_compliance.py.
+    monkeypatch.setattr(main, "_require_live_compliance_approval", allow_compliance, raising=False)
     return engine, sessions
 
 
@@ -53,6 +60,7 @@ def _social_payload(**overrides):
         "platform": "reddit",
         "post": {"subreddit": "test", "title": "A reviewed draft", "text": "A compliant example post."},
         "confirm_live_publish": True,
+        "target_jurisdictions": ["US"],
     }
     payload.update(overrides)
     return payload

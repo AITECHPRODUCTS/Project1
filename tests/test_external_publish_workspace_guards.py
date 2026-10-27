@@ -40,6 +40,13 @@ async def _database(monkeypatch):
             yield session
 
     monkeypatch.setitem(main.app.dependency_overrides, get_session, override_session)
+
+    async def allow_compliance(*args, **kwargs):
+        return object()
+
+    # These tests focus on auth and provider-write behavior, while the dedicated
+    # compliance suite exercises real evidence matching and approval enforcement.
+    monkeypatch.setattr(main, "_require_live_compliance_approval", allow_compliance, raising=False)
     return engine, sessions
 
 
@@ -194,6 +201,7 @@ async def test_social_live_publish_requires_explicit_confirmation_and_writes_aud
                     "platform": "reddit",
                     "post": {"subreddit": "test", "title": "Reviewed", "text": "Body"},
                     "confirm_live_publish": True,
+                    "target_jurisdictions": ["US"],
                 },
                 headers={"Idempotency-Key": "social-publish-test-key-0001"},
             )

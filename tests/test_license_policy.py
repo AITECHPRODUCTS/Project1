@@ -124,3 +124,42 @@ def test_license_exception_expiration_fails_closed(tmp_path: Path):
     report = _python_report(tmp_path, [{"Name": "package", "Version": "1.0", "License": "LGPL-3.0-or-later"}])
     with pytest.raises(ValueError, match="expired"):
         verify_reports(python_reports=[report], exception_policy=policy)
+
+
+def test_build_only_exception_requires_explicit_scope_and_does_not_approve_production(tmp_path: Path):
+    report = _cyclonedx_report(tmp_path, [
+        {"name": "@img/sharp-libvips-linux-x64", "version": "1.3.4",
+         "licenses": [{"expression": "LGPL-3.0-or-later"}]},
+    ])
+    policy = tmp_path / "build-only-exceptions.json"
+    policy.write_text(json.dumps({
+        "policy_version": 1,
+        "exceptions": [{
+            "package": "@img/sharp-libvips-linux-x64",
+            "version": "1.3.4",
+            "license": "LGPL-3.0-or-later",
+            "status": "temporary-build-inventory-only",
+            "scope": "frontend-build-only",
+            "excluded_from_production": True,
+            "expires": "2099-01-01",
+            "reason": "The optional native dependency is pruned before the production tree is committed."
+        }]
+    }), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="--build-inventory-only"):
+        verify_reports(cyclonedx_reports=[report], exception_policy=policy)
+
+    count, findings, notices = verify_reports(
+        cyclonedx_reports=[report], exception_policy=policy, build_inventory_only=True
+    )
+    assert count == 1
+    assert findings == []
+    assert len(notices) == 1
+    assert "BUILD-ONLY INVENTORY NOTICE" in notices[0]
+    assert "never for the production SBOM" in notices[0]
+
+    # The same component in a production SBOM without exceptions must fail closed.
+    count, findings, notices = verify_reports(cyclonedx_reports=[report])
+    assert count == 1
+    assert findings and "requires legal review" in findings[0]
+    assert notices == []

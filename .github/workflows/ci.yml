@@ -160,7 +160,53 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
         run: npm run build
-
+      - name: Prune optional and development-only packages from the runtime tree
+        run: npm prune --omit=dev --omit=optional --no-audit --no-fund
+      - name: Verify production dependency boundary
+        run: node scripts/verify-production-dependencies.mjs
+      - name: Smoke test Next production server after pruning
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: |
+          set -eu
+          npm run start -- -H 127.0.0.1 -p 3100 > /tmp/omni-next-production.log 2>&1 &
+          server_pid=$!
+          cleanup() { kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3100/ads/guardrails > /tmp/omni-guardrails.html 2>/dev/null; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat /tmp/omni-next-production.log; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then cat /tmp/omni-next-production.log; exit 1; fi
+          grep -q "Ad budget guardrails" /tmp/omni-guardrails.html
+          curl --fail --silent --show-error http://127.0.0.1:3100/ > /tmp/omni-home.html
+          echo "Pruned frontend production server smoke passed."
+      - name: Build final frontend Docker image and inspect shipped runtime dependencies
+        run: docker build --tag omni-affiliate-os-frontend-ci:ci --file Dockerfile .
+      - name: Smoke test the final frontend Docker image
+        run: |
+          set -eu
+          docker run --detach --name omni-affiliate-os-frontend-ci --publish 127.0.0.1:3200:3000 omni-affiliate-os-frontend-ci:ci
+          cleanup() { docker rm --force omni-affiliate-os-frontend-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker exec omni-affiliate-os-frontend-ci node scripts/verify-production-dependencies.mjs
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3200/ads/guardrails > /tmp/omni-docker-guardrails.html 2>/dev/null; then
+              ready=true
+              break
+            fi
+            if [ "$(docker inspect --format='{{.State.Running}}' omni-affiliate-os-frontend-ci)" != true ]; then docker logs omni-affiliate-os-frontend-ci; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs omni-affiliate-os-frontend-ci; exit 1; fi
+          grep -q "Ad budget guardrails" /tmp/omni-docker-guardrails.html
+          echo "Final frontend image production smoke passed."
 
   lockfile-sync:
     # Capture the runner-resolved lockfile once, then validate a clean npm ci install
@@ -268,11 +314,23 @@ jobs:
           .scan-tools/bin/pip-licenses --python="$(command -v python)" --from=mixed --format=json --with-urls --output-file=artifacts/python-licenses-core.json
           python scripts/verify_license_policy.py --python-report artifacts/python-licenses-core.json --exceptions docs/license-policy-exceptions.json --report-output artifacts/license-policy-python-core.json
           printf '{"commit_sha":"%s","profile":"python-core-test"}\n' "$GITHUB_SHA" > artifacts/sbom-metadata.json
-      - name: Generate frontend CycloneDX SBOM from the installed lockfile tree
+      - name: Generate complete frontend build-install CycloneDX SBOM
         working-directory: frontend
-        run: npm ci --no-audit --no-fund && npm sbom --sbom-format=cyclonedx > ../artifacts/sbom-frontend.json
-      - name: Enforce frontend dependency license policy
-        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend.json --exceptions docs/license-policy-exceptions.json --report-output artifacts/license-policy-frontend.json
+        run: npm ci --no-audit --no-fund && npm sbom --sbom-format=cyclonedx > ../artifacts/sbom-frontend-build-install.json
+      - name: Review full build-install license inventory (build-only scope)
+        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend-build-install.json --exceptions docs/license-policy-exceptions.json --build-inventory-only --report-output artifacts/license-policy-frontend-build-install.json
+      - name: Build and prune the exact frontend production dependency tree
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: |
+          npm run typecheck
+          npm run build
+          npm prune --omit=dev --omit=optional --no-audit --no-fund
+          node scripts/verify-production-dependencies.mjs
+          npm sbom --sbom-format=cyclonedx > ../artifacts/sbom-frontend-production.json
+      - name: Enforce production frontend license policy without exceptions
+        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend-production.json --report-output artifacts/license-policy-frontend-production.json
       - name: Upload core/frontend SBOM and license evidence
         if: always()
         uses: actions/upload-artifact@v7

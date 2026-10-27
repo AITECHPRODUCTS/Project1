@@ -448,3 +448,9 @@
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
 | Scheduled spend/ROAS/CPA safety checks | APScheduler job ad-guardrails every 5 minutes; ad_guardrail_monitor_job; AdBudgetGuardrail and ad_guardrails evaluator; tests/test_ad_guardrail_scheduler.py | implemented and exact-SHA push/PR CI verified on 798d4f60d212ba8d86dbc7d48e72dead52423a93; Python 422 passed/3 skipped, PostgreSQL 3 passed, frontend/AI/security/secret/lockfile passed | Production scheduler telemetry/SLO and alert delivery, provider-specific pause enforcement, concurrency/UAT and live provider authorization remain open. Internal latch is not a remote campaign pause. |
+
+
+## Frontend production dependency/license boundary (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Avoid shipping optional LGPL native image libraries when the UI does not use image optimization | frontend/next.config.ts; frontend/scripts/verify-production-dependencies.mjs; frontend/Dockerfile single-layer install/build/prune; CI full build-install SBOM plus separate production SBOM scanned without exceptions; production server smoke test | candidate: source audit found no next/image imports and the runtime config disables optimization; Docker and CI will prune optional packages and fail if sharp/@img/sharp-* remain | Exact-SHA push/PR CI, Docker image build, runtime smoke, production CycloneDX report with release_approved=true, and no-exception license scan. Full build-install SBOM remains separately available and its narrowly scoped notices do not authorize shipping those packages. |

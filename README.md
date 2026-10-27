@@ -35,3 +35,8 @@ The Docker image enables the AI/RAG and video profiles by default. Set the corre
 ### Signed ad performance collector
 
 See docs/SIGNED_AD_PERFORMANCE_INGESTION.md. A per-workspace/per-platform HMAC key authenticates a trusted collector-provided normalized daily report. The collector must independently verify the underlying ad-platform source before signing. The endpoint does not establish a native provider account connection and does not execute ad changes.
+
+
+### Frontend production dependency boundary
+
+The current UI does not import next/image, so the optimizer is disabled. The frontend Docker build prunes optional/native image packages before the final image layer is committed and verifies the actual runtime dependency tree. CI emits both a complete build/install SBOM and a separate production SBOM; only the production SBOM is evaluated as the shipped runtime, with the license checker invoked without exceptions. Do not add next/image until its dependency and license impact has been reviewed and the runtime policy/test is intentionally revised.

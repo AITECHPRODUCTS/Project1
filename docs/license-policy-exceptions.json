@@ -5,19 +5,23 @@
       "package": "@img/sharp-libvips-linux-x64",
       "version": "1.3.4",
       "license": "LGPL-3.0-or-later",
-      "status": "temporary-release-blocker",
+      "status": "temporary-build-inventory-only",
       "expires": "2026-11-02",
       "review_owner": "Project maintainer / legal reviewer",
-      "reason": "Transitive native libvips runtime shipped by the frontend sharp image-processing dependency. CI may inventory this exact package/version to provide a complete SBOM, but LGPL notice, relinking/redistribution and distribution-model obligations require explicit legal review. This exception does not approve production distribution."
+      "reason": "The package appears only in the full npm install/build inventory as a transitive optional sharp/libvips dependency. The frontend source does not import next/image; production config disables the optimizer and the Docker build prunes optional packages in the same layer. CI must independently verify the production SBOM with no exceptions. This scoped inventory notice is not permission to distribute the package.",
+      "scope": "frontend-build-only",
+      "excluded_from_production": true
     },
     {
       "package": "@img/sharp-libvips-linuxmusl-x64",
       "version": "1.3.4",
       "license": "LGPL-3.0-or-later",
-      "status": "temporary-release-blocker",
+      "status": "temporary-build-inventory-only",
       "expires": "2026-11-02",
       "review_owner": "Project maintainer / legal reviewer",
-      "reason": "Transitive native libvips runtime shipped by the frontend sharp image-processing dependency for musl-based Linux. CI may inventory this exact package/version to provide a complete SBOM, but LGPL notice, relinking/redistribution and distribution-model obligations require explicit legal review. This exception does not approve production distribution."
+      "reason": "The package appears only in the full npm install/build inventory as a transitive optional sharp/libvips dependency. The frontend source does not import next/image; production config disables the optimizer and the Docker build prunes optional packages in the same layer. CI must independently verify the production SBOM with no exceptions. This scoped inventory notice is not permission to distribute the package.",
+      "scope": "frontend-build-only",
+      "excluded_from_production": true
     }
   ]
 }

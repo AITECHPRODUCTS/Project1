@@ -46,7 +46,7 @@ def _blocked(value: str) -> bool:
     return any(pattern.search(value) for pattern in BLOCKED_PATTERNS)
 
 
-def _load_exceptions(path: Path | None) -> dict[tuple[str, str, str], dict[str, Any]]:
+def _load_exceptions(path: Path | None, *, build_inventory_only: bool = False) -> dict[tuple[str, str, str], dict[str, Any]]:
     if path is None:
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -63,8 +63,19 @@ def _load_exceptions(path: Path | None) -> dict[tuple[str, str, str], dict[str, 
         required = ("package", "version", "license", "status", "expires", "reason")
         if any(not str(entry.get(key) or "").strip() for key in required):
             raise ValueError(f"{path}: every exception needs {', '.join(required)}")
-        if entry["status"] != "temporary-release-blocker":
-            raise ValueError(f"{path}: exception status must be temporary-release-blocker")
+        if entry["status"] not in {"temporary-release-blocker", "temporary-build-inventory-only"}:
+            raise ValueError(f"{path}: unsupported license exception status")
+        if entry["status"] == "temporary-build-inventory-only":
+            if not build_inventory_only:
+                raise ValueError(
+                    f"{path}: build-inventory-only exceptions require --build-inventory-only "
+                    "and may never be used for a production SBOM"
+                )
+            if entry.get("scope") != "frontend-build-only" or entry.get("excluded_from_production") is not True:
+                raise ValueError(
+                    f"{path}: build-only exception must declare scope=frontend-build-only "
+                    "and excluded_from_production=true"
+                )
         try:
             expires = date.fromisoformat(str(entry["expires"]))
         except ValueError as exc:
@@ -87,6 +98,13 @@ def _matches_exception(name: str, version: str, licenses: list[str],
 
 
 def _exception_notice(name: str, version: str, entry: dict[str, Any]) -> str:
+    if entry["status"] == "temporary-build-inventory-only":
+        return (
+            f"{name}@{version}: {entry['license']} is a BUILD-ONLY INVENTORY NOTICE until "
+            f"{entry['expires']}; excluded_from_production=true. This exception is valid only "
+            "for a full install/build SBOM and never for the production SBOM. "
+            f"Reason: {entry['reason']}"
+        )
     return (f"{name}@{version}: {entry['license']} has a temporary CI-inventory exception "
             f"until {entry['expires']}; RELEASE BLOCKED pending legal review. Reason: {entry['reason']}")
 
@@ -172,9 +190,10 @@ def _cyclonedx_findings(report: Path, exceptions: dict[tuple[str, str, str], dic
 
 def verify_reports(*, python_reports: list[Path] | None = None,
                    cyclonedx_reports: list[Path] | None = None,
-                   exception_policy: Path | None = None
+                   exception_policy: Path | None = None,
+                   build_inventory_only: bool = False
                    ) -> tuple[int, list[str], list[str]]:
-    exceptions = _load_exceptions(exception_policy)
+    exceptions = _load_exceptions(exception_policy, build_inventory_only=build_inventory_only)
     total, findings, notices = 0, [], []
     for report in python_reports or []:
         count, issues, warnings = _python_findings(report, exceptions)
@@ -194,23 +213,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--python-report", action="append", type=Path, default=[])
     parser.add_argument("--cyclonedx-report", action="append", type=Path, default=[])
     parser.add_argument("--exceptions", type=Path)
+    parser.add_argument(
+        "--build-inventory-only",
+        action="store_true",
+        help="Scope exception policy to a full build/install inventory; never use this mode for production SBOM approval.",
+    )
     parser.add_argument("--report-output", type=Path)
     args = parser.parse_args(argv)
     if not args.python_report and not args.cyclonedx_report:
         parser.error("provide at least one --python-report or --cyclonedx-report")
     try:
-        count, findings, notices = verify_reports(python_reports=args.python_report,
-            cyclonedx_reports=args.cyclonedx_report, exception_policy=args.exceptions)
+        count, findings, notices = verify_reports(
+            python_reports=args.python_report,
+            cyclonedx_reports=args.cyclonedx_report,
+            exception_policy=args.exceptions,
+            build_inventory_only=args.build_inventory_only,
+        )
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"License policy scan could not be completed: {exc}", file=sys.stderr)
         return 2
+    release_blockers = [notice for notice in notices if "RELEASE BLOCKED pending legal review" in notice]
+    build_only_notices = [notice for notice in notices if "BUILD-ONLY INVENTORY NOTICE" in notice]
     summary = {
         "commit_sha": os.environ.get("GITHUB_SHA", "local"),
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "inventory_scope": "build-install-only" if args.build_inventory_only else "production-or-unspecified",
         "packages_reviewed": count,
         "findings": findings,
-        "temporary_exceptions_release_blockers": notices,
-        "release_approved": not findings and not notices,
+        "temporary_exceptions_release_blockers": release_blockers,
+        "build_inventory_only_notices": build_only_notices,
+        "release_approved": None if args.build_inventory_only else not findings and not release_blockers,
     }
     if args.report_output:
         try:
@@ -220,14 +252,24 @@ def main(argv: list[str] | None = None) -> int:
             print(f"License policy report could not be written: {exc}", file=sys.stderr)
             return 2
     for notice in notices:
-        print(f"LICENSE EXCEPTION (RELEASE BLOCKER): {notice}", file=sys.stderr)
+        if "BUILD-ONLY INVENTORY NOTICE" in notice:
+            print(f"LICENSE INVENTORY (BUILD ONLY): {notice}")
+        else:
+            print(f"LICENSE EXCEPTION (RELEASE BLOCKER): {notice}", file=sys.stderr)
     if findings:
         for item in findings:
             print(f"LICENSE POLICY: {item}", file=sys.stderr)
         print(f"License policy failed: {len(findings)} finding(s) across {count} package(s).", file=sys.stderr)
         return 1
-    if notices:
-        print(f"License inventory completed for {count} packages with {len(notices)} temporary exception(s); release_approved=false.")
+    if release_blockers:
+        print(f"License inventory completed for {count} packages with {len(release_blockers)} release blocker(s); release_approved=false.", file=sys.stderr)
+    elif args.build_inventory_only and build_only_notices:
+        print(
+            f"Build/install inventory reviewed {count} packages; {len(build_only_notices)} explicitly scoped build-only notice(s). "
+            "Production approval is indeterminate in this report and must be checked against a separate production SBOM without exceptions."
+        )
+    elif notices:
+        print(f"License inventory completed for {count} packages with {len(notices)} notice(s).")
     else:
         print(f"License policy passed: {count} packages reviewed; no unknown or blocked licenses found.")
     return 0

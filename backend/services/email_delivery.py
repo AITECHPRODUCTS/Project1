@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
 from backend.database import SessionLocal
-from backend.models import Lead,ScheduledEmail
+from backend.models import AuditLog,Lead,ScheduledEmail
 from backend.tenancy import get_workspace_id, workspace_scope
 from backend.services.llm import llm_service
 from backend.services.s4_s5_landing import email_drip_sequence
@@ -343,7 +343,50 @@ async def send_due_emails(
     await session.close()
 
 
-async def unsubscribe_lead(session:AsyncSession,lead_id:str)->bool:
- lead=await session.get(Lead,lead_id)
- if lead is None:return False
- lead.unsubscribed_at=datetime.now(timezone.utc);await session.commit();return True
+async def unsubscribe_lead(session: AsyncSession, lead_id: str) -> bool:
+ """Record a signed recipient opt-out and immediately suppress pending sequence mail."""
+ lead = await session.scalar(select(Lead).where(Lead.id == str(lead_id)))
+ if lead is None:
+  return False
+
+ workspace_id = str(lead.workspace_id)
+ with workspace_scope(workspace_id):
+  previously_unsubscribed = lead.unsubscribed_at is not None
+  if not previously_unsubscribed:
+   lead.unsubscribed_at = datetime.now(timezone.utc)
+
+  # Cancel pending/retry items in the same transaction as the suppression record.
+  # Items already in "sending" have been claimed by an active worker and are
+  # checked against the current Lead opt-out before the provider request.
+  result = await session.execute(
+   update(ScheduledEmail)
+   .where(
+    ScheduledEmail.workspace_id == workspace_id,
+    ScheduledEmail.lead_id == lead.id,
+    ScheduledEmail.status.in_(["scheduled", "retry"]),
+   )
+   .values(
+    status="suppressed",
+    claimed_at=None,
+    last_error="Recipient unsubscribed; pending delivery canceled.",
+   )
+   .execution_options(synchronize_session=False)
+  )
+  cancelled = int(result.rowcount or 0)
+  if not previously_unsubscribed or cancelled:
+   session.add(AuditLog(
+    workspace_id=workspace_id,
+    actor="recipient",
+    action="email.consent.unsubscribed",
+    resource_type="lead",
+    resource_id=lead.id,
+    outcome="suppressed",
+    details_json={
+     "source": "signed_unsubscribe_link",
+     "pending_messages_cancelled": cancelled,
+     "repeat_opt_out": previously_unsubscribed,
+     "email_delivery_suppressed": True,
+    },
+   ))
+  await session.commit()
+ return True

@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.database import Base
-from backend.models import Lead, ScheduledEmail, Workspace
+from backend.models import AuditLog, Lead, ScheduledEmail, Workspace
 from backend.services import email_delivery
 from backend.tenancy import workspace_scope
 
@@ -170,5 +170,73 @@ async def test_stale_delivery_older_than_provider_dedup_window_requires_manual_r
         assert row.status == "delivery_unknown"
         assert row.claimed_at is None
         assert "manual reconciliation" in (row.last_error or "")
+    finally:
+        await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_immediately_suppresses_pending_sequence_and_audits_without_cross_workspace_impact(tmp_path, monkeypatch):
+    engine, sessions = await _database(tmp_path, monkeypatch)
+    try:
+        workspace_id, lead_id, message_id = await _seed_email(sessions)
+        other_workspace_id, _, other_message_id = await _seed_email(sessions)
+
+        with workspace_scope(workspace_id):
+            async with sessions() as db:
+                assert await email_delivery.unsubscribe_lead(db, lead_id) is True
+
+        async with sessions() as db:
+            lead = await db.get(Lead, lead_id)
+            message = await db.get(ScheduledEmail, message_id)
+            unrelated_message = await db.get(ScheduledEmail, other_message_id)
+            events = list((await db.scalars(
+                select(AuditLog).where(
+                    AuditLog.workspace_id == workspace_id,
+                    AuditLog.action == "email.consent.unsubscribed",
+                    AuditLog.resource_id == lead_id,
+                )
+            )).all())
+        assert lead is not None and lead.unsubscribed_at is not None
+        first_unsubscribe_at = lead.unsubscribed_at
+        assert message is not None and message.status == "suppressed"
+        assert message.claimed_at is None
+        assert "unsubscribed" in (message.last_error or "").lower()
+        assert unrelated_message is not None and unrelated_message.status == "scheduled"
+        assert len(events) == 1
+        assert events[0].details_json["pending_messages_cancelled"] == 1
+        assert events[0].details_json["email_delivery_suppressed"] is True
+
+        # Repeated clicks are idempotent and do not overwrite the original opt-out.
+        with workspace_scope(workspace_id):
+            async with sessions() as db:
+                assert await email_delivery.unsubscribe_lead(db, lead_id) is True
+        async with sessions() as db:
+            lead = await db.get(Lead, lead_id)
+            repeated_events = list((await db.scalars(
+                select(AuditLog).where(
+                    AuditLog.workspace_id == workspace_id,
+                    AuditLog.action == "email.consent.unsubscribed",
+                    AuditLog.resource_id == lead_id,
+                )
+            )).all())
+        assert lead is not None and lead.unsubscribed_at == first_unsubscribe_at
+        assert len(repeated_events) == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_suppresses_retry_items_as_well_as_scheduled_items(tmp_path, monkeypatch):
+    engine, sessions = await _database(tmp_path, monkeypatch)
+    try:
+        workspace_id, lead_id, message_id = await _seed_email(sessions, status="retry")
+        with workspace_scope(workspace_id):
+            async with sessions() as db:
+                assert await email_delivery.unsubscribe_lead(db, lead_id) is True
+        async with sessions() as db:
+            message = await db.get(ScheduledEmail, message_id)
+        assert message is not None and message.status == "suppressed"
+        assert message.claimed_at is None
     finally:
         await engine.dispose()

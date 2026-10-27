@@ -20,7 +20,7 @@ def application_payload():
         "publisher_website_url": "https://publisher.example.com",
         "audience_description": "Readers who need careful, evidence-based creator software comparisons.",
         "traffic_sources": ["seo", "blog", "email_opt_in"],
-        "intended_regions": ["us", "GB", "IN"],
+        "intended_regions": ["us", "GB"],
         "promotion_plan": "We will publish carefully sourced comparison content, retain dated terms evidence, disclose affiliate links clearly, and respect the merchant's permitted regions and traffic restrictions.",
         "offer_terms_reviewed": True,
         "traffic_restrictions_reviewed": True,
@@ -44,7 +44,7 @@ def seed_offer(merchant_workspace_id: str) -> MerchantOffer:
         commission_terms_url="https://seller.example.com/affiliate-terms",
         seller_authorization_url="https://seller.example.com/brand-authorization",
         allowed_regions_json=["US", "GB"],
-        restricted_traffic_sources_json=["incentivized"],
+        restricted_traffic_sources_json=["incentivized", "paid social"],
         affiliate_disclosure="Affiliate disclosure: publishers may earn commissions from qualifying purchases.",
         status="approved",
         terms_verified=True,
@@ -219,3 +219,45 @@ def test_marketplace_application_requires_compliance_attestations_and_public_url
     payload["publisher_website_url"] = "http://127.0.0.1/private"
     with pytest.raises(ValidationError):
         MarketplaceApplicationCreateRequest.model_validate(payload)
+
+
+def test_applications_are_rejected_when_regions_or_traffic_sources_conflict_with_merchant_terms(tmp_path):
+    engine, user, merchant_id, _, publisher_id, _, offer_id, client = make_client(tmp_path)
+    try:
+        with client:
+            user["workspace_id"] = merchant_id
+            listed = client.post(f"/api/merchant/offers/{offer_id}/list")
+            assert listed.status_code == 200, listed.text
+
+            user["workspace_id"] = publisher_id
+            disallowed_region = application_payload()
+            disallowed_region["intended_regions"] = ["US", "IN"]
+            region_result = client.post(
+                f"/api/marketplace/offers/{offer_id}/applications",
+                json=disallowed_region,
+            )
+            assert region_result.status_code == 422, region_result.text
+            assert "OFFER_REGION_RESTRICTION" in region_result.text
+            assert client.get("/api/marketplace/applications").json()["count"] == 0
+
+            disallowed_traffic = application_payload()
+            disallowed_traffic["traffic_sources"] = ["seo", "paid_social"]
+            traffic_result = client.post(
+                f"/api/marketplace/offers/{offer_id}/applications",
+                json=disallowed_traffic,
+            )
+            assert traffic_result.status_code == 422, traffic_result.text
+            assert "OFFER_TRAFFIC_RESTRICTION" in traffic_result.text
+            assert client.get("/api/marketplace/applications").json()["count"] == 0
+
+            allowed = application_payload()
+            allowed["intended_regions"] = ["US", "GB"]
+            allowed["traffic_sources"] = ["seo", "blog"]
+            good_result = client.post(
+                f"/api/marketplace/offers/{offer_id}/applications",
+                json=allowed,
+            )
+            assert good_result.status_code == 201, good_result.text
+            assert client.get("/api/marketplace/applications").json()["count"] == 1
+    finally:
+        cleanup(engine, client)

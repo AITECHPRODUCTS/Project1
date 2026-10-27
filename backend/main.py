@@ -1308,6 +1308,43 @@ async def create_marketplace_application(
         merchant_workspace_id = str(offer.workspace_id)
         if merchant_workspace_id == publisher_workspace_id:
             raise HTTPException(409, "A workspace cannot apply to its own merchant offer")
+        # Enforce merchant terms server-side before persisting the publisher application.
+        allowed_regions = {
+            str(value).strip().upper()
+            for value in (offer.allowed_regions_json or [])
+            if str(value).strip()
+        }
+        if not allowed_regions:
+            raise HTTPException(409, {
+                "code": "OFFER_REGIONS_NOT_CONFIGURED",
+                "message": "The merchant has not configured eligible regions; ask the merchant to update the offer before applying.",
+            })
+        disallowed_regions = sorted(set(payload.intended_regions) - allowed_regions)
+        if disallowed_regions:
+            raise HTTPException(422, {
+                "code": "OFFER_REGION_RESTRICTION",
+                "message": "Your intended regions include regions not allowed by the merchant.",
+                "disallowed_regions": disallowed_regions,
+                "allowed_regions": sorted(allowed_regions),
+            })
+        def normalize_traffic_source(value: str) -> str:
+            return re.sub(r"[\s-]+", "_", str(value).strip().lower())
+        restricted_sources = {
+            normalize_traffic_source(value)
+            for value in (offer.restricted_traffic_sources_json or [])
+            if str(value).strip()
+        }
+        conflicting_sources = sorted({
+            normalize_traffic_source(value)
+            for value in payload.traffic_sources
+            if normalize_traffic_source(value) in restricted_sources
+        })
+        if conflicting_sources:
+            raise HTTPException(422, {
+                "code": "OFFER_TRAFFIC_RESTRICTION",
+                "message": "Your selected traffic sources conflict with merchant restrictions.",
+                "restricted_selected_sources": conflicting_sources,
+            })
         snapshot = {
             "id": offer.id,
             "name": offer.name,

@@ -88,7 +88,14 @@ export default function MarketplacePage(){
             <p className="mt-3 text-sm leading-6 text-slate-600">{offer.description}</p>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Commission terms (not payout evidence)</p><p className="mt-1 text-sm font-bold">{offer.commission_value} {offer.commission_currency} · {offer.commission_type}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Allowed regions</p><p className="mt-1 text-sm font-bold">{offer.allowed_regions.join(", ")}</p></div></div>
             <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 p-3"><p className="text-xs font-bold text-amber-900">Traffic restrictions</p><p className="mt-1 text-sm text-amber-900">{offer.restricted_traffic_sources.join(", ")||"No restrictions recorded"}</p><p className="mt-2 text-xs leading-5 text-amber-900">{offer.affiliate_disclosure}</p><a href={offer.commission_terms_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex break-all text-xs font-bold text-indigo-700 underline">Review commission terms reference</a></div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-slate-500">External network approval: {offer.affiliate_network_approval_status}</p><button onClick={()=>{setSelected(offer);setNotice("");setError("");}} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">Apply to merchant</button></div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-slate-500">External network approval: {offer.affiliate_network_approval_status}</p><button onClick={()=>{
+              setSelected(offer);setNotice("");setError("");
+              setRegions(offer.allowed_regions.join(", "));
+              const normalize=(value:string)=>value.trim().toLowerCase().replace(/[\s-]+/g,"_");
+              const restricted=new Set(offer.restricted_traffic_sources.map(normalize));
+              const defaults=["seo","blog","organic_social","email_opt_in","video","community","referral","other","paid_search","paid_social","influencer"];
+              setTraffic(defaults.filter(value=>!restricted.has(normalize(value))).slice(0,3).join(", "));
+            }} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">Apply to merchant</button></div>
           </article>)}
         </div>
       </section>

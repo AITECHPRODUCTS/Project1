@@ -424,3 +424,9 @@
 ## Marketplace listing default drift — corrected and verified
 - Initial candidate \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed SQLite and PostgreSQL \`alembic check\` because the new database-level default for \`merchant_offers.marketplace_listed\` was missing from ORM metadata.
 - Added matching \`server_default=false()\` in \`backend/models.py\`. The corrected candidate \`de8a59e2e86c6f318a7c9a789516d749debfb9ae\` passed both migration drift gates in push run 40522649663 and PR run 40522660792. No test or security guard was weakened.
+
+
+## Marketplace offer-term eligibility gate (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Enforce merchant allowed regions and restricted traffic on publisher applications | \`backend/main.py:create_marketplace_application\`; \`frontend/app/marketplace/page.tsx\`; \`tests/test_marketplace_applications_api.py\` | candidate: server rejects incompatible intended regions/traffic before persistence; UI preselects offer-compatible defaults | Exact-SHA CI, PostgreSQL integration, browser UAT, and review of provider-specific region/traffic-source mapping |

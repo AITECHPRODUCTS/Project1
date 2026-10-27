@@ -832,3 +832,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Initial marketplace candidate SHA \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed both push [40521613901](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521613901) and PR [40521622522](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40521622522) at SQLite/PostgreSQL drift checks because the column \`merchant_offers.marketplace_listed\` had a migration default not represented in ORM metadata.
 - The correction adds SQLAlchemy \`server_default=false()\` to match the migration. No migration guard or tests were weakened.
 - Corrected exact SHA \`de8a59e2e86c6f318a7c9a789516d749debfb9ae\` passed both push run 40522649663 and PR run 40522660792, including both migration drift gates. The original failed runs are retained as audit history.
+
+
+## 2026-10-27 marketplace eligibility enforcement — candidate
+- Added server-side rejection before any application row is created when publisher intended regions exceed the merchant's explicitly allowed regions or selected traffic sources conflict with the merchant's declared restrictions. Space, hyphen and underscore variants are normalized.
+- The publisher form pre-populates eligible regions and selects safe default traffic sources from the displayed merchant offer; the backend remains authoritative.
+- Regression tests cover disallowed regions, restricted traffic, no application row on rejection, and a compliant application path.
+- This source candidate is not verified until both exact-SHA push and PR workflows pass, including SQLite/PostgreSQL migration/drift, frontend build, security and 53-skill guard jobs.

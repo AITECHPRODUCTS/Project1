@@ -225,3 +225,6 @@ These additive rules apply to every future Project1 build session.
 
 
 86. Marketplace migration correction history: the first candidate \`4ed81112ad2b579ef88e720c5e4cdef9ce539cf8\` failed SQLite and PostgreSQL drift checks because the new \`marketplace_listed\` server default was absent from ORM metadata. The corrective commit declares matching \`server_default=false()\` and is verified on exact SHA \`de8a59e2e86c6f318a7c9a789516d749debfb9ae\`; push [40522649663](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40522649663) and PR [40522660792](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40522660792) both pass. Preserve failure history and keep migration tests strict.
+
+
+87. Marketplace eligibility candidate (2026-10-27): enforce merchant region and traffic restrictions on the server before writing applications; normalize whitespace/hyphen/underscore variants and test both rejection/no-row behavior and compliant success. The UI's default values are convenience only; the backend rule is authoritative. Exact-SHA push and PR CI must pass before status is verified.

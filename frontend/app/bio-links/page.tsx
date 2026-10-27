@@ -5,7 +5,9 @@ import {API_BASE,apiFetch} from "@/lib/api";
 
 type BioLink = {label:string;url:string;description:string;is_affiliate:boolean};
 type Publication = {provider:string;remote_id:string|null;url:string|null;status:string;published_at:string|null}|null;
-type GithubPagesPublication = {status:string;repository?:string;branch?:string;content_path?:string;published_url?:string;commit_sha?:string;provider_status?:string;action_id?:string}|null;\ntype GithubPagesStatus = {configuration_ready:boolean;publish_ready:boolean;deployment_enabled:boolean;repository:string|null;branch:string|null;directory:string|null;token_configured:boolean;provider_connection_verified:boolean;site_source_verified:boolean;message:string};\ntype PageAsset = {id:string;title:string;status:string;source_urls:string[];link_count:number;affiliate_link_count:number;page_sha256:string;created_at:string|null;publication:Publication;github_pages_publication?:GithubPagesPublication;preview_url?:string;execution_boundary:string};
+type GithubPagesPublication = {status:string;repository?:string;branch?:string;content_path?:string;published_url?:string;commit_sha?:string;provider_status?:string;action_id?:string}|null;
+type GithubPagesStatus = {configuration_ready:boolean;publish_ready:boolean;deployment_enabled:boolean;repository:string|null;branch:string|null;directory:string|null;token_configured:boolean;provider_connection_verified:boolean;site_source_verified:boolean;message:string};
+type PageAsset = {id:string;title:string;status:string;source_urls:string[];link_count:number;affiliate_link_count:number;page_sha256:string;created_at:string|null;publication:Publication;github_pages_publication?:GithubPagesPublication;preview_url?:string;execution_boundary:string};
 type PageList = {count:number;data:PageAsset[]};
 const field="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
 const label="block text-sm font-semibold text-slate-700";
@@ -15,7 +17,8 @@ const initialLinks:BioLink[]=[
 ];
 function errorMessage(error:unknown){return error instanceof Error?error.message:"Request failed";}
 export default function BioLinksPage(){
- const [pages,setPages]=useState<PageAsset[]>([]);\n const [githubPagesStatus,setGithubPagesStatus]=useState<GithubPagesStatus|null>(null);
+ const [pages,setPages]=useState<PageAsset[]>([]);
+ const [githubPagesStatus,setGithubPagesStatus]=useState<GithubPagesStatus|null>(null);
  const [title,setTitle]=useState("Creator resource links");
  const [headline,setHeadline]=useState("Helpful tools and resources");
  const [subheadline,setSubheadline]=useState("A curated list of resources and products worth exploring.");

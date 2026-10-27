@@ -1484,3 +1484,120 @@ class SignedAdPerformanceWebhookPayload(BaseModel):
         if address is not None and not address.is_global:
             raise ValueError("Private, loopback, link-local, multicast or reserved source references are not allowed")
         return normalized
+
+# Evidence-backed, human-reviewed jurisdiction compliance assessments.
+ComplianceActivity = Literal[
+    "affiliate_promotion",
+    "content_publish",
+    "paid_media",
+    "email_marketing",
+    "lead_capture",
+    "tracking_analytics",
+    "merchant_marketplace",
+]
+
+
+class JurisdictionComplianceRuleEvidence(BaseModel):
+    """One cited source record; this is evidence for review, not an automated legal conclusion."""
+
+    jurisdiction_code: str = Field(min_length=2, max_length=12)
+    category: str = Field(min_length=2, max_length=80)
+    source_title: str = Field(min_length=3, max_length=300)
+    source_url: str = Field(min_length=12, max_length=2048)
+    rule_summary: str = Field(min_length=20, max_length=4000)
+    effective_date: date | None = None
+    reviewed_at: datetime
+    reviewer_attestation: bool = False
+
+    @field_validator("jurisdiction_code")
+    @classmethod
+    def normalize_evidence_jurisdiction(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"(?:[A-Z]{2}(?:-[A-Z0-9]{1,6})?|EU|EEA|GLOBAL)", normalized):
+            raise ValueError("Use an ISO-style country/subdivision code or EU, EEA, GLOBAL")
+        return normalized
+
+    @field_validator("category")
+    @classmethod
+    def normalize_evidence_category(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[a-z][a-z0-9_]{1,79}", normalized):
+            raise ValueError("Evidence category must be a lowercase identifier")
+        return normalized
+
+    @field_validator("source_title", "rule_summary")
+    @classmethod
+    def normalize_evidence_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Evidence text must not be blank")
+        return normalized
+
+    @field_validator("source_url")
+    @classmethod
+    def require_public_https_source(cls, value: str) -> str:
+        normalized = value.strip()
+        try:
+            parsed = urlparse(normalized)
+            host = (parsed.hostname or "").lower().rstrip(".")
+        except ValueError as exc:
+            raise ValueError("Evidence source must be a valid HTTPS URL") from exc
+        if parsed.scheme.lower() != "https" or not host or parsed.username or parsed.password:
+            raise ValueError("Evidence sources must use absolute HTTPS URLs without credentials")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local/private evidence sources are not allowed")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Evidence sources cannot use private, loopback, link-local or reserved IP addresses")
+        return normalized
+
+    @field_validator("reviewed_at")
+    @classmethod
+    def require_explicit_evidence_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Evidence reviewed_at must include an explicit timezone offset")
+        return value.astimezone(timezone.utc)
+
+
+class JurisdictionComplianceAssessmentCreateRequest(BaseModel):
+    activity: ComplianceActivity
+    channels: list[str] = Field(min_length=1, max_length=50)
+    jurisdictions: list[str] = Field(min_length=1, max_length=50)
+    rule_evidence: list[JurisdictionComplianceRuleEvidence] = Field(default_factory=list, max_length=1000)
+    operator_notes: str = Field(default="", max_length=4000)
+
+    @field_validator("channels")
+    @classmethod
+    def normalize_compliance_channels(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().lower() for value in values if str(value).strip()))
+        if not normalized or any(not re.fullmatch(r"[a-z0-9][a-z0-9._:-]{0,59}", value) for value in normalized):
+            raise ValueError("Choose one or more valid channel identifiers")
+        return normalized
+
+    @field_validator("jurisdictions")
+    @classmethod
+    def normalize_compliance_jurisdictions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().upper() for value in values if str(value).strip()))
+        if not normalized or any(not re.fullmatch(r"(?:[A-Z]{2}(?:-[A-Z0-9]{1,6})?|EU|EEA|GLOBAL)", value) for value in normalized):
+            raise ValueError("Target jurisdictions must use ISO-style country/subdivision codes or EU, EEA, GLOBAL")
+        return normalized
+
+    @field_validator("operator_notes")
+    @classmethod
+    def normalize_compliance_operator_notes(cls, value: str) -> str:
+        return value.strip()
+
+
+class JurisdictionComplianceAssessmentReviewRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+    confirm_scope_reviewed: bool = False
+    reviewer_notes: str = Field(default="", max_length=4000)
+
+    @field_validator("reviewer_notes")
+    @classmethod
+    def normalize_compliance_reviewer_notes(cls, value: str) -> str:
+        return value.strip()
+

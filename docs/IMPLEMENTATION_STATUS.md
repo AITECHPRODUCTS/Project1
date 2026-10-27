@@ -806,3 +806,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Readiness checks report missing official terms evidence and unchecked affiliate disclosure, traffic-source terms, geographic restrictions, consent/privacy and claims-substantiation controls. User-provided URLs are references only; the system does not fetch them or treat them as verified facts.
 - Owner/admin review can approve the packet for manual handoff or reject it. Provider submission remains `not_configured`; no external application is sent and no network approval is claimed.
 - Audit events record packet creation and internal review. Tests cover incomplete readiness, evidence/checklist-gated handoff, workspace role gate and the non-submission invariant.
+
+
+## 2026-10-27 merchant offer lifecycle — implementation candidate
+- Added a workspace-scoped merchant offer packet with typed commission terms, supported regions, restricted traffic-source declarations, seller-authorization/commission-terms references and explicit affiliate disclosure.
+- Added draft, submit-for-review, second-person approval/rejection and suspension APIs. Internal activation is blocked until a different workspace owner/admin explicitly attests to seller authorization and terms; state transitions create audit events.
+- Internal approval returns affiliate network status as not configured and does not imply network acceptance, live listing, tracking-link creation or provider submission.
+- Added a responsive merchant-offer console plus API tests for workspace isolation, self-review denial, evidence gates, suspension, role restrictions, private URL rejection and percentage bounds.
+- Candidate only: exact-SHA hosted CI, PostgreSQL migration/drift checks and frontend build are required before marking verified. No production deployment or provider approval is claimed.

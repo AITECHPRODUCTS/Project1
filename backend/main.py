@@ -23,9 +23,9 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
-from backend.schemas import ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -906,6 +906,230 @@ async def automation_multi_program_manager(
         db.add(asset)
         await db.commit()
     return {**generated, "asset_id": asset.id}
+
+
+
+
+
+def _merchant_offer_dict(row: MerchantOffer) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "product_url": row.product_url,
+        "description": row.description,
+        "category": row.category,
+        "commission_type": row.commission_type,
+        "commission_value": format(Decimal(row.commission_value), "f"),
+        "commission_currency": row.commission_currency,
+        "terms_version": row.terms_version,
+        "commission_terms_url": row.commission_terms_url,
+        "seller_authorization_url": row.seller_authorization_url,
+        "allowed_regions": row.allowed_regions_json or [],
+        "restricted_traffic_sources": row.restricted_traffic_sources_json or [],
+        "affiliate_disclosure": row.affiliate_disclosure,
+        "status": row.status,
+        "terms_verified": row.terms_verified is True,
+        "seller_authorization_verified": row.seller_authorization_verified is True,
+        "activation_allowed": row.activation_allowed is True,
+        "reviewer_notes": row.reviewer_notes,
+        "reviewed_by": row.reviewed_by,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "created_by": row.created_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "affiliate_network_approval_status": row.affiliate_network_approval_status,
+        "affiliate_network_approved": False,
+        "provider_submission_performed": False,
+    }
+
+
+@api.post("/merchant/offers", status_code=201)
+async def create_merchant_offer(
+    payload: MerchantOfferCreateRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a workspace-owned merchant offer draft; no external listing or affiliate-network approval occurs."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating a merchant offer")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = MerchantOffer(
+            workspace_id=workspace_id,
+            created_by=str(user.get("email") or "unknown")[:320],
+            name=payload.name,
+            product_url=payload.product_url,
+            description=payload.description,
+            category=payload.category,
+            commission_type=payload.commission_type,
+            commission_value=payload.commission_value,
+            commission_currency=payload.commission_currency,
+            terms_version=payload.terms_version,
+            commission_terms_url=payload.commission_terms_url,
+            seller_authorization_url=payload.seller_authorization_url,
+            allowed_regions_json=payload.allowed_regions,
+            restricted_traffic_sources_json=payload.restricted_traffic_sources,
+            affiliate_disclosure=payload.affiliate_disclosure,
+            status="draft",
+            terms_verified=False,
+            seller_authorization_verified=False,
+            activation_allowed=False,
+            affiliate_network_approval_status="not_configured",
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown"),
+            action="merchant.offer.created",
+            resource_type="merchant_offer",
+            resource_id=row.id,
+            outcome="draft",
+            details_json={
+                "commission_type": row.commission_type,
+                "currency": row.commission_currency,
+                "terms_verified": False,
+                "seller_authorization_verified": False,
+                "activation_allowed": False,
+                "affiliate_network_approval_status": "not_configured",
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _merchant_offer_dict(row)
+
+
+@api.get("/merchant/offers")
+async def list_merchant_offers(
+    limit: int = Query(default=100, ge=1, le=300),
+    status: str | None = Query(default=None, max_length=40),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before listing merchant offers")
+    valid_statuses = {"draft", "submitted_for_review", "approved", "rejected", "suspended"}
+    if status is not None and status not in valid_statuses:
+        raise HTTPException(422, "Unsupported merchant offer status filter")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        query = select(MerchantOffer).where(MerchantOffer.workspace_id == workspace_id)
+        if status is not None:
+            query = query.where(MerchantOffer.status == status)
+        rows = list((await db.scalars(query.order_by(MerchantOffer.created_at.desc()).limit(limit))).all())
+    return {"count": len(rows), "data": [_merchant_offer_dict(row) for row in rows]}
+
+
+@api.post("/merchant/offers/{offer_id}/submit")
+async def submit_merchant_offer(
+    offer_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Submit an offer packet for a different workspace owner/admin to review."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before submitting a merchant offer")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        if row.status != "draft":
+            raise HTTPException(409, "Only a draft merchant offer can be submitted; create a new draft to replace a reviewed packet")
+        blockers = []
+        if not row.product_url:
+            blockers.append("product_url_required")
+        if not row.commission_terms_url or not row.terms_version:
+            blockers.append("commission_terms_evidence_required")
+        if not row.seller_authorization_url:
+            blockers.append("seller_authorization_evidence_required")
+        if len((row.affiliate_disclosure or "").strip()) < 12:
+            blockers.append("affiliate_disclosure_required")
+        if blockers:
+            raise HTTPException(409, {"message": "Merchant offer is not ready for review", "blockers": blockers})
+        row.status = "submitted_for_review"
+        row.activation_allowed = False
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.offer.submitted", resource_type="merchant_offer", resource_id=row.id,
+            outcome=row.status,
+            details_json={"evidence_references_present": True, "source_content_independently_fetched": False,
+                          "activation_allowed": False, "affiliate_network_approved": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _merchant_offer_dict(row)
+
+
+@api.post("/merchant/offers/{offer_id}/review")
+async def review_merchant_offer(
+    offer_id: str,
+    payload: MerchantOfferReviewRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Human review within the workspace; internal approval is not an external network approval."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing a merchant offer")
+    workspace_id = str(workspace_id)
+    reviewer = str(user.get("email") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        if row.created_by.strip().casefold() == reviewer.strip().casefold():
+            raise HTTPException(403, "A different workspace owner/admin must review the offer creator's packet")
+        if payload.decision in {"approve", "reject"} and row.status != "submitted_for_review":
+            raise HTTPException(409, "Only a submitted merchant offer can be approved or rejected")
+        if payload.decision == "suspend" and row.status != "approved":
+            raise HTTPException(409, "Only an internally approved offer can be suspended")
+        if payload.decision == "approve":
+            if payload.seller_authorization_verified is not True or payload.commission_terms_verified is not True:
+                raise HTTPException(409, "Approval requires explicit seller-authorization and commission-terms verification")
+            if not row.seller_authorization_url or not row.commission_terms_url or len(row.affiliate_disclosure.strip()) < 12:
+                raise HTTPException(409, "Seller evidence, commission terms and affiliate disclosure must be present")
+            row.status = "approved"
+            row.seller_authorization_verified = True
+            row.terms_verified = True
+            row.activation_allowed = True
+        elif payload.decision == "reject":
+            row.status = "rejected"
+            row.activation_allowed = False
+            row.seller_authorization_verified = False
+            row.terms_verified = False
+        else:
+            row.status = "suspended"
+            row.activation_allowed = False
+        row.reviewer_notes = payload.reviewer_notes
+        row.reviewed_by = reviewer
+        row.reviewed_at = datetime.now(timezone.utc)
+        row.affiliate_network_approval_status = "not_configured"
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=reviewer,
+            action="merchant.offer.reviewed", resource_type="merchant_offer", resource_id=row.id,
+            outcome=row.status,
+            details_json={
+                "decision": payload.decision,
+                "seller_authorization_verified": row.seller_authorization_verified,
+                "commission_terms_verified": row.terms_verified,
+                "activation_allowed": row.activation_allowed,
+                "affiliate_network_approval_status": "not_configured",
+                "affiliate_network_approved": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _merchant_offer_dict(row)
 
 
 

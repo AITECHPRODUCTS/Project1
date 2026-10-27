@@ -406,3 +406,8 @@
 - Python 396 passed, 3 skipped. All required CI gates including PostgreSQL integration, AI/RAG SBOM/license, frontend, audits, secret scan, skill parity and lockfile sync passed.
 - The operator CLI validates staged artifact directory hashes, application SHA, Hub revision pin, license/acquisition metadata and runtime local-only policy. Its fixture tests do not prove any actual model has been downloaded, staged or licensed.
 - Production artifact/cache-only load, retrieval-golden testing, staging egress, provider UAT, legal exception resolution, deployment and restore evidence remain pending.
+
+## Merchant / product-owner offer lifecycle (2026-10-27 candidate)
+| Requirement area | Implementation path | Current status | Remaining acceptance evidence |
+|---|---|---|---|
+| Merchant-owned offer packet and internal activation gate | backend/models.py MerchantOffer; migration 0014_merchant_offers; backend/schemas.py; backend/main.py /api/merchant/offers routes; frontend/app/merchant/offers/page.tsx; tests/test_merchant_offers_api.py | candidate: workspace-scoped draft, submission, second-person review, evidence attestation, suspension and audit transitions | Exact-SHA CI/migration checks, browser UAT, authorized human review of seller authority/terms and production role-policy review; network approval and live listing remain not configured |

@@ -1230,3 +1230,86 @@ class ProgramApplicationReviewRequest(BaseModel):
     @classmethod
     def normalize_reviewer_notes(cls, value: str) -> str:
         return value.strip()
+
+
+class MerchantOfferCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=240)
+    product_url: str = Field(min_length=8, max_length=2048)
+    description: str = Field(min_length=30, max_length=6000)
+    category: str = Field(min_length=2, max_length=160)
+    commission_type: Literal["percentage", "fixed", "recurring_percentage", "recurring_fixed", "cpa", "cpl"]
+    commission_value: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
+    commission_currency: str = Field(default="USD", min_length=3, max_length=3)
+    terms_version: str = Field(min_length=1, max_length=120)
+    commission_terms_url: str = Field(min_length=8, max_length=2048)
+    seller_authorization_url: str = Field(min_length=8, max_length=2048)
+    allowed_regions: list[str] = Field(min_length=1, max_length=50)
+    restricted_traffic_sources: list[str] = Field(default_factory=list, max_length=30)
+    affiliate_disclosure: str = Field(min_length=12, max_length=1200)
+
+    @field_validator("name", "description", "category", "terms_version", "affiliate_disclosure")
+    @classmethod
+    def normalize_merchant_offer_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field must not be blank")
+        return value
+
+    @field_validator("product_url", "commission_terms_url", "seller_authorization_url")
+    @classmethod
+    def validate_merchant_offer_url(cls, value: str) -> str:
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in {"https", "http"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("URLs must be absolute HTTP(S) URLs without embedded credentials")
+        host = parsed.hostname.lower().rstrip(".")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local or internal URLs are not valid evidence references")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private or reserved IP addresses are not valid destinations")
+        return value.strip()
+
+    @field_validator("commission_currency")
+    @classmethod
+    def normalize_merchant_currency(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", normalized):
+            raise ValueError("Currency must be a three-letter ISO currency code")
+        return normalized
+
+    @field_validator("allowed_regions")
+    @classmethod
+    def normalize_merchant_regions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().upper() for value in values if value and value.strip()))
+        if not normalized or any(len(value) > 80 for value in normalized):
+            raise ValueError("Provide one or more non-empty region identifiers")
+        return normalized
+
+    @field_validator("restricted_traffic_sources")
+    @classmethod
+    def normalize_merchant_traffic_sources(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().lower() for value in values if value and value.strip()))
+        if any(len(value) > 80 for value in normalized):
+            raise ValueError("Traffic-source identifiers must be at most 80 characters")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_commission_range(self):
+        if self.commission_type in {"percentage", "recurring_percentage"} and self.commission_value > Decimal("100"):
+            raise ValueError("Percentage commission cannot exceed 100")
+        return self
+
+
+class MerchantOfferReviewRequest(BaseModel):
+    decision: Literal["approve", "reject", "suspend"]
+    seller_authorization_verified: bool = False
+    commission_terms_verified: bool = False
+    reviewer_notes: str = Field(default="", max_length=3000)
+
+    @field_validator("reviewer_notes")
+    @classmethod
+    def normalize_merchant_review_notes(cls, value: str) -> str:
+        return value.strip()

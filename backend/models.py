@@ -519,3 +519,45 @@ class AffiliateProgramApplication(TenantScopedMixin, Base):
     provider_application_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MerchantOffer(TenantScopedMixin, Base):
+    """Internally reviewed merchant offer; never implies affiliate-network approval."""
+    __tablename__ = "merchant_offers"
+    __table_args__ = (
+        Index("ix_merchant_offers_workspace_status_created", "workspace_id", "status", "created_at"),
+        Index("ix_merchant_offers_workspace_name", "workspace_id", "name"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    product_url: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    commission_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    commission_value: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    commission_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    terms_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    commission_terms_url: Mapped[str] = mapped_column(Text, nullable=False)
+    seller_authorization_url: Mapped[str] = mapped_column(Text, nullable=False)
+    allowed_regions_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    restricted_traffic_sources_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    affiliate_disclosure: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="draft", nullable=False, index=True)
+    terms_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    seller_authorization_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    activation_allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reviewer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    affiliate_network_approval_status: Mapped[str] = mapped_column(
+        String(40), default="not_configured", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

@@ -328,7 +328,7 @@ jobs:
           npm run build
           npm prune --omit=dev --omit=optional --no-audit --no-fund
           node scripts/verify-production-dependencies.mjs
-          npm sbom --sbom-format=cyclonedx > ../artifacts/sbom-frontend-production.json
+          npm sbom --sbom-format=cyclonedx --omit=dev --omit=optional > ../artifacts/sbom-frontend-production.json
       - name: Enforce production frontend license policy without exceptions
         run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend-production.json --report-output artifacts/license-policy-frontend-production.json
       - name: Upload core/frontend SBOM and license evidence

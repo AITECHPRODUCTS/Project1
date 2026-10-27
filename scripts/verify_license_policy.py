@@ -183,7 +183,7 @@ def _cyclonedx_findings(report: Path, exceptions: dict[tuple[str, str, str], dic
             continue
         license_text = " OR ".join(licenses)
         if _blocked(license_text):
-            exception = _matches_exception(name, version, licenses, exceptions)
+            exception = _matches_exception(name, version, licenses, exceptions, build_inventory_only=build_inventory_only)
             if exception:
                 notices.append(_exception_notice(name, version, exception))
             else:

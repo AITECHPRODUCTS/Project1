@@ -1676,3 +1676,82 @@ class SkillPackageReviewRequest(BaseModel):
     def normalize_skill_review_notes(cls, value: str) -> str:
         return value.strip()
 
+# Evidence-aware, disclosure-forward bio-link pages.
+class BioLinkItem(BaseModel):
+    label: str = Field(min_length=2, max_length=120)
+    url: str = Field(min_length=10, max_length=2048)
+    description: str = Field(default="", max_length=240)
+    is_affiliate: bool = False
+
+    @field_validator("label", "description")
+    @classmethod
+    def normalize_bio_link_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("url")
+    @classmethod
+    def validate_bio_link_destination(cls, value: str) -> str:
+        normalized = value.strip()
+        try:
+            parsed = urlparse(normalized)
+            host = (parsed.hostname or "").lower().rstrip(".")
+            _ = parsed.port
+        except ValueError as exc:
+            raise ValueError("Link destination must be a valid absolute HTTP(S) URL") from exc
+        if parsed.scheme.lower() not in {"http", "https"} or not host or parsed.username or parsed.password:
+            raise ValueError("Link destination must be absolute HTTP(S) without credentials")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith(
+            (".localhost", ".local", ".internal", ".test", ".home", ".lan", ".corp")
+        ):
+            raise ValueError("Local/private hostnames cannot be bio-link destinations")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private, loopback, link-local, multicast or reserved IP destinations are not allowed")
+        return normalized
+
+
+class BioLinkPageCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=180)
+    headline: str = Field(min_length=3, max_length=240)
+    subheadline: str = Field(default="", max_length=500)
+    links: list[BioLinkItem] = Field(min_length=1, max_length=50)
+    affiliate_disclosure: str = Field(default="", max_length=1200)
+    footer_note: str = Field(default="", max_length=600)
+
+    @field_validator("title", "headline", "subheadline", "affiliate_disclosure", "footer_note")
+    @classmethod
+    def normalize_bio_page_text(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def require_disclosure_for_affiliate_links(self):
+        if any(item.is_affiliate for item in self.links) and len(self.affiliate_disclosure.strip()) < 10:
+            raise ValueError("Add a clear affiliate disclosure before creating a page with affiliate links")
+        return self
+
+
+class BioLinkPublishRequest(BaseModel):
+    provider: Literal["wordpress", "ghost"]
+    target_jurisdictions: list[str] = Field(default_factory=list, max_length=50)
+    canonical_url: str = Field(min_length=8, max_length=2048)
+    status: Literal["draft", "publish"] = "draft"
+    confirm_live_publish: bool = False
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    disclosure: str = Field(default="Disclosure: This page may contain affiliate links; I may earn a commission from qualifying purchases.", max_length=1200)
+
+    @field_validator("target_jurisdictions")
+    @classmethod
+    def normalize_bio_publish_jurisdictions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().upper() for value in values if str(value).strip()))
+        if any(not re.fullmatch(r"(?:[A-Z]{2}(?:-[A-Z0-9]{1,6})?|EU|EEA|GLOBAL)", value) for value in normalized):
+            raise ValueError("Use ISO-style country/subdivision codes or EU, EEA, GLOBAL")
+        return normalized
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_bio_publish_tags(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))[:20]
+

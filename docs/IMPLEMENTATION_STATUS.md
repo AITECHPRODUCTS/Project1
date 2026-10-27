@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 51 partial and 2 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 52 partial and 1 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -893,3 +893,13 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added the “Governed skill packages” UI for authoring declarative manifests, inspecting checksums and fixture failures, and recording review decisions.
 - Updated `docs/skill-parity-matrix.csv`: `meta/create-skill` is now partial because package authoring, static contract validation and review persistence exist. Runtime dispatch/sandboxing, execution-specific tests, and UAT remain open; this is not an end-to-end-complete skill.
 - Current skill inventory remains 53 rows: 51 partial, 2 not implemented, 0 fully implemented end-to-end. This is a skills inventory, not an overall product completion percentage.
+
+
+## 2026-10-27 implementation update — bio-link studio and CMS publishing
+- Added a workspace-scoped bio-link page builder using the existing content-asset persistence model; pages remain drafts until an operator explicitly sends them to WordPress/Ghost.
+- Added strict destination validation for absolute HTTP(S) URLs, rejection of credentials/local/private literal destinations, HTML escaping for all user text, affiliate disclosure requirements, sponsored/nofollow link attributes, responsive accessible markup, and first-party UTM parameters that preserve existing query parameters.
+- Added an authenticated no-store preview endpoint with a restrictive Content Security Policy. The generated markup includes no user-supplied HTML, scripts, iframe/embed, forms, or remote server-side link fetches.
+- Added CMS publication for saved bio-link pages via the existing provider adapter, workspace/platform-admin boundary, external-action idempotency registry, live-publish confirmation, jurisdiction compliance approval gate, and audit trail. Ambiguous provider outcomes are marked unknown and block unsafe blind retries.
+- Added service/API tests for escaping, unsafe destinations, disclosure validation, UTM preservation, tenant isolation, preview, live compliance gating, and idempotent publish replay.
+- Updated `docs/skill-parity-matrix.csv`: `distribution/bio-link-deployer` is now partial. Actual connected-provider scope verification and deployed provider UAT remain unverified; a tracked partial state is not a production-ready claim.
+- Current skill inventory is 53 rows: 52 partial, 1 not implemented, 0 fully implemented end-to-end. This is not an overall product completion percentage.

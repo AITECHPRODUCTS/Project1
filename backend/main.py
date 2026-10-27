@@ -28,7 +28,7 @@ from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -46,6 +46,7 @@ from backend.services.multi_program_manager import manage_program_portfolio as m
 from backend.services.seo_audit import audit_public_page as audit_public_page_service
 from backend.services.internal_linking import recommend_internal_links as recommend_internal_links_service
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
+from backend.services.bio_link_page import build_bio_link_page
 from backend.services.skill_packager import build_skill_package
 from backend.services.skill_finder import find_skills as find_skills_service
 from backend.services.proprietary_data_generator import build_proprietary_dataset as build_proprietary_dataset_service
@@ -4717,6 +4718,261 @@ async def cms(
         remote_id=result.get("remote_id"),
     )
     return result
+
+
+def _bio_link_asset_dict(row: ContentAsset, *, include_html: bool = False) -> dict[str, Any]:
+    metadata = dict(row.metadata_json or {})
+    result = {
+        "id": row.id,
+        "title": row.title,
+        "status": row.status,
+        "source_urls": list(row.source_urls or []),
+        "link_count": int(metadata.get("link_count") or 0),
+        "affiliate_link_count": int(metadata.get("affiliate_link_count") or 0),
+        "page_sha256": str(metadata.get("page_sha256") or ""),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "publication": metadata.get("publication"),
+        "execution_boundary": "Draft HTML is generated locally; CMS publishing uses the existing platform-admin, idempotency, and live-compliance gates.",
+    }
+    if include_html:
+        result["html"] = row.body
+    return result
+
+
+@api.get("/distribution/bio-links")
+async def list_bio_link_pages(
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing bio-link pages")
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(ContentAsset).where(
+                ContentAsset.workspace_id == workspace_id,
+                ContentAsset.asset_type == "bio_link_page",
+            ).order_by(ContentAsset.created_at.desc()).limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [_bio_link_asset_dict(row) for row in rows]}
+
+
+@api.post("/distribution/bio-links", status_code=201)
+async def create_bio_link_page(
+    payload: BioLinkPageCreateRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating bio-link pages")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        row = ContentAsset(
+            workspace_id=workspace_id,
+            asset_type="bio_link_page",
+            title=payload.title,
+            body="",
+            status="draft",
+            source_urls=[link.url for link in payload.links],
+            metadata_json={"schema_version": 1},
+        )
+        db.add(row)
+        await db.flush()
+        try:
+            built = build_bio_link_page(payload.model_dump(mode="json"), page_id=row.id)
+        except ValueError as exc:
+            await db.rollback()
+            raise HTTPException(422, str(exc)) from exc
+        row.body = built["html"]
+        row.metadata_json = {
+            "schema_version": 1,
+            "link_count": built["link_count"],
+            "affiliate_link_count": built["affiliate_link_count"],
+            "page_sha256": built["sha256"],
+            "tracking_parameters": ["utm_source", "utm_medium", "utm_content"],
+            "external_scripts": False,
+            "user_markup_embedded": False,
+            "server_side_link_fetches": 0,
+        }
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=actor,
+            action="bio_link_page.created", resource_type="content_asset",
+            resource_id=row.id, outcome="draft",
+            details_json={
+                "link_count": built["link_count"],
+                "affiliate_link_count": built["affiliate_link_count"],
+                "page_sha256": built["sha256"],
+                "external_scripts": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    result = _bio_link_asset_dict(row)
+    result["preview_url"] = f"/api/distribution/bio-links/{row.id}/preview"
+    return result
+
+
+@api.get("/distribution/bio-links/{asset_id}/preview")
+async def preview_bio_link_page(
+    asset_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before previewing bio-link pages")
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "bio_link_page",
+        ))
+    if row is None:
+        raise HTTPException(404, "Bio-link page not found in the active workspace")
+    return HTMLResponse(
+        row.body,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+        },
+    )
+
+
+@api.post("/distribution/bio-links/{asset_id}/publish")
+async def publish_bio_link_page(
+    asset_id: str,
+    payload: BioLinkPublishRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before publishing a bio-link page")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        asset = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "bio_link_page",
+        ))
+    if asset is None:
+        raise HTTPException(404, "Bio-link page not found in the active workspace")
+    if payload.status == "publish" and payload.confirm_live_publish is not True:
+        raise HTTPException(409, "Live bio-link publishing requires confirm_live_publish=true")
+    supplied_key = str(request.headers.get("Idempotency-Key") or "").strip()
+    if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(supplied_key):
+        raise HTTPException(428, "A valid Idempotency-Key header is required for provider writes")
+    metadata = dict(asset.metadata_json or {})
+    action_payload = {
+        "asset_id": asset.id,
+        "page_sha256": metadata.get("page_sha256"),
+        "provider": payload.provider,
+        "canonical_url": payload.canonical_url,
+        "target_jurisdictions": payload.target_jurisdictions,
+        "status": payload.status,
+        "confirm_live_publish": payload.confirm_live_publish,
+        "tags": payload.tags,
+        "disclosure": payload.disclosure,
+    }
+    action_id, replay = await _claim_external_action(
+        db, workspace_id=workspace_id, action_type="bio_link_publish",
+        provider=payload.provider, idempotency_key=supplied_key,
+        request_payload=action_payload,
+    )
+    if replay is not None:
+        await _record_external_publish_audit(
+            db, user=user, workspace_id=workspace_id,
+            action="bio_link_publish_idempotency_replay", platform=payload.provider,
+            outcome="replayed", remote_id=(replay.get("provider_result") or {}).get("remote_id"),
+        )
+        return replay
+    if asset.status in {"published", "publish_outcome_unknown"}:
+        await _finish_external_action(
+            db, workspace_id=workspace_id, action_id=action_id,
+            status="failed", error_type="BioLinkAlreadyPublishedOrUnknown",
+        )
+        raise HTTPException(409, "This page is already published or has an unknown provider outcome; reconcile before publishing again")
+    live_publish = payload.status == "publish" and settings.cms_publish_execute is True
+    if live_publish:
+        try:
+            await _require_live_compliance_approval(
+                db, workspace_id=workspace_id, activity="content_publish",
+                jurisdictions=payload.target_jurisdictions, channel=payload.provider,
+                actor=actor, action="bio_link_publish",
+            )
+        except HTTPException:
+            await _finish_external_action(
+                db, workspace_id=workspace_id, action_id=action_id,
+                status="failed", error_type="ComplianceApprovalRequired",
+            )
+            raise
+    try:
+        with workspace_scope(workspace_id):
+            remote = await publish_article(
+                provider=payload.provider,
+                title=asset.title,
+                article_html=asset.body,
+                canonical_url=payload.canonical_url,
+                status=payload.status,
+                tags=payload.tags,
+                disclosure=payload.disclosure,
+            )
+    except Exception as exc:
+        action_outcome = _external_action_failure_status(exc)
+        await _finish_external_action(
+            db, workspace_id=workspace_id, action_id=action_id,
+            status=action_outcome, error_type=type(exc).__name__,
+        )
+        if action_outcome == "unknown":
+            with workspace_scope(workspace_id):
+                asset.status = "publish_outcome_unknown"
+                metadata = dict(asset.metadata_json or {})
+                metadata["publication"] = {"provider": payload.provider, "status": "outcome_unknown", "error_type": type(exc).__name__}
+                asset.metadata_json = metadata
+                await db.commit()
+        await _record_external_publish_audit(
+            db, user=user, workspace_id=workspace_id, action="bio_link_publish",
+            platform=payload.provider, outcome="outcome_unknown" if action_outcome == "unknown" else "failed",
+            error_type=type(exc).__name__,
+        )
+        raise
+    asset_status = "published" if str(remote.get("status") or "").lower() in {"publish", "published"} else "cms_draft"
+    result = {
+        "asset_id": asset.id,
+        "asset_status": asset_status,
+        "page_sha256": metadata.get("page_sha256"),
+        "provider_result": remote,
+        "status": "completed",
+    }
+    await _finish_external_action(
+        db, workspace_id=workspace_id, action_id=action_id,
+        status="completed", result=result,
+    )
+    with workspace_scope(workspace_id):
+        asset.status = asset_status
+        metadata = dict(asset.metadata_json or {})
+        metadata["publication"] = {
+            "provider": payload.provider,
+            "remote_id": str(remote.get("remote_id") or "")[:255] or None,
+            "url": remote.get("url"),
+            "status": remote.get("status"),
+            "published_at": utcnow().isoformat() if asset_status == "published" else None,
+            "page_sha256": metadata.get("page_sha256"),
+        }
+        asset.metadata_json = metadata
+        await db.commit()
+    await _record_external_publish_audit(
+        db, user=user, workspace_id=workspace_id, action="bio_link_publish",
+        platform=payload.provider, outcome=asset_status, remote_id=remote.get("remote_id"),
+    )
+    return result
+
+
 @api.get("/audit")
 async def audit(
     limit: int = Query(100, ge=1, le=500),

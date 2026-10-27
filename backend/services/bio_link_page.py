@@ -79,7 +79,7 @@ def build_bio_link_page(payload: dict, *, page_id: str) -> dict:
         )
 
     disclosure_block = (
-        f'<aside class="disclosure" aria-label="Affiliate disclosure">{html.escape(disclosure, quote=True)}</aside>'
+        f'<aside class="affiliate-disclosure" aria-label="Affiliate disclosure">{html.escape(disclosure, quote=True)}</aside>'
         if disclosure else ""
     )
     subheadline_block = f"<p class=\"subtitle\">{html.escape(subheadline, quote=True)}</p>" if subheadline else ""

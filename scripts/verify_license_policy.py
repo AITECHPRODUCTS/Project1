@@ -66,11 +66,6 @@ def _load_exceptions(path: Path | None, *, build_inventory_only: bool = False) -
         if entry["status"] not in {"temporary-release-blocker", "temporary-build-inventory-only"}:
             raise ValueError(f"{path}: unsupported license exception status")
         if entry["status"] == "temporary-build-inventory-only":
-            if not build_inventory_only:
-                raise ValueError(
-                    f"{path}: build-inventory-only exceptions require --build-inventory-only "
-                    "and may never be used for a production SBOM"
-                )
             if entry.get("scope") != "frontend-build-only" or entry.get("excluded_from_production") is not True:
                 raise ValueError(
                     f"{path}: build-only exception must declare scope=frontend-build-only "
@@ -90,11 +85,15 @@ def _load_exceptions(path: Path | None, *, build_inventory_only: bool = False) -
 
 
 def _matches_exception(name: str, version: str, licenses: list[str],
-                       exceptions: dict[tuple[str, str, str], dict[str, Any]]) -> dict[str, Any] | None:
+                       exceptions: dict[tuple[str, str, str], dict[str, Any]],
+                       *, build_inventory_only: bool = False) -> dict[str, Any] | None:
     # Exact package + exact version + exact single license; never a license-family/path waiver.
     if len(licenses) != 1 or _unknown(licenses[0]):
         return None
-    return exceptions.get((name, version, _normalized_license(licenses[0])))
+    entry = exceptions.get((name, version, _normalized_license(licenses[0])))
+    if entry and entry["status"] == "temporary-build-inventory-only" and not build_inventory_only:
+        return None
+    return entry
 
 
 def _exception_notice(name: str, version: str, entry: dict[str, Any]) -> str:
@@ -109,7 +108,8 @@ def _exception_notice(name: str, version: str, entry: dict[str, Any]) -> str:
             f"until {entry['expires']}; RELEASE BLOCKED pending legal review. Reason: {entry['reason']}")
 
 
-def _python_findings(report: Path, exceptions: dict[tuple[str, str, str], dict[str, Any]]
+def _python_findings(report: Path, exceptions: dict[tuple[str, str, str], dict[str, Any]],
+                     *, build_inventory_only: bool = False
                      ) -> tuple[int, list[str], list[str]]:
     payload = json.loads(report.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
@@ -129,7 +129,9 @@ def _python_findings(report: Path, exceptions: dict[tuple[str, str, str], dict[s
         if _unknown(license_text):
             findings.append(f"{identity}: missing/unknown license metadata")
         elif _blocked(license_text):
-            exception = _matches_exception(name, version, licenses, exceptions)
+            exception = _matches_exception(
+                name, version, licenses, exceptions, build_inventory_only=build_inventory_only
+            )
             if exception:
                 notices.append(_exception_notice(name, version, exception))
             else:
@@ -157,7 +159,8 @@ def _component_license_strings(component: dict[str, Any]) -> list[str]:
     return result
 
 
-def _cyclonedx_findings(report: Path, exceptions: dict[tuple[str, str, str], dict[str, Any]]
+def _cyclonedx_findings(report: Path, exceptions: dict[tuple[str, str, str], dict[str, Any]],
+                        *, build_inventory_only: bool = False
                         ) -> tuple[int, list[str], list[str]]:
     payload = json.loads(report.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("bomFormat") != "CycloneDX":
@@ -196,12 +199,16 @@ def verify_reports(*, python_reports: list[Path] | None = None,
     exceptions = _load_exceptions(exception_policy, build_inventory_only=build_inventory_only)
     total, findings, notices = 0, [], []
     for report in python_reports or []:
-        count, issues, warnings = _python_findings(report, exceptions)
+        count, issues, warnings = _python_findings(
+            report, exceptions, build_inventory_only=build_inventory_only
+        )
         total += count
         findings.extend(issues)
         notices.extend(warnings)
     for report in cyclonedx_reports or []:
-        count, issues, warnings = _cyclonedx_findings(report, exceptions)
+        count, issues, warnings = _cyclonedx_findings(
+            report, exceptions, build_inventory_only=build_inventory_only
+        )
         total += count
         findings.extend(issues)
         notices.extend(warnings)

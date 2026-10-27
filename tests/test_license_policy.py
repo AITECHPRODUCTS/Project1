@@ -146,8 +146,10 @@ def test_build_only_exception_requires_explicit_scope_and_does_not_approve_produ
         }]
     }), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="--build-inventory-only"):
-        verify_reports(cyclonedx_reports=[report], exception_policy=policy)
+    count, findings, notices = verify_reports(cyclonedx_reports=[report], exception_policy=policy)
+    assert count == 1
+    assert findings and "requires legal review" in findings[0]
+    assert notices == []
 
     count, findings, notices = verify_reports(
         cyclonedx_reports=[report], exception_policy=policy, build_inventory_only=True

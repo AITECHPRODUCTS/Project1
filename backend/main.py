@@ -1237,7 +1237,11 @@ async def offers_sync(
             row.cookie_days = item.get("cookie_days")
             row.traffic_score = item.get("traffic_score")
             row.source_stars = item.get("stars_count")
-            row.verified = bool(item.get("verified"))
+            provider_verified = item.get("verified")
+            # Provider verification is trusted only when the adapter supplied an
+            # actual JSON boolean. Truthy strings such as "false" must not grant
+            # a positive verification badge.
+            row.verified = provider_verified if isinstance(provider_verified, bool) else False
             raw = item.get("raw") or {}
             row.source_url = raw.get("source_url") if isinstance(raw, dict) else None
             metrics = compute_offer_metrics({

@@ -159,3 +159,44 @@ async def test_offer_sync_provider_failure_is_audited_and_returns_gateway_error(
         assert audit.details_json["error_type"] == "TimeoutError"
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_offer_sync_only_accepts_real_boolean_provider_verification(monkeypatch):
+    engine, sessions, workspace_id = await _setup(monkeypatch)
+    try:
+        _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_id)
+
+        provider_rows = [
+            {"slug": "verify-bool-true", "name": "Literal boolean true", "verified": True},
+            {"slug": "verify-bool-false", "name": "Literal boolean false", "verified": False},
+            {"slug": "verify-string-false", "name": "String false", "verified": "false"},
+            {"slug": "verify-string-true", "name": "String true", "verified": "true"},
+            {"slug": "verify-number-one", "name": "Numeric one", "verified": 1},
+            {"slug": "verify-missing", "name": "Missing verification", "verified": None},
+        ]
+
+        async def fake_fetch_programs(**kwargs):
+            return {"data": provider_rows, "registry_total": len(provider_rows)}
+
+        monkeypatch.setattr(main.openaffiliate_client, "fetch_programs", fake_fetch_programs)
+        with TestClient(main.app) as client:
+            response = client.post("/api/offers/sync?limit=10")
+
+        assert response.status_code == 200, response.text
+        async with sessions() as db:
+            rows = list((await db.scalars(select(Offer).where(
+                Offer.network == "openaffiliate",
+                Offer.external_id.in_([item["slug"] for item in provider_rows]),
+            ))).all())
+        actual = {row.external_id: row.verified for row in rows}
+        assert actual == {
+            "verify-bool-true": True,
+            "verify-bool-false": False,
+            "verify-string-false": False,
+            "verify-string-true": False,
+            "verify-number-one": False,
+            "verify-missing": False,
+        }
+    finally:
+        await engine.dispose()

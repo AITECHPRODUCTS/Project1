@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+from decimal import Decimal, InvalidOperation
 from typing import Any
 import yaml
 from backend.adapters.base import AffiliateNetworkAdapter
@@ -29,10 +30,64 @@ class ConfiguredJSONAdapter(AffiliateNetworkAdapter):
   for part in self.items_path.split("."):data=data.get(part) if isinstance(data,dict) else None
   if not isinstance(data,list):raise ValueError(f"{self.network_name} response lacks configured list path {self.items_path}")
   return [x for x in data if isinstance(x,dict)][:normalized_limit]
+ @staticmethod
+ def _non_negative_amount(payload:dict[str,Any],field:str)->Decimal:
+  raw=payload.get(field,0)
+  if raw is None or raw=="":
+   raw=0
+  if isinstance(raw,bool) or not isinstance(raw,(int,float,str,Decimal)):
+   raise ValueError(f"{field} must be a valid non-negative amount")
+  try:
+   amount=Decimal(str(raw))
+  except (InvalidOperation,ValueError,TypeError) as exc:
+   raise ValueError(f"{field} must be a valid non-negative amount") from exc
+  maximum=Decimal("999999999999.999999")
+  scale=Decimal("0.000001")
+  if not amount.is_finite() or amount<0 or amount>maximum:
+   raise ValueError(f"{field} must fit the non-negative Numeric(18, 6) ledger range")
+  try:
+   normalized=amount.quantize(scale)
+  except InvalidOperation as exc:
+   raise ValueError(f"{field} must fit Numeric(18, 6)") from exc
+  if normalized!=amount:
+   raise ValueError(f"{field} must have no more than 6 decimal places")
+  return amount
  def parse_conversion(self,payload:dict[str,Any])->dict[str,Any]:
-  event=payload.get("event_id") or payload.get("transaction_id")
-  if not event:raise ValueError("event_id or transaction_id is required")
-  return {"network":self.network_name,"external_event_id":str(event),"click_id":payload.get("click_id") or payload.get("subid"),"commission":float(payload.get("commission",0) or 0),"revenue":float(payload.get("revenue",0) or 0),"status":str(payload.get("status") or "pending").lower(),"raw":payload}
+  if not isinstance(payload,dict):
+   raise ValueError("Conversion payload must be an object")
+  raw_event_id=payload.get("event_id")
+  if raw_event_id is None or (isinstance(raw_event_id,str) and not raw_event_id.strip()):
+   raw_event_id=payload.get("transaction_id")
+  if isinstance(raw_event_id,bool) or not isinstance(raw_event_id,(str,int)):
+   raise ValueError("event_id or transaction_id is required")
+  event=str(raw_event_id).strip()
+  if not event:
+   raise ValueError("event_id or transaction_id is required")
+  if len(event)>255:
+   raise ValueError("External event ID must be 255 characters or fewer")
+  raw_click_id=payload.get("click_id")
+  if raw_click_id is None or (isinstance(raw_click_id,str) and not raw_click_id.strip()):
+   raw_click_id=payload.get("subid")
+  if raw_click_id is None or raw_click_id=="":
+   click_id=None
+  elif isinstance(raw_click_id,bool) or not isinstance(raw_click_id,(str,int)):
+   raise ValueError("click_id must be a string or integer")
+  else:
+   click_id=str(raw_click_id).strip() or None
+  if click_id is not None and len(click_id)>80:
+   raise ValueError("click_id must be 80 characters or fewer")
+  status=str(payload.get("status") or "pending").strip().lower() or "pending"
+  if len(status)>60:
+   raise ValueError("status must be 60 characters or fewer")
+  return {
+   "network":self.network_name,
+   "external_event_id":event,
+   "click_id":click_id,
+   "commission":self._non_negative_amount(payload,"commission"),
+   "revenue":self._non_negative_amount(payload,"revenue"),
+   "status":status,
+   "raw":payload,
+  }
 class AdapterFactory:
  def __init__(self,config_path:str="config.yaml"):self.config_path=config_path;self._registry={"openaffiliate":lambda cfg:OpenAffiliateAdapter()}
  def create(self,network:str)->AffiliateNetworkAdapter:

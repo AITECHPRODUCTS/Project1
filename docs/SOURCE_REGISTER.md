@@ -67,3 +67,9 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 ## 2026-10-25 AI/RAG dependency audit and Chroma security boundary
 - The core/test dependency audit passed after updated Pillow/pytest ranges and the pytest-asyncio resolver fix. The first optional AI/RAG scan found fixable pre-1.0 LangChain packages plus ChromaDB 1.5.9 advisories `PYSEC-2026-311`, `PYSEC-2026-3814`, `PYSEC-2026-3815`, and `PYSEC-2026-3813`; the cited upstream records had no fixed PyPI release as of this review.
 - Requirements are moving to compatible audited LangChain 1.x releases; legacy `RetrievalQA` is switched to `langchain-classic`. A local-only Chroma boundary checker/test is added before the temporary audit exception. Only those four exact IDs may be excepted after the guard passes; the workflow emits a warning and product release remains blocked. Exact-SHA verification is pending.
+
+
+## 2026-10-28 source review checkpoint
+- Inspected the current uploaded build brief and prior Library archives, including the 2,273-line master build guide, product requirements, S1–S8 functional contract, security/privacy/compliance contract, CI/UAT acceptance, and requirement traceability backlog.
+- Verified that duplicate copies of `100%AutopilotAffiliatesystem_24102026.zip` and `AutopilotaffiliateRequirement_231026_0850.zip` are byte-identical by SHA-256. The nested `omnichannel_affiliate_os_source.zip` is an older code snapshot; it is not evidence of a separately live app. Keep the live Project1 branch authoritative.
+- Exact-SHA verification for distributed resource-budget locking and the cross-replica reservation cap test passed on `f2d508177905a2f5f0f85bdeb991feb061080111`. The next code slice adds an explicit, audited re-consent path for previously unsubscribed leads; it must pass the same hosted CI gates before being called verified.

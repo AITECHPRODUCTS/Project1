@@ -140,6 +140,7 @@ class LeadCaptureRequest(BaseModel):
     audience: str = Field(min_length=2, max_length=500)
     offer: dict[str, Any] = Field(default_factory=dict)
     consent_source: str = Field(default="website_form", max_length=180)
+    resubscribe_confirmed: bool = False
     workspace_token: str | None = Field(default=None, max_length=1024)
     email_automation_id: str | None = Field(default=None, min_length=36, max_length=36)
     duration_days: int = Field(default=5, ge=5, le=7)

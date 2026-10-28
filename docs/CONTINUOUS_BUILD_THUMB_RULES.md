@@ -268,3 +268,5 @@ These additive rules apply to every future Project1 build session.
 
 13. Budget enforcement must be race-safe across application replicas: budget usage check and reservation insert must share a transaction-scoped, workspace-keyed PostgreSQL lock; SQLite-only tests do not count as proof of distributed concurrency. Keep provider spend and external campaign mutations disabled until explicit authorization and kill-switch acceptance.
 14. The live `docs/skill-parity-matrix.csv` currently contains 53 rows, all marked `partial`; historical audit summaries showing 47 partial / 6 not implemented are stale and must not override the current CSV or `scripts/verify_skill_registry.py`. Update the status ledger and backlog to match the live matrix, and preserve the canonical status-count phrase expected by the parity guard.
+
+15. Email opt-out is a durable suppression state. Re-subscription must require both fresh affirmative consent and an explicit confirmation flag, write a privacy-minimizing audit event, preserve old suppressed delivery history, and schedule a new idempotent sequence without reviving canceled messages.

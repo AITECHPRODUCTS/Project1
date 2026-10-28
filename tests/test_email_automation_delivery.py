@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from backend.database import Base
-from backend.models import ContentAsset, Lead, ScheduledEmail, Workspace
+from backend.models import AuditLog, ContentAsset, Lead, ScheduledEmail, Workspace
 from backend.services import email_delivery
 from backend.services.email_automation_builder import build_email_automation
 from backend.tenancy import workspace_scope
@@ -212,5 +212,101 @@ async def test_next_email_node_is_scheduled_only_after_current_node_is_sent():
         assert len(queued) == 1
         assert queued[0].subject == "One useful next step"
         assert queued[0].condition_json["automation_step_id"] == "follow-up"
+    finally:
+        await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_resubscribe_requires_fresh_confirmation_and_starts_a_new_sequence(monkeypatch):
+    engine, sessions = await _db()
+    async def offline_complete(*args, **kwargs):
+        return {"text": "[]", "provider": "offline"}
+
+    monkeypatch.setattr(email_delivery.llm_service, "complete", offline_complete)
+    workspace_id = "email-runtime-workspace"
+    lead_id = None
+    now = datetime.now(timezone.utc)
+    try:
+        async with sessions() as session:
+            with workspace_scope(workspace_id):
+                lead = Lead(
+                    workspace_id=workspace_id,
+                    email="previously-unsubscribed@example.invalid",
+                    consent_at=now - timedelta(days=30),
+                    consent_source="website_form",
+                    lead_magnet="Starter guide",
+                    unsubscribed_at=now - timedelta(days=2),
+                )
+                session.add(lead)
+                await session.flush()
+                lead_id = lead.id
+                for day in range(5):
+                    session.add(ScheduledEmail(
+                        workspace_id=workspace_id,
+                        lead_id=lead.id,
+                        sequence_day=day,
+                        subject=f"Old sequence {day}",
+                        body_text="Old email",
+                        body_html="<p>Old email</p>",
+                        condition_json={"requires_consent": True, "skip_if_unsubscribed": True},
+                        send_at=now + timedelta(days=day),
+                        status="suppressed",
+                        last_error="Recipient unsubscribed; pending delivery canceled.",
+                    ))
+                await session.commit()
+
+        async with sessions() as session:
+            with workspace_scope(workspace_id):
+                with pytest.raises(ValueError, match="explicit resubscribe confirmation"):
+                    await email_delivery.capture_lead_and_schedule(
+                        session,
+                        email_address="previously-unsubscribed@example.invalid",
+                        consent=True,
+                        lead_magnet="Updated starter guide",
+                        audience="independent creators",
+                        offer={"name": "Example offer", "url": "https://example.invalid"},
+                        consent_source="resubscribe_form",
+                        workspace_id=workspace_id,
+                    )
+                await session.rollback()
+
+        async with sessions() as session:
+            with workspace_scope(workspace_id):
+                result = await email_delivery.capture_lead_and_schedule(
+                    session,
+                    email_address="previously-unsubscribed@example.invalid",
+                    consent=True,
+                    lead_magnet="Updated starter guide",
+                    audience="independent creators",
+                    offer={"name": "Example offer", "url": "https://example.invalid"},
+                    consent_source="resubscribe_form",
+                    resubscribe_confirmed=True,
+                    workspace_id=workspace_id,
+                )
+        assert result["emails_scheduled"] == 5
+        assert result["sequence_days"] == [5, 6, 7, 8, 9]
+
+        with workspace_scope(workspace_id):
+            async with sessions() as session:
+                lead = await session.scalar(select(Lead).where(Lead.id == lead_id))
+                assert lead is not None
+                assert lead.unsubscribed_at is None
+                assert lead.consent_source == "resubscribe_form"
+                messages = list((await session.scalars(
+                    select(ScheduledEmail).where(ScheduledEmail.lead_id == lead_id)
+                    .order_by(ScheduledEmail.sequence_day.asc())
+                )).all())
+                assert [message.sequence_day for message in messages] == list(range(10))
+                assert all(message.status == "suppressed" for message in messages[:5])
+                assert all(message.status == "scheduled" for message in messages[5:])
+                audit = await session.scalar(select(AuditLog).where(
+                    AuditLog.workspace_id == workspace_id,
+                    AuditLog.resource_id == lead_id,
+                    AuditLog.action == "email.consent.resubscribed",
+                ))
+                assert audit is not None
+                assert audit.details_json["explicit_confirmation"] is True
+                assert audit.details_json["source"] == "resubscribe_form"
     finally:
         await engine.dispose()

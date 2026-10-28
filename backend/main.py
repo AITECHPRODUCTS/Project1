@@ -3000,6 +3000,7 @@ async def create_lead(
                 audience=payload.audience,
                 offer=payload.offer,
                 consent_source=payload.consent_source,
+                resubscribe_confirmed=payload.resubscribe_confirmed,
                 email_automation_id=payload.email_automation_id,
                 workspace_id=owner_workspace_id,
             )

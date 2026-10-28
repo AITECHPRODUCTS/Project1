@@ -39,6 +39,7 @@ async def capture_lead_and_schedule(
  audience: str,
  offer: dict[str, Any],
  consent_source: str = "website_form",
+ resubscribe_confirmed: bool = False,
  email_automation_id: str | None = None,
  workspace_id: str | None = None,
 ) -> dict[str, Any]:
@@ -57,8 +58,27 @@ async def capture_lead_and_schedule(
     Lead.email == address,
    )
   )
-  if lead and lead.unsubscribed_at:
+  was_resubscribed = bool(lead and lead.unsubscribed_at)
+  if was_resubscribed and resubscribe_confirmed is not True:
    raise ValueError("Address previously unsubscribed; explicit resubscribe confirmation required")
+  if was_resubscribed:
+   previous_unsubscribed_at = lead.unsubscribed_at
+   lead.unsubscribed_at = None
+   session.add(AuditLog(
+    workspace_id=owner_workspace_id,
+    actor="recipient",
+    action="email.consent.resubscribed",
+    resource_type="lead",
+    resource_id=lead.id,
+    outcome="confirmed",
+    details_json={
+     "source": consent_source[:180],
+     "explicit_confirmation": True,
+     "fresh_consent_at": now.isoformat(),
+     "prior_unsubscribed_at": previous_unsubscribed_at.isoformat() if previous_unsubscribed_at else None,
+     "pending_email_delivery_suppression_lifted": True,
+    },
+   ))
   if lead:
    lead.consent_at = now
    lead.lead_magnet = lead_magnet[:300]
@@ -102,7 +122,7 @@ async def capture_lead_and_schedule(
     item for item in existing_messages
     if (item.condition_json or {}).get("automation_id") == automation_id
    ]
-   if matching_messages:
+   if matching_messages and not was_resubscribed:
     # Idempotent repeated form submissions must not restart an already-entered path.
     await session.commit()
     return {
@@ -188,6 +208,21 @@ async def capture_lead_and_schedule(
     "note": "One first-step email queued. The worker rechecks current email-marketing compliance and recipient suppression before sending, then evaluates the next branch after a successful delivery.",
    }
 
+  existing_messages = list((await session.scalars(select(ScheduledEmail).where(
+   ScheduledEmail.workspace_id == owner_workspace_id,
+   ScheduledEmail.lead_id == lead.id,
+  ))).all())
+  sequence_offset = (
+   max((int(item.sequence_day) for item in existing_messages), default=-1) + 1
+   if was_resubscribed else 0
+  )
+  if was_resubscribed:
+   for pending in existing_messages:
+    if pending.status in {"scheduled", "retry"}:
+     pending.status = "suppressed"
+     pending.claimed_at = None
+     pending.last_error = "Superseded by explicit recipient re-consent."
+
   sequence = email_drip_sequence(
    audience=audience,
    lead_magnet=lead_magnet,
@@ -228,11 +263,12 @@ async def capture_lead_and_schedule(
   created = 0
   for item in sequence:
    day = item["day"]
+   sequence_day = sequence_offset + day
    existing_email_id = await session.scalar(
     select(ScheduledEmail.id).where(
      ScheduledEmail.workspace_id == owner_workspace_id,
      ScheduledEmail.lead_id == lead.id,
-     ScheduledEmail.sequence_day == day,
+     ScheduledEmail.sequence_day == sequence_day,
     )
    )
    if existing_email_id:
@@ -254,7 +290,7 @@ async def capture_lead_and_schedule(
     ScheduledEmail(
      workspace_id=owner_workspace_id,
      lead_id=lead.id,
-     sequence_day=day,
+     sequence_day=sequence_day,
      subject=subject,
      body_html=body_html,
      body_text=body,
@@ -274,7 +310,7 @@ async def capture_lead_and_schedule(
    "lead_id": lead.id,
    "workspace_id": owner_workspace_id,
    "emails_scheduled": created,
-   "sequence_days": [item["day"] for item in sequence],
+   "sequence_days": [sequence_offset + item["day"] for item in sequence],
    "provider": generated["provider"],
    "delivery_configured": bool(get_settings().resend_api_key and get_settings().resend_from_email),
    "note": "5-day sequence queued; actual sending requires provider configuration and scheduled worker.",

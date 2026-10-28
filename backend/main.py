@@ -1314,6 +1314,54 @@ async def openaffiliate_sync_status(
     }
 
 
+@api.get("/integrations/openaffiliate/sync-history")
+async def openaffiliate_sync_history(
+    limit: int = Query(default=10, ge=1, le=50),
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return a bounded, sanitized history of OpenAffiliate sync audit outcomes for one workspace."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing catalog sync history")
+    rows = list((await db.scalars(
+        select(AuditLog).where(
+            AuditLog.workspace_id == str(workspace_id),
+            AuditLog.action == "offers.sync",
+            AuditLog.resource_type == "offer_registry",
+        ).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit)
+    )).all())
+
+    def count_or_unknown(value: Any) -> int | None:
+        return value if type(value) is int and value >= 0 else None
+
+    items = []
+    for audit in rows:
+        details = audit.details_json if isinstance(audit.details_json, dict) else {}
+        items.append({
+            "state": audit.outcome if audit.outcome in {"completed", "failed"} else "unknown",
+            "attempted_at": audit.created_at.isoformat() if audit.created_at else None,
+            "created": count_or_unknown(details.get("created")),
+            "updated": count_or_unknown(details.get("updated")),
+            "registry_total": count_or_unknown(details.get("registry_total")),
+            "requested_limit": count_or_unknown(details.get("requested_limit")),
+            "query_supplied": details.get("query_supplied") is True,
+            "error_type": str(details["error_type"])[:120] if isinstance(details.get("error_type"), str) else None,
+            "source_attestation_verified": False,
+        })
+    return {
+        "provider": "openaffiliate",
+        "count": len(items),
+        "limit": limit,
+        "source_attestation_verified": False,
+        "note": (
+            "History contains local sync audit outcomes only. It is not evidence of independent provider identity, "
+            "account eligibility, source authenticity or offer approval."
+        ),
+        "items": items,
+    }
+
+
 @api.post("/offers/sync")
 async def offers_sync(
     q: str | None = None,

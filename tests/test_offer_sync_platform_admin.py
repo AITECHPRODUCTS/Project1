@@ -57,8 +57,10 @@ def test_workspace_member_cannot_trigger_global_offer_sync(monkeypatch):
     with TestClient(main.app) as client:
         response = client.post("/api/offers/sync")
         status_response = client.get("/api/integrations/openaffiliate/sync-status")
+        history_response = client.get("/api/integrations/openaffiliate/sync-history")
     assert response.status_code == 403
     assert status_response.status_code == 403
+    assert history_response.status_code == 403
     assert "Platform Super Admin" in response.text
     assert calls == []
 
@@ -75,8 +77,10 @@ def test_platform_admin_without_workspace_cannot_sync_global_offer_registry(monk
     with TestClient(main.app) as client:
         response = client.post("/api/offers/sync")
         status_response = client.get("/api/integrations/openaffiliate/sync-status")
+        history_response = client.get("/api/integrations/openaffiliate/sync-history")
     assert response.status_code == 403
     assert status_response.status_code == 403
+    assert history_response.status_code == 403
     assert calls == []
 
 
@@ -228,7 +232,16 @@ async def test_platform_admin_sync_status_is_unknown_before_first_attempt(monkey
         _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_id)
         with TestClient(main.app) as client:
             response = client.get("/api/integrations/openaffiliate/sync-status")
+            history = client.get("/api/integrations/openaffiliate/sync-history")
+            invalid_low = client.get("/api/integrations/openaffiliate/sync-history?limit=0")
+            invalid_high = client.get("/api/integrations/openaffiliate/sync-history?limit=51")
         assert response.status_code == 200, response.text
+        assert history.status_code == 200, history.text
+        assert history.json()["count"] == 0
+        assert history.json()["items"] == []
+        assert history.json()["source_attestation_verified"] is False
+        assert invalid_low.status_code == 422
+        assert invalid_high.status_code == 422
         assert response.json()["state"] == "never_synced"
         assert response.json()["last_attempt_at"] is None
         assert response.json()["created"] is None
@@ -264,9 +277,83 @@ async def test_openaffiliate_sync_status_is_scoped_to_active_workspace(monkeypat
         _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_a)
         with TestClient(main.app) as client:
             response = client.get("/api/integrations/openaffiliate/sync-status")
+            history = client.get("/api/integrations/openaffiliate/sync-history?limit=10")
         assert response.status_code == 200, response.text
         assert response.json()["registry_total"] == 7
         assert response.json()["query_supplied"] is False
         assert response.json()["state"] == "completed"
+        assert history.status_code == 200, history.text
+        assert history.json()["count"] == 1
+        assert history.json()["items"][0]["registry_total"] == 7
+        assert history.json()["items"][0]["source_attestation_verified"] is False
+
+        _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_b)
+        with TestClient(main.app) as client:
+            other_history = client.get("/api/integrations/openaffiliate/sync-history")
+        assert other_history.status_code == 200, other_history.text
+        assert other_history.json()["count"] == 1
+        assert other_history.json()["items"][0]["registry_total"] == 99
+    finally:
+        await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_openaffiliate_sync_history_is_newest_first_bounded_and_sanitized(monkeypatch):
+    engine, sessions, workspace_id = await _setup(monkeypatch)
+    try:
+        _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_id)
+
+        async def fake_fetch_programs(*, q: str | None = None, limit: int = 100):
+            if q == "failure":
+                raise TimeoutError("provider private response body must never be exposed")
+            return {"data": [], "registry_total": 9 if q == "latest" else 7}
+
+        monkeypatch.setattr(main.openaffiliate_client, "fetch_programs", fake_fetch_programs)
+        with TestClient(main.app) as client:
+            first = client.post("/api/offers/sync?limit=5")
+            failed = client.post("/api/offers/sync?q=failure")
+            latest = client.post("/api/offers/sync?q=latest")
+        assert first.status_code == 200, first.text
+        assert failed.status_code == 502
+        assert latest.status_code == 200, latest.text
+
+        # Fix timestamps deterministically so the assertion checks ordering rather
+        # than depending on DB timestamp precision or randomly generated row IDs.
+        async with sessions() as db:
+            audits = list((await db.scalars(select(AuditLog).where(
+                AuditLog.workspace_id == workspace_id,
+                AuditLog.action == "offers.sync",
+                AuditLog.resource_type == "offer_registry",
+            ))).all())
+            for audit in audits:
+                details = audit.details_json if isinstance(audit.details_json, dict) else {}
+                if audit.outcome == "failed":
+                    audit.created_at = datetime(2026, 10, 2, tzinfo=timezone.utc)
+                elif details.get("registry_total") == 7:
+                    audit.created_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+                elif details.get("registry_total") == 9:
+                    audit.created_at = datetime(2026, 10, 3, tzinfo=timezone.utc)
+            await db.commit()
+
+        with TestClient(main.app) as client:
+            response = client.get("/api/integrations/openaffiliate/sync-history?limit=2")
+            all_history = client.get("/api/integrations/openaffiliate/sync-history?limit=50")
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["count"] == 2
+        assert payload["limit"] == 2
+        assert [item["state"] for item in payload["items"]] == ["completed", "failed"]
+        assert payload["items"][0]["registry_total"] == 9
+        assert payload["items"][1]["error_type"] == "TimeoutError"
+        assert payload["items"][1]["source_attestation_verified"] is False
+        assert "provider private response body" not in response.text
+        assert payload["source_attestation_verified"] is False
+
+        assert all_history.status_code == 200, all_history.text
+        assert all_history.json()["count"] == 3
+        assert all_history.json()["items"][0]["registry_total"] == 9
+        assert all_history.json()["items"][1]["state"] == "failed"
+        assert all_history.json()["items"][2]["registry_total"] == 7
     finally:
         await engine.dispose()

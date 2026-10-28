@@ -42,6 +42,27 @@ type SyncStatus = {
   note: string;
 };
 
+type SyncHistoryItem = {
+  state: "completed" | "failed" | "unknown";
+  attempted_at: string | null;
+  created: number | null;
+  updated: number | null;
+  registry_total: number | null;
+  requested_limit: number | null;
+  query_supplied: boolean;
+  error_type: string | null;
+  source_attestation_verified: false;
+};
+
+type SyncHistory = {
+  provider: string;
+  count: number;
+  limit: number;
+  source_attestation_verified: false;
+  note: string;
+  items: SyncHistoryItem[];
+};
+
 type CatalogResponse = {
   count: number;
   total_count: number;
@@ -123,6 +144,9 @@ export default function OfferCatalogPage() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [syncStatusLoading, setSyncStatusLoading] = useState(false);
   const [syncStatusError, setSyncStatusError] = useState("");
+  const [syncHistory, setSyncHistory] = useState<SyncHistory | null>(null);
+  const [syncHistoryLoading, setSyncHistoryLoading] = useState(false);
+  const [syncHistoryError, setSyncHistoryError] = useState("");
 
   const loadCatalog = useCallback(async (filters: Filters, nextOffset: number) => {
     const params = new URLSearchParams();
@@ -169,6 +193,19 @@ export default function OfferCatalogPage() {
     }
   }, []);
 
+  const refreshSyncHistory = useCallback(async () => {
+    setSyncHistoryLoading(true);
+    setSyncHistoryError("");
+    try {
+      const result = await apiFetch<SyncHistory>("/api/integrations/openaffiliate/sync-history?limit=10");
+      setSyncHistory(result);
+    } catch (cause) {
+      setSyncHistoryError(cause instanceof Error ? cause.message : "The persisted sync history could not be loaded.");
+    } finally {
+      setSyncHistoryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadCatalog(DEFAULT_FILTERS, 0);
   }, [loadCatalog]);
@@ -179,13 +216,16 @@ export default function OfferCatalogPage() {
       .then(response => {
         const isActivePlatformAdmin = response.user?.is_admin === true && Boolean(response.user?.workspace_id);
         if (mounted) setSyncAccess(isActivePlatformAdmin ? "admin" : "not_admin");
-        if (isActivePlatformAdmin) void refreshSyncStatus();
+        if (isActivePlatformAdmin) {
+          void refreshSyncStatus();
+          void refreshSyncHistory();
+        }
       })
       .catch(() => {
         if (mounted) setSyncAccess("not_admin");
       });
     return () => { mounted = false; };
-  }, [refreshSyncStatus]);
+  }, [refreshSyncHistory, refreshSyncStatus]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -209,7 +249,7 @@ export default function OfferCatalogPage() {
         " updated; upstream registry total " + registryTotal +
         ". Provider approval and source authenticity remain unverified."
       );
-      await refreshSyncStatus();
+      await Promise.all([refreshSyncStatus(), refreshSyncHistory()]);
       await loadCatalog(activeFilters, catalog?.offset ?? 0);
     } catch (cause) {
       setSyncError(cause instanceof Error ? cause.message : "OpenAffiliate catalog sync failed.");
@@ -288,6 +328,39 @@ export default function OfferCatalogPage() {
             </div>
             {syncStatusError && <p role="alert" data-testid="openaffiliate-sync-status-error" className="mt-3 text-sm text-rose-700">Status could not be loaded: {syncStatusError}</p>}
             <p className="mt-3 text-xs leading-5 text-slate-500">{syncStatus?.note ?? "Saved status is an audit record, not proof of provider identity, account approval or source authenticity."}</p>
+          </section>
+        )}
+        {syncAccess === "admin" && (
+          <section data-testid="openaffiliate-sync-history" aria-label="Recent OpenAffiliate sync attempts" className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-black">Recent sync attempts</h2>
+                <p className="mt-1 text-xs text-slate-500">Up to 10 latest attempts from this workspace’s audit history.</p>
+              </div>
+              <button type="button" onClick={() => void refreshSyncHistory()} disabled={syncHistoryLoading} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-50">Refresh history</button>
+            </div>
+            {syncHistoryLoading && <p role="status" className="mt-3 text-sm text-slate-500">Loading sync history…</p>}
+            {!syncHistoryLoading && syncHistory && syncHistory.items.length === 0 && <p data-testid="openaffiliate-sync-history-empty" className="mt-3 text-sm text-slate-500">No sync attempts are recorded for this workspace.</p>}
+            {!syncHistoryLoading && syncHistory && syncHistory.items.length > 0 && (
+              <ol className="mt-3 divide-y divide-slate-100" data-testid="openaffiliate-sync-history-items">
+                {syncHistory.items.map((item, index) => {
+                  const attemptedAt = item.attempted_at ? new Date(item.attempted_at) : null;
+                  const attemptedLabel = attemptedAt && Number.isFinite(attemptedAt.getTime()) ? attemptedAt.toLocaleString() : "Attempt time unavailable";
+                  const outcome = item.state === "completed" ? "Sync completed" : item.state === "failed" ? "Sync failed" : "Sync outcome unknown";
+                  return <li key={String(item.attempted_at) + "-" + index} data-testid={"sync-history-item-" + item.state + "-" + index} className="py-3 first:pt-1 last:pb-1">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className={"text-sm font-bold " + (item.state === "failed" ? "text-rose-700" : item.state === "completed" ? "text-slate-800" : "text-amber-700")}>{outcome}</p>
+                      <time className="text-xs text-slate-500" dateTime={item.attempted_at ?? undefined}>{attemptedLabel}</time>
+                    </div>
+                    {item.state === "completed" && <p className="mt-1 text-xs text-slate-600">{item.created ?? "Unknown"} created · {item.updated ?? "Unknown"} updated · upstream registry total {item.registry_total ?? "unknown"}</p>}
+                    {item.state === "failed" && <p className="mt-1 text-xs text-rose-700">Recorded error type: {item.error_type ?? "unknown"}</p>}
+                    <p className="mt-1 text-xs text-slate-500">Requested up to {item.requested_limit ?? "unknown"} entries · search query {item.query_supplied ? "supplied" : "not supplied"} · source attestation unverified</p>
+                  </li>;
+                })}
+              </ol>
+            )}
+            {syncHistoryError && <p role="alert" data-testid="openaffiliate-sync-history-error" className="mt-3 text-sm text-rose-700">History could not be loaded: {syncHistoryError}</p>}
+            <p className="mt-3 text-xs leading-5 text-slate-500">{syncHistory?.note ?? "History is a local audit record, not proof of provider identity, approval or source authenticity."}</p>
           </section>
         )}
 

@@ -3,6 +3,7 @@ import asyncio,base64,hashlib,hmac,json,logging,re,secrets,time
 import httpx
 from uuid import UUID
 from contextlib import asynccontextmanager
+from html.parser import HTMLParser
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from pathlib import Path
@@ -25,7 +26,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
@@ -67,7 +68,7 @@ from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
 from backend.services.tracking_service import choose_destination,destination_healthy,record_click_and_resolve,verify_click_signature
-from backend.services.url_safety import validate_public_http_url
+from backend.services.url_safety import open_public_http_response, read_limited_response, validate_public_http_url
 from backend.services.video_engine import render_vertical_video
 from backend.tools.affiliate_api import client as openaffiliate_client
 from backend.workflows import LABELS,resolve_steps
@@ -1259,6 +1260,160 @@ def _merchant_offer_dict(row: MerchantOffer) -> dict[str, Any]:
     }
 
 
+
+MAX_MERCHANT_TERMS_SOURCE_BYTES = 1_500_000
+MERCHANT_TERMS_FETCH_TIMEOUT_SECONDS = 8.0
+MERCHANT_TERMS_TEXT_TYPES = {"text/html", "application/xhtml+xml", "text/plain"}
+
+
+class _MerchantTermsTextExtractor(HTMLParser):
+    """Extract readable page text without executing or preserving script/style content."""
+
+    _SKIP_TAGS = {"script", "style", "noscript", "svg", "canvas", "iframe", "template"}
+    _SEPARATOR_TAGS = {
+        "address", "article", "blockquote", "br", "dd", "div", "dl", "dt", "h1", "h2",
+        "h3", "h4", "h5", "h6", "li", "ol", "p", "section", "td", "th", "tr",
+    }
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+        elif self._skip_depth == 0 and tag in self._SEPARATOR_TAGS:
+            self.parts.append(" ")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+        elif self._skip_depth == 0 and tag in self._SEPARATOR_TAGS:
+            self.parts.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self.parts.append(data)
+
+    def text(self) -> str:
+        return re.sub(r"\s+", " ", " ".join(self.parts)).strip()
+
+
+def _extract_merchant_terms_text(body: bytes, content_type: str) -> str:
+    decoded = body.decode("utf-8", errors="replace")
+    if content_type in {"text/html", "application/xhtml+xml"}:
+        parser = _MerchantTermsTextExtractor()
+        parser.feed(decoded)
+        parser.close()
+        decoded = parser.text()
+    decoded = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", decoded)
+    return re.sub(r"\s+", " ", decoded).strip()[:3000]
+
+
+def _merchant_term_evidence_fetch_dict(row: MerchantOfferTermEvidenceFetch) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "merchant_offer_id": row.merchant_offer_id,
+        "term_snapshot_id": row.term_snapshot_id,
+        "source_url": row.source_url,
+        "fetch_status": row.fetch_status,
+        "http_status_code": row.http_status_code,
+        "content_type": row.content_type,
+        "response_bytes": row.response_bytes,
+        "content_sha256": row.content_sha256,
+        "text_excerpt": row.text_excerpt,
+        "etag": row.etag,
+        "last_modified": row.last_modified,
+        "error_code": row.error_code,
+        "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+        "provider_verified": row.provider_verified is True,
+        "requested_by": row.requested_by,
+    }
+
+
+async def _fetch_merchant_terms_source(source_url: str) -> dict[str, Any]:
+    """Make one explicitly requested, bounded HTTPS GET without following redirects."""
+    result: dict[str, Any] = {
+        "fetch_status": "network_error",
+        "http_status_code": None,
+        "content_type": None,
+        "response_bytes": None,
+        "content_sha256": None,
+        "text_excerpt": "",
+        "etag": None,
+        "last_modified": None,
+        "error_code": None,
+    }
+    if urlparse(source_url).scheme.lower() != "https":
+        result.update(fetch_status="blocked_target", error_code="https_required")
+        return result
+
+    request_headers = {
+        "Accept": "text/html, application/xhtml+xml, text/plain;q=0.9",
+        "User-Agent": "OmniAffiliateOS-TermEvidence/1.0",
+    }
+    try:
+        async with open_public_http_response(
+            source_url,
+            method="GET",
+            headers=request_headers,
+            timeout=MERCHANT_TERMS_FETCH_TIMEOUT_SECONDS,
+        ) as response:
+            result["http_status_code"] = int(response.status_code)
+            raw_content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            result["content_type"] = raw_content_type[:160] or None
+            result["etag"] = (response.headers.get("etag") or "")[:500] or None
+            result["last_modified"] = (response.headers.get("last-modified") or "")[:200] or None
+
+            if 300 <= response.status_code < 400:
+                result.update(fetch_status="redirect_blocked", error_code="redirect_not_followed")
+                return result
+            if response.status_code < 200 or response.status_code >= 300:
+                result.update(fetch_status="http_error", error_code="upstream_http_error")
+                return result
+            if raw_content_type not in MERCHANT_TERMS_TEXT_TYPES:
+                result.update(fetch_status="unsupported_content_type", error_code="text_content_required")
+                return result
+
+            try:
+                body = await read_limited_response(
+                    response, max_bytes=MAX_MERCHANT_TERMS_SOURCE_BYTES, raw=False
+                )
+            except ValueError as exc:
+                if "exceeds byte limit" in str(exc).casefold():
+                    result.update(fetch_status="too_large", error_code="response_too_large")
+                else:
+                    result.update(fetch_status="invalid_response", error_code="invalid_response_length")
+                return result
+
+            text_excerpt = _extract_merchant_terms_text(body, raw_content_type)
+            result.update(
+                fetch_status="fetched" if text_excerpt else "empty_content",
+                response_bytes=len(body),
+                content_sha256=hashlib.sha256(body).hexdigest(),
+                text_excerpt=text_excerpt,
+                error_code=None if text_excerpt else "no_readable_text",
+            )
+            return result
+    except ValueError as exc:
+        message = str(exc).casefold()
+        if any(token in message for token in ("private", "loopback", "link-local", "reserved", "local hostname", "blocked")):
+            result.update(fetch_status="blocked_target", error_code="public_destination_rejected")
+        elif "timeout" in message or "dns lookup failed" in message or "no addresses" in message:
+            result.update(fetch_status="network_error", error_code="dns_or_timeout_error")
+        else:
+            result.update(fetch_status="blocked_target", error_code="public_destination_rejected")
+        return result
+    except (httpx.HTTPError, TimeoutError):
+        result.update(fetch_status="network_error", error_code="request_or_timeout_error")
+        return result
+    except Exception:
+        # Do not put exception text or provider-controlled response content in logs or API errors.
+        result.update(fetch_status="network_error", error_code="unexpected_fetch_error")
+        return result
+
+
 def _merchant_offer_term_snapshot_dict(row: MerchantOfferTermSnapshot) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -1532,6 +1687,120 @@ async def list_merchant_offer_term_snapshots(
             MerchantOfferTermSnapshot.id.desc(),
         ).limit(limit))).all())
     return {"count": len(rows), "data": [_merchant_offer_term_snapshot_dict(row) for row in rows]}
+
+
+@api.post("/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetch-evidence", status_code=201)
+async def fetch_merchant_offer_terms_evidence(
+    offer_id: str,
+    snapshot_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Fetch a cited HTTPS page on explicit request; never verify or approve the offer automatically."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before fetching offer evidence")
+    workspace_id = str(workspace_id)
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ))
+        if offer is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        snapshot = await db.scalar(select(MerchantOfferTermSnapshot).where(
+            MerchantOfferTermSnapshot.id == snapshot_id,
+            MerchantOfferTermSnapshot.workspace_id == workspace_id,
+            MerchantOfferTermSnapshot.merchant_offer_id == offer.id,
+        ))
+        if snapshot is None:
+            raise HTTPException(404, "Term snapshot not found in the active workspace")
+        source_url = snapshot.source_url
+        # Do not hold a database read transaction open while contacting an external server.
+        await db.rollback()
+
+    result = await _fetch_merchant_terms_source(source_url)
+    with workspace_scope(workspace_id):
+        row = MerchantOfferTermEvidenceFetch(
+            workspace_id=workspace_id,
+            merchant_offer_id=offer_id,
+            term_snapshot_id=snapshot_id,
+            source_url=source_url,
+            fetch_status=result["fetch_status"],
+            http_status_code=result["http_status_code"],
+            content_type=result["content_type"],
+            response_bytes=result["response_bytes"],
+            content_sha256=result["content_sha256"],
+            text_excerpt=result["text_excerpt"],
+            etag=result["etag"],
+            last_modified=result["last_modified"],
+            error_code=result["error_code"],
+            fetched_at=utcnow(),
+            provider_verified=False,
+            requested_by=actor,
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="merchant.offer.terms_source_fetch_attempted",
+            resource_type="merchant_offer",
+            resource_id=offer_id,
+            outcome=result["fetch_status"],
+            details_json={
+                "snapshot_id": snapshot_id,
+                "fetch_record_id": row.id,
+                "http_status_code": result["http_status_code"],
+                "content_type": result["content_type"],
+                "response_bytes": result["response_bytes"],
+                "content_sha256": result["content_sha256"],
+                "provider_verified": False,
+                "offer_approval_changed": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _merchant_term_evidence_fetch_dict(row)
+
+
+@api.get("/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetches")
+async def list_merchant_offer_terms_evidence_fetches(
+    offer_id: str,
+    snapshot_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """List bounded fetch-attempt evidence for one workspace-owned terms snapshot."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing offer evidence fetches")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ))
+        if offer is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        snapshot = await db.scalar(select(MerchantOfferTermSnapshot).where(
+            MerchantOfferTermSnapshot.id == snapshot_id,
+            MerchantOfferTermSnapshot.workspace_id == workspace_id,
+            MerchantOfferTermSnapshot.merchant_offer_id == offer.id,
+        ))
+        if snapshot is None:
+            raise HTTPException(404, "Term snapshot not found in the active workspace")
+        rows = list((await db.scalars(select(MerchantOfferTermEvidenceFetch).where(
+            MerchantOfferTermEvidenceFetch.workspace_id == workspace_id,
+            MerchantOfferTermEvidenceFetch.merchant_offer_id == offer.id,
+            MerchantOfferTermEvidenceFetch.term_snapshot_id == snapshot.id,
+        ).order_by(
+            MerchantOfferTermEvidenceFetch.fetched_at.desc(),
+            MerchantOfferTermEvidenceFetch.id.desc(),
+        ).limit(limit))).all())
+    return {"count": len(rows), "data": [_merchant_term_evidence_fetch_dict(row) for row in rows]}
 
 
 @api.post("/merchant/offers/{offer_id}/submit")

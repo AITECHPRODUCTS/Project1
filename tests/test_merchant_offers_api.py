@@ -288,3 +288,191 @@ def test_term_snapshot_request_rejects_private_evidence_urls_naive_timestamps_an
     payload = term_snapshot_payload(commission_value="100.0001")
     with pytest.raises(ValidationError):
         MerchantOfferTermSnapshotCreateRequest.model_validate(payload)
+
+
+class _FakeTermsResponse:
+    def __init__(self, status_code=200, headers=None, body=b""):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self._body = body
+
+    async def aiter_bytes(self):
+        for offset in range(0, len(self._body), 137):
+            yield self._body[offset:offset + 137]
+
+
+def _patch_terms_response(monkeypatch, response, calls=None, failure=None):
+    from contextlib import asynccontextmanager
+
+    observed = calls if calls is not None else []
+
+    @asynccontextmanager
+    async def fake_open(url, **kwargs):
+        observed.append({"url": url, **kwargs})
+        if failure is not None:
+            raise failure
+        yield response
+
+    monkeypatch.setattr(main, "open_public_http_response", fake_open)
+    return observed
+
+
+def test_explicit_terms_fetch_persists_hash_excerpt_and_never_verifies_offer(tmp_path, monkeypatch):
+    import hashlib
+
+    engine, user, _, client = make_client(tmp_path)
+    body = b"<html><head><title>Terms</title><script>do_not_store_this()</script></head><body><h1>Affiliate Terms</h1><p>Recurring commission is 25 percent.</p><style>.hidden{}</style></body></html>"
+    response = _FakeTermsResponse(200, {
+        "content-type": "text/html; charset=utf-8",
+        "content-length": str(len(body)),
+        "etag": '"terms-v7"',
+        "last-modified": "Tue, 27 Oct 2026 10:00:00 GMT",
+    }, body)
+    calls = _patch_terms_response(monkeypatch, response)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            assert created.status_code == 201, created.text
+            offer_id = created.json()["id"]
+            saved = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots",
+                json=term_snapshot_payload(),
+            )
+            assert saved.status_code == 201, saved.text
+            snapshot_id = saved.json()["id"]
+
+            fetched = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetch-evidence"
+            )
+            assert fetched.status_code == 201, fetched.text
+            result = fetched.json()
+            assert result["fetch_status"] == "fetched"
+            assert result["http_status_code"] == 200
+            assert result["response_bytes"] == len(body)
+            assert result["content_sha256"] == hashlib.sha256(body).hexdigest()
+            assert "Recurring commission is 25 percent." in result["text_excerpt"]
+            assert "do_not_store_this" not in result["text_excerpt"]
+            assert result["etag"] == '"terms-v7"'
+            assert result["last_modified"] == "Tue, 27 Oct 2026 10:00:00 GMT"
+            assert result["provider_verified"] is False
+            assert len(calls) == 1 and calls[0]["url"] == "https://merchant.example.com/affiliate-terms"
+            assert calls[0]["timeout"] == main.MERCHANT_TERMS_FETCH_TIMEOUT_SECONDS
+            current_offer = client.get("/api/merchant/offers").json()["data"][0]
+            assert current_offer["terms_verified"] is False
+            assert current_offer["activation_allowed"] is False
+            history = client.get(
+                f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetches"
+            )
+            assert history.status_code == 200, history.text
+            assert history.json()["count"] == 1
+            assert history.json()["data"][0]["content_sha256"] == result["content_sha256"]
+    finally:
+        cleanup(engine, client)
+
+
+@pytest.mark.parametrize(
+    "status_code,headers,expected_status,expected_error",
+    [
+        (302, {"content-type": "text/html", "location": "http://127.0.0.1/admin"}, "redirect_blocked", "redirect_not_followed"),
+        (200, {"content-type": "application/pdf"}, "unsupported_content_type", "text_content_required"),
+        (403, {"content-type": "text/html"}, "http_error", "upstream_http_error"),
+    ],
+)
+def test_terms_fetch_records_redirect_content_type_and_http_failures(
+    tmp_path, monkeypatch, status_code, headers, expected_status, expected_error
+):
+    engine, user, _, client = make_client(tmp_path)
+    response = _FakeTermsResponse(status_code, headers, b"ignored")
+    calls = _patch_terms_response(monkeypatch, response)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            offer_id = created.json()["id"]
+            saved = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots",
+                json=term_snapshot_payload(),
+            )
+            snapshot_id = saved.json()["id"]
+            result = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetch-evidence"
+            )
+            assert result.status_code == 201, result.text
+            assert result.json()["fetch_status"] == expected_status
+            assert result.json()["error_code"] == expected_error
+            assert len(calls) == 1
+            assert result.json()["provider_verified"] is False
+    finally:
+        cleanup(engine, client)
+
+
+def test_terms_fetch_refuses_http_without_network_request(tmp_path, monkeypatch):
+    engine, user, _, client = make_client(tmp_path)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            offer_id = created.json()["id"]
+            saved = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots",
+                json=term_snapshot_payload(source_url="http://merchant.example.com/terms"),
+            )
+            assert saved.status_code == 201, saved.text
+            snapshot_id = saved.json()["id"]
+            calls = _patch_terms_response(monkeypatch, None)
+            result = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetch-evidence"
+            )
+            assert result.status_code == 201, result.text
+            assert result.json()["fetch_status"] == "blocked_target"
+            assert result.json()["error_code"] == "https_required"
+            assert calls == []
+    finally:
+        cleanup(engine, client)
+
+
+def test_terms_fetch_private_resolution_is_recorded_without_request(tmp_path, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    engine, user, _, client = make_client(tmp_path)
+
+    @asynccontextmanager
+    async def block_private(url, **kwargs):
+        raise ValueError("Private, loopback, link-local, multicast or reserved destinations are blocked")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(main, "open_public_http_response", block_private)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            offer_id = created.json()["id"]
+            saved = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots",
+                json=term_snapshot_payload(),
+            )
+            snapshot_id = saved.json()["id"]
+            result = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetch-evidence"
+            )
+            assert result.status_code == 201, result.text
+            assert result.json()["fetch_status"] == "blocked_target"
+            assert result.json()["error_code"] == "public_destination_rejected"
+            assert result.json()["content_sha256"] is None
+    finally:
+        cleanup(engine, client)
+
+
+def test_terms_fetch_history_is_workspace_scoped(tmp_path, monkeypatch):
+    engine, user, workspace_b, client = make_client(tmp_path)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            offer_id = created.json()["id"]
+            saved = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots",
+                json=term_snapshot_payload(),
+            )
+            snapshot_id = saved.json()["id"]
+            user["workspace_id"] = workspace_b
+            route = f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetches"
+            assert client.get(route).status_code == 404
+    finally:
+        cleanup(engine, client)

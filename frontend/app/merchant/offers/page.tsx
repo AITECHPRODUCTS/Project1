@@ -17,6 +17,12 @@ type TermDraft={
   cookie_days:string;attribution_window_days:string;allowed_regions:string;restricted_traffic_sources:string;
   source_url:string;evidence_type:"operator_observed"|"merchant_claim"|"network_reported"|"manual_import";evidence_excerpt:string;
 };
+type TermEvidenceFetch={
+  id:string;merchant_offer_id:string;term_snapshot_id:string;source_url:string;fetch_status:string;
+  http_status_code:number|null;content_type:string|null;response_bytes:number|null;content_sha256:string|null;
+  text_excerpt:string;etag:string|null;last_modified:string|null;error_code:string|null;fetched_at:string|null;
+  provider_verified:boolean;requested_by:string;
+};
 type TermSnapshot={
   id:string;sequence_number:number;terms_version:string;commission_type:string;commission_value:string;commission_currency:string;
   cookie_days:number|null;attribution_window_days:number|null;allowed_regions:string[];restricted_traffic_sources:string[];
@@ -60,6 +66,9 @@ export default function MerchantOffersPage(){
   const [termEditorId,setTermEditorId]=useState("");
   const [termDrafts,setTermDrafts]=useState<Record<string,TermDraft>>({});
   const [termHistory,setTermHistory]=useState<Record<string,TermSnapshot[]>>({});
+  const [evidenceFetchHistory,setEvidenceFetchHistory]=useState<Record<string,TermEvidenceFetch[]>>({});
+  const [evidenceHistoryVisibleId,setEvidenceHistoryVisibleId]=useState("");
+  const [evidenceBusyId,setEvidenceBusyId]=useState("");
   const [termBusyId,setTermBusyId]=useState("");
 
   const load=useCallback(async()=>{
@@ -99,6 +108,36 @@ export default function MerchantOffersPage(){
     setError("");
     await loadTermHistory(offer.id);
   };
+
+  const loadEvidenceFetchHistory=async(offerId:string,snapshotId:string)=>{
+    try{
+      const response=await apiFetch<{count:number;data:TermEvidenceFetch[]}>(
+        "/api/merchant/offers/"+encodeURIComponent(offerId)+"/term-snapshots/"+encodeURIComponent(snapshotId)+"/fetches"
+      );
+      setEvidenceFetchHistory(prev=>({...prev,[snapshotId]:response.data||[]}));
+    }catch(e){
+      setError(e instanceof Error?e.message:"Could not load public-source fetch history.");
+    }
+  };
+  const fetchTermEvidence=async(offer:MerchantOffer,snapshot:TermSnapshot)=>{
+    setEvidenceBusyId(snapshot.id);setError("");setNotice("");
+    try{
+      const result=await apiFetch<TermEvidenceFetch>(
+        "/api/merchant/offers/"+encodeURIComponent(offer.id)+"/term-snapshots/"+encodeURIComponent(snapshot.id)+"/fetch-evidence",
+        {method:"POST"}
+      );
+      await loadEvidenceFetchHistory(offer.id,snapshot.id);
+      setNotice(offer.name+": source retrieval "+result.fetch_status+". Provider verification and offer approval remain unchanged.");
+    }catch(e){
+      setError(e instanceof Error?e.message:"Could not retrieve the cited terms page.");
+    }finally{setEvidenceBusyId("")}
+  };
+  const toggleEvidenceFetchHistory=async(offerId:string,snapshotId:string)=>{
+    if(evidenceHistoryVisibleId===snapshotId){setEvidenceHistoryVisibleId("");return;}
+    setEvidenceHistoryVisibleId(snapshotId);
+    await loadEvidenceFetchHistory(offerId,snapshotId);
+  };
+
   const updateTermDraft=(offer:MerchantOffer,field:keyof TermDraft,value:string)=>{
     setTermDrafts(prev=>({...prev,[offer.id]:{...(prev[offer.id]||makeTermDraft(offer)),[field]:value}}));
   };
@@ -223,7 +262,21 @@ export default function MerchantOffersPage(){
               <button onClick={()=>void saveTermSnapshot(offer)} disabled={termBusyId===offer.id||!!busy} className="mt-4 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{termBusyId===offer.id?"Saving snapshot…":"Save immutable terms snapshot"}</button>
               <div className="mt-5">
                 <h5 className="text-xs font-black uppercase tracking-wider text-slate-600">Term history</h5>
-                {(termHistory[offer.id]||[]).length===0?<p className="mt-2 text-xs text-slate-500">No snapshots are stored yet.</p>:<div className="mt-2 grid gap-2">{termHistory[offer.id]?.map(snapshot=><div key={snapshot.id} className="rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{"Snapshot #"+snapshot.sequence_number+" · "+snapshot.change_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{snapshot.captured_at?new Date(snapshot.captured_at).toLocaleString():"Capture time unavailable"}</span></div><p className="mt-1 text-xs text-slate-600">Changed fields: {snapshot.changed_fields.length?snapshot.changed_fields.join(", "):"none"}</p><p className="mt-1 break-all text-xs text-slate-500">SHA-256: {snapshot.terms_sha256}</p><p className="mt-1 text-xs text-amber-800">Unverified operator-supplied record · provider verified: no · source fetched: no</p></div>)}</div>}
+                {(termHistory[offer.id]||[]).length===0?<p className="mt-2 text-xs text-slate-500">No snapshots are stored yet.</p>:<div className="mt-2 grid gap-2">{termHistory[offer.id]?.map(snapshot=><div key={snapshot.id} className="rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{"Snapshot #"+snapshot.sequence_number+" · "+snapshot.change_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{snapshot.captured_at?new Date(snapshot.captured_at).toLocaleString():"Capture time unavailable"}</span></div><p className="mt-1 text-xs text-slate-600">Changed fields: {snapshot.changed_fields.length?snapshot.changed_fields.join(", "):"none"}</p><p className="mt-1 break-all text-xs text-slate-500">SHA-256: {snapshot.terms_sha256}</p><p className="mt-1 text-xs text-amber-800">Operator-entered terms remain unverified. The snapshot source-content flag describes capture-time state only; later retrieval attempts are recorded separately and never approve or verify terms.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button onClick={()=>void fetchTermEvidence(offer,snapshot)} disabled={evidenceBusyId===snapshot.id||!!busy} className="rounded-lg border border-indigo-200 px-3 py-2 text-xs font-bold text-indigo-700 disabled:opacity-50">{evidenceBusyId===snapshot.id?"Fetching bounded source…":"Fetch public HTTPS source"}</button>
+                      <button onClick={()=>void toggleEvidenceFetchHistory(offer.id,snapshot.id)} disabled={evidenceBusyId===snapshot.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">{evidenceHistoryVisibleId===snapshot.id?"Hide fetch history":"View fetch history"}</button>
+                    </div>
+                    {evidenceHistoryVisibleId===snapshot.id&&<div className="mt-3 grid gap-2">{(evidenceFetchHistory[snapshot.id]||[]).length===0?<p className="text-xs text-slate-500">No fetch attempts recorded.</p>:(evidenceFetchHistory[snapshot.id]||[]).map(fetchRow=><div key={fetchRow.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-wrap justify-between gap-2"><strong className="text-xs">{fetchRow.fetch_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{fetchRow.fetched_at?new Date(fetchRow.fetched_at).toLocaleString():"Fetch time unavailable"}</span></div>
+                      <p className="mt-1 text-xs text-slate-600">HTTP: {fetchRow.http_status_code??"not reached"} · Type: {fetchRow.content_type||"unknown"} · Bytes read: {fetchRow.response_bytes??"not read"}</p>
+                      {fetchRow.content_sha256&&<p className="mt-1 break-all text-xs text-slate-500">SHA-256: {fetchRow.content_sha256}</p>}
+                      {(fetchRow.etag||fetchRow.last_modified)&&<p className="mt-1 break-all text-xs text-slate-500">ETag: {fetchRow.etag||"not supplied"} · Last-Modified: {fetchRow.last_modified||"not supplied"}</p>}
+                      {fetchRow.error_code&&<p className="mt-1 text-xs text-amber-800">Result code: {fetchRow.error_code}</p>}
+                      {fetchRow.text_excerpt&&<p className="mt-2 whitespace-normal text-xs leading-5 text-slate-700">{fetchRow.text_excerpt}</p>}
+                      <p className="mt-2 text-xs text-amber-800">Retrieved content/hash is evidence for human review only · provider verified: no · terms verified automatically: no</p>
+                    </div>)}</div>}
+                    </div>)}</div>}
               </div>
             </section>}
           </article>)}

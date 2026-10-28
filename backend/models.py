@@ -709,6 +709,42 @@ class MerchantOfferTermSnapshot(TenantScopedMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+
+class MerchantOfferTermEvidenceFetch(TenantScopedMixin, Base):
+    """Append-only result of one explicit, bounded public terms-source retrieval attempt."""
+    __tablename__ = "merchant_offer_term_evidence_fetches"
+    __table_args__ = (
+        Index(
+            "ix_merchant_offer_evidence_fetch_scope_time",
+            "workspace_id", "merchant_offer_id", "term_snapshot_id", "fetched_at",
+        ),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    merchant_offer_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("merchant_offers.id", ondelete="RESTRICT"), nullable=False
+    )
+    term_snapshot_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("merchant_offer_term_snapshots.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    fetch_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    http_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    response_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    text_excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    etag: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_modified: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    provider_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(320), nullable=False)
+
+
 class MarketplaceApplication(TenantScopedMixin, Base):
     """Publisher application to an internally reviewed marketplace offer; not a network application."""
     __tablename__ = "marketplace_applications"

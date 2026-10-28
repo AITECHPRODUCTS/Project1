@@ -202,7 +202,8 @@ def simulate_email_automation(
     cumulative_delay = 0
     for _ in range(len(by_id)):
         node = by_id[node_id]
-        path.append(node_id)
+        if node["kind"] != "branch":
+            path.append(node_id)
         if node["kind"] == "stop":
             return {
                 "graph_sha256": built["sha256"], "path": path, "emails": emails,

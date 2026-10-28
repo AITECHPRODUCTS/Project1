@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -10,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main
 from backend.database import Base
-from backend.models import Conversion, ResourceUsage, Workspace
+from backend.models import Campaign, ClickEvent, Conversion, ConversionLedgerEntry, ResourceUsage, Workspace
 from backend.services import resource_budget, s6_s8_analytics
 from backend.tenancy import workspace_scope
 
@@ -195,3 +196,128 @@ async def test_non_postgres_resource_budget_lock_does_not_issue_advisory_sql():
     db = FakeSession()
     await resource_budget._acquire_workspace_budget_lock(db, "workspace-a")
     assert db.executed is False
+
+
+
+@pytest.mark.asyncio
+async def test_learning_uses_net_commission_for_partial_refunds_and_excludes_full_reversals(monkeypatch):
+    engine, sessions = await _database(monkeypatch)
+    settings = main.get_settings()
+    monkeypatch.setattr(settings, "min_conversions_for_learning", 1)
+    monkeypatch.setattr(settings, "min_hook_conversion_rate", 0.0)
+    workspace_id = None
+    try:
+        async with sessions() as db:
+            workspace = Workspace(name="Learning Reversal Workspace", slug="learning-reversal-tenant")
+            db.add(workspace)
+            await db.flush()
+            workspace_id = workspace.id
+            with workspace_scope(workspace_id):
+                campaign = Campaign(
+                    name="Learning reversal campaign",
+                    niche="test",
+                    primary_destination="https://example.invalid/offer",
+                )
+                db.add(campaign)
+                await db.flush()
+                db.add(ClickEvent(
+                    click_id="learning-reversal-click",
+                    campaign_id=campaign.id,
+                    destination_url="https://example.invalid/offer",
+                    chosen_destination="primary",
+                    utm_json={"utm_content": "partial-refund-hook"},
+                ))
+                db.add_all([
+                    Conversion(
+                        workspace_id=workspace_id,
+                        network="learning-test-network",
+                        external_event_id="partial-original",
+                        commission=1.25,
+                        revenue=10.0,
+                        hook="partial-refund-hook",
+                        status="partially_reversed",
+                        event_json={"reversal": False},
+                    ),
+                    Conversion(
+                        workspace_id=workspace_id,
+                        network="learning-test-network",
+                        external_event_id="partial-event",
+                        commission=-0.50,
+                        revenue=-2.0,
+                        hook="partial-refund-hook",
+                        status="partially_reversed",
+                        event_json={"reversal": True, "partial_reversal": True},
+                    ),
+                    Conversion(
+                        workspace_id=workspace_id,
+                        network="learning-test-network",
+                        external_event_id="fully-reversed-original",
+                        commission=5.0,
+                        revenue=50.0,
+                        hook="partial-refund-hook",
+                        status="reversed",
+                        event_json={"reversal": False},
+                    ),
+                ])
+                db.add_all([
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network="learning-test-network",
+                        external_event_id="partial-original",
+                        entry_type="conversion",
+                        commission_amount=Decimal("1.250000"),
+                        revenue_amount=Decimal("10.000000"),
+                        currency="USD",
+                        status="partially_reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network="learning-test-network",
+                        external_event_id="partial-event",
+                        entry_type="reversal",
+                        original_event_id="partial-original",
+                        commission_amount=Decimal("-0.500000"),
+                        revenue_amount=Decimal("-2.000000"),
+                        currency="USD",
+                        status="partially_reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network="learning-test-network",
+                        external_event_id="fully-reversed-original",
+                        entry_type="conversion",
+                        commission_amount=Decimal("5.000000"),
+                        revenue_amount=Decimal("50.000000"),
+                        currency="USD",
+                        status="reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network="learning-test-network",
+                        external_event_id="fully-reversed-event",
+                        entry_type="reversal",
+                        original_event_id="fully-reversed-original",
+                        commission_amount=Decimal("-5.000000"),
+                        revenue_amount=Decimal("-50.000000"),
+                        currency="USD",
+                        status="reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                ])
+                await db.commit()
+
+        result = await s6_s8_analytics.self_improver_loop(workspace_id=workspace_id)
+        assert result["conversions_scanned"] == 1
+        assert result["performance_memory_candidates_saved"] == 1
+        assert result["learned_hooks"][0]["hook"] == "partial-refund-hook"
+        assert result["learned_hooks"][0]["conversions"] == 1
+        assert result["learned_hooks"][0]["commission"] == pytest.approx(0.75)
+    finally:
+        await engine.dispose()

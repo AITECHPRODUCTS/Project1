@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import get_settings
 from backend.database import SessionLocal
-from backend.models import ClickEvent, Conversion, PerformanceMemory
+from backend.models import ClickEvent, Conversion, ConversionLedgerEntry, PerformanceMemory
 from backend.tenancy import get_workspace_id, workspace_scope
 
 
@@ -32,11 +33,39 @@ async def _self_improver_loop_scoped(
                     select(Conversion).where(
                         Conversion.created_at >= cutoff,
                         Conversion.hook.is_not(None),
-                        Conversion.status.in_(["approved", "paid", "complete", "completed", "confirmed"]),
+                        Conversion.status.in_(["approved", "paid", "complete", "completed", "confirmed", "partially_reversed"]),
                     )
                 )
             ).all()
         )
+        # A partial reversal keeps the original sale eligible for learning, but its
+        # recorded commission must be net of immutable reversal ledger entries.
+        # The reversal Conversion row itself is not a conversion outcome.
+        eligible_conversions = [
+            row for row in conversions
+            if not (row.status == "partially_reversed" and bool((row.event_json or {}).get("reversal")))
+        ]
+        partial_original_ids = {
+            (row.network, row.external_event_id)
+            for row in eligible_conversions
+            if row.status == "partially_reversed" and row.external_event_id
+        }
+        reversal_commission: dict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal("0"))
+        if partial_original_ids:
+            networks = {network for network, _ in partial_original_ids}
+            event_ids = {event_id for _, event_id in partial_original_ids}
+            reversal_entries = list((await session.scalars(
+                select(ConversionLedgerEntry).where(
+                    ConversionLedgerEntry.entry_type == "reversal",
+                    ConversionLedgerEntry.network.in_(networks),
+                    ConversionLedgerEntry.original_event_id.in_(event_ids),
+                )
+            )).all())
+            for entry in reversal_entries:
+                key = (entry.network, str(entry.original_event_id or ""))
+                if key in partial_original_ids:
+                    reversal_commission[key] += Decimal(str(entry.commission_amount or 0))
+
         clicks = list((await session.scalars(select(ClickEvent).where(ClickEvent.created_at >= cutoff))).all())
         click_counts: Counter[str] = Counter()
         for click in clicks:
@@ -46,7 +75,7 @@ async def _self_improver_loop_scoped(
                 click_counts[hook] += 1
 
         grouped: dict[str, list[Conversion]] = defaultdict(list)
-        for conversion in conversions:
+        for conversion in eligible_conversions:
             hook = str(conversion.hook or conversion.utm_content or "").strip()
             if hook:
                 grouped[hook].append(conversion)
@@ -60,7 +89,15 @@ async def _self_improver_loop_scoped(
             rate = conversion_count / max(conversion_count, click_count)
             if rate < settings.min_hook_conversion_rate:
                 continue
-            commission = round(sum(max(0.0, float(row.commission or 0)) for row in rows), 2)
+            commission = round(sum(
+                float(max(
+                    Decimal(str(row.commission or 0)) + reversal_commission.get(
+                        (row.network, str(row.external_event_id or "")), Decimal("0")
+                    ),
+                    Decimal("0"),
+                ))
+                for row in rows
+            ), 2)
             networks = sorted({row.network for row in rows})
             key = hashlib.sha256(f"perf:{hook}:{cutoff.date()}".encode()).hexdigest()
             learned.append(
@@ -107,7 +144,7 @@ async def _self_improver_loop_scoped(
 
         return {
             "lookback_days": lookback_days,
-            "conversions_scanned": len(conversions),
+            "conversions_scanned": len(eligible_conversions),
             "clicks_scanned": len(clicks),
             "performance_memory_candidates_saved": saved,
             "learned_hooks": learned,

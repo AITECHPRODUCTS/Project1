@@ -276,3 +276,5 @@ These additive rules apply to every future Project1 build session.
 17. Financial reversal acceptance must include a real PostgreSQL ledger test: partial reversal then full reversal must offset only the remaining balance, preserve immutable ledger entries, and net both commission and revenue to zero. Mocked route tests alone do not establish database correctness.
 
 18. Public landing pages must expose separate controls for consent to receive marketing emails and optional explicit re-subscription confirmation. Never make the re-subscribe checkbox required for first-time subscribers; server-side logic must still require it when the existing lead is unsubscribed.
+
+19. Learning must not count reversal event rows as new conversions or train on fully reversed outcomes. For partially reversed original conversions, use the append-only ledger to calculate net commission; keep sample-size gates and human review/promotion safeguards in place.

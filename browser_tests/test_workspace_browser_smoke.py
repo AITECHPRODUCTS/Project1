@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import re
 import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import func, select
+
+from backend.database import SessionLocal
+from backend.models import Lead
+from backend.tenancy import workspace_scope
 
 from playwright.sync_api import sync_playwright
 
@@ -163,5 +172,101 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             page.locator("main [role='status']").wait_for(state="visible")
             assert "External affiliate-network approval remains not_configured." in page.locator("main [role='status']").inner_text()
             page.get_by_text(offer_name, exact=True).wait_for(state="visible")
+
+            # Build a real public landing form using the authenticated workspace token.
+            landing_response = context.request.post(
+                f"{api_base}/api/landing/page",
+                data={
+                    "headline": "A practical affiliate starter guide",
+                    "subheadline": "A consent-first resource for independent marketers.",
+                    "benefit_bullets": ["Review claims against evidence", "Compare offers on consistent criteria"],
+                    "privacy_url": "https://example.com/privacy",
+                    "lead_magnet": "Browser UAT starter guide",
+                    "audience": "affiliate marketers",
+                },
+            )
+            assert landing_response.status == 200, landing_response.text()
+            landing_html = landing_response.text()
+            token_match = re.search(r'name="workspace_token"\s+value="([^"]+)"', landing_html)
+            assert token_match is not None, "generated landing form must contain a signed workspace token"
+            workspace_token = token_match.group(1)
+
+            # The public form must not submit without the required explicit-consent checkbox.
+            public_posts: list[str] = []
+            def block_public_capture(route):
+                public_posts.append(route.request.url)
+                route.fulfill(status=422, content_type="application/json", body='{"detail":"test submission should be blocked"}')
+            page.route("http://127.0.0.1:8000/api/public/leads/capture", block_public_capture)
+            page.route("https://cdn.tailwindcss.com", lambda route: route.fulfill(
+                status=200, content_type="application/javascript", body=""
+            ))
+            browser_landing_html = landing_html.replace(
+                "<head>", '<head><base href="http://127.0.0.1:8000/">', 1
+            )
+            page.set_content(browser_landing_html, wait_until="domcontentloaded")
+            page.get_by_label("Email address").fill(f"no-consent-{uuid.uuid4().hex}@example.test")
+            page.get_by_role("button", name="Send me the resource").click()
+            assert page.locator('input[name="consent"]').evaluate("(element) => element.validity.valueMissing") is True
+            assert public_posts == []
+
+            # The server independently rejects missing consent, even when bypassing HTML validation.
+            missing_consent = context.request.post(
+                f"{api_base}/api/public/leads/capture",
+                data={
+                    "email": f"no-consent-api-{uuid.uuid4().hex}@example.test",
+                    "consent": False,
+                    "lead_magnet": "Browser UAT starter guide",
+                    "audience": "affiliate marketers",
+                    "offer": {},
+                    "consent_source": "browser_uat",
+                    "workspace_token": workspace_token,
+                },
+                headers={"Accept": "application/json"},
+            )
+            assert missing_consent.status == 422
+
+            # Seed an unsubscribed recipient and prove public capture cannot silently resubscribe them.
+            unsubscribed_email = f"unsubscribed-{uuid.uuid4().hex}@example.test"
+            async def seed_unsubscribed_lead():
+                now = datetime.now(timezone.utc)
+                with workspace_scope(workspace_id):
+                    async with SessionLocal() as db:
+                        db.add(Lead(
+                            workspace_id=workspace_id,
+                            email=unsubscribed_email,
+                            consent_at=now,
+                            consent_source="browser_uat_seed",
+                            lead_magnet="Prior resource",
+                            unsubscribed_at=now,
+                        ))
+                        await db.commit()
+            asyncio.run(seed_unsubscribed_lead())
+
+            blocked_resubscribe = context.request.post(
+                f"{api_base}/api/public/leads/capture",
+                data={
+                    "email": unsubscribed_email,
+                    "consent": True,
+                    "lead_magnet": "Browser UAT starter guide",
+                    "audience": "affiliate marketers",
+                    "offer": {},
+                    "consent_source": "browser_uat",
+                    "workspace_token": workspace_token,
+                    "resubscribe_confirmed": False,
+                },
+                headers={"Accept": "application/json"},
+            )
+            assert blocked_resubscribe.status == 422
+            assert "explicit resubscribe confirmation required" in blocked_resubscribe.json()["detail"]
+
+            async def verify_unsubscribed_state():
+                with workspace_scope(workspace_id):
+                    async with SessionLocal() as db:
+                        lead = await db.scalar(select(Lead).where(
+                            Lead.workspace_id == workspace_id,
+                            Lead.email == unsubscribed_email,
+                        ))
+                        return lead is not None and lead.unsubscribed_at is not None
+            assert asyncio.run(verify_unsubscribed_state()) is True
         finally:
             browser.close()

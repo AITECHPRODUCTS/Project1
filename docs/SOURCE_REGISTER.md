@@ -85,3 +85,8 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 ## 2026-10-28 browser acceptance follow-up
 - The previously recorded browser-UAT gap has been partially closed by the verified Chromium suite and real authenticated workspace journey documented in `docs/IMPLEMENTATION_STATUS.md`. Exact-SHA push/PR runs `40651721191` and `40651726705` passed at commit `97bc4551de400929635206a462861460d1e52b6e`; the suite reports 3 passed on each run.
 - Remaining browser coverage gap: authenticated content draft creation, offer validation, and lead capture are not yet exercised end-to-end. Do not equate this narrow UAT suite with full product acceptance or production readiness.
+
+
+## 2026-10-28 content/offer browser acceptance follow-up
+- Browser UAT now exercises a real persisted infographic draft and a real merchant offer draft in a disposable SQLite-backed workspace. Exact-SHA push/PR workflows `40652912071` and `40652918364` passed at commit `58c5f7b94788771017812080a419bcd72b590566`; 3 Chromium tests passed on each run.
+- Remaining acceptance gap: lead capture/CRM consent and suppression semantics, distribution queueing, full authenticated content/offer journeys beyond these tested paths, and all live external provider UAT remain unverified. See `docs/IMPLEMENTATION_STATUS.md` for the current checkpoint and release gates.

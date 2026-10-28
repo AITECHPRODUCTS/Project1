@@ -25,10 +25,10 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -59,6 +59,7 @@ from backend.services.email_automation_builder import build_email_automation,sim
 from backend.services.integration_registry import build_network_registry
 from backend.services.capability_matrix import build_capability_matrix
 from backend.services.offer_intelligence import compute_offer_metrics
+from backend.services.offer_term_snapshots import compare_offer_terms
 from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
@@ -1258,6 +1259,36 @@ def _merchant_offer_dict(row: MerchantOffer) -> dict[str, Any]:
     }
 
 
+def _merchant_offer_term_snapshot_dict(row: MerchantOfferTermSnapshot) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "merchant_offer_id": row.merchant_offer_id,
+        "terms_version": row.terms_version,
+        "commission_type": row.commission_type,
+        "commission_value": format(Decimal(row.commission_value), "f"),
+        "commission_currency": row.commission_currency,
+        "cookie_days": row.cookie_days,
+        "attribution_window_days": row.attribution_window_days,
+        "allowed_regions": row.allowed_regions_json or [],
+        "restricted_traffic_sources": row.restricted_traffic_sources_json or [],
+        "source_url": row.source_url,
+        "evidence_type": row.evidence_type,
+        "evidence_excerpt": row.evidence_excerpt,
+        "observed_at": row.observed_at.isoformat() if row.observed_at else None,
+        "captured_at": row.captured_at.isoformat() if row.captured_at else None,
+        "terms_sha256": row.terms_sha256,
+        "change_status": row.change_status,
+        "changed_fields": row.changed_fields_json or [],
+        "changes": row.changes_json or [],
+        "requires_revalidation": bool(row.changed_fields_json),
+        "provenance_status": row.provenance_status,
+        "provider_verified": row.provider_verified is True,
+        "source_content_fetched": row.source_content_fetched is True,
+        "created_by": row.created_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
 @api.post("/merchant/offers", status_code=201)
 async def create_merchant_offer(
     payload: MerchantOfferCreateRequest,
@@ -1335,6 +1366,168 @@ async def list_merchant_offers(
             query = query.where(MerchantOffer.status == status)
         rows = list((await db.scalars(query.order_by(MerchantOffer.created_at.desc()).limit(limit))).all())
     return {"count": len(rows), "data": [_merchant_offer_dict(row) for row in rows]}
+
+
+@api.post("/merchant/offers/{offer_id}/term-snapshots", status_code=201)
+async def capture_merchant_offer_term_snapshot(
+    offer_id: str,
+    payload: MerchantOfferTermSnapshotCreateRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Persist operator-entered term evidence and invalidate approvals when material terms change."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before recording offer term evidence")
+    workspace_id = str(workspace_id)
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ).with_for_update())
+        if offer is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+
+        latest = await db.scalar(select(MerchantOfferTermSnapshot).where(
+            MerchantOfferTermSnapshot.workspace_id == workspace_id,
+            MerchantOfferTermSnapshot.merchant_offer_id == offer.id,
+        ).order_by(
+            MerchantOfferTermSnapshot.captured_at.desc(),
+            MerchantOfferTermSnapshot.created_at.desc(),
+            MerchantOfferTermSnapshot.id.desc(),
+        ).limit(1))
+
+        current_terms = {
+            "terms_version": payload.terms_version,
+            "commission_type": payload.commission_type,
+            "commission_value": payload.commission_value,
+            "commission_currency": payload.commission_currency,
+            "cookie_days": payload.cookie_days,
+            "attribution_window_days": payload.attribution_window_days,
+            "allowed_regions": payload.allowed_regions,
+            "restricted_traffic_sources": payload.restricted_traffic_sources,
+        }
+        previous_terms = ({
+            "terms_version": latest.terms_version,
+            "commission_type": latest.commission_type,
+            "commission_value": latest.commission_value,
+            "commission_currency": latest.commission_currency,
+            "cookie_days": latest.cookie_days,
+            "attribution_window_days": latest.attribution_window_days,
+            "allowed_regions": latest.allowed_regions_json or [],
+            "restricted_traffic_sources": latest.restricted_traffic_sources_json or [],
+        } if latest is not None else {
+            "terms_version": offer.terms_version,
+            "commission_type": offer.commission_type,
+            "commission_value": offer.commission_value,
+            "commission_currency": offer.commission_currency,
+            "cookie_days": None,
+            "attribution_window_days": None,
+            "allowed_regions": offer.allowed_regions_json or [],
+            "restricted_traffic_sources": offer.restricted_traffic_sources_json or [],
+        })
+        report = compare_offer_terms(
+            previous_terms,
+            current_terms,
+            has_previous_snapshot=latest is not None,
+        )
+        previous_offer_status = offer.status
+        if report["requires_revalidation"]:
+            offer.terms_verified = False
+            offer.activation_allowed = False
+            offer.marketplace_listed = False
+            if offer.status == "approved":
+                offer.status = "suspended"
+            elif offer.status == "submitted_for_review":
+                offer.status = "draft"
+
+        snapshot = MerchantOfferTermSnapshot(
+            workspace_id=workspace_id,
+            merchant_offer_id=offer.id,
+            terms_version=report["current_terms"]["terms_version"],
+            commission_type=report["current_terms"]["commission_type"],
+            commission_value=Decimal(report["current_terms"]["commission_value"]),
+            commission_currency=report["current_terms"]["commission_currency"],
+            cookie_days=report["current_terms"]["cookie_days"],
+            attribution_window_days=report["current_terms"]["attribution_window_days"],
+            allowed_regions_json=report["current_terms"]["allowed_regions"],
+            restricted_traffic_sources_json=report["current_terms"]["restricted_traffic_sources"],
+            source_url=payload.source_url or offer.commission_terms_url,
+            evidence_type=payload.evidence_type,
+            evidence_excerpt=payload.evidence_excerpt,
+            observed_at=payload.observed_at or utcnow(),
+            terms_sha256=report["terms_sha256"],
+            change_status=report["change_status"],
+            changed_fields_json=report["changed_fields"],
+            changes_json=report["changes"],
+            provenance_status="operator_supplied_unverified",
+            provider_verified=False,
+            source_content_fetched=False,
+            created_by=actor,
+        )
+        db.add(snapshot)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="merchant.offer.terms_snapshot_captured",
+            resource_type="merchant_offer",
+            resource_id=offer.id,
+            outcome=report["change_status"],
+            details_json={
+                "snapshot_id": snapshot.id,
+                "terms_sha256": report["terms_sha256"],
+                "changed_fields": report["changed_fields"],
+                "requires_revalidation": report["requires_revalidation"],
+                "previous_offer_status": previous_offer_status,
+                "current_offer_status": offer.status,
+                "provider_verified": False,
+                "source_content_fetched": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(snapshot)
+        await db.refresh(offer)
+
+    return {
+        **_merchant_offer_term_snapshot_dict(snapshot),
+        "requires_revalidation": report["requires_revalidation"],
+        "offer_status": offer.status,
+        "terms_verified": offer.terms_verified is True,
+        "activation_allowed": offer.activation_allowed is True,
+        "marketplace_listed": offer.marketplace_listed is True,
+    }
+
+
+@api.get("/merchant/offers/{offer_id}/term-snapshots")
+async def list_merchant_offer_term_snapshots(
+    offer_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """List immutable term snapshots visible to the active workspace."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing offer term evidence")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ))
+        if offer is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        rows = list((await db.scalars(select(MerchantOfferTermSnapshot).where(
+            MerchantOfferTermSnapshot.workspace_id == workspace_id,
+            MerchantOfferTermSnapshot.merchant_offer_id == offer.id,
+        ).order_by(
+            MerchantOfferTermSnapshot.captured_at.desc(),
+            MerchantOfferTermSnapshot.created_at.desc(),
+            MerchantOfferTermSnapshot.id.desc(),
+        ).limit(limit))).all())
+    return {"count": len(rows), "data": [_merchant_offer_term_snapshot_dict(row) for row in rows]}
 
 
 @api.post("/merchant/offers/{offer_id}/submit")

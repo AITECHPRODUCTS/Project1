@@ -667,6 +667,47 @@ class MerchantOffer(TenantScopedMixin, Base):
     )
 
 
+class MerchantOfferTermSnapshot(TenantScopedMixin, Base):
+    """Append-only, explicitly unverified snapshot of merchant-offer terms."""
+    __tablename__ = "merchant_offer_term_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_merchant_offer_terms_workspace_offer_captured",
+            "workspace_id", "merchant_offer_id", "captured_at",
+        ),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    merchant_offer_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("merchant_offers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    terms_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    commission_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    commission_value: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    commission_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    cookie_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attribution_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allowed_regions_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    restricted_traffic_sources_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    evidence_excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    terms_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    change_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    changed_fields_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    changes_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    provenance_status: Mapped[str] = mapped_column(String(40), default="operator_supplied_unverified", nullable=False)
+    provider_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    source_content_fetched: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class MarketplaceApplication(TenantScopedMixin, Base):
     """Publisher application to an internally reviewed marketplace offer; not a network application."""
     __tablename__ = "marketplace_applications"

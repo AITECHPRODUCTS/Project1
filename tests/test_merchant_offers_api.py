@@ -3,6 +3,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from backend.schemas import MerchantOfferTermSnapshotCreateRequest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from backend import main
 from backend.database import Base, get_session
@@ -148,3 +149,141 @@ def test_private_urls_and_percentage_values_are_rejected():
     payload["commission_value"] = "100.0001"
     with pytest.raises(ValidationError):
         MerchantOfferCreateRequest.model_validate(payload)
+
+
+
+def term_snapshot_payload(**overrides):
+    payload = {
+        "terms_version": "terms-2026-10",
+        "commission_type": "recurring_percentage",
+        "commission_value": "25.0000",
+        "commission_currency": "USD",
+        "cookie_days": None,
+        "attribution_window_days": None,
+        "allowed_regions": ["US", "GB", "IN"],
+        "restricted_traffic_sources": ["incentivized", "spam"],
+        "source_url": "https://merchant.example.com/affiliate-terms",
+        "evidence_type": "operator_observed",
+        "evidence_excerpt": "Terms manually reviewed by an operator.",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_term_snapshots_record_baseline_changes_and_unverified_provenance(tmp_path):
+    engine, user, _, client = make_client(tmp_path)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            assert created.status_code == 201, created.text
+            offer_id = created.json()["id"]
+            endpoint = f"/api/merchant/offers/{offer_id}/term-snapshots"
+
+            baseline = client.post(endpoint, json=term_snapshot_payload())
+            assert baseline.status_code == 201, baseline.text
+            first = baseline.json()
+            assert first["change_status"] == "baseline_recorded"
+            assert first["changed_fields"] == []
+            assert first["requires_revalidation"] is False
+            assert first["provider_verified"] is False
+            assert first["source_content_fetched"] is False
+            assert first["provenance_status"] == "operator_supplied_unverified"
+            assert len(first["terms_sha256"]) == 64
+
+            unchanged = client.post(endpoint, json=term_snapshot_payload())
+            assert unchanged.status_code == 201, unchanged.text
+            assert unchanged.json()["change_status"] == "unchanged"
+            assert unchanged.json()["requires_revalidation"] is False
+
+            changed = client.post(endpoint, json=term_snapshot_payload(
+                terms_version="terms-2026-11",
+                commission_value="20.0000",
+                cookie_days=30,
+                attribution_window_days=30,
+                evidence_type="network_reported",
+            ))
+            assert changed.status_code == 201, changed.text
+            result = changed.json()
+            assert result["change_status"] == "changes_detected"
+            assert result["requires_revalidation"] is True
+            assert {"terms_version", "commission_value", "cookie_days", "attribution_window_days"} <= set(result["changed_fields"])
+            assert result["provider_verified"] is False
+            assert result["source_content_fetched"] is False
+
+            history = client.get(endpoint)
+            assert history.status_code == 200, history.text
+            assert history.json()["count"] == 3
+            assert history.json()["data"][0]["terms_sha256"] == result["terms_sha256"]
+    finally:
+        cleanup(engine, client)
+
+
+def test_changed_terms_suspend_listed_approved_offer_and_require_revalidation(tmp_path):
+    engine, user, _, client = make_client(tmp_path)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            assert created.status_code == 201, created.text
+            offer_id = created.json()["id"]
+            submitted = client.post(f"/api/merchant/offers/{offer_id}/submit")
+            assert submitted.status_code == 200, submitted.text
+
+            user["email"] = "different-reviewer@example.com"
+            user["workspace_role"] = "admin"
+            approved = client.post(f"/api/merchant/offers/{offer_id}/review", json={
+                "decision": "approve",
+                "seller_authorization_verified": True,
+                "commission_terms_verified": True,
+                "reviewer_notes": "Evidence reviewed before activating the offer.",
+            })
+            assert approved.status_code == 200, approved.text
+            listed = client.post(f"/api/merchant/offers/{offer_id}/list")
+            assert listed.status_code == 200 and listed.json()["marketplace_listed"] is True
+
+            endpoint = f"/api/merchant/offers/{offer_id}/term-snapshots"
+            baseline = client.post(endpoint, json=term_snapshot_payload())
+            assert baseline.status_code == 201, baseline.text
+            assert baseline.json()["offer_status"] == "approved"
+
+            changed = client.post(endpoint, json=term_snapshot_payload(commission_value="18.0000"))
+            assert changed.status_code == 201, changed.text
+            body = changed.json()
+            assert body["requires_revalidation"] is True
+            assert body["offer_status"] == "suspended"
+            assert body["terms_verified"] is False
+            assert body["activation_allowed"] is False
+            assert body["marketplace_listed"] is False
+            refreshed = client.get("/api/merchant/offers")
+            assert refreshed.status_code == 200
+            assert refreshed.json()["data"][0]["status"] == "suspended"
+    finally:
+        cleanup(engine, client)
+
+
+def test_term_snapshot_history_and_capture_are_workspace_scoped(tmp_path):
+    engine, user, workspace_b, client = make_client(tmp_path)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            assert created.status_code == 201, created.text
+            offer_id = created.json()["id"]
+            endpoint = f"/api/merchant/offers/{offer_id}/term-snapshots"
+            user["workspace_id"] = workspace_b
+            assert client.get(endpoint).status_code == 404
+            assert client.post(endpoint, json=term_snapshot_payload()).status_code == 404
+    finally:
+        cleanup(engine, client)
+
+
+def test_term_snapshot_request_rejects_private_evidence_urls_naive_timestamps_and_invalid_percentages():
+    payload = term_snapshot_payload(source_url="http://127.0.0.1/internal")
+    with pytest.raises(ValidationError):
+        MerchantOfferTermSnapshotCreateRequest.model_validate(payload)
+
+    payload = term_snapshot_payload(observed_at="2026-10-28T10:00:00")
+    with pytest.raises(ValidationError):
+        MerchantOfferTermSnapshotCreateRequest.model_validate(payload)
+
+    payload = term_snapshot_payload(commission_value="100.0001")
+    with pytest.raises(ValidationError):
+        MerchantOfferTermSnapshotCreateRequest.model_validate(payload)

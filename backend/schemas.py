@@ -1424,6 +1424,90 @@ class MerchantOfferReviewRequest(BaseModel):
         return value.strip()
 
 
+class MerchantOfferTermSnapshotCreateRequest(BaseModel):
+    terms_version: str = Field(min_length=1, max_length=120)
+    commission_type: Literal["percentage", "fixed", "recurring_percentage", "recurring_fixed", "cpa", "cpl"]
+    commission_value: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
+    commission_currency: str = Field(default="USD", min_length=3, max_length=3)
+    cookie_days: int | None = Field(default=None, ge=0, le=3650)
+    attribution_window_days: int | None = Field(default=None, ge=0, le=3650)
+    allowed_regions: list[str] = Field(min_length=1, max_length=50)
+    restricted_traffic_sources: list[str] = Field(default_factory=list, max_length=30)
+    source_url: str | None = Field(default=None, min_length=8, max_length=2048)
+    evidence_type: Literal["operator_observed", "merchant_claim", "network_reported", "manual_import"] = "operator_observed"
+    evidence_excerpt: str = Field(default="", max_length=4000)
+    observed_at: datetime | None = None
+
+    @field_validator("terms_version")
+    @classmethod
+    def normalize_term_snapshot_version(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Terms version must not be blank")
+        return normalized
+
+    @field_validator("commission_currency")
+    @classmethod
+    def normalize_term_snapshot_currency(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", normalized):
+            raise ValueError("Currency must be a three-letter ISO currency code")
+        return normalized
+
+    @field_validator("allowed_regions")
+    @classmethod
+    def normalize_term_snapshot_regions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().upper() for value in values if value and value.strip()))
+        if not normalized or any(len(value) > 80 for value in normalized):
+            raise ValueError("Provide one or more non-empty region identifiers")
+        return normalized
+
+    @field_validator("restricted_traffic_sources")
+    @classmethod
+    def normalize_term_snapshot_traffic(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().lower() for value in values if value and value.strip()))
+        if any(len(value) > 80 for value in normalized):
+            raise ValueError("Traffic-source identifiers must be at most 80 characters")
+        return normalized
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_term_snapshot_source_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in {"https", "http"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Evidence URL must be absolute HTTP(S) without embedded credentials")
+        host = parsed.hostname.lower().rstrip(".")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("Local or internal URLs are not valid evidence references")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("Private or reserved IP addresses are not valid evidence references")
+        return value.strip()
+
+    @field_validator("evidence_excerpt")
+    @classmethod
+    def normalize_term_evidence_excerpt(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("observed_at")
+    @classmethod
+    def require_aware_term_observation_time(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("observed_at must include a timezone")
+        return value
+
+    @model_validator(mode="after")
+    def validate_term_snapshot_commission_range(self):
+        if self.commission_type in {"percentage", "recurring_percentage"} and self.commission_value > Decimal("100"):
+            raise ValueError("Percentage commission cannot exceed 100")
+        return self
+
+
 class MarketplaceApplicationCreateRequest(BaseModel):
     publisher_website_url: str = Field(min_length=8, max_length=2048)
     audience_description: str = Field(min_length=30, max_length=3000)

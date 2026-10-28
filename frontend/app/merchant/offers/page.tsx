@@ -12,6 +12,26 @@ type MerchantOffer={
   reviewer_notes:string|null;reviewed_by:string|null;created_by:string;created_at:string|null;
   affiliate_network_approval_status:string;affiliate_network_approved:boolean;provider_submission_performed:boolean;marketplace_listed:boolean;
 };
+type TermDraft={
+  terms_version:string;commission_type:string;commission_value:string;commission_currency:string;
+  cookie_days:string;attribution_window_days:string;allowed_regions:string;restricted_traffic_sources:string;
+  source_url:string;evidence_type:"operator_observed"|"merchant_claim"|"network_reported"|"manual_import";evidence_excerpt:string;
+};
+type TermSnapshot={
+  id:string;terms_version:string;commission_type:string;commission_value:string;commission_currency:string;
+  cookie_days:number|null;attribution_window_days:number|null;allowed_regions:string[];restricted_traffic_sources:string[];
+  source_url:string;evidence_type:string;evidence_excerpt:string;observed_at:string|null;captured_at:string|null;
+  terms_sha256:string;change_status:string;changed_fields:string[];requires_revalidation:boolean;
+  provenance_status:string;provider_verified:boolean;source_content_fetched:boolean;offer_status?:string;
+};
+function makeTermDraft(offer:MerchantOffer):TermDraft {
+  return {
+    terms_version:offer.terms_version,commission_type:offer.commission_type,commission_value:offer.commission_value,
+    commission_currency:offer.commission_currency,cookie_days:"",attribution_window_days:"",
+    allowed_regions:offer.allowed_regions.join(", "),restricted_traffic_sources:offer.restricted_traffic_sources.join(", "),
+    source_url:offer.commission_terms_url,evidence_type:"operator_observed",evidence_excerpt:""
+  };
+}
 const inputClass="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm";
 const labelClass="block text-sm font-bold text-slate-700";
 
@@ -37,6 +57,10 @@ export default function MerchantOffersPage(){
   const [reviewNotes,setReviewNotes]=useState("");
   const [sellerVerified,setSellerVerified]=useState(false);
   const [termsVerified,setTermsVerified]=useState(false);
+  const [termEditorId,setTermEditorId]=useState("");
+  const [termDrafts,setTermDrafts]=useState<Record<string,TermDraft>>({});
+  const [termHistory,setTermHistory]=useState<Record<string,TermSnapshot[]>>({});
+  const [termBusyId,setTermBusyId]=useState("");
 
   const load=useCallback(async()=>{
     setError("");
@@ -60,6 +84,49 @@ export default function MerchantOffersPage(){
     }catch(e){setError(e instanceof Error?e.message:"Merchant offer operation failed.");}
     finally{setBusy("")}
   };
+  const loadTermHistory=async(offerId:string)=>{
+    try{
+      const response=await apiFetch<{count:number;data:TermSnapshot[]}>("/api/merchant/offers/"+encodeURIComponent(offerId)+"/term-snapshots");
+      setTermHistory(prev=>({...prev,[offerId]:response.data||[]}));
+    }catch(e){
+      setError(e instanceof Error?e.message:"Could not load offer-term history.");
+    }
+  };
+  const openTermEditor=async(offer:MerchantOffer)=>{
+    if(termEditorId===offer.id){setTermEditorId("");return;}
+    setTermDrafts(prev=>({...prev,[offer.id]:prev[offer.id]||makeTermDraft(offer)}));
+    setTermEditorId(offer.id);
+    setError("");
+    await loadTermHistory(offer.id);
+  };
+  const updateTermDraft=(offer:MerchantOffer,field:keyof TermDraft,value:string)=>{
+    setTermDrafts(prev=>({...prev,[offer.id]:{...(prev[offer.id]||makeTermDraft(offer)),[field]:value}}));
+  };
+  const saveTermSnapshot=async(offer:MerchantOffer)=>{
+    const draft=termDrafts[offer.id]||makeTermDraft(offer);
+    setTermBusyId(offer.id);setError("");setNotice("");
+    try{
+      const result=await apiFetch<TermSnapshot>("/api/merchant/offers/"+encodeURIComponent(offer.id)+"/term-snapshots",{
+        method:"POST",
+        body:JSON.stringify({
+          terms_version:draft.terms_version,commission_type:draft.commission_type,
+          commission_value:draft.commission_value,commission_currency:draft.commission_currency,
+          cookie_days:draft.cookie_days.trim()?Number(draft.cookie_days):null,
+          attribution_window_days:draft.attribution_window_days.trim()?Number(draft.attribution_window_days):null,
+          allowed_regions:draft.allowed_regions.split(",").map(x=>x.trim()).filter(Boolean),
+          restricted_traffic_sources:draft.restricted_traffic_sources.split(",").map(x=>x.trim()).filter(Boolean),
+          source_url:draft.source_url.trim()||offer.commission_terms_url,
+          evidence_type:draft.evidence_type,evidence_excerpt:draft.evidence_excerpt
+        })
+      });
+      setNotice(offer.name+": terms snapshot "+result.change_status+". "+(result.requires_revalidation?"Material changes blocked activation; review the new terms before re-approval. ":"No material term change detected. ")+"The cited URL was not fetched and this record is not provider-verified.");
+      await load();
+      await loadTermHistory(offer.id);
+    }catch(e){
+      setError(e instanceof Error?e.message:"Could not save the terms snapshot.");
+    }finally{setTermBusyId("")}
+  };
+
   const create=async(e:FormEvent)=>{
     e.preventDefault();
     await act("create","/api/merchant/offers",{
@@ -135,7 +202,30 @@ export default function MerchantOffersPage(){
               {offer.status==="approved"&&offer.activation_allowed&&!offer.marketplace_listed&&<button onClick={()=>void act("list","/api/merchant/offers/"+encodeURIComponent(offer.id)+"/list")} disabled={!!busy} className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">List in publisher marketplace</button>}
               {offer.marketplace_listed&&<button onClick={()=>void act("unlist","/api/merchant/offers/"+encodeURIComponent(offer.id)+"/unlist")} disabled={!!busy} className="rounded-xl border border-amber-200 px-3 py-2 text-sm font-bold text-amber-800 disabled:opacity-50">Unlist from marketplace</button>}
               <span className="self-center text-xs text-slate-500">Marketplace listed: {offer.marketplace_listed?"yes":"no"} · Affiliate network: {offer.affiliate_network_approval_status}</span>
+              <button onClick={()=>void openTermEditor(offer)} disabled={!!busy||termBusyId===offer.id} className="rounded-xl border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-700 disabled:opacity-50">{termEditorId===offer.id?"Close terms history":"Record / compare terms"}</button>
             </div>
+            {termEditorId===offer.id&&termDrafts[offer.id]&&<section className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+              <h4 className="text-sm font-black">Append an offer-terms snapshot</h4>
+              <p className="mt-1 text-xs leading-5 text-slate-600">Record what an operator observed. The URL is stored as evidence reference only, not fetched. Even “network reported” values remain unverified without provider-attested evidence.</p>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div><label className={labelClass} htmlFor={"term-version-"+offer.id}>Terms version/date</label><input id={"term-version-"+offer.id} className={inputClass} value={termDrafts[offer.id]?.terms_version??offer.terms_version} onChange={e=>updateTermDraft(offer,"terms_version",e.target.value)} maxLength={120} required/></div>
+                <div><label className={labelClass} htmlFor={"term-type-"+offer.id}>Commission model</label><select id={"term-type-"+offer.id} className={inputClass} value={termDrafts[offer.id]?.commission_type??offer.commission_type} onChange={e=>updateTermDraft(offer,"commission_type",e.target.value)}><option value="percentage">Percentage</option><option value="fixed">Fixed</option><option value="recurring_percentage">Recurring percentage</option><option value="recurring_fixed">Recurring fixed</option><option value="cpa">CPA</option><option value="cpl">CPL</option></select></div>
+                <div><label className={labelClass} htmlFor={"term-value-"+offer.id}>Commission amount / rate</label><input id={"term-value-"+offer.id} className={inputClass} type="number" min="0.0001" step="0.0001" value={termDrafts[offer.id]?.commission_value??offer.commission_value} onChange={e=>updateTermDraft(offer,"commission_value",e.target.value)} required/></div>
+                <div><label className={labelClass} htmlFor={"term-currency-"+offer.id}>Currency</label><input id={"term-currency-"+offer.id} className={inputClass} value={termDrafts[offer.id]?.commission_currency??offer.commission_currency} onChange={e=>updateTermDraft(offer,"commission_currency",e.target.value.toUpperCase())} minLength={3} maxLength={3} required/></div>
+                <div><label className={labelClass} htmlFor={"term-cookie-"+offer.id}>Cookie duration (days; blank = unknown)</label><input id={"term-cookie-"+offer.id} className={inputClass} type="number" min="0" max="3650" step="1" value={termDrafts[offer.id]?.cookie_days??""} onChange={e=>updateTermDraft(offer,"cookie_days",e.target.value)}/></div>
+                <div><label className={labelClass} htmlFor={"term-window-"+offer.id}>Attribution window (days; blank = unknown)</label><input id={"term-window-"+offer.id} className={inputClass} type="number" min="0" max="3650" step="1" value={termDrafts[offer.id]?.attribution_window_days??""} onChange={e=>updateTermDraft(offer,"attribution_window_days",e.target.value)}/></div>
+                <div><label className={labelClass} htmlFor={"term-regions-"+offer.id}>Allowed regions, comma-separated</label><input id={"term-regions-"+offer.id} className={inputClass} value={termDrafts[offer.id]?.allowed_regions??offer.allowed_regions.join(", ")} onChange={e=>updateTermDraft(offer,"allowed_regions",e.target.value)} required/></div>
+                <div><label className={labelClass} htmlFor={"term-traffic-"+offer.id}>Restricted traffic sources, comma-separated</label><input id={"term-traffic-"+offer.id} className={inputClass} value={termDrafts[offer.id]?.restricted_traffic_sources??offer.restricted_traffic_sources.join(", ")} onChange={e=>updateTermDraft(offer,"restricted_traffic_sources",e.target.value)}/></div>
+                <div><label className={labelClass} htmlFor={"term-source-"+offer.id}>Evidence reference URL</label><input id={"term-source-"+offer.id} className={inputClass} type="url" value={termDrafts[offer.id]?.source_url??offer.commission_terms_url} onChange={e=>updateTermDraft(offer,"source_url",e.target.value)} required/></div>
+                <div><label className={labelClass} htmlFor={"term-evidence-type-"+offer.id}>Evidence classification (not verification)</label><select id={"term-evidence-type-"+offer.id} className={inputClass} value={termDrafts[offer.id]?.evidence_type??"operator_observed"} onChange={e=>updateTermDraft(offer,"evidence_type",e.target.value as TermDraft["evidence_type"])}><option value="operator_observed">Operator observed</option><option value="merchant_claim">Merchant claim</option><option value="network_reported">Network reported (unverified)</option><option value="manual_import">Manual import</option></select></div>
+                <div className="sm:col-span-2"><label className={labelClass} htmlFor={"term-excerpt-"+offer.id}>Evidence excerpt / operator notes</label><textarea id={"term-excerpt-"+offer.id} className={inputClass} rows={2} maxLength={4000} value={termDrafts[offer.id]?.evidence_excerpt??""} onChange={e=>updateTermDraft(offer,"evidence_excerpt",e.target.value)}/></div>
+              </div>
+              <button onClick={()=>void saveTermSnapshot(offer)} disabled={termBusyId===offer.id||!!busy} className="mt-4 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{termBusyId===offer.id?"Saving snapshot…":"Save immutable terms snapshot"}</button>
+              <div className="mt-5">
+                <h5 className="text-xs font-black uppercase tracking-wider text-slate-600">Term history</h5>
+                {(termHistory[offer.id]||[]).length===0?<p className="mt-2 text-xs text-slate-500">No snapshots are stored yet.</p>:<div className="mt-2 grid gap-2">{termHistory[offer.id]?.map(snapshot=><div key={snapshot.id} className="rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{snapshot.change_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{snapshot.captured_at?new Date(snapshot.captured_at).toLocaleString():"Capture time unavailable"}</span></div><p className="mt-1 text-xs text-slate-600">Changed fields: {snapshot.changed_fields.length?snapshot.changed_fields.join(", "):"none"}</p><p className="mt-1 break-all text-xs text-slate-500">SHA-256: {snapshot.terms_sha256}</p><p className="mt-1 text-xs text-amber-800">Unverified operator-supplied record · provider verified: no · source fetched: no</p></div>)}</div>}
+              </div>
+            </section>}
           </article>)}
         </div>
         {offers.some(x=>x.status==="submitted_for_review"&&x.created_by.toLowerCase()!==userEmail)&&<div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/70 p-4"><p className="text-sm font-bold text-amber-900">Reviewer evidence checklist</p><label className="mt-3 flex items-start gap-2 text-sm text-amber-950"><input type="checkbox" checked={sellerVerified} onChange={e=>setSellerVerified(e.target.checked)} className="mt-1"/><span>I inspected the seller authorization reference and verified the offer creator can represent this merchant.</span></label><label className="mt-3 flex items-start gap-2 text-sm text-amber-950"><input type="checkbox" checked={termsVerified} onChange={e=>setTermsVerified(e.target.checked)} className="mt-1"/><span>I inspected the cited terms and verified commission model, amount, currency, allowed regions and traffic restrictions.</span></label><label className={labelClass+" mt-3"} htmlFor="merchant-review-notes">Review notes</label><textarea id="merchant-review-notes" className={inputClass} rows={2} value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)} maxLength={3000}/><p className="mt-2 text-xs leading-5 text-amber-900">These are human attestations, not automated URL validation. The server denies approval unless both are true and prevents self-review.</p></div>}

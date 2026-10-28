@@ -485,3 +485,10 @@
 - **Tests:** `tests/test_commission_reconciliation.py` covers false cent-rounded matches, six-decimal exact matching, excess precision and absent currency, in addition to existing ambiguous/reversed/non-confirmation tests.
 - **Verification:** exact candidate `d10258653c4e400cf483c006af47a64f1d3bcbaf`; push [40674307123](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40674307123) and PR [40674316496](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40674316496) both passed. Python: 558 passed, 7 skipped, 1 warning; PostgreSQL, frontend, AI/RAG, security, secret scan, repo guard and browser UAT passed.
 - **Remaining evidence:** provider-specific reconciliation contracts, currency-specific minor-unit policies, live provider authorization and production finance UAT remain unverified.
+
+
+## 2026-10-28 additive traceability note — commission evidence status normalization
+- **Requirement:** S6 reconciliation must treat equivalent status spelling consistently and must not silently skip pending evidence due to case or whitespace formatting.
+- **Implementation:** `backend/services/commission_reconciliation.py::_status_key` normalizes case and punctuation separators to underscore-delimited status keys for evidence and conversion status evaluation.
+- **Tests:** `tests/test_commission_reconciliation.py` adds pending-status and already-reviewed-status spelling regression tests.
+- **Candidate commits:** `91976a3e8fdbe8aab1b56ab362bcabf7504c29bf` and `38cf64a294fec308b6c9dfa5a2d3dfe978f7e70c`. Exact current-head CI evidence is pending; do not count as verified until both push and PR runs complete.

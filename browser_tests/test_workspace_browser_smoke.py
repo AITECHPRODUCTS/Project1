@@ -252,8 +252,26 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
                 f"unsubscribe:{lead_id}:{timestamp}".encode(),
                 hashlib.sha256,
             ).hexdigest()
-            unsubscribe = context.request.get(
-                f"{api_base}/unsubscribe/{lead_id}?ts={timestamp}&sig={signature}"
+            unsubscribe_url = f"{api_base}/unsubscribe/{lead_id}?ts={timestamp}&sig={signature}"
+            unsubscribe_confirmation = context.request.get(unsubscribe_url)
+            assert unsubscribe_confirmation.status == 200, unsubscribe_confirmation.text()
+            assert "Confirm unsubscribe" in unsubscribe_confirmation.text()
+            assert 'method="post"' in unsubscribe_confirmation.text()
+            assert "You are unsubscribed" not in unsubscribe_confirmation.text()
+
+            # Link previews/scanners must not change recipient preferences; only
+            # the explicit browser confirmation POST performs the opt-out.
+            leads_after_link_preview = context.request.get(f"{api_base}/api/leads")
+            assert leads_after_link_preview.status == 200, leads_after_link_preview.text()
+            lead_before_confirmation = next(
+                item for item in leads_after_link_preview.json()["data"] if item["id"] == lead_id
+            )
+            assert lead_before_confirmation["unsubscribed"] is False
+
+            unsubscribe = context.request.post(
+                unsubscribe_url,
+                data={"confirm": "unsubscribe"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             assert unsubscribe.status == 200, unsubscribe.text()
             assert "You are unsubscribed" in unsubscribe.text()

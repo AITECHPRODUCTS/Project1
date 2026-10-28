@@ -157,7 +157,7 @@ def test_runtime_schema_validation_rejects_boolean_as_number_and_non_finite_valu
 
 def test_runtime_catalog_is_explicit_and_contains_no_user_supplied_code_execution():
     assert set(SUPPORTED_RUNTIME_HANDLERS) == {
-        "none", "content.extractive_summary", "research.keyword_extract", "analytics.roas_calculator"
+        "none", "content.extractive_summary", "research.keyword_extract", "research.offer_metrics", "analytics.roas_calculator"
     }
 
 
@@ -188,3 +188,141 @@ def test_roas_handler_rejects_ratio_that_exceeds_its_supported_output_range():
                 "minimum_roas": 1,
             },
         )
+
+
+
+def test_offer_metrics_handler_calculates_only_from_supplied_measured_values():
+    result = execute_skill_handler(
+        "research.offer_metrics",
+        {
+            "offer": {"reward_type": "one-time", "gravity_score": 4.5},
+            "clicks": 20,
+            "conversions": 2,
+            "total_revenue": 50,
+            "gravity_weight": 2,
+        },
+    )
+    assert result == {
+        "gravity_score": 4.5,
+        "normalized_gravity": 9.0,
+        "epc": 2.5,
+        "conversion_rate": 0.1,
+        "recurring_commission": False,
+        "recurring_commission_value": None,
+        "measurement_basis": {
+            "clicks": 20,
+            "conversions": 2,
+            "total_revenue": 50.0,
+            "gravity_weight": 2.0,
+        },
+    }
+
+    unknown = execute_skill_handler("research.offer_metrics", {"offer": {"reward_type": "one-time"}})
+    assert unknown["epc"] is None
+    assert unknown["conversion_rate"] is None
+    assert unknown["gravity_score"] is None
+    assert unknown["measurement_basis"]["clicks"] is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"offer": "not-an-object"},
+        {"offer": {}, "untrusted_extra": True},
+        {"offer": {}, "clicks": 1.5},
+        {"offer": {}, "clicks": 2, "conversions": 3},
+        {"offer": {}, "total_revenue": float("inf")},
+        {"offer": {}, "gravity_weight": float("nan")},
+    ],
+)
+def test_offer_metrics_handler_rejects_invalid_or_ambiguous_inputs(payload):
+    with pytest.raises(ValueError):
+        execute_skill_handler("research.offer_metrics", payload)
+
+
+def test_offer_metrics_skill_fixture_executes_the_real_allowlisted_handler():
+    input_value = {
+        "offer": {"reward_type": "one-time", "gravity_score": 4.5},
+        "clicks": 20,
+        "conversions": 2,
+        "total_revenue": 50,
+        "gravity_weight": 2,
+    }
+    expected = {
+        "gravity_score": 4.5,
+        "normalized_gravity": 9.0,
+        "epc": 2.5,
+        "conversion_rate": 0.1,
+        "recurring_commission": False,
+        "recurring_commission_value": None,
+        "measurement_basis": {
+            "clicks": 20,
+            "conversions": 2,
+            "total_revenue": 50.0,
+            "gravity_weight": 2.0,
+        },
+    }
+    payload = {
+        "skill_id": "research/offer-metrics",
+        "display_name": "Measured offer metrics",
+        "version": "1.0.0",
+        "description": "Calculate evidence-dependent offer metrics from measured values supplied by the operator.",
+        "stage": "S1",
+        "runtime_handler": "research.offer_metrics",
+        "capabilities": ["research.read"],
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "offer": {
+                    "type": "object",
+                    "properties": {
+                        "reward_type": {"type": "string"},
+                        "gravity_score": {"type": "number", "minimum": 0},
+                    },
+                    "required": ["reward_type", "gravity_score"],
+                    "additionalProperties": False,
+                },
+                "clicks": {"type": "integer", "minimum": 0},
+                "conversions": {"type": "integer", "minimum": 0},
+                "total_revenue": {"type": "number", "minimum": 0},
+                "gravity_weight": {"type": "number", "minimum": 0, "maximum": 10},
+            },
+            "required": ["offer", "clicks", "conversions", "total_revenue", "gravity_weight"],
+            "additionalProperties": False,
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "gravity_score": {"type": "number", "minimum": 0},
+                "normalized_gravity": {"type": "number", "minimum": 0},
+                "epc": {"type": "number", "minimum": 0},
+                "conversion_rate": {"type": "number", "minimum": 0, "maximum": 1},
+                "recurring_commission": {"type": "boolean"},
+                "recurring_commission_value": {"type": "null"},
+                "measurement_basis": {
+                    "type": "object",
+                    "properties": {
+                        "clicks": {"type": "integer", "minimum": 0},
+                        "conversions": {"type": "integer", "minimum": 0},
+                        "total_revenue": {"type": "number", "minimum": 0},
+                        "gravity_weight": {"type": "number", "minimum": 0, "maximum": 10},
+                    },
+                    "required": ["clicks", "conversions", "total_revenue", "gravity_weight"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": [
+                "gravity_score", "normalized_gravity", "epc", "conversion_rate",
+                "recurring_commission", "recurring_commission_value", "measurement_basis",
+            ],
+            "additionalProperties": False,
+        },
+        "instructions_markdown": "# Declarative guidance\nUse measured evidence only; do not infer provider approval or search volume.",
+        "test_cases": [{"name": "measured one-time offer", "input": input_value, "expected_output": expected}],
+    }
+    built = build_skill_package(payload)
+    report = built["validation_report"]
+    assert report["all_fixtures_passed"] is True
+    assert report["runtime_execution_tested"] is True
+    assert report["cases"][0]["runtime_output_matches_expected"] is True
+    assert built["manifest"]["runtime_handler"] == "research.offer_metrics"

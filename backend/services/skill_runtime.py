@@ -6,10 +6,13 @@ from collections import Counter
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from backend.services.offer_intelligence import compute_offer_metrics
+
 SUPPORTED_RUNTIME_HANDLERS = (
     "none",
     "content.extractive_summary",
     "research.keyword_extract",
+    "research.offer_metrics",
     "analytics.roas_calculator",
 )
 
@@ -17,6 +20,7 @@ _HANDLER_DESCRIPTIONS = {
     "none": "Declarative-only package; instructions are not executed.",
     "content.extractive_summary": "Deterministic local extractive summary from supplied text; no model or network call.",
     "research.keyword_extract": "Deterministic frequency-based keyword extraction from supplied text; no search-volume claim.",
+    "research.offer_metrics": "Evidence-dependent EPC, conversion rate and gravity calculations from supplied offer and measured data; no provider claims.",
     "analytics.roas_calculator": "Decimal-based ROAS calculation and review-only stop-loss signal; no campaign action.",
 }
 
@@ -87,6 +91,25 @@ def _keyword_extract(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
+def _offer_metrics(payload: dict[str, Any]) -> dict[str, Any]:
+    """Calculate offer metrics from explicit inputs without inventing missing measurements."""
+    allowed = {"offer", "clicks", "conversions", "total_revenue", "gravity_weight"}
+    unexpected = sorted(set(payload) - allowed)
+    if unexpected:
+        raise ValueError("unsupported offer-metrics input fields: " + ", ".join(unexpected[:8]))
+    offer = payload.get("offer")
+    if not isinstance(offer, dict):
+        raise ValueError("offer must be a JSON object")
+    return compute_offer_metrics(
+        offer,
+        clicks=payload.get("clicks"),
+        conversions=payload.get("conversions"),
+        total_revenue=payload.get("total_revenue"),
+        gravity_weight=payload.get("gravity_weight", 1.0),
+    )
+
+
 def _roas_calculator(payload: dict[str, Any]) -> dict[str, Any]:
     values: dict[str, Decimal] = {}
     monetary_limit = Decimal("999999999999.999999")
@@ -155,6 +178,8 @@ def execute_skill_handler(handler_key: str, input_value: Any) -> dict[str, Any]:
         return _text_extract_summary(payload)
     if handler_key == "research.keyword_extract":
         return _keyword_extract(payload)
+    if handler_key == "research.offer_metrics":
+        return _offer_metrics(payload)
     if handler_key == "analytics.roas_calculator":
         return _roas_calculator(payload)
     raise ValueError("Unsupported runtime handler")

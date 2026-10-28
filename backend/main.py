@@ -1322,6 +1322,9 @@ def _merchant_term_evidence_fetch_dict(row: MerchantOfferTermEvidenceFetch) -> d
         "content_type": row.content_type,
         "response_bytes": row.response_bytes,
         "content_sha256": row.content_sha256,
+        "previous_content_sha256": row.previous_content_sha256,
+        "content_change_status": row.content_change_status,
+        "requires_human_review": row.content_change_status == "content_changed",
         "text_excerpt": row.text_excerpt,
         "etag": row.etag,
         "last_modified": row.last_modified,
@@ -1717,10 +1720,28 @@ async def fetch_merchant_offer_terms_evidence(
         if snapshot is None:
             raise HTTPException(404, "Term snapshot not found in the active workspace")
         source_url = snapshot.source_url
+        previous_hash = await db.scalar(select(MerchantOfferTermEvidenceFetch.content_sha256).where(
+            MerchantOfferTermEvidenceFetch.workspace_id == workspace_id,
+            MerchantOfferTermEvidenceFetch.merchant_offer_id == offer.id,
+            MerchantOfferTermEvidenceFetch.term_snapshot_id == snapshot.id,
+            MerchantOfferTermEvidenceFetch.content_sha256.is_not(None),
+        ).order_by(
+            MerchantOfferTermEvidenceFetch.fetched_at.desc(),
+            MerchantOfferTermEvidenceFetch.id.desc(),
+        ).limit(1))
         # Do not hold a database read transaction open while contacting an external server.
         await db.rollback()
 
     result = await _fetch_merchant_terms_source(source_url)
+    current_hash = result["content_sha256"]
+    if current_hash is None:
+        content_change_status = "not_comparable"
+    elif previous_hash is None:
+        content_change_status = "baseline_recorded"
+    elif current_hash == previous_hash:
+        content_change_status = "unchanged"
+    else:
+        content_change_status = "content_changed"
     with workspace_scope(workspace_id):
         row = MerchantOfferTermEvidenceFetch(
             workspace_id=workspace_id,
@@ -1732,6 +1753,8 @@ async def fetch_merchant_offer_terms_evidence(
             content_type=result["content_type"],
             response_bytes=result["response_bytes"],
             content_sha256=result["content_sha256"],
+            previous_content_sha256=previous_hash,
+            content_change_status=content_change_status,
             text_excerpt=result["text_excerpt"],
             etag=result["etag"],
             last_modified=result["last_modified"],
@@ -1756,6 +1779,9 @@ async def fetch_merchant_offer_terms_evidence(
                 "content_type": result["content_type"],
                 "response_bytes": result["response_bytes"],
                 "content_sha256": result["content_sha256"],
+                "previous_content_sha256": previous_hash,
+                "content_change_status": content_change_status,
+                "requires_human_review": content_change_status == "content_changed",
                 "provider_verified": False,
                 "offer_approval_changed": False,
             },

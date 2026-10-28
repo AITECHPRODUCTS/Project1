@@ -476,3 +476,66 @@ def test_terms_fetch_history_is_workspace_scoped(tmp_path, monkeypatch):
             assert client.get(route).status_code == 404
     finally:
         cleanup(engine, client)
+
+
+def test_terms_fetch_compares_successful_page_hashes_without_claiming_terms_verified(tmp_path, monkeypatch):
+    import hashlib
+    from contextlib import asynccontextmanager
+
+    engine, user, _, client = make_client(tmp_path)
+    body_a = b"<html><body><p>Commission is twenty five percent.</p></body></html>"
+    body_b = b"<html><body><p>Commission is twenty percent.</p></body></html>"
+    responses = [
+        _FakeTermsResponse(200, {"content-type": "text/html", "content-length": str(len(body_a))}, body_a),
+        _FakeTermsResponse(200, {"content-type": "text/html", "content-length": str(len(body_a))}, body_a),
+        _FakeTermsResponse(200, {"content-type": "text/html", "content-length": str(len(body_b))}, body_b),
+    ]
+
+    @asynccontextmanager
+    async def fake_open(url, **kwargs):
+        yield responses.pop(0)
+
+    monkeypatch.setattr(main, "open_public_http_response", fake_open)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            offer_id = created.json()["id"]
+            saved = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots",
+                json=term_snapshot_payload(),
+            )
+            snapshot_id = saved.json()["id"]
+            endpoint = f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetch-evidence"
+
+            first_response = client.post(endpoint)
+            assert first_response.status_code == 201, first_response.text
+            first = first_response.json()
+            assert first["content_change_status"] == "baseline_recorded"
+            assert first["previous_content_sha256"] is None
+            assert first["requires_human_review"] is False
+            assert first["content_sha256"] == hashlib.sha256(body_a).hexdigest()
+
+            second = client.post(endpoint).json()
+            assert second["content_change_status"] == "unchanged"
+            assert second["previous_content_sha256"] == first["content_sha256"]
+            assert second["requires_human_review"] is False
+
+            third = client.post(endpoint).json()
+            assert third["content_change_status"] == "content_changed"
+            assert third["previous_content_sha256"] == second["content_sha256"]
+            assert third["content_sha256"] == hashlib.sha256(body_b).hexdigest()
+            assert third["requires_human_review"] is True
+            assert third["provider_verified"] is False
+
+            current_offer = client.get("/api/merchant/offers").json()["data"][0]
+            assert current_offer["terms_verified"] is False
+            assert current_offer["activation_allowed"] is False
+            history = client.get(
+                f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetches"
+            ).json()
+            assert history["count"] == 3
+            assert [item["content_change_status"] for item in history["data"]] == [
+                "content_changed", "unchanged", "baseline_recorded"
+            ]
+    finally:
+        cleanup(engine, client)

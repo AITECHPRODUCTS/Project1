@@ -20,6 +20,7 @@ type TermDraft={
 type TermEvidenceFetch={
   id:string;merchant_offer_id:string;term_snapshot_id:string;source_url:string;fetch_status:string;
   http_status_code:number|null;content_type:string|null;response_bytes:number|null;content_sha256:string|null;
+  previous_content_sha256:string|null;content_change_status:string;requires_human_review:boolean;
   text_excerpt:string;etag:string|null;last_modified:string|null;error_code:string|null;fetched_at:string|null;
   provider_verified:boolean;requested_by:string;
 };
@@ -269,7 +270,9 @@ export default function MerchantOffersPage(){
                     </div>
                     {evidenceHistoryVisibleId===snapshot.id&&<div className="mt-3 grid gap-2">{(evidenceFetchHistory[snapshot.id]||[]).length===0?<p className="text-xs text-slate-500">No fetch attempts recorded.</p>:(evidenceFetchHistory[snapshot.id]||[]).map(fetchRow=><div key={fetchRow.id} className="rounded-xl border border-slate-200 bg-white p-3">
                       <div className="flex flex-wrap justify-between gap-2"><strong className="text-xs">{fetchRow.fetch_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{fetchRow.fetched_at?new Date(fetchRow.fetched_at).toLocaleString():"Fetch time unavailable"}</span></div>
-                      <p className="mt-1 text-xs text-slate-600">HTTP: {fetchRow.http_status_code??"not reached"} · Type: {fetchRow.content_type||"unknown"} · Bytes read: {fetchRow.response_bytes??"not read"}</p>
+                      <p className="mt-1 text-xs text-slate-600">HTTP: {fetchRow.http_status_code??"not reached"} · Type: {fetchRow.content_type||"unknown"} · Bytes read: {fetchRow.response_bytes??"not read"} · Page hash: {fetchRow.content_change_status.replaceAll("_"," ")}</p>
+                      {fetchRow.requires_human_review&&<p className="mt-1 text-xs font-bold text-amber-800">Source content differs from the previous successful retrieval. Review the page before relying on the earlier human terms check; this hash change does not prove material terms changed.</p>}
+                      {fetchRow.previous_content_sha256&&<p className="mt-1 break-all text-xs text-slate-500">Previous content SHA-256: {fetchRow.previous_content_sha256}</p>}
                       {fetchRow.content_sha256&&<p className="mt-1 break-all text-xs text-slate-500">SHA-256: {fetchRow.content_sha256}</p>}
                       {(fetchRow.etag||fetchRow.last_modified)&&<p className="mt-1 break-all text-xs text-slate-500">ETag: {fetchRow.etag||"not supplied"} · Last-Modified: {fetchRow.last_modified||"not supplied"}</p>}
                       {fetchRow.error_code&&<p className="mt-1 text-xs text-amber-800">Result code: {fetchRow.error_code}</p>}

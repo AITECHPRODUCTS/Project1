@@ -736,6 +736,8 @@ class MerchantOfferTermEvidenceFetch(TenantScopedMixin, Base):
     content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
     response_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    previous_content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    content_change_status: Mapped[str] = mapped_column(String(40), default="not_comparable", server_default="'not_comparable'", nullable=False)
     text_excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
     etag: Mapped[str | None] = mapped_column(String(500), nullable=True)
     last_modified: Mapped[str | None] = mapped_column(String(200), nullable=True)

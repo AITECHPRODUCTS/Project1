@@ -90,3 +90,11 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 ## 2026-10-28 content/offer browser acceptance follow-up
 - Browser UAT now exercises a real persisted infographic draft and a real merchant offer draft in a disposable SQLite-backed workspace. Exact-SHA push/PR workflows `40652912071` and `40652918364` passed at commit `58c5f7b94788771017812080a419bcd72b590566`; 3 Chromium tests passed on each run.
 - Remaining acceptance gap: lead capture/CRM consent and suppression semantics, distribution queueing, full authenticated content/offer journeys beyond these tested paths, and all live external provider UAT remain unverified. See `docs/IMPLEMENTATION_STATUS.md` for the current checkpoint and release gates.
+
+
+## 2026-10-28 latest code candidate — governed skill runtime
+
+- Code-owned execution slice was added on 0f1db72dd9f99a192fd25be224ddcfe9419a5f1e; the Skill Studio UI was added on 5b42d37185b5f7d86faca5c47ba1ec24c2a848f3.
+- Exact push workflow 40719626368 passed all configured jobs, including browser UAT and lockfile sync. Python: 631 passed, 7 skipped, 5 warnings. The exact PR workflow 40719638066 had all non-browser jobs green; browser UAT remained in progress at last check.
+- This work closes a narrow runtime test gap for three deterministic local handlers, not the 53-skill project goal. No user-supplied Markdown is executed. The broader skill parity row stays partial.
+- License evidence is distinguished by inventory: production frontend SBOM passed policy with 19 components and no exceptions, while the complete build/install inventory still emits two temporary build-only LGPL notices expiring 2026-11-02. Do not distribute based on that notice; retain the maintainer/legal decision or remove the dependency before expiry.

@@ -3,8 +3,21 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Latest verified feature/test checkpoint:** 22b64068cb06d5085761aad986e3787a59634981  
-**Release status:** NOT RELEASE READY
+**Latest verified code candidate:** [5b42d37185b5f7d86faca5c47ba1ec24c2a848f3](https://github.com/AITECHPRODUCTS/Project1/commit/5b42d37185b5f7d86faca5c47ba1ec24c2a848f3)  
+**Release status:** NOT RELEASE READY  
+**Compact snapshot:** [Built work and remaining production work](BUILD_SUMMARY_AND_REMAINING_PRODUCTION_WORK_2026-10-28.md)
+
+## Latest verified addition — code-owned deterministic skill runtime
+
+- `0f1db72dd9f99a192fd25be224ddcfe9419a5f1e` introduces the code-owned handler registry and package fixture runtime, migration `0027_skill_runtime_handlers`, package integrity verification, input/output validation and audited execution. The only executable handlers are deterministic local extractive summary, keyword extraction and ROAS calculation review signal; no user-authored Markdown or external action is executed.
+- `5b42d37185b5f7d86faca5c47ba1ec24c2a848f3` adds handler selection and execution/result surfaces to the existing Skill Studio UI.
+- Exact SHA push workflow [40719626368](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40719626368) passed including Python (631 passed, 7 skipped, 5 warnings), PostgreSQL migration/concurrency, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard, browser UAT and lockfile sync. Exact SHA PR workflow [40719638066](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40719638066) had all non-browser jobs green; browser UAT remained in progress at the latest check and must be rechecked.
+- The create-skill row stays **partial**. The 53-row matrix has 53 partial and zero end-to-end-complete skills; three deterministic handlers are not parity for the 53 upstream skills.
+
+## CI license evidence update
+
+The push security job passes. It reviewed 78 core Python packages with no unknown/blocked licenses and a separate 19-component production frontend SBOM with no exception and policy pass. The complete build/install inventory still emits two temporary build-only LGPL sharp/libvips notices expiring 2026-11-02. Preserve the distinction and obtain maintainer/legal disposition or remove the build-time dependency before expiry; do not treat the notice or a passing production SBOM as broad legal clearance.
+
 
 This is a concise status note, not a replacement for the complete pending-build register, v4 requirements, or full traceability backlog. The current confirmed checkpoint is recorded first below.
 

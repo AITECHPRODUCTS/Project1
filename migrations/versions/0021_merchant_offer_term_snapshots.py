@@ -47,11 +47,6 @@ def upgrade() -> None:
         ["workspace_id"],
     )
     op.create_index(
-        "ix_merchant_offer_term_snapshots_offer_id",
-        "merchant_offer_term_snapshots",
-        ["merchant_offer_id"],
-    )
-    op.create_index(
         "ix_merchant_offer_terms_workspace_offer_captured",
         "merchant_offer_term_snapshots",
         ["workspace_id", "merchant_offer_id", "captured_at"],
@@ -60,6 +55,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_merchant_offer_terms_workspace_offer_captured", table_name="merchant_offer_term_snapshots")
-    op.drop_index("ix_merchant_offer_term_snapshots_offer_id", table_name="merchant_offer_term_snapshots")
     op.drop_index("ix_merchant_offer_term_snapshots_workspace_id", table_name="merchant_offer_term_snapshots")
     op.drop_table("merchant_offer_term_snapshots")

@@ -202,3 +202,124 @@ async def test_postgres_conversion_ledger_rejects_direct_update_and_delete(monke
         # PostgreSQL CI provisions a disposable database per run; immutable ledger
         # observations are intentionally not deleted during test teardown.
         await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_postgres_partial_reversal_caps_and_full_reversal_offsets_remaining_balance(monkeypatch):
+    if not engine.url.drivername.startswith("postgresql"):
+        pytest.skip("requires the dedicated PostgreSQL integration CI job")
+
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    workspace_id: str | None = None
+    try:
+        async with SessionLocal() as db:
+            workspace = Workspace(
+                name="Partial reversal ledger test",
+                slug=f"partial-reversal-{uuid.uuid4().hex}",
+            )
+            db.add(workspace)
+            await db.commit()
+            workspace_id = workspace.id
+
+        click_id = uuid.uuid4().hex
+        with workspace_scope(workspace_id):
+            async with SessionLocal() as db:
+                campaign = Campaign(
+                    name="Partial reversal campaign",
+                    niche="test",
+                    primary_destination="https://example.com/offer",
+                )
+                db.add(campaign)
+                await db.flush()
+                db.add(ClickEvent(
+                    click_id=click_id,
+                    campaign_id=campaign.id,
+                    destination_url="https://example.com/offer",
+                    chosen_destination="primary",
+                ))
+                db.add(Conversion(
+                    workspace_id=workspace_id,
+                    network=NETWORK,
+                    external_event_id=ORIGINAL_EVENT_ID,
+                    click_id=click_id,
+                    commission=1.25,
+                    revenue=9.50,
+                    currency="USD",
+                    status="approved",
+                ))
+                db.add(ConversionLedgerEntry(
+                    workspace_id=workspace_id,
+                    network=NETWORK,
+                    external_event_id=ORIGINAL_EVENT_ID,
+                    click_id=click_id,
+                    entry_type="conversion",
+                    commission_amount=Decimal("1.250000"),
+                    revenue_amount=Decimal("9.500000"),
+                    currency="USD",
+                    status="approved",
+                    evidence_status="signed_webhook_verified",
+                    source_event_json={"test_fixture": True},
+                ))
+                await db.commit()
+
+        partial_payload = {
+            "event_id": "postgres-partial-refund",
+            "click_id": click_id,
+            "status": "partial_refund",
+            "original_event_id": ORIGINAL_EVENT_ID,
+            "commission": "0.50",
+            "revenue": "2.00",
+            "currency": "USD",
+        }
+        partial_body = json.dumps(partial_payload, separators=(",", ":")).encode("utf-8")
+        async with AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+            partial_response = await client.post(
+                f"/api/webhooks/conversions/{NETWORK}",
+                content=partial_body,
+                headers=_signed_headers(partial_body),
+            )
+        assert partial_response.status_code == 200
+        assert partial_response.json()["commission_adjustment"] == -0.5
+        assert partial_response.json()["revenue_adjustment"] == -2.0
+        assert partial_response.json()["remaining_commission"] == "0.75"
+        assert partial_response.json()["remaining_revenue"] == "7.5"
+
+        full_payload = {
+            "event_id": "postgres-final-refund",
+            "click_id": click_id,
+            "status": "refunded",
+            "original_event_id": ORIGINAL_EVENT_ID,
+            "currency": "USD",
+        }
+        full_body = json.dumps(full_payload, separators=(",", ":")).encode("utf-8")
+        async with AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+            full_response = await client.post(
+                f"/api/webhooks/conversions/{NETWORK}",
+                content=full_body,
+                headers=_signed_headers(full_body),
+            )
+        assert full_response.status_code == 200
+        assert full_response.json()["commission_adjustment"] == -0.75
+        assert full_response.json()["revenue_adjustment"] == -7.5
+        assert full_response.json()["remaining_commission"] == "0"
+        assert full_response.json()["remaining_revenue"] == "0"
+
+        with workspace_scope(workspace_id):
+            async with SessionLocal() as db:
+                conversions = list((await db.scalars(select(Conversion))).all())
+                original = next(row for row in conversions if row.external_event_id == ORIGINAL_EVENT_ID)
+                partial = next(row for row in conversions if row.external_event_id == "postgres-partial-refund")
+                full = next(row for row in conversions if row.external_event_id == "postgres-final-refund")
+                assert original.status == "reversed"
+                assert partial.status == "partially_reversed"
+                assert full.status == "reversed"
+                assert sum(row.commission for row in conversions) == pytest.approx(0.0)
+                assert sum(row.revenue for row in conversions) == pytest.approx(0.0)
+
+                ledger_rows = list((await db.scalars(select(ConversionLedgerEntry))).all())
+                assert len(ledger_rows) == 3
+                assert sum((row.commission_amount for row in ledger_rows), Decimal("0")) == Decimal("0.000000")
+                assert sum((row.revenue_amount for row in ledger_rows), Decimal("0")) == Decimal("0.000000")
+    finally:
+        await engine.dispose()

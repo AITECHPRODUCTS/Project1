@@ -272,3 +272,5 @@ These additive rules apply to every future Project1 build session.
 15. Email opt-out is a durable suppression state. Re-subscription must require both fresh affirmative consent and an explicit confirmation flag, write a privacy-minimizing audit event, preserve old suppressed delivery history, and schedule a new idempotent sequence without reviving canceled messages.
 
 16. Conversion reversal processing must preserve an append-only signed ledger, serialize against the original conversion row, allow explicit partial-refund events only when their offsets do not exceed the remaining original amounts, and make later full reversals offset only the remaining balance. Unmatched partial reversals must be rejected rather than guessed.
+
+17. Financial reversal acceptance must include a real PostgreSQL ledger test: partial reversal then full reversal must offset only the remaining balance, preserve immutable ledger entries, and net both commission and revenue to zero. Mocked route tests alone do not establish database correctness.

@@ -3,15 +3,17 @@
 **Snapshot date:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Implementation branch:** build/omni-affiliate-os-production  
-**Latest verified source candidate:** [ca03d16af65c11f93f185fd7e2f33d3ad9598d41](https://github.com/AITECHPRODUCTS/Project1/commit/ca03d16af65c11f93f185fd7e2f33d3ad9598d41)  
+**Latest verified code candidate:** [c4bb44836e0cff412a68549ef9e9ed72122fd142](https://github.com/AITECHPRODUCTS/Project1/commit/c4bb44836e0cff412a68549ef9e9ed72122fd142)  
 **Release status: NOT RELEASE READY.** This is a compact handoff/status summary, not a claim of full product completion.
 
-## Candidate under verification — ad guardrail provenance correction (2026-10-28)
+## Latest verified checkpoint — ad provenance safety and affiliate ledger precision (2026-10-28)
 
-Feature code commit [9ccfb8480453a35311b7fdd451f6cbba0bcc3f71](https://github.com/AITECHPRODUCTS/Project1/commit/9ccfb8480453a35311b7fdd451f6cbba0bcc3f71) prevents caller-controlled skill input from asserting authenticated provider evidence. The authoritative review result stays blocked pending independent verification; only a clearly named hypothetical scenario reports breaches that would exist if the inputs were later authenticated. Regression tests cover that distinction and stale/invalid inputs. The combined candidate's push and PR workflow results are pending and must be checked on the final SHA before marking the correction verified.
+Code checkpoint: [c4bb44836e0cff412a68549ef9e9ed72122fd142](https://github.com/AITECHPRODUCTS/Project1/commit/c4bb44836e0cff412a68549ef9e9ed72122fd142). This includes the provenance-safe ad budget review handler, generic affiliate conversion parser hardening, and OpenAffiliate Decimal/ledger precision hardening. Both push/PR matrices for the exact code commit passed: [push 40728766005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40728766005) and [PR 40728776271](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40728776271). Python: **674 passed, 7 skipped, 5 warnings** on PR; browser UAT **5 passed** on each run. PostgreSQL, frontend/Docker, AI/RAG SBOM, security/dependency audit, secret scan and repository guard passed. Push lockfile sync passed; PR lockfile sync was skipped by its configured event condition.
+
+Production remains blocked by native authorized provider contracts and account-level verification, completion of the 53-skill/S1–S8 parity work, license/privacy decisions, and staging/deployment plus backup/restore acceptance.
 
 
-## Latest verified feature slice — 2026-10-28 S1 offer metrics runtime
+## Previous verified feature slice — 2026-10-28 S1 offer metrics runtime
 
 Feature commit [440d378d7588081f6e072e18e35bd7573543f89a](https://github.com/AITECHPRODUCTS/Project1/commit/440d378d7588081f6e072e18e35bd7573543f89a) added allowlisted `research.offer_metrics` to the governed runtime with regression and executable package-fixture tests. It reuses existing input validation and preserves unknown measurements; it does not scrape sources or call providers.
 

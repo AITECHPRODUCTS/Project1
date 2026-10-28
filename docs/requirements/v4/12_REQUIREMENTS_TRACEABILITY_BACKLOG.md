@@ -349,3 +349,8 @@
 - Python 396 passed, 3 skipped, 1 warning; PostgreSQL migrations/concurrency, AI/RAG imports and SBOM/license, frontend, dependency/license audits, secret scan, source/53-skill guard and push lockfile sync passed.
 - The validator checks application SHA, path containment and symlinks, staged-tree digest, immutable Hub revision, license/acquisition metadata, timezone-aware timestamps and local-only runtime flags. Ten test cases cover valid and invalid manifests.
 - Real staged model provenance, license review, cache-only load from the deployed image and RAG retrieval golden tests remain external deployment evidence; none are claimed complete.
+
+## R-02 follow-up — source statistic extraction regression (2026-10-28)
+- Failure evidence: pre-fix SHA `a9a76b66586bf22b4d39762f2a894ae9eb3cef2f`; push [40628516136](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40628516136) and PR [40628523691](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40628523691) failed in the Python test job. Exact log: 529 passed, 3 skipped, 1 failed because `observed_statistics` was empty for a source containing `30%`.
+- Fix candidate: correct percent-token boundary handling and extend regression assertions to currency, percent words, plural units and snapshot-hash linkage.
+- Status: awaiting exact-SHA hosted verification; do not mark R-02 or the release gate complete until both push and PR checks pass.

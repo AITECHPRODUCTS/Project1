@@ -82,7 +82,7 @@ async def content_research_brief(topic:str,urls:list[str])->dict[str,Any]:
    excerpt = re.sub(r"\s+", " ", soup.get_text(" ", strip=True)).strip()[:10000]
    if not excerpt:
     raise ValueError("Source contained no readable text")
-   stats = list(dict.fromkeys(re.findall(r"(?:\$\s?\d[\d,.]*%?|\b\d[\d,.]*\s?(?:%|percent|users|customers|hours|days|years|million|billion)\b)", excerpt, re.I)))[:25]
+   stats = list(dict.fromkeys(re.findall(r"(?:\$\s?\d[\d,.]*%?|\b\d[\d,.]*\s?(?:%(?!\w)|percent\b|users?\b|customers?\b|hours?\b|days?\b|years?\b|million\b|billion\b))", excerpt, re.I)))[:25]
    source = {
     "source_id": source_id, "url": url, "title": title[:300], "status": "fetched",
     "http_status": http_status if isinstance(http_status, int) else None,

@@ -59,7 +59,7 @@ async def test_research_brief_records_hash_and_matches_only_quotes_from_fetched_
         return (
             "<html><head><title>Source Report</title></head><body>"
             "<nav>navigation should be removed</nav>"
-            "<p>The survey found 30% of respondents used the service weekly.</p>"
+            "<p>The survey found 30% of respondents used the service weekly. The subscription costs $29.99; 15 percent of 12 users used it for 24 hours.</p>"
             "<script>secret=1</script></body></html>",
             "text/html; charset=utf-8",
             200,
@@ -104,7 +104,11 @@ async def test_research_brief_records_hash_and_matches_only_quotes_from_fetched_
     assert snapshot["excerpt_sha256"] and len(snapshot["excerpt_sha256"]) == 64
     assert "navigation should be removed" not in snapshot["excerpt"]
     assert "secret=1" not in snapshot["excerpt"]
-    assert result["observed_statistics"][0]["source_id"] == "S01"
+    observed = result["observed_statistics"]
+    assert observed[0]["source_id"] == "S01"
+    assert {item["observed_text"] for item in observed} >= {"30%", "$29.99", "15 percent", "12 users", "24 hours"}
+    assert all(item["evidence_status"] == "observed_in_fetched_snapshot" for item in observed)
+    assert all(item["excerpt_sha256"] == snapshot["excerpt_sha256"] for item in observed)
     assert result["requires_review"] is True
     assert result["publishing_started"] is False
 

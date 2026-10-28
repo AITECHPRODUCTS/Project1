@@ -115,13 +115,24 @@ class WorkflowRunner:
     row.lease_expires_at=datetime.now(timezone.utc)+timedelta(seconds=WORKFLOW_LEASE_SECONDS)
    await db.commit()
  async def _pause(self,sid:str,name:str,index:int,state:dict[str,Any],exc:VerificationRequiredError,worker_id:str|None=None):
+  metadata=state.get("metadata",{}) if isinstance(state,dict) else {}
+  workspace_id=str(metadata.get("workspace_id") or "").strip() if isinstance(metadata,dict) else ""
+  if not workspace_id:raise ValueError("Authorized workspace context is required to pause a workflow")
   safe=copy.deepcopy(state);safe.pop("_verification_response",None)
-  async with SessionLocal() as db:
-   row=await db.get(PausedSession,sid)
-   if row is None:row=PausedSession(session_id=sid,workflow_name=name);db.add(row)
-   run=await db.get(WorkflowRun,sid)
-   if run:
-    if worker_id is not None and run.lease_owner!=worker_id:raise WorkflowLeaseLost("Workflow lease was claimed while pausing")
+  with workspace_scope(workspace_id):
+   async with SessionLocal() as db:
+    run=await db.scalar(select(WorkflowRun).where(
+     WorkflowRun.id==sid,WorkflowRun.workspace_id==workspace_id
+    ))
+    if run is None:raise KeyError("Workflow session not found in the active workspace")
+    if worker_id is not None and run.lease_owner!=worker_id:
+     raise WorkflowLeaseLost("Workflow lease was claimed while pausing")
+    row=await db.scalar(select(PausedSession).where(
+     PausedSession.session_id==sid,PausedSession.workspace_id==workspace_id
+    ))
+    if row is None:
+     row=PausedSession(session_id=sid,workspace_id=workspace_id,workflow_name=name)
+     db.add(row)
     stored_state=run.state_json if isinstance(run.state_json,dict) else {}
     stored_control=stored_state.get("control") if isinstance(stored_state.get("control"),dict) else {}
     new_control=safe.get("control") if isinstance(safe.get("control"),dict) else {}
@@ -130,10 +141,10 @@ class WorkflowRunner:
     if worker_id:
      run.heartbeat_at=datetime.now(timezone.utc)
      run.lease_expires_at=datetime.now(timezone.utc)+timedelta(seconds=WORKFLOW_LEASE_SECONDS)
-   row.status="paused";row.current_step=index;row.required_action=exc.action;row.state_json=safe;row.last_error=str(exc)[:800]
-   row.verification_response_encrypted=None
-   db.add(AuditLog(actor="system",action="workflow.paused_for_verification",resource_type="workflow",resource_id=sid,workspace_id=run.workspace_id if run else None,details_json={"index":index,"action":exc.action}))
-   await db.commit()
+    row.status="paused";row.current_step=index;row.required_action=exc.action;row.state_json=safe;row.last_error=str(exc)[:800]
+    row.verification_response_encrypted=None
+    db.add(AuditLog(actor="system",action="workflow.paused_for_verification",resource_type="workflow",resource_id=sid,workspace_id=workspace_id,details_json={"index":index,"action":exc.action}))
+    await db.commit()
  async def _drive(self,sid:str,name:str,state:dict[str,Any],steps:list[WorkflowStep],start:int,mode:str,worker_id:str|None=None):
   settings=get_settings();event=self.events.setdefault(sid,asyncio.Event());await self._save(sid,"running",start,state,worker_id=worker_id)
   await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"workflow_name":name,"status":"running","current_step":start,"total_steps":len(steps)})

@@ -192,6 +192,7 @@ async def test_cancellation_while_paused_wakes_worker_and_clears_persisted_hitl_
             paused=await db.get(PausedSession,"workflow-cancel-1")
         assert row is not None and row.status=="cancelled"
         assert paused is not None and paused.status=="cancelled"
+        assert paused.workspace_id == "cancel-workspace-a"
         assert paused.verification_response_encrypted is None
         assert calls==["attempt"]
     finally:

@@ -447,6 +447,12 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
             assert tracked_lead["attribution"]["first_touch"] == expected_utm
             assert tracked_lead["attribution"]["last_touch"] == expected_utm
 
+            tracked_page.goto(BASE_URL + "/leads", wait_until="domcontentloaded")
+            tracked_page.get_by_role("heading", name="Leads & attribution").wait_for(state="visible")
+            tracked_page.get_by_text(utm_email, exact=True).wait_for(state="visible")
+            tracked_page.get_by_text("weekly newsletter", exact=True).wait_for(state="visible")
+            tracked_page.get_by_text("guide & checklist", exact=True).wait_for(state="visible")
+
             # A persisted draft is not public until owner/admin confirmation.
             published_card = page.locator('[data-testid="landing-page-' + asset_id + '"]')
             published_card.get_by_role("button", name="Unpublish page").wait_for(state="visible")

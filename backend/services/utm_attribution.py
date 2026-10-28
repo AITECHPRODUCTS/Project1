@@ -40,7 +40,7 @@ def merge_lead_attribution_metadata(
     *,
     observed_at: datetime,
 ) -> dict[str, Any]:
-    """Preserve first-touch UTM fields and update last-touch for tagged visits."""
+    """Preserve first touch and update last touch on tagged lead-capture events."""
     metadata = dict(existing_metadata) if isinstance(existing_metadata, Mapping) else {}
     current = normalize_utm_attribution(values)
     if not current:

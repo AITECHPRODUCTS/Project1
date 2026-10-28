@@ -15,12 +15,18 @@ from backend.core.state_machine import WorkflowRunner, WorkflowStep
 from backend.models import AuditLog, PausedSession, WorkflowRun, Workspace
 
 
-async def _runner_db(monkeypatch):
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+async def _runner_db(monkeypatch, *, tmp_path=None):
+    # In-memory SQLite with StaticPool is useful for isolated unit tests, but
+    # concurrent worker/poller sessions must use separate connections so the
+    # test exercises transaction visibility rather than sharing one connection.
+    if tmp_path is None:
+        engine = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+    else:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'workflow-cancel.db'}")
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(state_machine, "SessionLocal", sessions)
 
@@ -151,10 +157,13 @@ async def test_cancel_is_workspace_scoped_and_repeated_request_is_idempotent(mon
 
 
 @pytest.mark.asyncio
-async def test_cancellation_while_paused_wakes_worker_and_clears_persisted_hitl_response(monkeypatch):
+async def test_cancellation_while_paused_wakes_worker_and_clears_persisted_hitl_response(monkeypatch, tmp_path):
     from backend.core.errors import VerificationRequiredError
 
-    engine, sessions=await _runner_db(monkeypatch)
+    # This test intentionally runs a worker and a poller concurrently; use a
+    # file-backed SQLite database with independent connections for realistic
+    # transaction/commit visibility.
+    engine, sessions=await _runner_db(monkeypatch, tmp_path=tmp_path)
     runner=WorkflowRunner()
     started=asyncio.Event()
     calls=[]
@@ -173,12 +182,20 @@ async def test_cancellation_while_paused_wakes_worker_and_clears_persisted_hitl_
         task=asyncio.create_task(runner._drive("workflow-cancel-1","cancel-test",state,steps,0,"SEMI_AUTONOMOUS"))
         runner.tasks["workflow-cancel-1"]=task
         await asyncio.wait_for(started.wait(),timeout=2)
-        for _ in range(100):
-            async with sessions() as db:
-                row=await db.get(WorkflowRun,"workflow-cancel-1")
-            if row and row.status=="paused":break
+        row=None
+        paused=None
+        for _ in range(200):
+            with state_machine.workspace_scope("cancel-workspace-a"):
+                async with sessions() as db:
+                    row=await db.get(WorkflowRun,"workflow-cancel-1")
+                    paused=await db.get(PausedSession,"workflow-cancel-1")
+            if row and row.status=="paused" and paused and paused.status=="paused":
+                break
             await asyncio.sleep(.01)
         assert row is not None and row.status=="paused"
+        assert paused is not None and paused.status=="paused", (
+            "A paused workflow must persist its PausedSession before exposing the paused state"
+        )
         with state_machine.workspace_scope("cancel-workspace-a"):
             async with sessions() as db:
                 paused=await db.get(PausedSession,"workflow-cancel-1")

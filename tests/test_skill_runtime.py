@@ -157,7 +157,7 @@ def test_runtime_schema_validation_rejects_boolean_as_number_and_non_finite_valu
 
 def test_runtime_catalog_is_explicit_and_contains_no_user_supplied_code_execution():
     assert set(SUPPORTED_RUNTIME_HANDLERS) == {
-        "none", "content.extractive_summary", "research.keyword_extract", "research.offer_metrics", "analytics.roas_calculator"
+        "none", "content.extractive_summary", "research.keyword_extract", "research.offer_metrics", "ads.guardrail_review", "analytics.roas_calculator"
     }
 
 
@@ -326,3 +326,96 @@ def test_offer_metrics_skill_fixture_executes_the_real_allowlisted_handler():
     assert report["runtime_execution_tested"] is True
     assert report["cases"][0]["runtime_output_matches_expected"] is True
     assert built["manifest"]["runtime_handler"] == "research.offer_metrics"
+
+
+
+def _guardrail_policy_payload(**overrides):
+    policy = {
+        "id": "policy-guardrail-1",
+        "campaign_plan_id": "plan-1",
+        "daily_spend_cap_usd": "30.00",
+        "campaign_spend_cap_usd": "500.00",
+        "minimum_roas": "1.20",
+        "maximum_cpa_usd": "35.00",
+        "minimum_verified_impressions": 1000,
+        "minimum_verified_clicks": 30,
+        "minimum_verified_conversions": 3,
+    }
+    policy.update(overrides)
+    return policy
+
+
+def _guardrail_observation_payload(**overrides):
+    observation = {
+        "platform": "meta",
+        "creative_id": "creative-1",
+        "observed_at": "2026-10-28T17:00:00+00:00",
+        "spend_usd": "30.00",
+        "commission_usd": "60.00",
+        "impressions": 1000,
+        "clicks": 50,
+        "conversions": 4,
+        "evidence_status": "provider_verified",
+    }
+    observation.update(overrides)
+    return observation
+
+
+def _guardrail_payload(observations=None, **overrides):
+    payload = {
+        "policy": _guardrail_policy_payload(),
+        "observations": [_guardrail_observation_payload()] if observations is None else observations,
+        "now": "2026-10-28T18:00:00+00:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_ad_guardrail_handler_fails_closed_for_unverified_evidence():
+    result = execute_skill_handler(
+        "ads.guardrail_review",
+        _guardrail_payload(observations=[_guardrail_observation_payload(evidence_status="operator_supplied_unverified")]),
+    )
+    assert result["status"] == "blocked_pending_provider_verification"
+    assert result["stop_recommended"] is False
+    assert result["kill_switch_should_engage"] is False
+    assert result["live_spend_authorized"] is False
+    assert result["provider_action_executed"] is False
+
+
+def test_ad_guardrail_handler_flags_verified_spend_cap_breach_without_remote_action():
+    result = execute_skill_handler("ads.guardrail_review", _guardrail_payload())
+    assert result["status"] == "triggered_stop"
+    assert result["stop_recommended"] is True
+    assert result["kill_switch_should_engage"] is True
+    assert {item["code"] for item in result["breaches"]} == {"daily_spend_cap_reached"}
+    assert result["live_spend_authorized"] is False
+    assert result["provider_action_executed"] is False
+    assert result["freshness_gate"]["passed"] is True
+    assert result["sample_gate"]["passed"] is True
+
+
+def test_ad_guardrail_handler_blocks_stale_provider_observations_even_if_spend_breaches_cap():
+    stale = _guardrail_observation_payload(observed_at="2026-10-25T18:00:00+00:00", spend_usd="60.00")
+    result = execute_skill_handler("ads.guardrail_review", _guardrail_payload(observations=[stale]))
+    assert result["status"] == "blocked_stale_provider_evidence"
+    assert result["breaches"] == []
+    assert result["kill_switch_should_engage"] is False
+    assert result["provider_action_executed"] is False
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _guardrail_payload(now="2026-10-28T18:00:00"),
+        _guardrail_payload(policy=_guardrail_policy_payload(unexpected="x")),
+        _guardrail_payload(policy=_guardrail_policy_payload(daily_spend_cap_usd="NaN")),
+        _guardrail_payload(policy=_guardrail_policy_payload(daily_spend_cap_usd="10", campaign_spend_cap_usd="5")),
+        _guardrail_payload(observations=[_guardrail_observation_payload(clicks=True)]),
+        _guardrail_payload(observations=[_guardrail_observation_payload(spend_usd="Infinity")]),
+        _guardrail_payload(observations=[_guardrail_observation_payload(extra_field="value")]),
+    ],
+)
+def test_ad_guardrail_handler_rejects_ambiguous_or_invalid_inputs(payload):
+    with pytest.raises(ValueError):
+        execute_skill_handler("ads.guardrail_review", payload)

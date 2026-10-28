@@ -28,7 +28,7 @@ from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -61,7 +61,7 @@ from backend.services.capability_matrix import build_capability_matrix
 from backend.services.offer_intelligence import compute_offer_metrics
 from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
-from backend.services.s2_s3_content import affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
+from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.s6_s8_analytics import self_improver_loop
 from backend.services.tracking_service import choose_destination,destination_healthy,record_click_and_resolve,verify_click_signature
@@ -2355,6 +2355,108 @@ async def atomize_content_route(
         "requires_review": True,
         "publishing_started": False,
     }
+
+
+@api.post("/content/research-brief", status_code=201)
+async def create_content_research_brief(
+    payload: ContentResearchBriefRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating a research brief")
+    _validate_generation_payload_size(payload)
+    await workspace_generation_rate_limit(request, workspace_id)
+    try:
+        result = await content_research_brief_service(payload.topic, payload.urls)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(502, {
+            "code": "RESEARCH_SOURCES_UNAVAILABLE",
+            "message": str(exc),
+            "provider_calls_made": 0,
+        }) from exc
+
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    source_snapshots = []
+    for source in result.get("sources", []):
+        if not isinstance(source, dict):
+            continue
+        source_snapshots.append({
+            "source_id": str(source.get("source_id") or "")[:20],
+            "url": str(source.get("url") or "")[:2048],
+            "title": str(source.get("title") or "")[:300],
+            "status": str(source.get("status") or "unknown")[:40],
+            "http_status": source.get("http_status"),
+            "content_type": str(source.get("content_type") or "")[:120],
+            "fetched_at": source.get("fetched_at"),
+            "excerpt_sha256": source.get("excerpt_sha256"),
+            "excerpt": str(source.get("excerpt") or "")[:4000],
+            "statistics_seen_in_source": list(source.get("statistics_seen_in_source") or [])[:25],
+            "error_type": source.get("error_type"),
+            "detail": source.get("detail"),
+        })
+    claim_summary = dict(result.get("claim_ledger_summary") or {})
+    metadata = {
+        "schema_version": 1,
+        "topic": result["topic"],
+        "provider": result.get("provider", "unknown"),
+        "rag_sources": result.get("rag_sources", []),
+        "source_snapshots": source_snapshots,
+        "source_count": len(result.get("source_urls") or []),
+        "observed_statistics": result.get("observed_statistics", [])[:250],
+        "claim_ledger": result.get("claim_ledger", [])[:80],
+        "claim_ledger_summary": claim_summary,
+        "claim_ledger_parse_status": result.get("claim_ledger_parse_status", "unknown"),
+        "requires_review": True,
+        "source_currentness_verified": False,
+        "claim_truth_independently_verified": False,
+        "legal_approval_granted": False,
+        "publishing_started": False,
+        "created_by": actor,
+    }
+    with workspace_scope(workspace_id):
+        asset = ContentAsset(
+            workspace_id=workspace_id,
+            asset_type="content_research_brief",
+            title=str(result["topic"])[:500],
+            body=str(result.get("brief") or ""),
+            status="draft",
+            source_urls=list(result.get("source_urls") or []),
+            metadata_json=metadata,
+        )
+        db.add(asset)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="content_research_brief.created",
+            resource_type="content_asset",
+            resource_id=asset.id,
+            outcome="draft",
+            details_json={
+                "source_count": metadata["source_count"],
+                "claim_count": claim_summary.get("claim_count", 0),
+                "quote_match_count": claim_summary.get("quote_match_count", 0),
+                "unmatched_claim_count": claim_summary.get("unmatched_claim_count", 0),
+                "claim_ledger_parse_status": metadata["claim_ledger_parse_status"],
+                "source_currentness_verified": False,
+                "claim_truth_independently_verified": False,
+                "publishing_started": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(asset)
+    result["asset_id"] = asset.id
+    result["asset_status"] = asset.status
+    result["execution_boundary"] = (
+        "Workspace-owned draft only. Quote matching verifies exact text presence in the fetched snapshot, "
+        "not factual truth, currentness, legal approval or publication readiness."
+    )
+    return result
 
 
 @api.post("/content/blog")

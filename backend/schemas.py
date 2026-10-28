@@ -467,6 +467,43 @@ class ContentResearchBriefRequest(BaseModel):
     topic: str = Field(min_length=3, max_length=400)
     urls: list[str] = Field(min_length=1, max_length=10)
 
+    @field_validator("topic")
+    @classmethod
+    def normalize_research_topic(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Topic must not be blank")
+        return normalized
+
+    @field_validator("urls")
+    @classmethod
+    def validate_research_source_urls(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))
+        if not normalized or len(normalized) > 10:
+            raise ValueError("Provide between one and ten distinct public source URLs")
+        for url in normalized:
+            if len(url) > 2048:
+                raise ValueError("Each source URL must be at most 2048 characters")
+            try:
+                parsed = urlparse(url)
+                host = (parsed.hostname or "").lower().rstrip(".")
+                _ = parsed.port
+            except ValueError as exc:
+                raise ValueError("Provide valid absolute public HTTP(S) URLs") from exc
+            if parsed.scheme.lower() not in {"http", "https"} or not host:
+                raise ValueError("Provide valid absolute public HTTP(S) URLs")
+            if parsed.username or parsed.password:
+                raise ValueError("Source URLs containing credentials are not allowed")
+            if host == "localhost" or host.endswith((".localhost", ".local", ".internal", ".test", ".home", ".lan", ".corp")):
+                raise ValueError("Local/private source hostnames are not allowed")
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("Private, loopback, link-local, multicast or reserved source IPs are not allowed")
+        return normalized
+
 
 class ContentAngleCandidateRequest(BaseModel):
     angle: str = Field(min_length=5, max_length=600)

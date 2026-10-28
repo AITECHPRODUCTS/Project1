@@ -466,3 +466,13 @@
 | Requirement area | Implementation path | Current status | Remaining acceptance evidence |
 |---|---|---|---|
 | Capture evidence-backed international policy scope and require human approval before live content distribution | \`JurisdictionComplianceAssessment\`; migration \`0018_jurisdiction_compliance_assessments\`; \`backend/services/jurisdiction_compliance.py\`; \`/api/compliance/requirements\`, \`/api/compliance/assessments*\`; \`frontend/app/compliance/page.tsx\`; live social/CMS and workflow S5 guard; \`tests/test_jurisdiction_compliance.py\` | candidate: evidence coverage is jurisdiction × activity category; approved assessment is channel-scoped and expires; stale/missing review blocks new live action and is audited. Draft/dry-run remain available. | Exact-SHA CI/migration/drift; browser/accessibility UAT; human review quality and source-maintenance process. This is an evidence workflow, not an automatic law database or legal opinion. Paid media/email/lead/tracking external execution gates remain future slices. |
+
+
+
+## 2026-10-28 additive traceability note — conversion amount precision
+
+- **Requirement:** S6 signed/deduplicated conversion events and commission ledger use exact Decimal/Numeric values; do not silently round money.
+- **Implementation:** `backend/adapters/webhook.py::AggregatorWebhookAdapter._non_negative_amount` returns normalized `Decimal`, rejects non-finite/negative values, enforces the `Numeric(18, 6)` representable maximum, and rejects values with more than six meaningful fractional digits.
+- **Tests:** `tests/test_webhook_adapter.py` adds exact Decimal preservation at six fractional places and overflow/excess-scale negative cases. Existing signature and event-ID checks remain in the same suite.
+- **Code/test commits:** `f69e49b0346e6d9bfdc4f6ffb9522143e551e63f`, `ec9dee0c13a123b3571ceb86facb1004a11ab383`.
+- **Status:** Implemented; hosted exact-SHA CI verification **pending/unverified** as of this note. The current head must be checked because subsequent documentation commits also trigger CI. No provider-specific contract or production-readiness claim is implied.

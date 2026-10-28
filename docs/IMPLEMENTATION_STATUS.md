@@ -958,3 +958,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Python job passed 530 tests, skipped 3, with one existing warning. PostgreSQL migration upgrade/downgrade/drift checks and concurrent conversion-reversal/workflow-lease tests passed. PostgreSQL teardown completed successfully; the apparent long-running cleanup step was not a test failure.
 - The source-observation regex now captures percentage tokens, currency values, spelled-out percent, plural numeric units and evidence hash linkage. This repair is verified at source/CI level; it does not by itself certify the complete product for production.
 - Remaining release gates include the unresolved frontend LGPL license items noted in the source inventory, real staging proxy/egress tests, provider authorization and live UAT, deployment smoke, monitoring/SLO and backup/restore evidence.
+
+
+## 2026-10-28 targeted-ad safety slice — freshness gate (candidate pending CI)
+- Starting verified head: `9085d1af1fd7a7fe23574b1201849713ab5e04f9`; push and PR CI both passed all required jobs at that SHA.
+- New candidate in `backend/services/ad_guardrails.py` blocks stop/monitor decisions when the latest provider-verified observation for any creative/platform is older than 24 hours or more than five minutes in the future. Historical daily snapshots remain eligible for campaign totals if each creative/platform also has a fresh latest observation.
+- Added regression coverage for stale evidence, fresh latest evidence with older history, and materially future-dated observations. The guardrail still never calls an ad provider and still reports `provider_action_executed=false`; no live campaign is paused by this change.
+- This is a candidate until exact-SHA push and PR workflows finish. Provider polling cadence, per-provider freshness contracts and live ad-account UAT remain external/unfinished.
+- License note correction: the current frontend build config disables `next/image`; the production dependency verifier rejects installed `sharp`/`@img/sharp-libvips` packages, and CI generates a separate production SBOM checked without exceptions. Build-install inventory notices are not, by themselves, proof that these packages ship in production. Keep owner/legal review as a release governance item, but distinguish it from verified production runtime contents.

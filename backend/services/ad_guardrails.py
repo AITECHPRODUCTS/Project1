@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Iterable
+
+
+MAX_PROVIDER_OBSERVATION_AGE = timedelta(hours=24)
+MAX_FUTURE_OBSERVATION_SKEW = timedelta(minutes=5)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -39,6 +43,28 @@ def evaluate_ad_budget_guardrail(
     verified_rows = [row for row in all_rows if getattr(row, "evidence_status", None) == "provider_verified"]
     snapshots = _daily_snapshots(verified_rows)
     now_utc = _as_utc(now)
+    # Historical daily snapshots feed campaign totals, but every creative/platform
+    # needs a recent latest observation before a current stop/monitor decision.
+    latest_by_creative: dict[tuple[str, str], Any] = {}
+    for row in verified_rows:
+        key = (str(row.platform), str(row.creative_id))
+        previous = latest_by_creative.get(key)
+        if previous is None or _as_utc(previous.observed_at) <= _as_utc(row.observed_at):
+            latest_by_creative[key] = row
+    stale_observations = []
+    future_observations = []
+    for row in latest_by_creative.values():
+        age = now_utc - _as_utc(row.observed_at)
+        item = {
+            "platform": str(row.platform),
+            "creative_id": str(row.creative_id),
+            "observed_at": _as_utc(row.observed_at).isoformat(),
+            "age_seconds": int(age.total_seconds()),
+        }
+        if age > MAX_PROVIDER_OBSERVATION_AGE:
+            stale_observations.append(item)
+        elif age < -MAX_FUTURE_OBSERVATION_SKEW:
+            future_observations.append(item)
     daily_rows = [row for row in snapshots if _as_utc(row.observed_at).date() == now_utc.date()]
     daily_spend = sum((_number(row.spend_usd) for row in daily_rows), Decimal("0.00"))
     campaign_spend = sum((_number(row.spend_usd) for row in snapshots), Decimal("0.00"))
@@ -89,6 +115,14 @@ def evaluate_ad_budget_guardrail(
             "actual_verified_conversions": conversions,
             "passed": sample_passed,
         },
+        "freshness_gate": {
+            "max_age_hours": int(MAX_PROVIDER_OBSERVATION_AGE.total_seconds() // 3600),
+            "max_future_skew_minutes": int(MAX_FUTURE_OBSERVATION_SKEW.total_seconds() // 60),
+            "latest_creative_count": len(latest_by_creative),
+            "stale_creatives": stale_observations,
+            "future_dated_creatives": future_observations,
+            "passed": not stale_observations and not future_observations,
+        },
         "breaches": [],
         "stop_recommended": False,
         "kill_switch_should_engage": False,
@@ -103,6 +137,13 @@ def evaluate_ad_budget_guardrail(
     if not complete:
         result["status"] = "blocked_mixed_evidence"
         result["note"] = "At least one linked observation is not provider-verified. Evaluation is blocked rather than mixing reported and verified totals."
+        return result
+    if stale_observations or future_observations:
+        result["status"] = "blocked_stale_provider_evidence" if stale_observations else "blocked_future_provider_evidence"
+        result["note"] = (
+            "The latest provider observation for one or more creatives is stale or future-dated. "
+            "No stop/monitor decision is made until fresh provider evidence is received."
+        )
         return result
 
     breaches: list[dict[str, str]] = []

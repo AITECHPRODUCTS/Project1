@@ -360,3 +360,11 @@
 - Exact SHA `2677741f65aedc1c9c53a53fa5dd3c412abde273`; push [40634328707](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40634328707) and PR [40634334600](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40634334600) both completed successfully.
 - Push: all eight jobs succeeded, including PostgreSQL integration and lockfile sync. PR: all required jobs succeeded; lockfile sync is push-only and was skipped. Python: 530 passed, 3 skipped, one existing warning. PostgreSQL migration upgrade/downgrade/drift and concurrent conversion-reversal/workflow-lease checks passed.
 - Status: **verified at source and hosted CI level**. Production/release readiness remains blocked by separate staging, provider, license and deployment evidence gates.
+
+
+## Ads safety follow-up — freshness of provider evidence (2026-10-28, candidate)
+- Requirement: S6 / targeted-ad guardrails must not make a current spend, ROAS or CPA decision from stale or implausibly future-dated provider observations.
+- Implementation candidate: `backend/services/ad_guardrails.py`; latest observation per platform/creative must be no older than 24 hours and not more than five minutes in the future. Historical daily snapshots remain included in campaign totals once each creative/platform passes the latest-observation freshness gate.
+- Regression tests: `tests/test_ad_budget_guardrails.py` covers stale evidence, historical data plus fresh latest evidence, and materially future-dated observations.
+- Safety boundary: this evaluator remains a recommendation only; it does not call provider APIs, authorize spend or execute a pause.
+- Status: **candidate / CI pending** at the time this record was written. Promote only after exact-SHA push and PR workflows pass and logs are inspected. Live provider polling contracts and account-level UAT remain open.

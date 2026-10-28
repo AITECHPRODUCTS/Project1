@@ -68,6 +68,46 @@ def test_guardrail_deduplicates_creative_day_snapshots_and_enforces_lower_daily_
     assert result["breaches"][0]["code"] == "daily_spend_cap_reached"
 
 
+def test_guardrail_blocks_stale_latest_provider_observation_but_keeps_history_for_fresh_creative():
+    now = datetime(2026, 10, 28, 18, tzinfo=timezone.utc)
+    stale = evaluate_ad_budget_guardrail(
+        policy=policy(),
+        observations=[observation(day=26, spend="25.00", commission="0.00")],
+        now=now,
+    )
+    assert stale["status"] == "blocked_stale_provider_evidence"
+    assert stale["freshness_gate"]["passed"] is False
+    assert stale["freshness_gate"]["stale_creatives"][0]["creative_id"] == "creative-1"
+    assert stale["breaches"] == []
+    assert stale["kill_switch_should_engage"] is False
+    assert stale["provider_action_executed"] is False
+
+    # Older daily snapshots still feed campaign totals when the same creative
+    # has a fresh latest observation; freshness applies to the latest point.
+    fresh = evaluate_ad_budget_guardrail(
+        policy=policy(minimum_roas=Decimal("0"), maximum_cpa_usd=None),
+        observations=[
+            observation(day=25, spend="10.00", commission="20.00"),
+            observation(day=28, spend="12.00", commission="24.00", hour=17),
+        ],
+        now=now,
+    )
+    assert fresh["status"] == "monitoring"
+    assert fresh["freshness_gate"]["passed"] is True
+    assert fresh["verified_campaign_spend_usd"] == "22.00"
+
+
+def test_guardrail_blocks_materially_future_dated_provider_observations():
+    now = datetime(2026, 10, 27, 18, tzinfo=timezone.utc)
+    future = observation(day=28, spend="30.00")
+    result = evaluate_ad_budget_guardrail(policy=policy(), observations=[future], now=now)
+    assert result["status"] == "blocked_future_provider_evidence"
+    assert result["freshness_gate"]["passed"] is False
+    assert result["freshness_gate"]["future_dated_creatives"][0]["creative_id"] == "creative-1"
+    assert result["breaches"] == []
+    assert result["kill_switch_should_engage"] is False
+
+
 def test_guardrail_campaign_cap_roas_and_cpa_breaches_are_explicit():
     now = datetime(2026, 10, 27, 18, tzinfo=timezone.utc)
     result = evaluate_ad_budget_guardrail(

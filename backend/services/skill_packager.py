@@ -34,18 +34,53 @@ def _schema_errors(schema: Any, *, path: str, depth: int = 0) -> list[str]:
     declared_type = schema.get("type")
     if declared_type not in _ALLOWED_TYPES:
         errors.append(f"{path}.type: choose one supported JSON type")
+    valid_integer_bounds: dict[str, bool] = {}
     for key in ("minLength", "maxLength", "minItems", "maxItems"):
-        if key in schema and (isinstance(schema[key], bool) or not isinstance(schema[key], int) or schema[key] < 0):
+        valid = (
+            key not in schema
+            or (
+                not isinstance(schema[key], bool)
+                and isinstance(schema[key], int)
+                and schema[key] >= 0
+            )
+        )
+        valid_integer_bounds[key] = valid
+        if not valid:
             errors.append(f"{path}.{key}: must be a non-negative integer")
-    if "minimum" in schema and (isinstance(schema["minimum"], bool) or not isinstance(schema["minimum"], (int, float))):
-        errors.append(f"{path}.minimum: must be numeric")
-    if "maximum" in schema and (isinstance(schema["maximum"], bool) or not isinstance(schema["maximum"], (int, float))):
-        errors.append(f"{path}.maximum: must be numeric")
-    if "minLength" in schema and "maxLength" in schema and schema["minLength"] > schema["maxLength"]:
+
+    valid_numeric_bounds: dict[str, bool] = {}
+    for key in ("minimum", "maximum"):
+        if key not in schema:
+            valid_numeric_bounds[key] = False
+            continue
+        value = schema[key]
+        valid = (
+            not isinstance(value, bool)
+            and isinstance(value, (int, float))
+            and not (isinstance(value, float) and not math.isfinite(value))
+        )
+        valid_numeric_bounds[key] = valid
+        if not valid:
+            errors.append(
+                f"{path}.{key}: must be a finite number (booleans, NaN and infinity are not supported)"
+            )
+
+    if (
+        "minLength" in schema and "maxLength" in schema
+        and valid_integer_bounds["minLength"] and valid_integer_bounds["maxLength"]
+        and schema["minLength"] > schema["maxLength"]
+    ):
         errors.append(f"{path}: minLength cannot exceed maxLength")
-    if "minItems" in schema and "maxItems" in schema and schema["minItems"] > schema["maxItems"]:
+    if (
+        "minItems" in schema and "maxItems" in schema
+        and valid_integer_bounds["minItems"] and valid_integer_bounds["maxItems"]
+        and schema["minItems"] > schema["maxItems"]
+    ):
         errors.append(f"{path}: minItems cannot exceed maxItems")
-    if "minimum" in schema and "maximum" in schema and schema["minimum"] > schema["maximum"]:
+    if (
+        valid_numeric_bounds["minimum"] and valid_numeric_bounds["maximum"]
+        and schema["minimum"] > schema["maximum"]
+    ):
         errors.append(f"{path}: minimum cannot exceed maximum")
     if "pattern" in schema:
         pattern = schema["pattern"]

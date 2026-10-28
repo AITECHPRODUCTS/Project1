@@ -159,3 +159,32 @@ def test_runtime_catalog_is_explicit_and_contains_no_user_supplied_code_executio
     assert set(SUPPORTED_RUNTIME_HANDLERS) == {
         "none", "content.extractive_summary", "research.keyword_extract", "analytics.roas_calculator"
     }
+
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("spend_usd", "1000000000000.00"),
+        ("spend_usd", "0.0000001"),
+        ("commission_usd", "12.1234567"),
+        ("minimum_roas", "1000000.1"),
+    ],
+)
+def test_roas_handler_rejects_out_of_range_or_unrepresentable_values(field, value):
+    payload = {"spend_usd": 50, "commission_usd": 60, "minimum_roas": 1.2}
+    payload[field] = value
+    with pytest.raises(ValueError):
+        execute_skill_handler("analytics.roas_calculator", payload)
+
+
+def test_roas_handler_rejects_ratio_that_exceeds_its_supported_output_range():
+    with pytest.raises(ValueError, match="ROAS exceeds the supported output range"):
+        execute_skill_handler(
+            "analytics.roas_calculator",
+            {
+                "spend_usd": "0.000001",
+                "commission_usd": "999999999999.999999",
+                "minimum_roas": 1,
+            },
+        )

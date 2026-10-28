@@ -88,7 +88,10 @@ def _keyword_extract(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _roas_calculator(payload: dict[str, Any]) -> dict[str, Any]:
-    values = {}
+    values: dict[str, Decimal] = {}
+    monetary_limit = Decimal("999999999999.999999")
+    threshold_limit = Decimal("1000000")
+    scale = Decimal("0.000001")
     for key in ("spend_usd", "commission_usd", "minimum_roas"):
         value = payload.get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float, str)):
@@ -99,7 +102,17 @@ def _roas_calculator(payload: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{key} must be a finite non-negative number") from exc
         if not decimal_value.is_finite() or decimal_value < 0:
             raise ValueError(f"{key} must be a finite non-negative number")
-        values[key] = decimal_value
+        try:
+            normalized = decimal_value.quantize(scale)
+        except InvalidOperation as exc:
+            raise ValueError(f"{key} exceeds the supported numeric precision or range") from exc
+        if normalized != decimal_value:
+            raise ValueError(f"{key} supports at most six meaningful decimal places")
+        limit = threshold_limit if key == "minimum_roas" else monetary_limit
+        if normalized > limit:
+            raise ValueError(f"{key} exceeds the supported upper bound")
+        values[key] = normalized
+
     spend = values["spend_usd"]
     commission = values["commission_usd"]
     minimum = values["minimum_roas"]
@@ -112,10 +125,16 @@ def _roas_calculator(payload: dict[str, Any]) -> dict[str, Any]:
     if spend == 0:
         return {**common, "reason": "ROAS is unavailable because spend is zero."}
     ratio = commission / spend
+    if ratio > Decimal("1000000000000"):
+        raise ValueError("computed ROAS exceeds the supported output range")
+    try:
+        rounded_ratio = ratio.quantize(scale)
+    except InvalidOperation as exc:
+        raise ValueError("computed ROAS exceeds the supported output precision") from exc
     below = ratio < minimum
     return {
         **common,
-        "roas": float(ratio.quantize(Decimal("0.000001"))),
+        "roas": float(rounded_ratio),
         "pause_recommended": bool(below),
         "reason": (
             "Below threshold; review only. Confirm attribution-window maturity before any pause."

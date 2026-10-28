@@ -312,3 +312,26 @@ def test_runtime_bound_skill_package_requires_approval_executes_safely_and_is_wo
             assert cross_workspace.status_code == 404
     finally:
         asyncio.run(engine.dispose())
+
+
+
+@pytest.mark.parametrize("bound", [float("nan"), float("inf"), float("-inf")])
+def test_skill_package_rejects_non_finite_numeric_schema_bounds(bound):
+    with pytest.raises(ValueError, match="finite number"):
+        build_skill_package(package_payload(
+            input_schema={"type": "number", "minimum": bound},
+            output_schema={"type": "string"},
+        ))
+
+
+def test_invalid_numeric_or_integer_bounds_are_reported_without_comparison_type_errors():
+    with pytest.raises(ValueError, match="input_schema.minimum: must be a finite number"):
+        build_skill_package(package_payload(
+            input_schema={"type": "number", "minimum": "not numeric", "maximum": 2},
+            output_schema={"type": "string"},
+        ))
+    with pytest.raises(ValueError, match="input_schema.minLength: must be a non-negative integer"):
+        build_skill_package(package_payload(
+            input_schema={"type": "string", "minLength": "not numeric", "maxLength": 10},
+            output_schema={"type": "string"},
+        ))

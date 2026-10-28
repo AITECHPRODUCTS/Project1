@@ -208,6 +208,50 @@ jobs:
           grep -q "Ad budget guardrails" /tmp/omni-docker-guardrails.html
           echo "Final frontend image production smoke passed."
 
+
+  browser-uat:
+    needs: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install pinned browser test dependencies
+        run: python -m pip install --upgrade pip && pip install pytest==9.0.3 playwright==1.64.1
+      - name: Install Chromium and operating-system dependencies
+        run: python -m playwright install --with-deps chromium
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Build and exercise the production UI in Chromium
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+          BROWSER_BASE_URL: http://127.0.0.1:3100
+        run: |
+          set -eu
+          cd frontend
+          npm ci --no-audit --no-fund
+          npm run build
+          npm prune --omit=dev --omit=optional --no-audit --no-fund
+          npm run start -- -H 127.0.0.1 -p 3100 > /tmp/omni-browser-uat-next.log 2>&1 &
+          server_pid=$!
+          cleanup() { kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=false
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error http://127.0.0.1:3100/skills > /tmp/omni-browser-uat-skills.html 2>/dev/null; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat /tmp/omni-browser-uat-next.log; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then cat /tmp/omni-browser-uat-next.log; exit 1; fi
+          cd ..
+          python -m pytest -q browser_tests
+
   lockfile-sync:
     # Capture the runner-resolved lockfile once, then validate a clean npm ci install
     # before committing the exact artifact to the one existing implementation branch.

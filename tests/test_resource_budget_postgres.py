@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.config import get_settings
 from backend.core.errors import ResourceBudgetExceeded
-from backend.database import SessionLocal, engine
+from backend.database import engine
 from backend.models import ResourceUsage, Workspace
 from backend.services import resource_budget
 from backend.tenancy import workspace_scope
@@ -32,16 +33,21 @@ async def test_postgres_budget_lock_blocks_second_connection_until_commit():
         )
     )
 
-    async with SessionLocal() as first:
-        async with SessionLocal() as second:
-            await _acquire_workspace_budget_lock(first, workspace_id)
-            assert await second.scalar(probe) is False
+    test_engine = create_async_engine(str(engine.url), pool_pre_ping=True)
+    sessions = async_sessionmaker(test_engine, expire_on_commit=False)
+    try:
+        async with sessions() as first:
+            async with sessions() as second:
+                await _acquire_workspace_budget_lock(first, workspace_id)
+                assert await second.scalar(probe) is False
 
-            # The transaction-scoped lock is released only when its owner
-            # commits or rolls back, not when another process-local lock exits.
-            await first.commit()
-            assert await second.scalar(probe) is True
-            await second.rollback()
+                # The transaction-scoped lock is released only when its owner
+                # commits or rolls back, not when another process-local lock exits.
+                await first.commit()
+                assert await second.scalar(probe) is True
+                await second.rollback()
+    finally:
+        await test_engine.dispose()
 
 
 
@@ -59,7 +65,10 @@ async def test_postgres_concurrent_reservations_cannot_overspend_workspace_budge
     assert spec is not None and spec.loader is not None
     replica = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(replica)
-    replica.SessionLocal = SessionLocal
+    test_engine = create_async_engine(str(engine.url), pool_pre_ping=True)
+    sessions = async_sessionmaker(test_engine, expire_on_commit=False)
+    monkeypatch.setattr(resource_budget, "SessionLocal", sessions)
+    replica.SessionLocal = sessions
 
     settings = get_settings()
     monkeypatch.setattr(settings, "resource_budget_usd_per_day", 1.5)
@@ -67,7 +76,7 @@ async def test_postgres_concurrent_reservations_cannot_overspend_workspace_budge
 
     workspace_id = None
     try:
-        async with SessionLocal() as db:
+        async with sessions() as db:
             workspace = Workspace(
                 name="Resource budget concurrency",
                 slug=f"resource-budget-{uuid.uuid4().hex}",
@@ -99,7 +108,7 @@ async def test_postgres_concurrent_reservations_cannot_overspend_workspace_budge
         assert isinstance(failures[0], ResourceBudgetExceeded)
 
         with workspace_scope(workspace_id):
-            async with SessionLocal() as db:
+            async with sessions() as db:
                 count, total = (
                     await db.execute(
                         select(
@@ -111,10 +120,13 @@ async def test_postgres_concurrent_reservations_cannot_overspend_workspace_budge
         assert count == 1
         assert float(total) == pytest.approx(1.0)
     finally:
-        if workspace_id:
-            async with SessionLocal() as db:
-                await db.execute(
-                    delete(ResourceUsage).where(ResourceUsage.workspace_id == workspace_id)
-                )
-                await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
-                await db.commit()
+        try:
+            if workspace_id:
+                async with sessions() as db:
+                    await db.execute(
+                        delete(ResourceUsage).where(ResourceUsage.workspace_id == workspace_id)
+                    )
+                    await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
+                    await db.commit()
+        finally:
+            await test_engine.dispose()

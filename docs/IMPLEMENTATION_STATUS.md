@@ -1065,3 +1065,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - **Code commits:** service `dfa98507075ba53e9d36e5bfb400f5fa910add2e`; tests `d10258653c4e400cf483c006af47a64f1d3bcbaf`.
 - **Exact-SHA hosted CI:** push run [40674307123](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40674307123) and PR run [40674316496](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40674316496) completed successfully on `d10258653c4e400cf483c006af47a64f1d3bcbaf`. Python: **558 passed, 7 skipped, 1 warning**; PostgreSQL integration, frontend production build, AI/RAG, security audit, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured event condition.
 - **Scope boundary:** this does not establish provider account authorization, provider-specific payout evidence, currency-specific statutory minor-unit rules, production deployment, or overall S1–S8 release readiness.
+
+
+## 2026-10-28 commission reconciliation status normalization — candidate
+- Corrected a status-spelling edge case in `backend/services/commission_reconciliation.py`: evidence statuses such as `Pending Verification` and `matched to conversion` are normalized to stable underscore-separated keys before state routing. This avoids treating a pending evidence row as already reviewed solely because of case/spacing differences; reviewed rows remain closed to automatic rematching.
+- Added two regression tests for pending and reviewed status variants in `tests/test_commission_reconciliation.py`.
+- Service commit: `91976a3e8fdbe8aab1b56ab362bcabf7504c29bf`; test commit: `38cf64a294fec308b6c9dfa5a2d3dfe978f7e70c`.
+- **Candidate only until exact-current-HEAD push and PR CI complete.** No live payout state is changed. Existing staging/provider/production release gates remain open.

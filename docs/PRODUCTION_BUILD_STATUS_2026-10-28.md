@@ -2,14 +2,24 @@
 **As of:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Working branch:** `build/omni-affiliate-os-production`  
-**Latest verified feature-code checkpoint:** 8addf2b83991ca8015b4496704ef6a159b0a0a4a
+**Latest verified feature/test checkpoint:** 22b64068cb06d5085761aad986e3787a59634981
 
-## 2026-10-28 verified increment — lead consent evidence
+## Prior verified increment — lead consent evidence
 
 Code commit 8addf2b83991ca8015b4496704ef6a159b0a0a4a has green [push CI run 40706775818](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706775818) and [PR CI run 40706784399](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706784399). Both completed successfully. Python: 610 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT all passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its event condition. These runs verify the feature-code commit, not any later code changes.
 
 - Migration 0025 adds tenant-scoped consent evidence. Grant, resubscription and unsubscribe events are recorded with timestamp, source, purpose and versioned canonical wording. ORM and database guards protect immutability; read access is limited to the active workspace.
-- This closes the previously noted gap for recording exact current email-marketing consent text/version. It does not implement universal double opt-in, the privacy unlink/anonymization workflow, or all jurisdiction-specific legal requirements.
+- This closes the code-level gap for recording exact current email-marketing consent text/version. Subsequent configurable DOI is implemented and CI-verified; the privacy unlink/anonymization workflow, real sender-domain verification and target-jurisdiction legal review remain open.
+
+## 2026-10-28 verified checkpoint — double opt-in and truthful signup outcomes
+
+- Verified feature/test SHA: `22b64068cb06d5085761aad986e3787a59634981`. [Push CI run 40713741377](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713741377) and [PR CI run 40713751355](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713751355) both completed successfully on feature/test checkpoint `22b64068cb06d5085761aad986e3787a59634981`. Python: **619 passed, 7 skipped, 5 warnings**. PostgreSQL migration/concurrency, frontend typecheck/build/final Docker smoke, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition. The predecessor feature-code push/PR attempt exposed two test assertions comparing raw HTML with rendered copy; `22b6406` fixes the assertions to decode HTML entities while keeping production escaping intact.
+- Migration 0026 adds a per-lead email-confirmation timestamp plus expiring confirmation records; the feature is controlled by `EMAIL_DOUBLE_OPT_IN_REQUIRED` and is off by default. It requires configured `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and a valid public HTTPS callback URL before relying on real delivery.
+- Implemented explicit DOI email delivery, 48-hour confirmation expiry, stored SHA-256 token hashes (raw tokens are not persisted), scanner-safe GET that renders a confirmation form without changing state, and a bounded URL-encoded POST that applies consent only after the recipient confirms.
+- A conditional database update atomically claims a still-sent token before scheduling, preventing concurrent confirmation replays from both succeeding. Unsubscribe cancels pending/sent confirmation tokens; the email worker suppresses marketing delivery while DOI is required but unconfirmed.
+- Owner/admin resend is workspace-scoped. A five-minute duplicate request guard reuses a recent matching confirmation, avoids sending a second message, and prevents a different pending signup payload from silently replacing the request bound to the existing token.
+- Public HTML and JSON signup responses distinguish queued marketing, confirmation pending/in flight, and provider delivery failure; they no longer report a marketing sequence as queued when none was scheduled. Production HTML output remains escaped.
+- Actual Resend account authentication, sender-domain verification and production delivery were **not** tested; CI uses controlled fixtures/mocks. Jurisdiction and owner policy review is needed before enabling DOI for a particular deployment. This is not a universal compliance guarantee.
 
 ## What exists in the current implementation branch
 

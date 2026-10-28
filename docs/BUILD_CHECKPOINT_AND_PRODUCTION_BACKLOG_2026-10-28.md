@@ -3,7 +3,7 @@
 **Date:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Verified feature-code checkpoint:** 8addf2b83991ca8015b4496704ef6a159b0a0a4a  
+**Verified feature/test checkpoint:** 22b64068cb06d5085761aad986e3787a59634981  
 **Release decision:** **NOT RELEASE READY**
 
 This note is a concise operational summary. The detailed feature backlog remains in Pasted markdown(3).md and the repository's docs/REQUIREMENTS_TRACEABILITY_MASTER.md, docs/IMPLEMENTATION_STATUS.md, docs/SOURCE_REGISTER.md and docs/skill-parity-matrix.csv.
@@ -20,17 +20,20 @@ This note is a concise operational summary. The detailed feature backlog remains
 - S7 persisted workflow checkpoints, human approval pauses, retry/recovery, leases/heartbeats and cancellation handling.
 - 53 upstream skills mapped in a parity matrix; the documented result is 53 partial, 0 end-to-end complete.
 
-## Implemented and verified in this checkpoint
+## Implemented and verified across the latest checkpoints
 
 - S4 consent-evidence ledger for consent_granted, resubscribed and unsubscribed events, with timestamp, source, purpose, exact approved wording/version and metadata.
 - Canonical consent wording/version enforced server-side and included in the persisted landing-page form. User-supplied replacement wording or outdated policy versions are rejected.
 - ORM and PostgreSQL/SQLite migration triggers protect consent events from updates/deletes. A read-only workspace-scoped API returns history.
 - Regression tests cover exact rendered copy, schema tampering, record creation, opt-out idempotency/suppression, ORM immutability and tenant-scoped history retrieval.
-- Privacy caveat: this immutable ledger intentionally avoids cascading removal with a lead row; governed unlink/anonymization/retention handling remains a release requirement. This does not implement double opt-in. Applicable jurisdiction-specific double-opt-in remains pending.
+- The subsequent DOI increment adds the worker gate, confirmation service/API, atomic token-use protection, duplicate confirmation suppression, and truthful public responses; these passed the exact candidate CI above.
+- Privacy caveat: the immutable ledger intentionally avoids cascading removal with a lead row; governed unlink/anonymization/retention handling remains a release requirement. The later DOI feature is configurable but not enabled by default; provider-domain setup, target-jurisdiction policy review and appropriate rollout approval remain required.
 
-## Exact feature-commit CI evidence
+## Exact feature/test commit CI evidence
 
-Code commit 8addf2b83991ca8015b4496704ef6a159b0a0a4a has green [push CI run 40706775818](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706775818) and [PR CI run 40706784399](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706784399). Both completed successfully. Python: 610 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT all passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its event condition. These runs verify the feature-code commit, not any later code changes.
+[Push CI run 40713741377](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713741377) and [PR CI run 40713751355](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713751355) both completed successfully on feature/test checkpoint `22b64068cb06d5085761aad986e3787a59634981`. Python: **619 passed, 7 skipped, 5 warnings**. PostgreSQL migration/concurrency, frontend typecheck/build/final Docker smoke, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition. The predecessor feature-code push/PR attempt exposed two test assertions comparing raw HTML with rendered copy; `22b6406` fixes the assertions to decode HTML entities while keeping production escaping intact.
+
+These runs verify this code/test checkpoint, not live provider delivery or production deployment.
 
 Successful CI is not proof of production deployment or live provider readiness.
 

@@ -3,12 +3,24 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Latest verified feature-code checkpoint:** 8addf2b83991ca8015b4496704ef6a159b0a0a4a  
+**Latest verified feature/test checkpoint:** 22b64068cb06d5085761aad986e3787a59634981  
 **Release status:** NOT RELEASE READY
 
-This is a concise status note, not a replacement for the complete pending-build register, v4 requirements, or full traceability backlog. The newest verified feature-code checkpoint is recorded first below.
+This is a concise status note, not a replacement for the complete pending-build register, v4 requirements, or full traceability backlog. The current confirmed checkpoint is recorded first below.
 
-## 2026-10-28 verified checkpoint — immutable lead consent evidence
+## 2026-10-28 verified checkpoint — double opt-in and truthful signup outcomes
+
+- Verified feature/test SHA: `22b64068cb06d5085761aad986e3787a59634981`. [Push CI run 40713741377](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713741377) and [PR CI run 40713751355](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713751355) both completed successfully on feature/test checkpoint `22b64068cb06d5085761aad986e3787a59634981`. Python: **619 passed, 7 skipped, 5 warnings**. PostgreSQL migration/concurrency, frontend typecheck/build/final Docker smoke, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition. The predecessor feature-code push/PR attempt exposed two test assertions comparing raw HTML with rendered copy; `22b6406` fixes the assertions to decode HTML entities while keeping production escaping intact.
+- Migration 0026 adds a per-lead email-confirmation timestamp plus expiring confirmation records; the feature is controlled by `EMAIL_DOUBLE_OPT_IN_REQUIRED` and is off by default. It requires configured `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and a valid public HTTPS callback URL before relying on real delivery.
+- Implemented explicit DOI email delivery, 48-hour confirmation expiry, stored SHA-256 token hashes (raw tokens are not persisted), scanner-safe GET that renders a confirmation form without changing state, and a bounded URL-encoded POST that applies consent only after the recipient confirms.
+- A conditional database update atomically claims a still-sent token before scheduling, preventing concurrent confirmation replays from both succeeding. Unsubscribe cancels pending/sent confirmation tokens; the email worker suppresses marketing delivery while DOI is required but unconfirmed.
+- Owner/admin resend is workspace-scoped. A five-minute duplicate request guard reuses a recent matching confirmation, avoids sending a second message, and prevents a different pending signup payload from silently replacing the request bound to the existing token.
+- Public HTML and JSON signup responses distinguish queued marketing, confirmation pending/in flight, and provider delivery failure; they no longer report a marketing sequence as queued when none was scheduled. Production HTML output remains escaped.
+- Actual Resend account authentication, sender-domain verification and production delivery were **not** tested; CI uses controlled fixtures/mocks. Jurisdiction and owner policy review is needed before enabling DOI for a particular deployment. This is not a universal compliance guarantee.
+
+
+
+## Prior verified checkpoint — immutable lead consent evidence
 
 - Feature-code SHA: 8addf2b83991ca8015b4496704ef6a159b0a0a4a.
 - Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706775818
@@ -16,7 +28,7 @@ This is a concise status note, not a replacement for the complete pending-build 
 - Both runs completed successfully. Python: 610 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition.
 - Added migration 0025 and a tenant-scoped consent event model. Grant, resubscription and unsubscribe events record exact canonical wording/version where applicable, purpose, source, channel and timestamp. Database triggers and ORM guards prevent update/delete. A read-only, workspace-scoped API exposes event history.
 - Regression coverage verifies exact form copy, rejection of altered wording/old versions, persisted grant evidence, idempotent unsubscribe/suppression, ORM immutability and scoped history access.
-- Remaining S4 work: applicable double opt-in, purpose-specific consent beyond email marketing, policy/legal review and governed unlink/anonymization/retention. The consent ledger does not establish universal compliance.
+- At this historical checkpoint, configurable double opt-in had not yet been implemented. The newer DOI checkpoint below closes the code-level confirmation journey; purpose/jurisdiction policy and governed unlink/anonymization/retention still remain open. No universal legal compliance is claimed.
 
 ## Prior verified checkpoint — unsubscribe safety and workflow test isolation
 

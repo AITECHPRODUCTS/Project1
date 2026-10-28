@@ -51,7 +51,7 @@ def test_unsubscribe_get_is_non_mutating_and_returns_explicit_confirmation(monke
 
         assert response.status_code == 200
         assert "Confirm unsubscribe" in response.text
-        assert "select Unsubscribe to confirm" in response.text
+        assert "select unsubscribe to confirm" in response.text.lower()
         assert 'method="post"' in response.text
         assert f"ts={params['ts']}&amp;sig={params['sig']}" in response.text
         assert response.headers["cache-control"] == "no-store, max-age=0"

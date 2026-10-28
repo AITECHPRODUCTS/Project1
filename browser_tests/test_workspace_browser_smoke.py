@@ -7,6 +7,7 @@ import os
 import re
 import time
 import uuid
+from urllib.parse import parse_qs, urlparse
 
 from backend.config import get_settings
 
@@ -77,6 +78,89 @@ def test_ad_guardrails_browser_exposes_read_only_provider_boundary():
             browser.close()
 
 
+
+
+
+def test_affiliate_offer_catalog_searches_filters_sorts_and_paginates_without_claiming_verification():
+    requests: list[dict[str, list[str]]] = []
+
+    def offer_row(index: int) -> dict:
+        provider_claimed = index == 0
+        has_metrics = index != 1
+        return {
+            "id": "catalog-offer-" + str(index),
+            "network": "clickbank",
+            "external_id": "provider-" + str(index),
+            "name": "Analytics offer " + str(index),
+            "url": "https://merchant.example/offers/" + str(index),
+            "category": "analytics",
+            "description": "Example persisted offer entry for catalog UI acceptance.",
+            "reward_type": "percentage",
+            "reward_value": "20",
+            "cookie_days": 30 if has_metrics else None,
+            "traffic_score": 12.5 if has_metrics else None,
+            "gravity_score": 3.0 if has_metrics else None,
+            "normalized_gravity": 0.6 if has_metrics else None,
+            "epc": 1.25 if has_metrics else None,
+            "conversion_rate": 0.08 if has_metrics else None,
+            "recurring_commission": True if has_metrics else None,
+            "source_stars": 4.5 if has_metrics else None,
+            "verified": provider_claimed,
+            "verification_basis": "provider_claimed_unattested" if provider_claimed else "provider_not_verified_or_unknown",
+            "source_url": "https://provider.example/programs/" + str(index),
+            "updated_at": "2026-10-28T12:00:00+00:00",
+        }
+
+    def handle_catalog(route):
+        query = parse_qs(urlparse(route.request.url).query)
+        requests.append(query)
+        offset = int(query.get("offset", ["0"])[0])
+        if query.get("q") == ["analytics"]:
+            rows = [offer_row(501)]
+            total = 1
+            offset = 0
+        elif offset == 0:
+            rows = [offer_row(index) for index in range(20)]
+            total = 23
+        else:
+            rows = [offer_row(index) for index in range(20, 23)]
+            total = 23
+        _fulfill_json(route, {
+            "count": len(rows),
+            "total_count": total,
+            "offset": offset,
+            "limit": 20,
+            "data": rows,
+        })
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/api/offers**", handle_catalog)
+            page.goto(f"{BASE_URL}/offers", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Affiliate offer catalog").wait_for(state="visible")
+            page.get_by_text("Showing 1-20 of 23 results").wait_for(state="visible")
+            page.get_by_text("Provider claimed — not independently attested").first.wait_for(state="visible")
+            assert page.locator('[data-testid="offer-epc-catalog-offer-1"]').inner_text().endswith("Unknown")
+            assert requests[0]["sort_by"] == ["epc"]
+            assert requests[0]["sort_order"] == ["desc"]
+            assert requests[0]["offset"] == ["0"]
+
+            page.get_by_role("button", name="Next page").click()
+            page.get_by_text("Showing 21-23 of 23 results").wait_for(state="visible")
+            assert requests[-1]["offset"] == ["20"]
+
+            page.get_by_label("Search terms").fill("analytics")
+            page.get_by_label("Affiliate network").fill("clickbank")
+            page.get_by_role("button", name="Search catalog").click()
+            page.get_by_text("Showing 1-1 of 1 results").wait_for(state="visible")
+            assert requests[-1]["q"] == ["analytics"]
+            assert requests[-1]["network"] == ["clickbank"]
+            assert requests[-1]["offset"] == ["0"]
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()
 
 def test_real_registration_creates_workspace_and_authenticates_dashboard():
     api_base = "http://127.0.0.1:8000"

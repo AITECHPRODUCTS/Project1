@@ -28,6 +28,20 @@ type Offer = {
   updated_at: string | null;
 };
 
+type SyncStatus = {
+  provider: string;
+  state: "never_synced" | "completed" | "failed" | "unknown";
+  last_attempt_at: string | null;
+  created: number | null;
+  updated: number | null;
+  registry_total: number | null;
+  requested_limit: number | null;
+  query_supplied: boolean;
+  error_type: string | null;
+  source_attestation_verified: false;
+  note: string;
+};
+
 type CatalogResponse = {
   count: number;
   total_count: number;
@@ -106,6 +120,9 @@ export default function OfferCatalogPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [syncError, setSyncError] = useState("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [syncStatusLoading, setSyncStatusLoading] = useState(false);
+  const [syncStatusError, setSyncStatusError] = useState("");
 
   const loadCatalog = useCallback(async (filters: Filters, nextOffset: number) => {
     const params = new URLSearchParams();
@@ -139,6 +156,19 @@ export default function OfferCatalogPage() {
     }
   }, []);
 
+  const refreshSyncStatus = useCallback(async () => {
+    setSyncStatusLoading(true);
+    setSyncStatusError("");
+    try {
+      const result = await apiFetch<SyncStatus>("/api/integrations/openaffiliate/sync-status");
+      setSyncStatus(result);
+    } catch (cause) {
+      setSyncStatusError(cause instanceof Error ? cause.message : "The persisted sync status could not be loaded.");
+    } finally {
+      setSyncStatusLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadCatalog(DEFAULT_FILTERS, 0);
   }, [loadCatalog]);
@@ -147,15 +177,15 @@ export default function OfferCatalogPage() {
     let mounted = true;
     void apiFetch<{ user?: { is_admin?: boolean; workspace_id?: string | null } }>("/api/auth/me")
       .then(response => {
-        if (mounted) {
-          setSyncAccess(response.user?.is_admin === true && Boolean(response.user?.workspace_id) ? "admin" : "not_admin");
-        }
+        const isActivePlatformAdmin = response.user?.is_admin === true && Boolean(response.user?.workspace_id);
+        if (mounted) setSyncAccess(isActivePlatformAdmin ? "admin" : "not_admin");
+        if (isActivePlatformAdmin) void refreshSyncStatus();
       })
       .catch(() => {
         if (mounted) setSyncAccess("not_admin");
       });
     return () => { mounted = false; };
-  }, []);
+  }, [refreshSyncStatus]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -179,6 +209,7 @@ export default function OfferCatalogPage() {
         " updated; upstream registry total " + registryTotal +
         ". Provider approval and source authenticity remain unverified."
       );
+      await refreshSyncStatus();
       await loadCatalog(activeFilters, catalog?.offset ?? 0);
     } catch (cause) {
       setSyncError(cause instanceof Error ? cause.message : "OpenAffiliate catalog sync failed.");
@@ -237,6 +268,28 @@ export default function OfferCatalogPage() {
         {syncAccess === "admin" && <p className="mt-3 text-xs text-slate-500">Admin sync reads the configured OpenAffiliate directory and updates this shared catalog only. It does not submit applications, publish content, or change provider settings.</p>}
         {syncMessage && <p role="status" data-testid="openaffiliate-sync-result" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{syncMessage}</p>}
         {syncError && <p role="alert" data-testid="openaffiliate-sync-error" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">OpenAffiliate sync failed: {syncError}</p>}
+        {syncAccess === "admin" && (
+          <section data-testid="openaffiliate-sync-status" aria-label="OpenAffiliate sync status" className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-black">Last catalog sync</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  {syncStatusLoading ? "Loading saved sync status..." :
+                    !syncStatus ? "Saved sync status is unavailable." :
+                    syncStatus.state === "never_synced" ? "No sync attempt is recorded for this workspace." :
+                    syncStatus.state === "completed" ? "Last sync completed successfully." :
+                    syncStatus.state === "failed" ? "Last sync attempt failed." : "Last sync outcome is unknown."}
+                </p>
+                {syncStatus?.last_attempt_at && <p className="mt-1 text-xs text-slate-500">Attempted: {new Date(syncStatus.last_attempt_at).toLocaleString()}</p>}
+                {syncStatus?.state === "completed" && <p className="mt-2 text-sm text-slate-700">{syncStatus.created ?? "Unknown"} created · {syncStatus.updated ?? "Unknown"} updated · upstream registry total {syncStatus.registry_total ?? "unknown"}</p>}
+                {syncStatus?.state === "failed" && <p className="mt-2 text-sm text-rose-700">Recorded error type: {syncStatus.error_type ?? "unknown"}</p>}
+              </div>
+              <button type="button" onClick={() => void refreshSyncStatus()} disabled={syncStatusLoading} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-50">Refresh status</button>
+            </div>
+            {syncStatusError && <p role="alert" data-testid="openaffiliate-sync-status-error" className="mt-3 text-sm text-rose-700">Status could not be loaded: {syncStatusError}</p>}
+            <p className="mt-3 text-xs leading-5 text-slate-500">{syncStatus?.note ?? "Saved status is an audit record, not proof of provider identity, account approval or source authenticity."}</p>
+          </section>
+        )}
 
         <section className="mt-7 rounded-3xl border border-white bg-white p-5 shadow-sm sm:p-7" aria-label="Offer catalog filters">
           <div className="flex items-center gap-3">

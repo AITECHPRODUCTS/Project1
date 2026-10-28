@@ -152,6 +152,12 @@ def test_affiliate_offer_catalog_searches_filters_sorts_and_paginates_without_cl
 
             page.route("**/api/auth/me", handle_non_admin)
             page.route("**/api/offers**", handle_catalog)
+            page.route("**/api/integrations/openaffiliate/sync-status", lambda route: _fulfill_json(route, {
+                "provider": "openaffiliate", "state": "never_synced", "last_attempt_at": None,
+                "created": None, "updated": None, "registry_total": None, "requested_limit": None,
+                "query_supplied": False, "error_type": None, "source_attestation_verified": False,
+                "note": "This is an audit record, not independent source verification.",
+            }))
             page.goto(f"{BASE_URL}/offers", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Affiliate offer catalog").wait_for(state="visible")
             page.get_by_text("Showing 1-20 of 23 results").wait_for(state="visible")
@@ -198,6 +204,25 @@ def test_platform_admin_can_sync_persisted_openaffiliate_catalog_explicitly():
                     "csrf_token": "browser-admin-csrf-token",
                 })
 
+            status_requests: list[str] = []
+
+            def handle_sync_status(route):
+                status_requests.append(route.request.url)
+                if calls:
+                    _fulfill_json(route, {
+                        "provider": "openaffiliate", "state": "completed", "last_attempt_at": "2026-10-28T17:00:00+00:00",
+                        "created": 2, "updated": 1, "registry_total": 23, "requested_limit": 100,
+                        "query_supplied": False, "error_type": None, "source_attestation_verified": False,
+                        "note": "This is an audited local sync outcome, not independent provider identity or source authenticity.",
+                    })
+                else:
+                    _fulfill_json(route, {
+                        "provider": "openaffiliate", "state": "never_synced", "last_attempt_at": None,
+                        "created": None, "updated": None, "registry_total": None, "requested_limit": None,
+                        "query_supplied": False, "error_type": None, "source_attestation_verified": False,
+                        "note": "This is an audited local sync outcome, not independent provider identity or source authenticity.",
+                    })
+
             def handle_offers(route):
                 if route.request.method == "POST":
                     calls.append({
@@ -243,6 +268,7 @@ def test_platform_admin_can_sync_persisted_openaffiliate_catalog_explicitly():
                 })
 
             page.route("**/api/auth/me", handle_admin)
+            page.route("**/api/integrations/openaffiliate/sync-status", handle_sync_status)
             page.route("**/api/offers**", handle_offers)
             page.goto(f"{BASE_URL}/offers", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Affiliate offer catalog").wait_for(state="visible")
@@ -260,6 +286,10 @@ def test_platform_admin_can_sync_persisted_openaffiliate_catalog_explicitly():
             assert urlparse(calls[0]["url"]).path == "/api/offers/sync"
             assert parse_qs(urlparse(calls[0]["url"]).query) == {"limit": ["100"]}
             assert calls[0]["csrf"] == "browser-admin-csrf-token"
+            page.get_by_text("Last sync completed successfully.").wait_for(state="visible")
+            page.get_by_text("2 created · 1 updated · upstream registry total 23").wait_for(state="visible")
+            assert len(status_requests) >= 2
+            assert all(urlparse(url).path == "/api/integrations/openaffiliate/sync-status" for url in status_requests)
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()

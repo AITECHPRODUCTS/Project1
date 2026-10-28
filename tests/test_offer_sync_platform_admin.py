@@ -56,7 +56,9 @@ def test_workspace_member_cannot_trigger_global_offer_sync(monkeypatch):
     monkeypatch.setattr(main.openaffiliate_client, "fetch_programs", fake_fetch_programs)
     with TestClient(main.app) as client:
         response = client.post("/api/offers/sync")
+        status_response = client.get("/api/integrations/openaffiliate/sync-status")
     assert response.status_code == 403
+    assert status_response.status_code == 403
     assert "Platform Super Admin" in response.text
     assert calls == []
 
@@ -72,7 +74,9 @@ def test_platform_admin_without_workspace_cannot_sync_global_offer_registry(monk
     monkeypatch.setattr(main.openaffiliate_client, "fetch_programs", fake_fetch_programs)
     with TestClient(main.app) as client:
         response = client.post("/api/offers/sync")
+        status_response = client.get("/api/integrations/openaffiliate/sync-status")
     assert response.status_code == 403
+    assert status_response.status_code == 403
     assert calls == []
 
 
@@ -107,7 +111,17 @@ async def test_platform_admin_sync_updates_global_catalog_and_writes_audit(monke
         monkeypatch.setattr(main.openaffiliate_client, "fetch_programs", fake_fetch_programs)
         with TestClient(main.app) as client:
             response = client.post("/api/offers/sync?q=creator&limit=10")
+            status_response = client.get("/api/integrations/openaffiliate/sync-status")
         assert response.status_code == 200, response.text
+        assert status_response.status_code == 200, status_response.text
+        status_payload = status_response.json()
+        assert status_payload["state"] == "completed"
+        assert status_payload["created"] == 1
+        assert status_payload["updated"] == 0
+        assert status_payload["registry_total"] == 1
+        assert status_payload["requested_limit"] == 10
+        assert status_payload["query_supplied"] is True
+        assert status_payload["source_attestation_verified"] is False
         assert response.json()["created"] == 1
         assert response.json()["updated"] == 0
         assert calls == [{"q": "creator", "limit": 10}]
@@ -150,7 +164,12 @@ async def test_offer_sync_provider_failure_is_audited_and_returns_gateway_error(
         monkeypatch.setattr(main.openaffiliate_client, "fetch_programs", fail_fetch_programs)
         with TestClient(main.app) as client:
             response = client.post("/api/offers/sync")
+            status_response = client.get("/api/integrations/openaffiliate/sync-status")
         assert response.status_code == 502
+        assert status_response.status_code == 200, status_response.text
+        assert status_response.json()["state"] == "failed"
+        assert status_response.json()["error_type"] == "TimeoutError"
+        assert "provider unreachable" not in status_response.text
         async with sessions() as db:
             audit = await db.scalar(select(AuditLog).where(AuditLog.action == "offers.sync"))
         assert audit is not None
@@ -198,5 +217,56 @@ async def test_offer_sync_only_accepts_real_boolean_provider_verification(monkey
             "verify-number-one": False,
             "verify-missing": False,
         }
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_sync_status_is_unknown_before_first_attempt(monkeypatch):
+    engine, sessions, workspace_id = await _setup(monkeypatch)
+    try:
+        _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_id)
+        with TestClient(main.app) as client:
+            response = client.get("/api/integrations/openaffiliate/sync-status")
+        assert response.status_code == 200, response.text
+        assert response.json()["state"] == "never_synced"
+        assert response.json()["last_attempt_at"] is None
+        assert response.json()["created"] is None
+        assert response.json()["source_attestation_verified"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_openaffiliate_sync_status_is_scoped_to_active_workspace(monkeypatch):
+    engine, sessions, workspace_a = await _setup(monkeypatch)
+    workspace_b = "different-sync-status-workspace"
+    try:
+        async with sessions() as db:
+            db.add(Workspace(id=workspace_b, name="Workspace B", slug="sync-status-workspace-b"))
+            await db.commit()
+
+        async def fake_fetch_programs(*, q: str | None = None, limit: int = 100):
+            return {"data": [], "registry_total": 99 if q else 7}
+
+        monkeypatch.setattr(main.openaffiliate_client, "fetch_programs", fake_fetch_programs)
+
+        _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_a)
+        with TestClient(main.app) as client:
+            first = client.post("/api/offers/sync")
+        assert first.status_code == 200, first.text
+
+        _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_b)
+        with TestClient(main.app) as client:
+            second = client.post("/api/offers/sync?q=workspace-b")
+        assert second.status_code == 200, second.text
+
+        _override_user(monkeypatch, platform_admin=True, workspace_id=workspace_a)
+        with TestClient(main.app) as client:
+            response = client.get("/api/integrations/openaffiliate/sync-status")
+        assert response.status_code == 200, response.text
+        assert response.json()["registry_total"] == 7
+        assert response.json()["query_supplied"] is False
+        assert response.json()["state"] == "completed"
     finally:
         await engine.dispose()

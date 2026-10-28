@@ -1259,6 +1259,61 @@ async def offers(
             for offer in rows
         ],
     }
+@api.get("/integrations/openaffiliate/sync-status")
+async def openaffiliate_sync_status(
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return the latest OpenAffiliate sync audit outcome for the active operator workspace."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing catalog sync status")
+    audit = await db.scalar(
+        select(AuditLog).where(
+            AuditLog.workspace_id == str(workspace_id),
+            AuditLog.action == "offers.sync",
+            AuditLog.resource_type == "offer_registry",
+        ).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(1)
+    )
+    note = (
+        "This is an audited local sync outcome, not independent provider identity, account eligibility, "
+        "source authenticity or offer-approval evidence."
+    )
+    if audit is None:
+        return {
+            "provider": "openaffiliate",
+            "state": "never_synced",
+            "last_attempt_at": None,
+            "created": None,
+            "updated": None,
+            "registry_total": None,
+            "requested_limit": None,
+            "query_supplied": False,
+            "error_type": None,
+            "source_attestation_verified": False,
+            "note": note,
+        }
+    details = audit.details_json if isinstance(audit.details_json, dict) else {}
+
+    def count_or_unknown(value: Any) -> int | None:
+        return value if type(value) is int and value >= 0 else None
+
+    state = audit.outcome if audit.outcome in {"completed", "failed"} else "unknown"
+    return {
+        "provider": "openaffiliate",
+        "state": state,
+        "last_attempt_at": audit.created_at.isoformat() if audit.created_at else None,
+        "created": count_or_unknown(details.get("created")),
+        "updated": count_or_unknown(details.get("updated")),
+        "registry_total": count_or_unknown(details.get("registry_total")),
+        "requested_limit": count_or_unknown(details.get("requested_limit")),
+        "query_supplied": details.get("query_supplied") is True,
+        "error_type": str(details["error_type"])[:120] if isinstance(details.get("error_type"), str) else None,
+        "source_attestation_verified": False,
+        "note": note,
+    }
+
+
 @api.post("/offers/sync")
 async def offers_sync(
     q: str | None = None,

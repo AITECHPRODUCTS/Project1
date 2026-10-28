@@ -707,6 +707,26 @@ async def confirm_email_consent(session: AsyncSession, token: str) -> dict[str, 
    confirmation.status = "expired"
    await session.commit()
    raise ValueError("Email confirmation token has expired")
+  # Atomically claim the still-sent token before applying consent. A concurrent
+  # replay can read the old state, but only one conditional update may succeed.
+  claim = await session.execute(
+   update(EmailConsentConfirmation)
+   .where(
+    EmailConsentConfirmation.id == confirmation.id,
+    EmailConsentConfirmation.workspace_id == workspace_id,
+    EmailConsentConfirmation.token_hash == token_hash,
+    EmailConsentConfirmation.status == "sent",
+    EmailConsentConfirmation.expires_at > now,
+   )
+   .values(status="confirmed", confirmed_at=now)
+   .execution_options(synchronize_session=False)
+  )
+  if claim.rowcount != 1:
+   await session.rollback()
+   raise ValueError("Email confirmation token is already used, cancelled, superseded or expired")
+  confirmation.status = "confirmed"
+  confirmation.confirmed_at = now
+
   lead = await session.scalar(select(Lead).where(
    Lead.id == confirmation.lead_id,
    Lead.workspace_id == workspace_id,
@@ -721,8 +741,6 @@ async def confirm_email_consent(session: AsyncSession, token: str) -> dict[str, 
    confirmation.status = "cancelled"
    await session.commit()
    raise ValueError("This address has unsubscribed; submit a fresh form with explicit resubscribe confirmation")
-  confirmation.status = "confirmed"
-  confirmation.confirmed_at = now
   lead.email_consent_confirmed_at = now
   session.add(LeadConsentEvent(
    workspace_id=workspace_id,

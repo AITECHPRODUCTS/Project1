@@ -31,3 +31,12 @@ Evidence source URLs must be absolute HTTPS and reject embedded credentials, loc
 ## Operator acceptance
 
 Before enabling live actions, use authoritative regulators/platform documentation and confirm the actual business model, audience location, promotion channel, product category, consent model and applicable rules with qualified counsel or the designated legal reviewer. Include browser/accessibility UAT, source-refresh ownership, escalation/expiry alerts and documented test records. A successful software approval is evidence of an internal decision, not proof that the decision is legally correct.
+
+
+## Curated source catalogue (prepared 2026-10-28)
+
+The authenticated `GET /api/compliance/source-catalog` endpoint and compliance screen provide a curated **starter subset** of regulator, legislation, self-regulatory and platform-policy references for the US, UK (GB), India (IN), Canada (CA), Australia (AU), EU instruments, and selected global Meta/Google Ads policy pages. Search can filter by jurisdiction, activity, required category and channel.
+
+Catalogue rows carry an explicit jurisdiction scope, source type, optional recorded update date, scope note, and a review-required/non-approved status. The UI only copies the title and URL into the draft evidence form; it does not create evidence or approve it. The reviewer must open the current source, check effective status and applicability, then write and attest a substantive summary. A `GLOBAL` platform policy is supplemental and never satisfies a country-specific evidence requirement.
+
+This is not a comprehensive worldwide law database, not a legal conclusion, and not an automated regulatory-update service. Jurisdiction coverage, product-specific rules, local implementations, sector-specific obligations, commencement dates, enforcement and platform rules change. Do not rely on catalogue membership, source labels, or displayed dates as proof that a source is current or that an activity is lawful. Maintain authoritative sources and appropriate qualified review for every actual target market.

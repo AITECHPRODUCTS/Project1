@@ -35,6 +35,7 @@ from backend.services.ad_planner import generate_ad_campaign_plan
 from backend.services.ad_performance import summarize_ad_performance
 from backend.services.ad_guardrails import evaluate_ad_budget_guardrail
 from backend.services.jurisdiction_compliance import ASSESSMENT_VALIDITY_DAYS,evidence_coverage,find_current_assessment,normalize_jurisdictions,required_categories
+from backend.services.compliance_source_catalog import get_compliance_source_catalog
 from backend.services.content_angle_ranker import rank_content_angles as rank_content_angles_service
 from backend.services.infographic_generator import build_infographic as build_infographic_service
 from backend.services.guarantee_draft import build_guarantee_draft as build_guarantee_draft_service
@@ -4495,6 +4496,27 @@ async def _require_live_compliance_approval(
             "provider_action_executed": False,
         })
     return assessment
+
+
+@api.get("/compliance/source-catalog")
+async def compliance_source_catalog(
+    jurisdiction: str = Query(..., min_length=2, max_length=12),
+    category: str | None = Query(default=None, min_length=2, max_length=80),
+    activity: str | None = Query(default=None, min_length=2, max_length=80),
+    channel: str | None = Query(default=None, min_length=1, max_length=60),
+    user: dict[str, Any] = Depends(require_admin),
+):
+    """Curated source discovery; catalog entries never count as approved legal evidence."""
+    del user
+    try:
+        return get_compliance_source_catalog(
+            jurisdiction=jurisdiction,
+            category=category,
+            activity=activity,
+            channel=channel,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @api.get("/compliance/requirements")

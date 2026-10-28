@@ -919,3 +919,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Cancellation is cooperative and durable rather than an abrupt task kill. An in-flight stage/provider call is allowed to finish; the runner persists its output, marks the workflow cancelled at the next safe checkpoint, and does not start the next stage. This avoids pretending that cancellation rolls back an external action already accepted by a provider.
 - Cancellation requests survive an older worker state snapshot, block conflicting HITL resume responses, and are honored after local pause waits and recovery of interrupted/paused jobs. Terminal completed/failed workflows are not overwritten by stale workers.
 - Added API/state-machine regression tests for cancellation during a running stage, cancellation before the first stage begins, idempotent cancellation, workspace isolation, and safe checkpoint completion. This is workflow control plumbing; it does not mean every workflow step or external integration is production-live.
+
+
+## 2026-10-28 implementation update — compliance source catalogue
+- Added an authenticated, query-filtered starter catalogue of official regulator, legislation, self-regulatory and selected platform-policy references for US, GB, IN, CA, AU, EU instruments and global Meta/Google Ads policies.
+- Added filters for jurisdiction, activity, required category and optional channel. The response distinguishes exact-jurisdiction references from supplemental GLOBAL platform policies and labels each row as requiring review with no legal approval granted.
+- Added the compliance UI panel to search catalogue starters and load a title/URL into the evidence draft. The UI explicitly requires the operator to open the current source, confirm applicability/effective status, write a substantive summary, and attest; catalog entries never create evidence or approvals.
+- Added unit and API regression tests for national-scope matching, supplemental global policy handling, filters, invalid filter rejection, authorization and non-approval boundaries.
+- Scope remains partial: this curated set is not a worldwide law corpus, does not guarantee current legal coverage, and does not automatically refresh regulations. Current product compliance still requires qualified reviewer validation for every activity, actual channel and target jurisdiction.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from decimal import Decimal
 
 import pytest
 
@@ -36,8 +37,8 @@ def test_conversion_normalizes_ids_and_keeps_money_values_non_negative():
     result = adapter.parse_conversion({"transaction_id": "  txn-456 ", "subid": "click-1", "commission": "1.20", "revenue": "10.00", "status": " APPROVED "})
     assert result["external_event_id"] == "txn-456"
     assert result["click_id"] == "click-1"
-    assert result["commission"] == pytest.approx(1.2)
-    assert result["revenue"] == pytest.approx(10.0)
+    assert result["commission"] == Decimal("1.20")
+    assert result["revenue"] == Decimal("10.00")
     assert result["status"] == "approved"
     assert result["raw"]["transaction_id"] == "  txn-456 "
 
@@ -55,3 +56,26 @@ def test_conversion_requires_bounded_unique_event_id():
         adapter.parse_conversion({"commission": 1})
     with pytest.raises(ValueError, match="255 characters"):
         adapter.parse_conversion({"event_id": "x" * 256})
+
+
+
+def test_conversion_preserves_exact_decimal_precision_for_ledger():
+    adapter = AggregatorWebhookAdapter("example-network", SECRET)
+    result = adapter.parse_conversion(
+        {"event_id": "evt-precision", "commission": "0.123456", "revenue": "100.000001"}
+    )
+    assert result["commission"] == Decimal("0.123456")
+    assert result["revenue"] == Decimal("100.000001")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("commission", "0.1234567"),
+        ("revenue", "1000000000000"),
+    ],
+)
+def test_conversion_rejects_amounts_not_representable_by_ledger_numeric(field: str, value: str):
+    adapter = AggregatorWebhookAdapter("example-network", SECRET)
+    with pytest.raises(ValueError):
+        adapter.parse_conversion({"event_id": "evt-overflow", field: value})

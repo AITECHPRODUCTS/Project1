@@ -381,27 +381,42 @@ def test_ad_guardrail_handler_fails_closed_for_unverified_evidence():
     assert result["kill_switch_should_engage"] is False
     assert result["live_spend_authorized"] is False
     assert result["provider_action_executed"] is False
+    assert result["input_provenance"] == "caller_supplied_unattested"
+    assert result["source_attestation_verified"] is False
+    assert result["operational_action_permitted"] is False
+    assert result["status"] == "blocked_pending_provider_verification"
+    assert result["hypothetical_review"]["status_if_independently_attested"] == "triggered_stop"
+    assert result["hypothetical_review"]["is_provider_attested"] is False
 
 
-def test_ad_guardrail_handler_flags_verified_spend_cap_breach_without_remote_action():
+def test_ad_guardrail_handler_does_not_trust_caller_claimed_provider_verified_evidence():
     result = execute_skill_handler("ads.guardrail_review", _guardrail_payload())
-    assert result["status"] == "triggered_stop"
-    assert result["stop_recommended"] is True
-    assert result["kill_switch_should_engage"] is True
-    assert {item["code"] for item in result["breaches"]} == {"daily_spend_cap_reached"}
+    # Even though the input declares provider_verified, this pure handler
+    # cannot establish provenance and must not emit a real stop recommendation.
+    assert result["status"] == "blocked_pending_provider_verification"
+    assert result["stop_recommended"] is False
+    assert result["kill_switch_should_engage"] is False
     assert result["live_spend_authorized"] is False
     assert result["provider_action_executed"] is False
-    assert result["freshness_gate"]["passed"] is True
-    assert result["sample_gate"]["passed"] is True
+    assert result["source_attestation_verified"] is False
+    assert result["operational_action_permitted"] is False
+    assert result["hypothetical_review"]["status_if_independently_attested"] == "triggered_stop"
+    assert {item["code"] for item in result["hypothetical_review"]["potential_breaches_if_independently_attested"]} == {"daily_spend_cap_reached"}
+    assert result["hypothetical_review"]["is_provider_attested"] is False
+    assert "fails closed" in result["note"]
 
 
-def test_ad_guardrail_handler_blocks_stale_provider_observations_even_if_spend_breaches_cap():
+def test_ad_guardrail_handler_blocks_stale_input_and_reports_only_hypothetical_review():
     stale = _guardrail_observation_payload(observed_at="2026-10-25T18:00:00+00:00", spend_usd="60.00")
     result = execute_skill_handler("ads.guardrail_review", _guardrail_payload(observations=[stale]))
-    assert result["status"] == "blocked_stale_provider_evidence"
+    assert result["status"] == "blocked_pending_provider_verification"
     assert result["breaches"] == []
+    assert result["stop_recommended"] is False
     assert result["kill_switch_should_engage"] is False
     assert result["provider_action_executed"] is False
+    assert result["hypothetical_review"]["status_if_independently_attested"] == "blocked_stale_provider_evidence"
+    assert result["hypothetical_review"]["potential_breaches_if_independently_attested"] == []
+    assert result["hypothetical_review"]["is_provider_attested"] is False
 
 
 @pytest.mark.parametrize(

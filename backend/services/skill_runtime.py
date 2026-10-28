@@ -208,6 +208,7 @@ def _ad_guardrail_review(payload: dict[str, Any]) -> dict[str, Any]:
         "impressions", "clicks", "conversions", "evidence_status",
     }
     normalized_observations = []
+    scenario_observations = []
     for index, item in enumerate(raw_observations):
         if not isinstance(item, dict):
             raise ValueError(f"observations[{index}] must be a JSON object")
@@ -221,27 +222,73 @@ def _ad_guardrail_review(payload: dict[str, Any]) -> dict[str, Any]:
             value = item[field]
             if not isinstance(value, str) or not value.strip() or len(value) > limit:
                 raise ValueError(f"observations[{index}].{field} must be a non-empty string of at most {limit} characters")
+        # Skill inputs are operator-controlled JSON, not authenticated provider
+        # evidence. Retain the declared label only as caller input; never pass it
+        # into the authoritative evaluator as proof of provider verification.
+        observed_at = _guardrail_timestamp(item["observed_at"], f"observations[{index}].observed_at")
+        normalized = {
+            "platform": item["platform"].strip().lower(),
+            "creative_id": item["creative_id"].strip(),
+            "observed_at": observed_at,
+            "spend_usd": _guardrail_decimal(item["spend_usd"], f"observations[{index}].spend_usd"),
+            "commission_usd": _guardrail_decimal(item["commission_usd"], f"observations[{index}].commission_usd"),
+            "impressions": _guardrail_count(item["impressions"], f"observations[{index}].impressions"),
+            "clicks": _guardrail_count(item["clicks"], f"observations[{index}].clicks"),
+            "conversions": _guardrail_count(item["conversions"], f"observations[{index}].conversions"),
+        }
         normalized_observations.append(SimpleNamespace(
-            platform=item["platform"].strip().lower(),
-            creative_id=item["creative_id"].strip(),
-            observed_at=_guardrail_timestamp(item["observed_at"], f"observations[{index}].observed_at"),
-            spend_usd=_guardrail_decimal(item["spend_usd"], f"observations[{index}].spend_usd"),
-            commission_usd=_guardrail_decimal(item["commission_usd"], f"observations[{index}].commission_usd"),
-            impressions=_guardrail_count(item["impressions"], f"observations[{index}].impressions"),
-            clicks=_guardrail_count(item["clicks"], f"observations[{index}].clicks"),
-            conversions=_guardrail_count(item["conversions"], f"observations[{index}].conversions"),
-            evidence_status=item["evidence_status"].strip().lower(),
+            **normalized,
+            evidence_status="operator_supplied_unverified",
+        ))
+        scenario_observations.append(SimpleNamespace(
+            **normalized,
+            evidence_status="provider_verified",
         ))
 
     plan_budget = None
     if "plan_daily_budget_usd" in payload:
         plan_budget = _guardrail_decimal(payload["plan_daily_budget_usd"], "plan_daily_budget_usd")
-    return evaluate_ad_budget_guardrail(
-        policy=SimpleNamespace(**normalized_policy),
+    policy_object = SimpleNamespace(**normalized_policy)
+    # The authoritative decision always fails closed because this pure runtime
+    # cannot independently authenticate the source of caller-supplied metrics.
+    result = evaluate_ad_budget_guardrail(
+        policy=policy_object,
         observations=normalized_observations,
         now=now,
         plan_daily_budget_usd=plan_budget,
     )
+    # Optional scenario calculations are explicitly hypothetical, so an input
+    # label of "provider_verified" can never become a trusted decision or action.
+    scenario = evaluate_ad_budget_guardrail(
+        policy=policy_object,
+        observations=scenario_observations,
+        now=now,
+        plan_daily_budget_usd=plan_budget,
+    )
+    result["input_provenance"] = "caller_supplied_unattested"
+    result["source_attestation_verified"] = False
+    result["operational_action_permitted"] = False
+    result["hypothetical_review"] = {
+        "basis": "scenario_only_if_inputs_are_independently_attested",
+        "status_if_independently_attested": scenario["status"],
+        "potential_breaches_if_independently_attested": scenario["breaches"],
+        "sample_gate_if_independently_attested": scenario["sample_gate"],
+        "freshness_gate_if_independently_attested": scenario["freshness_gate"],
+        "spend_metrics_if_independently_attested": {
+            "daily_spend_usd": scenario["verified_spend_today_usd"],
+            "campaign_spend_usd": scenario["verified_campaign_spend_usd"],
+            "roas": scenario["verified_roas"],
+            "cpa_usd": scenario["verified_cpa_usd"],
+        },
+        "is_provider_attested": False,
+        "provider_action_executed": False,
+    }
+    result["note"] = (
+        "Authoritative status is calculated only from caller-supplied, unattested input and therefore "
+        "fails closed. The nested scenario is hypothetical if these values are independently verified; "
+        "it is not provider evidence and cannot authorize a live spend, pause or kill-switch action."
+    )
+    return result
 
 
 def _roas_calculator(payload: dict[str, Any]) -> dict[str, Any]:

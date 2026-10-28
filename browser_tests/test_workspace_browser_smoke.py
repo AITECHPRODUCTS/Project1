@@ -376,7 +376,7 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
                 )
                 assert other_publish.status == 404
             finally:
-                other.dispose()
+                other.close()
 
             denied = context.request.post(
                 api_base + "/api/landing/pages/" + asset_id + "/publish",

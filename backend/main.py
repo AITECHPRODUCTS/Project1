@@ -28,7 +28,7 @@ from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -55,6 +55,7 @@ from backend.services.proprietary_data_generator import build_proprietary_datase
 from backend.services.cms_publisher import publish_article
 from backend.services.external_action_registry import EXTERNAL_IDEMPOTENCY_KEY_RE, claim_external_action as _claim_external_action, external_action_failure_status as _external_action_failure_status, finish_external_action as _finish_external_action
 from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
+from backend.services.email_automation_builder import build_email_automation,simulate_email_automation
 from backend.services.integration_registry import build_network_registry
 from backend.services.capability_matrix import build_capability_matrix
 from backend.services.offer_intelligence import compute_offer_metrics
@@ -3066,6 +3067,225 @@ async def leads(
          "purchased": x.purchased_at is not None}
         for x in rows
     ]}
+
+
+
+
+def _email_automation_dict(row: ContentAsset, *, include_graph: bool = True) -> dict[str, Any]:
+    metadata = dict(row.metadata_json or {})
+    result = {
+        "id": row.id,
+        "name": str(metadata.get("name") or row.title),
+        "description": str(metadata.get("description") or ""),
+        "version": str(metadata.get("version") or ""),
+        "status": row.status,
+        "entry_step_id": str(metadata.get("entry_step_id") or ""),
+        "node_count": int(metadata.get("node_count") or 0),
+        "validation_report": dict(metadata.get("validation_report") or {}),
+        "graph_sha256": str(metadata.get("graph_sha256") or ""),
+        "created_by": metadata.get("created_by"),
+        "reviewed_by": metadata.get("reviewed_by"),
+        "reviewed_at": metadata.get("reviewed_at"),
+        "reviewer_notes": metadata.get("reviewer_notes"),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "execution_boundary": "Branching graph is persisted and can be simulated; no email is queued or sent by these routes. Existing consent/unsubscribe controls remain separate.",
+    }
+    if include_graph:
+        try:
+            result["graph"] = json.loads(row.body)
+        except (json.JSONDecodeError, TypeError):
+            result["graph"] = None
+    return result
+
+
+@api.get("/email/automations")
+async def list_email_automations(
+    limit: int = Query(default=100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing email automations")
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(ContentAsset).where(
+                ContentAsset.workspace_id == workspace_id,
+                ContentAsset.asset_type == "email_automation",
+            ).order_by(ContentAsset.created_at.desc()).limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [_email_automation_dict(row, include_graph=False) for row in rows]}
+
+
+@api.post("/email/automations", status_code=201)
+async def create_email_automation(
+    payload: EmailAutomationCreateRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating email automations")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    try:
+        built = build_email_automation(payload.model_dump(mode="json"))
+    except ValueError as exc:
+        raise HTTPException(422, {"code": "EMAIL_AUTOMATION_GRAPH_INVALID", "message": str(exc)}) from exc
+    with workspace_scope(workspace_id):
+        existing = list((await db.scalars(select(ContentAsset).where(
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "email_automation",
+        ).limit(200))).all())
+        if any(
+            str((item.metadata_json or {}).get("name") or "").casefold() == payload.name.casefold()
+            and str((item.metadata_json or {}).get("version") or "") == payload.version
+            for item in existing
+        ):
+            raise HTTPException(409, "This email automation name and version already exists in the active workspace")
+        metadata = {
+            "schema_version": 1,
+            "name": built["graph"]["name"],
+            "description": built["graph"]["description"],
+            "version": built["graph"]["version"],
+            "entry_step_id": built["graph"]["entry_step_id"],
+            "node_count": len(built["graph"]["nodes"]),
+            "graph_sha256": built["sha256"],
+            "validation_report": built["validation_report"],
+            "review_required": True,
+            "created_by": actor,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "reviewer_notes": None,
+            "execution_mode": "simulation_only",
+        }
+        row = ContentAsset(
+            workspace_id=workspace_id,
+            asset_type="email_automation",
+            title=built["graph"]["name"],
+            body=json.dumps(built["graph"], ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            status="review_required",
+            source_urls=[],
+            metadata_json=metadata,
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=actor,
+            action="email_automation.created", resource_type="content_asset",
+            resource_id=row.id, outcome="review_required",
+            details_json={
+                "version": built["graph"]["version"],
+                "graph_sha256": built["sha256"],
+                "node_count": metadata["node_count"],
+                "side_effects_performed": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return _email_automation_dict(row)
+
+
+async def _get_workspace_email_automation(db: AsyncSession, workspace_id: str, automation_id: str) -> ContentAsset:
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == automation_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "email_automation",
+        ))
+    if row is None:
+        raise HTTPException(404, "Email automation not found in the active workspace")
+    return row
+
+
+@api.get("/email/automations/{automation_id}")
+async def get_email_automation(
+    automation_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing email automations")
+    return _email_automation_dict(await _get_workspace_email_automation(db, workspace_id, automation_id))
+
+
+@api.post("/email/automations/{automation_id}/simulate")
+async def simulate_saved_email_automation(
+    automation_id: str,
+    payload: EmailAutomationSimulationRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before simulating email automations")
+    row = await _get_workspace_email_automation(db, workspace_id, automation_id)
+    try:
+        graph = json.loads(row.body)
+        result = simulate_email_automation(graph, **payload.model_dump())
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(409, "Stored graph is invalid; create a new version before simulation") from exc
+    return {
+        "automation_id": row.id,
+        "automation_status": row.status,
+        "simulation": result,
+        "provider_calls_made": 0,
+        "messages_scheduled": 0,
+        "messages_sent": 0,
+    }
+
+
+@api.post("/email/automations/{automation_id}/review")
+async def review_email_automation(
+    automation_id: str,
+    payload: EmailAutomationReviewRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing email automations")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    row = await _get_workspace_email_automation(db, workspace_id, automation_id)
+    metadata = dict(row.metadata_json or {})
+    if row.status in {"approved", "rejected"}:
+        raise HTTPException(409, "Reviewed automation versions are immutable; create a new version to change the graph")
+    try:
+        graph = json.loads(row.body)
+        built = build_email_automation(graph)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(409, "Stored graph is invalid; create a new version before review") from exc
+    if payload.decision == "approve":
+        if payload.confirm_graph_reviewed is not True:
+            raise HTTPException(409, "Approval requires confirm_graph_reviewed=true after reviewing every branch and message")
+        if built["sha256"] != metadata.get("graph_sha256"):
+            raise HTTPException(409, "Graph checksum changed; create a new version before approval")
+        row.status = "approved"
+        outcome = "human_review_approved"
+    else:
+        row.status = "rejected"
+        outcome = "human_review_rejected"
+    now = utcnow()
+    metadata["reviewed_by"] = actor
+    metadata["reviewed_at"] = now.isoformat()
+    metadata["reviewer_notes"] = payload.reviewer_notes or None
+    metadata["review_required"] = False
+    metadata["validation_report"] = built["validation_report"]
+    row.metadata_json = metadata
+    db.add(AuditLog(
+        workspace_id=workspace_id, actor=actor,
+        action="email_automation.reviewed", resource_type="content_asset",
+        resource_id=row.id, outcome=outcome,
+        details_json={
+            "version": metadata.get("version"),
+            "graph_sha256": metadata.get("graph_sha256"),
+            "side_effects_performed": False,
+            "runtime_activated": False,
+        },
+    ))
+    await db.commit()
+    await db.refresh(row)
+    return _email_automation_dict(row)
 
 
 @api.get("/email/queue")

@@ -927,3 +927,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added the compliance UI panel to search catalogue starters and load a title/URL into the evidence draft. The UI explicitly requires the operator to open the current source, confirm applicability/effective status, write a substantive summary, and attest; catalog entries never create evidence or approvals.
 - Added unit and API regression tests for national-scope matching, supplemental global policy handling, filters, invalid filter rejection, authorization and non-approval boundaries.
 - Scope remains partial: this curated set is not a worldwide law corpus, does not guarantee current legal coverage, and does not automatically refresh regulations. Current product compliance still requires qualified reviewer validation for every activity, actual channel and target jurisdiction.
+
+
+## 2026-10-28 implementation update — branching email automation builder
+- Added workspace-scoped, versioned email automation graphs on the existing content-asset store, avoiding a schema migration. Graphs support email, branch and stop nodes; purchase and engagement conditions; delay offsets; named versions; and deterministic SHA-256 checksums.
+- The graph validator checks step types/identifiers, references, acyclicity, reachability and affiliate disclosure declarations. Invalid or cyclic graphs are rejected before persistence.
+- Added APIs to create/list/detail, simulate, and human-review automation graph versions. Review decisions are immutable; creating/reviewing a graph does not send or enqueue email. Simulations stop immediately for no-consent/unsubscribed contexts, return the chosen path and schedule offsets, and report zero provider calls/queued/sent messages.
+- Added a branching-email UI with a declarative graph editor, saved graph register, sample lead-state toggles, path preview and review notes. The existing consent, scheduler, Resend integration and unsubscribe suppression remain the live delivery implementation.
+- Updated `docs/skill-parity-matrix.csv`: the email-automation-builder is now evidenced as partial; graph activation/branch progression inside the live scheduled-email worker, delivery UAT and provider-specific compliance verification remain open. This feature is not described as full automation delivery.

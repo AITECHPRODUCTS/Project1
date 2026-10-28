@@ -6558,8 +6558,8 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
   "commission_adjustment": float(commission), "revenue_adjustment": float(revenue),
  }
  if remaining_commission is not None and remaining_revenue is not None:
-  response["remaining_commission"] = str(remaining_commission)
-  response["remaining_revenue"] = str(remaining_revenue)
+  response["remaining_commission"] = format(remaining_commission.normalize(), "f")
+  response["remaining_revenue"] = format(remaining_revenue.normalize(), "f")
  return response
 @app.get("/r/{campaign_id}")
 async def redirect_campaign(campaign_id:str,request:Request,db:AsyncSession=Depends(get_session)):

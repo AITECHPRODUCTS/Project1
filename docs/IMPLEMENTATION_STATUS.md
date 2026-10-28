@@ -1,6 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-28
 
+## 2026-10-28 verified build checkpoint — offer terms and metric integrity
+- Verified code checkpoint: f787358479d27490f3e4e8b516eab5c27f2e84be. [Push workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685285720) and [PR workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685291821) both completed successfully. Python: 585 passed, 7 skipped; PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition.
+- Added merchant offer term snapshots with an Alembic migration, workspace-scoped capture/history APIs, SHA-256 fingerprints, deterministic per-offer sequence numbers, field-level comparisons, audit events, a terms-history UI and revalidation gating. This is operator-evidence capture; it does not fetch evidence URLs or establish provider verification.
+- Fixed offer metric handling so negative or non-finite revenue, invalid/fractional counts, booleans and invalid weights raise validation errors instead of being silently clamped/truncated. Invalid/non-finite source gravity remains unknown.
+- Release status remains NOT RELEASE READY. See docs/BUILD_PROGRESS_2026-10-28.md for the current feature list and remaining production work.
+
 ## Repository/build
 - Canonical repository: https://github.com/AITECHPRODUCTS/Project1 (public).
 - Implementation branch: `build/omni-affiliate-os-production`.

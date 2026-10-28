@@ -13,8 +13,10 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.exc import DBAPIError
 
 from backend import main
+from backend.config import get_settings
 from backend.database import SessionLocal, engine
-from backend.models import Campaign, ClickEvent, Conversion, ConversionLedgerEntry, Workspace
+from backend.models import Campaign, ClickEvent, Conversion, ConversionLedgerEntry, PerformanceMemory, Workspace
+from backend.services.s6_s8_analytics import self_improver_loop
 from backend.tenancy import workspace_scope
 
 
@@ -322,4 +324,157 @@ async def test_postgres_partial_reversal_caps_and_full_reversal_offsets_remainin
                 assert sum((row.commission_amount for row in ledger_rows), Decimal("0")) == Decimal("0.000000")
                 assert sum((row.revenue_amount for row in ledger_rows), Decimal("0")) == Decimal("0.000000")
     finally:
+        await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_postgres_learning_nets_partial_reversal_and_excludes_reversed_outcomes(monkeypatch):
+    if not engine.url.drivername.startswith("postgresql"):
+        pytest.skip("requires the dedicated PostgreSQL integration CI job")
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "min_conversions_for_learning", 1)
+    monkeypatch.setattr(settings, "min_hook_conversion_rate", 0.0)
+    workspace_id: str | None = None
+    try:
+        async with SessionLocal() as db:
+            workspace = Workspace(
+                name="PostgreSQL learning reversal test",
+                slug=f"learning-reversal-{uuid.uuid4().hex}",
+            )
+            db.add(workspace)
+            await db.commit()
+            workspace_id = workspace.id
+
+        hook = "postgres-partial-refund-hook"
+        click_id = uuid.uuid4().hex
+        with workspace_scope(workspace_id):
+            async with SessionLocal() as db:
+                campaign = Campaign(
+                    name="Learning reversal campaign",
+                    niche="test",
+                    primary_destination="https://example.com/offer",
+                )
+                db.add(campaign)
+                await db.flush()
+                db.add(ClickEvent(
+                    click_id=click_id,
+                    campaign_id=campaign.id,
+                    destination_url="https://example.com/offer",
+                    chosen_destination="primary",
+                    utm_json={"utm_content": hook},
+                ))
+                db.add_all([
+                    Conversion(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id="learning-partial-original",
+                        click_id=click_id,
+                        commission=1.25,
+                        revenue=10.0,
+                        hook=hook,
+                        status="partially_reversed",
+                        event_json={"reversal": False},
+                    ),
+                    Conversion(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id="learning-partial-event",
+                        click_id=click_id,
+                        commission=-0.50,
+                        revenue=-2.0,
+                        hook=hook,
+                        status="partially_reversed",
+                        event_json={"reversal": True, "partial_reversal": True},
+                    ),
+                    Conversion(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id="learning-fully-reversed",
+                        click_id=click_id,
+                        commission=5.0,
+                        revenue=50.0,
+                        hook=hook,
+                        status="reversed",
+                        event_json={"reversal": False},
+                    ),
+                ])
+                db.add_all([
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id="learning-partial-original",
+                        click_id=click_id,
+                        entry_type="conversion",
+                        commission_amount=Decimal("1.250000"),
+                        revenue_amount=Decimal("10.000000"),
+                        currency="USD",
+                        status="partially_reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id="learning-partial-event",
+                        click_id=click_id,
+                        entry_type="reversal",
+                        original_event_id="learning-partial-original",
+                        commission_amount=Decimal("-0.500000"),
+                        revenue_amount=Decimal("-2.000000"),
+                        currency="USD",
+                        status="partially_reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id="learning-fully-reversed",
+                        click_id=click_id,
+                        entry_type="conversion",
+                        commission_amount=Decimal("5.000000"),
+                        revenue_amount=Decimal("50.000000"),
+                        currency="USD",
+                        status="reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                    ConversionLedgerEntry(
+                        workspace_id=workspace_id,
+                        network=NETWORK,
+                        external_event_id="learning-full-reversal-event",
+                        click_id=click_id,
+                        entry_type="reversal",
+                        original_event_id="learning-fully-reversed",
+                        commission_amount=Decimal("-5.000000"),
+                        revenue_amount=Decimal("-50.000000"),
+                        currency="USD",
+                        status="reversed",
+                        evidence_status="signed_webhook_verified",
+                        source_event_json={"test_fixture": True},
+                    ),
+                ])
+                await db.commit()
+
+        result = await self_improver_loop(workspace_id=workspace_id)
+        assert result["conversions_scanned"] == 1
+        assert result["performance_memory_candidates_saved"] == 1
+        assert len(result["learned_hooks"]) == 1
+        assert result["learned_hooks"][0]["hook"] == hook
+        assert result["learned_hooks"][0]["conversions"] == 1
+        assert result["learned_hooks"][0]["commission"] == pytest.approx(0.75)
+
+        with workspace_scope(workspace_id):
+            async with SessionLocal() as db:
+                memory = await db.scalar(
+                    select(PerformanceMemory).where(PerformanceMemory.hook == hook)
+                )
+                assert memory is not None
+                assert memory.conversion_count == 1
+                assert memory.commission_recorded == pytest.approx(0.75)
+    finally:
+        # PostgreSQL CI provisions a disposable database per run; the append-only
+        # ledger intentionally retains these UUID-scoped observations.
         await engine.dispose()

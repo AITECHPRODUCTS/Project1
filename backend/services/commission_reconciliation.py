@@ -13,6 +13,12 @@ def _network_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
 
 
+def _status_key(value: Any, default: str = "") -> str:
+    """Normalize provider/operator status spelling without guessing semantics."""
+    status = str(value or default).strip().casefold()
+    return re.sub(r"[^a-z0-9]+", "_", status).strip("_")
+
+
 def _currency_key(value: Any) -> str | None:
     """Return an explicit three-letter currency code; never infer USD."""
     currency = str(value or "").strip().upper()
@@ -56,7 +62,7 @@ def build_commission_reconciliation(
         amount = _amount_key(conversion.get("commission"))
         network = _network_key(conversion.get("network"))
         currency = _currency_key(conversion.get("currency"))
-        status = str(conversion.get("status") or "").strip().casefold()
+        status = _status_key(conversion.get("status"))
         if amount is None or amount <= 0 or not network or currency is None or status in {
             "reversed", "refunded", "chargeback", "clawback", "reversal",
             "commission_reversal",
@@ -67,7 +73,7 @@ def build_commission_reconciliation(
     results = []
     counts = {"possible_match": 0, "ambiguous": 0, "unmatched": 0, "already_reviewed": 0}
     for evidence in evidence_rows:
-        evidence_status = str(evidence.get("status") or "pending_verification")
+        evidence_status = _status_key(evidence.get("status"), "pending_verification")
         currency = _currency_key(evidence.get("currency"))
         if evidence_status not in {"pending_verification", "needs_review"}:
             counts["already_reviewed"] += 1

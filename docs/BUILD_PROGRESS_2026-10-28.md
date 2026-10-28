@@ -3,16 +3,16 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Latest verified code candidate:** [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb)  
+**Latest verified code candidate:** [052fc71ac422b357caeef47fb44a6bffdbcabe4e](https://github.com/AITECHPRODUCTS/Project1/commit/052fc71ac422b357caeef47fb44a6bffdbcabe4e)  
 **Release status:** NOT RELEASE READY  
 
-## Latest verified checkpoint — persisted affiliate offer catalog UI (2026-10-28)
+## Latest verified checkpoint — bounded source ratings and persisted affiliate catalog (2026-10-28)
 
-Code candidate [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb) adds an actual Next.js catalog page at `/offers`, wired to persisted `GET /api/offers`. It includes text/network/category/reward filters, recurring-commission/cookie/verification filters, supported sort options and null-last direction, pagination (20 per page), clear/refresh/loading/error/empty states, and navigation from the existing growth dashboard and publisher marketplace. Missing metrics render as **Unknown**; EPC is not attributed a currency the database does not store; provider verification displays as “Provider claimed — not independently attested”; offer/source links must be HTTPS. Browser acceptance checks first-page results, unknown metrics, unattested-claim copy, pagination, and search filters.
+Code: [052fc71ac422b357caeef47fb44a6bffdbcabe4e](https://github.com/AITECHPRODUCTS/Project1/commit/052fc71ac422b357caeef47fb44a6bffdbcabe4e) adds a five-star bound to the existing OpenAffiliate metric normalizer. Ratings outside 0–5, malformed, boolean, negative, non-finite or overflowing inputs remain unknown rather than being displayed as valid ratings. The regression suite covers 5.01, 100 and valid 5.0. The prior verified catalog UI at [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb) exposes persisted `GET /api/offers` with filters, null-last sorting, pagination, explicit “provider claimed — not independently attested” labels, unknown metrics, HTTPS-only links and Chromium acceptance.
 
-Exact-SHA [push CI 40736669386](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736669386) and [PR CI 40736678275](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736678275) both completed successfully. Python: **687 passed, 7 skipped, 5 warnings** on PR. Browser UAT: **6 passed** on both runs. PostgreSQL migration/concurrency, frontend typecheck/production build/Docker smoke, AI/RAG SBOM, security/dependency audit, secret scan, repository guard and push lockfile-sync passed; PR lockfile-sync was skipped by the configured event condition.
+Exact-SHA [push CI 40738666906](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40738666906) and [PR CI 40738675557](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40738675557) passed. Python: **690 passed, 7 skipped, 5 warnings** on PR. Browser UAT: **6 passed** on each. PostgreSQL, frontend/Docker, AI/RAG SBOM and license inventory, security/dependency audit, secret scan, repository guard and push lockfile sync passed; PR lockfile sync was skipped by the configured event condition.
 
-This closes the first user-facing persisted affiliate-catalog slice, not live marketplace research. Native provider authentication, source attestation, terms/eligibility freshness, complete S1–S8/53-skill acceptance and all release gates remain. Product status remains **NOT RELEASE READY**.
+These slices improve local data quality and the persisted-catalog workflow; they do not authenticate source data or complete live marketplace research. Native provider authorization, freshness/terms/eligibility verification, full 53-skill S1–S8 acceptance, legal/licensing disposition and staging/deployment/restore gates remain. Status: **NOT RELEASE READY**.
 
 
 ## Previous verified feature slice — 2026-10-28 S1 offer metrics runtime

@@ -1,6 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-28
 
+## Candidate under verification — safe ad budget guardrail review handler (2026-10-28)
+
+- Feature code candidate: [9aff881546655b627b878213c1fe9b84b1410472](https://github.com/AITECHPRODUCTS/Project1/commit/9aff881546655b627b878213c1fe9b84b1410472). It adds allowlisted `ads.guardrail_review` to the governed skill runtime and calls the existing `evaluate_ad_budget_guardrail` service after strict JSON, timestamp, numeric and observation checks.
+- It returns review signals only. It does not call an ad platform, authorize spend, pause campaigns, or engage an external kill switch. Unverified/mixed records, stale/future evidence, invalid amounts and malformed records fail closed or reject input.
+- Tests in `tests/test_skill_runtime.py` cover fresh provider-verified spend-cap breaches, unverified inputs, stale observations, invalid timestamps, malformed policy/caps, boolean counters, non-finite money and unexpected fields.
+- Verification status at record creation: hosted push/PR workflows for the resulting branch candidate have not yet completed. Do not count this handler as hosted-CI-verified until the final exact-SHA push and PR matrices conclude.
+
+
 ## 2026-10-28 verified build — S1 offer-metrics runtime handler
 
 - Feature code was introduced by [commit 440d378d7588081f6e072e18e35bd7573543f89a](https://github.com/AITECHPRODUCTS/Project1/commit/440d378d7588081f6e072e18e35bd7573543f89a). The handler `research.offer_metrics` is allowlisted in `backend/services/skill_runtime.py` and calls the existing validated `compute_offer_metrics` service. It computes EPC, conversion rate and normalized supplied gravity from explicit inputs; missing data remains unknown. It rejects unexpected input fields, invalid numeric values and impossible counts. It performs no network request or external mutation.

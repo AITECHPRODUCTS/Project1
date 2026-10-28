@@ -7223,7 +7223,7 @@ async def resend_lead_consent_confirmation(
         raise HTTPException(403, "Select an authorized workspace before resending confirmation")
     if str(user.get("workspace_role") or "") not in {"owner", "admin"}:
         raise HTTPException(403, "Only a workspace owner or admin may resend consent confirmation")
-    if not settings.email_double_opt_in_required:
+    if not getattr(settings, "email_double_opt_in_required", False):
         raise HTTPException(409, "Email double opt-in is not enabled")
     try:
         with workspace_scope(workspace_id):

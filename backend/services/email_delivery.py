@@ -278,7 +278,7 @@ async def capture_lead_and_schedule(
    raise ValueError("Address previously unsubscribed; explicit resubscribe confirmation required")
   settings = get_settings()
   needs_confirmation = bool(
-   settings.email_double_opt_in_required
+   getattr(settings, "email_double_opt_in_required", False)
    and not consent_confirmation_verified
    and (lead is None or lead.email_consent_confirmed_at is None or was_resubscribed)
   )
@@ -771,7 +771,7 @@ async def resend_email_consent_confirmation(
 ) -> dict[str, Any]:
  """Issue a fresh token to a workspace-authorized operator without storing raw tokens."""
  settings = get_settings()
- if not settings.email_double_opt_in_required:
+ if not getattr(settings, "email_double_opt_in_required", False):
   raise ValueError("Email double opt-in is not enabled for this environment")
  if not (settings.resend_api_key and settings.resend_from_email):
   raise ConsentConfirmationDeliveryUnavailable(
@@ -920,7 +920,7 @@ async def send_due_emails(
      message.last_error = "Lead is missing or has unsubscribed"
      skipped += 1
      continue
-    if settings.email_double_opt_in_required and lead.email_consent_confirmed_at is None:
+    if getattr(settings, "email_double_opt_in_required", False) and lead.email_consent_confirmed_at is None:
      message.status = "suppressed"
      message.claimed_at = None
      message.last_error = "Marketing delivery blocked until recipient confirms the email address."

@@ -99,3 +99,24 @@ def test_reconciliation_never_infers_missing_currency_as_usd():
 
     assert report["data"][0]["reconciliation_status"] == "unmatched"
     assert report["data"][0]["currency"] is None
+
+
+def test_reconciliation_normalizes_pending_evidence_status_spelling():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": " Pending Verification "}],
+        [{"id": "conv-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "approved"}],
+    )
+
+    assert report["data"][0]["evidence_status"] == "pending_verification"
+    assert report["data"][0]["reconciliation_status"] == "possible_match"
+
+
+def test_reconciliation_normalizes_reviewed_status_spelling_without_reopening_it():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "matched to conversion"}],
+        [{"id": "conv-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "approved"}],
+    )
+
+    assert report["data"][0]["evidence_status"] == "matched_to_conversion"
+    assert report["data"][0]["reconciliation_status"] == "already_reviewed"
+    assert report["data"][0]["candidate_conversion_ids"] == []

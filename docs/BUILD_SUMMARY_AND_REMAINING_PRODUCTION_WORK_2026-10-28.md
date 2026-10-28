@@ -3,16 +3,16 @@
 **Snapshot date:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code candidate:** [052fc71ac422b357caeef47fb44a6bffdbcabe4e](https://github.com/AITECHPRODUCTS/Project1/commit/052fc71ac422b357caeef47fb44a6bffdbcabe4e)  
+**Latest verified code candidate:** [f0a6cfa1d6794ca5efd365226a1f5fc680a92de1](https://github.com/AITECHPRODUCTS/Project1/commit/f0a6cfa1d6794ca5efd365226a1f5fc680a92de1)  
 **Release status: NOT RELEASE READY.** This is a compact handoff/status summary, not a claim of full product completion.
 
-## Latest verified checkpoint — bounded source ratings and persisted affiliate catalog (2026-10-28)
+## Latest verified checkpoint — Platform Super Admin catalog sync UI (2026-10-28)
 
-Code: [052fc71ac422b357caeef47fb44a6bffdbcabe4e](https://github.com/AITECHPRODUCTS/Project1/commit/052fc71ac422b357caeef47fb44a6bffdbcabe4e) adds a five-star bound to the existing OpenAffiliate metric normalizer. Ratings outside 0–5, malformed, boolean, negative, non-finite or overflowing inputs remain unknown rather than being displayed as valid ratings. The regression suite covers 5.01, 100 and valid 5.0. The prior verified catalog UI at [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb) exposes persisted `GET /api/offers` with filters, null-last sorting, pagination, explicit “provider claimed — not independently attested” labels, unknown metrics, HTTPS-only links and Chromium acceptance.
+Code [f0a6cfa1d6794ca5efd365226a1f5fc680a92de1](https://github.com/AITECHPRODUCTS/Project1/commit/f0a6cfa1d6794ca5efd365226a1f5fc680a92de1) adds an explicit Sync OpenAffiliate catalog button on `/offers`. The client checks `/api/auth/me` and exposes it only for `is_admin === true` and a selected workspace; the backend’s existing Platform Super Admin dependency is still the authoritative guard. The button calls the existing `POST /api/offers/sync?limit=100` via `apiFetch`, preserving session cookies/CSRF, shows actual created/updated/registry counts, reports errors, reloads the list and prevents overlapping syncs. A non-admin UI test verifies the control is hidden; an admin browser test validates the CSRF header, POST path, result and reloaded catalog using controlled API fixtures.
 
-Exact-SHA [push CI 40738666906](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40738666906) and [PR CI 40738675557](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40738675557) passed. Python: **690 passed, 7 skipped, 5 warnings** on PR. Browser UAT: **6 passed** on each. PostgreSQL, frontend/Docker, AI/RAG SBOM and license inventory, security/dependency audit, secret scan, repository guard and push lockfile sync passed; PR lockfile sync was skipped by the configured event condition.
+Exact-SHA [push CI 40740353117](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40740353117) and [PR CI 40740367485](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40740367485) both passed. Python: **690 passed, 7 skipped, 5 warnings** on PR. Browser UAT: **7 passed** in each. PostgreSQL, frontend TypeScript/production build/Docker, AI/RAG SBOM/license inventory, security/dependency audit, secret scan and repository guard passed. Push lockfile sync passed; PR lockfile sync was skipped by configured event condition.
 
-These slices improve local data quality and the persisted-catalog workflow; they do not authenticate source data or complete live marketplace research. Native provider authorization, freshness/terms/eligibility verification, full 53-skill S1–S8 acceptance, legal/licensing disposition and staging/deployment/restore gates remain. Status: **NOT RELEASE READY**.
+This adds a real UI path to sync the configured OpenAffiliate directory into the persisted internal offer catalogue. CI’s browser fixture does not authenticate a real provider account; provider source authenticity, account approval, current terms and other networks’ native connectors remain unverified. Full 53-skill S1–S8 acceptance and legal, staging, rollback, monitoring and backup/restore gates remain. Release status: **NOT RELEASE READY**.
 
 
 ## Previous verified feature slice — 2026-10-28 S1 offer metrics runtime

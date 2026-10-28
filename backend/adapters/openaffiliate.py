@@ -7,17 +7,30 @@ from backend.adapters.base import AffiliateNetworkAdapter
 from backend.tools.affiliate_api import OpenAffiliateClient
 
 
-MAX_AMOUNT = Decimal("1000000000000.00")
+MAX_AMOUNT = Decimal("999999999999.999999")
+LEDGER_SCALE = Decimal("0.000001")
 
 
-def _money(value: Any, field: str) -> float:
+def _money(value: Any, field: str) -> Decimal:
+    # Keep affiliate amounts compatible with the immutable Numeric(18, 6)
+    # commission ledger; a float conversion would lose precision on valid events.
+    if value is None:
+        value = 0
+    if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
+        raise ValueError(f"{field} must be a finite non-negative amount")
     try:
-        amount = Decimal(str(0 if value is None else value))
+        amount = Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError) as exc:
         raise ValueError(f"{field} must be a finite non-negative amount") from exc
     if not amount.is_finite() or amount < 0 or amount > MAX_AMOUNT:
-        raise ValueError(f"{field} must be a finite non-negative amount within the supported range")
-    return float(amount)
+        raise ValueError(f"{field} must be a finite non-negative amount within Numeric(18, 6)")
+    try:
+        normalized = amount.quantize(LEDGER_SCALE)
+    except InvalidOperation as exc:
+        raise ValueError(f"{field} must fit Numeric(18, 6)") from exc
+    if normalized != amount:
+        raise ValueError(f"{field} must have no more than 6 decimal places")
+    return amount
 
 
 class OpenAffiliateAdapter(AffiliateNetworkAdapter):

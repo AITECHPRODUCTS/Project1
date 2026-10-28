@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 import pytest
 
 from backend.adapters.openaffiliate import OpenAffiliateAdapter
@@ -25,8 +26,8 @@ def test_openaffiliate_adapter_normalizes_conversion_fields():
     assert result["network"] == "openaffiliate"
     assert result["external_event_id"] == "txn-1"
     assert result["click_id"] == "click-1"
-    assert result["commission"] == 1.25
-    assert result["revenue"] == 9.5
+    assert result["commission"] == Decimal("1.25")
+    assert result["revenue"] == Decimal("9.50")
     assert result["status"] == "approved"
 
 
@@ -39,6 +40,9 @@ def test_openaffiliate_adapter_normalizes_conversion_fields():
         ("revenue", "Infinity"),
         ("commission", "not-a-number"),
         ("commission", "1000000000001"),
+        ("revenue", "1000000000000"),
+        ("commission", "0.1234567"),
+        ("revenue", True),
     ],
 )
 def test_openaffiliate_adapter_rejects_invalid_money(field, value):
@@ -65,3 +69,24 @@ async def test_openaffiliate_adapter_fetches_offers_through_client():
     assert await adapter.fetch_offers(query="camera", limit=25) == [
         {"id": "offer-1", "name": "Example"}
     ]
+
+
+
+def test_openaffiliate_adapter_preserves_full_numeric_18_6_precision():
+    adapter = OpenAffiliateAdapter(client=FakeClient())
+    result = adapter.parse_conversion({
+        "event_id": "evt-ledger-boundary",
+        "commission": "999999999999.999999",
+        "revenue": "0.000001",
+    })
+
+    assert result["commission"] == Decimal("999999999999.999999")
+    assert result["revenue"] == Decimal("0.000001")
+
+
+def test_openaffiliate_adapter_defaults_missing_amounts_without_float_conversion():
+    adapter = OpenAffiliateAdapter(client=FakeClient())
+    result = adapter.parse_conversion({"event_id": "evt-no-amounts"})
+
+    assert result["commission"] == Decimal("0")
+    assert result["revenue"] == Decimal("0")

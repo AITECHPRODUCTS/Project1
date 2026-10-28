@@ -492,3 +492,10 @@
 - **Implementation:** `backend/services/commission_reconciliation.py::_status_key` normalizes case and punctuation separators to underscore-delimited status keys for evidence and conversion status evaluation.
 - **Tests:** `tests/test_commission_reconciliation.py` adds pending-status and already-reviewed-status spelling regression tests.
 - **Candidate commits:** `91976a3e8fdbe8aab1b56ab362bcabf7504c29bf` and `38cf64a294fec308b6c9dfa5a2d3dfe978f7e70c`. Exact current-head CI evidence is pending; do not count as verified until both push and PR runs complete.
+
+
+## 2026-10-28 additive traceability — commission status fallback and reversal aliases
+- **Requirement:** S6 reconciliation must safely handle blank status fields and exclude explicitly reversed/refunded/chargeback commissions from candidate matching, regardless of punctuation/case variants.
+- **Implementation:** blank or whitespace-only evidence statuses now fall back to `pending_verification`; a narrow status classifier excludes explicit `fully_reversed`, `fully_refunded`, `charge_back`, and `commission_reversed` aliases after normalization. No fuzzy inference is used.
+- **Tests:** `tests/test_commission_reconciliation.py` adds whitespace-default and multiple reversal-alias regression coverage.
+- **Verification:** implementation candidate; exact-head CI is required before the behavior is considered verified. No payout is confirmed and no ledger state is mutated.

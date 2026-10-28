@@ -1072,3 +1072,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added two regression tests for pending and reviewed status variants in `tests/test_commission_reconciliation.py`.
 - Service commit: `91976a3e8fdbe8aab1b56ab362bcabf7504c29bf`; test commit: `38cf64a294fec308b6c9dfa5a2d3dfe978f7e70c`.
 - **Candidate only until exact-current-HEAD push and PR CI complete.** No live payout state is changed. Existing staging/provider/production release gates remain open.
+
+
+## 2026-10-28 commission reconciliation reversal-status hardening — candidate
+- Fixed whitespace-only evidence status handling: blank/whitespace values now use the documented `pending_verification` default rather than becoming an unknown reviewed status.
+- Added conservative explicit aliases for fully reversed/refunded, charge-back, and commission-reversed conversion statuses. These aliases are normalized first and excluded from candidate matches; unrelated statuses are not guessed to mean reversal.
+- Regression coverage: whitespace-only evidence status continues through review matching; explicit reversal variants never become commission candidates.
+- Candidate commit: pending creation in this checkpoint. Verify exact-head push and PR workflows before calling this change CI-verified. Reconciliation remains review-only and never confirms a payout.

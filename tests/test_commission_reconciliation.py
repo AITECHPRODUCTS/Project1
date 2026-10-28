@@ -120,3 +120,27 @@ def test_reconciliation_normalizes_reviewed_status_spelling_without_reopening_it
     assert report["data"][0]["evidence_status"] == "matched_to_conversion"
     assert report["data"][0]["reconciliation_status"] == "already_reviewed"
     assert report["data"][0]["candidate_conversion_ids"] == []
+
+
+def test_reconciliation_uses_default_for_whitespace_only_evidence_status():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "   "}],
+        [{"id": "conv-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "approved"}],
+    )
+
+    assert report["data"][0]["evidence_status"] == "pending_verification"
+    assert report["data"][0]["reconciliation_status"] == "possible_match"
+
+
+def test_reconciliation_excludes_explicit_reversal_status_variants():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.50", "currency": "USD"}],
+        [
+            {"id": "full-reversal", "network": "acme", "commission": "12.50", "currency": "USD", "status": "Fully Reversed"},
+            {"id": "charge-back", "network": "acme", "commission": "12.50", "currency": "USD", "status": "charge back"},
+            {"id": "commission-reversed", "network": "acme", "commission": "12.50", "currency": "USD", "status": "commission-reversed"},
+        ],
+    )
+
+    assert report["data"][0]["reconciliation_status"] == "unmatched"
+    assert report["data"][0]["candidate_conversion_ids"] == []

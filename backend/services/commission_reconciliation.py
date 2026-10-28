@@ -15,8 +15,19 @@ def _network_key(value: Any) -> str:
 
 def _status_key(value: Any, default: str = "") -> str:
     """Normalize provider/operator status spelling without guessing semantics."""
-    status = str(value or default).strip().casefold()
-    return re.sub(r"[^a-z0-9]+", "_", status).strip("_")
+    status = str(value or "").strip()
+    if not status:
+        status = default
+    return re.sub(r"[^a-z0-9]+", "_", status.casefold()).strip("_")
+
+
+def _is_reversed_conversion_status(status: str) -> bool:
+    """Exclude only explicit reversal/refund/chargeback states from candidates."""
+    return status in {
+        "reversed", "fully_reversed", "refunded", "fully_refunded",
+        "chargeback", "charge_back", "clawback", "reversal",
+        "commission_reversal", "commission_reversed",
+    }
 
 
 def _currency_key(value: Any) -> str | None:
@@ -63,10 +74,7 @@ def build_commission_reconciliation(
         network = _network_key(conversion.get("network"))
         currency = _currency_key(conversion.get("currency"))
         status = _status_key(conversion.get("status"))
-        if amount is None or amount <= 0 or not network or currency is None or status in {
-            "reversed", "refunded", "chargeback", "clawback", "reversal",
-            "commission_reversal",
-        }:
+        if amount is None or amount <= 0 or not network or currency is None or _is_reversed_conversion_status(status):
             continue
         indexed.setdefault((network, currency, amount), []).append(conversion)
 

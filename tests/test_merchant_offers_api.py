@@ -539,3 +539,102 @@ def test_terms_fetch_compares_successful_page_hashes_without_claiming_terms_veri
             ]
     finally:
         cleanup(engine, client)
+
+
+@pytest.mark.parametrize(
+    "decision,expected_review_status,expected_offer_status,expected_terms_verified",
+    [
+        ("no_material_change", "reviewed_no_material_change", "approved", True),
+        ("material_change_found", "material_change_found", "suspended", False),
+        ("source_unreliable", "source_unreliable", "suspended", False),
+    ],
+)
+def test_changed_source_requires_independent_review_and_applies_decision(
+    tmp_path, monkeypatch, decision, expected_review_status, expected_offer_status, expected_terms_verified
+):
+    from contextlib import asynccontextmanager
+
+    engine, user, _, client = make_client(tmp_path)
+    body_a = b"<html><body><p>Affiliate commission terms version A.</p></body></html>"
+    body_b = b"<html><body><p>Affiliate commission terms version B.</p></body></html>"
+    responses = [
+        _FakeTermsResponse(200, {"content-type": "text/html", "content-length": str(len(body_a))}, body_a),
+        _FakeTermsResponse(200, {"content-type": "text/html", "content-length": str(len(body_b))}, body_b),
+    ]
+
+    @asynccontextmanager
+    async def fake_open(url, **kwargs):
+        yield responses.pop(0)
+
+    monkeypatch.setattr(main, "open_public_http_response", fake_open)
+    try:
+        with client:
+            created = client.post("/api/merchant/offers", json=offer_payload())
+            assert created.status_code == 201, created.text
+            offer_id = created.json()["id"]
+            snapshot_response = client.post(
+                f"/api/merchant/offers/{offer_id}/term-snapshots",
+                json=term_snapshot_payload(),
+            )
+            assert snapshot_response.status_code == 201, snapshot_response.text
+            snapshot_id = snapshot_response.json()["id"]
+            submit = client.post(f"/api/merchant/offers/{offer_id}/submit")
+            assert submit.status_code == 200, submit.text
+
+            user["email"] = "reviewer@example.com"
+            user["workspace_role"] = "admin"
+            approved = client.post(f"/api/merchant/offers/{offer_id}/review", json={
+                "decision": "approve",
+                "seller_authorization_verified": True,
+                "commission_terms_verified": True,
+                "reviewer_notes": "Checked the supplied seller and terms references.",
+            })
+            assert approved.status_code == 200, approved.text
+            listed = client.post(f"/api/merchant/offers/{offer_id}/list")
+            assert listed.status_code == 200 and listed.json()["marketplace_listed"] is True
+
+            fetch_endpoint = f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetch-evidence"
+            assert client.post(fetch_endpoint).json()["content_change_status"] == "baseline_recorded"
+            changed_fetch = client.post(fetch_endpoint).json()
+            assert changed_fetch["content_change_status"] == "content_changed"
+            assert changed_fetch["review_status"] == "pending_review"
+
+            review_endpoint = f"/api/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetches/{changed_fetch['id']}/review"
+            user["email"] = "creator@example.com"
+            denied = client.post(review_endpoint, json={
+                "decision": decision, "reviewer_notes": "Reviewed the changed source content."
+            })
+            assert denied.status_code == 403, denied.text
+
+            user["email"] = "reviewer@example.com"
+            reviewed = client.post(review_endpoint, json={
+                "decision": decision,
+                "reviewer_notes": "Reviewed the changed source and documented the decision.",
+            })
+            assert reviewed.status_code == 200, reviewed.text
+            result = reviewed.json()
+            assert result["review_status"] == expected_review_status
+            assert result["review_decision"] == decision
+            assert result["reviewed_by"] == "reviewer@example.com"
+            assert result["requires_human_review"] is False
+            assert result["offer_status"] == expected_offer_status
+            assert result["terms_verified"] is expected_terms_verified
+            assert result["activation_allowed"] is expected_terms_verified
+            assert result["marketplace_listed"] is expected_terms_verified
+            repeated = client.post(review_endpoint, json={
+                "decision": "no_material_change", "reviewer_notes": "This repeat review must not be accepted."
+            })
+            assert repeated.status_code == 409
+    finally:
+        cleanup(engine, client)
+
+
+def test_changed_source_review_notes_must_be_meaningful():
+    from pydantic import ValidationError
+    from backend.schemas import MerchantOfferTermEvidenceReviewRequest
+
+    with pytest.raises(ValidationError):
+        MerchantOfferTermEvidenceReviewRequest.model_validate({
+            "decision": "no_material_change",
+            "reviewer_notes": "          ",
+        })

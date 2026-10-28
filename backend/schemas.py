@@ -1508,6 +1508,19 @@ class MerchantOfferTermSnapshotCreateRequest(BaseModel):
         return self
 
 
+class MerchantOfferTermEvidenceReviewRequest(BaseModel):
+    decision: Literal["no_material_change", "material_change_found", "source_unreliable"]
+    reviewer_notes: str = Field(min_length=10, max_length=3000)
+
+    @field_validator("reviewer_notes")
+    @classmethod
+    def normalize_terms_evidence_review_notes(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("Reviewer notes must contain at least 10 non-whitespace characters")
+        return normalized
+
+
 class MarketplaceApplicationCreateRequest(BaseModel):
     publisher_website_url: str = Field(min_length=8, max_length=2048)
     audience_description: str = Field(min_length=30, max_length=3000)

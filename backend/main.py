@@ -29,7 +29,7 @@ from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -1324,7 +1324,12 @@ def _merchant_term_evidence_fetch_dict(row: MerchantOfferTermEvidenceFetch) -> d
         "content_sha256": row.content_sha256,
         "previous_content_sha256": row.previous_content_sha256,
         "content_change_status": row.content_change_status,
-        "requires_human_review": row.content_change_status == "content_changed",
+        "review_status": row.review_status,
+        "review_decision": row.review_decision,
+        "review_notes": row.review_notes,
+        "reviewed_by": row.reviewed_by,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "requires_human_review": row.content_change_status == "content_changed" and row.review_status == "pending_review",
         "text_excerpt": row.text_excerpt,
         "etag": row.etag,
         "last_modified": row.last_modified,
@@ -1755,6 +1760,7 @@ async def fetch_merchant_offer_terms_evidence(
             content_sha256=result["content_sha256"],
             previous_content_sha256=previous_hash,
             content_change_status=content_change_status,
+            review_status="pending_review" if content_change_status == "content_changed" else "not_required",
             text_excerpt=result["text_excerpt"],
             etag=result["etag"],
             last_modified=result["last_modified"],
@@ -1827,6 +1833,112 @@ async def list_merchant_offer_terms_evidence_fetches(
             MerchantOfferTermEvidenceFetch.id.desc(),
         ).limit(limit))).all())
     return {"count": len(rows), "data": [_merchant_term_evidence_fetch_dict(row) for row in rows]}
+
+
+@api.post("/merchant/offers/{offer_id}/term-snapshots/{snapshot_id}/fetches/{fetch_id}/review")
+async def review_merchant_offer_terms_source_change(
+    offer_id: str,
+    snapshot_id: str,
+    fetch_id: str,
+    payload: MerchantOfferTermEvidenceReviewRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Record an independent human decision for changed source content."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing source evidence")
+    workspace_id = str(workspace_id)
+    reviewer = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id,
+            MerchantOffer.workspace_id == workspace_id,
+        ).with_for_update())
+        if offer is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        snapshot = await db.scalar(select(MerchantOfferTermSnapshot).where(
+            MerchantOfferTermSnapshot.id == snapshot_id,
+            MerchantOfferTermSnapshot.workspace_id == workspace_id,
+            MerchantOfferTermSnapshot.merchant_offer_id == offer.id,
+        ))
+        if snapshot is None:
+            raise HTTPException(404, "Term snapshot not found in the active workspace")
+        fetch_row = await db.scalar(select(MerchantOfferTermEvidenceFetch).where(
+            MerchantOfferTermEvidenceFetch.id == fetch_id,
+            MerchantOfferTermEvidenceFetch.workspace_id == workspace_id,
+            MerchantOfferTermEvidenceFetch.merchant_offer_id == offer.id,
+            MerchantOfferTermEvidenceFetch.term_snapshot_id == snapshot.id,
+        ).with_for_update())
+        if fetch_row is None:
+            raise HTTPException(404, "Evidence fetch record not found in the active workspace")
+        if fetch_row.content_change_status != "content_changed":
+            raise HTTPException(409, "Only source-content changes require this review action")
+        if fetch_row.review_status != "pending_review":
+            raise HTTPException(409, "This source-content change has already been reviewed")
+        if reviewer.strip().casefold() in {
+            (offer.created_by or "").strip().casefold(),
+            (snapshot.created_by or "").strip().casefold(),
+        }:
+            raise HTTPException(403, "A different workspace owner/admin must review the offer creator's source change")
+
+        previous_offer_status = offer.status
+        fetch_row.review_decision = payload.decision
+        fetch_row.review_notes = payload.reviewer_notes
+        fetch_row.reviewed_by = reviewer
+        fetch_row.reviewed_at = utcnow()
+        if payload.decision == "no_material_change":
+            fetch_row.review_status = "reviewed_no_material_change"
+        elif payload.decision == "material_change_found":
+            fetch_row.review_status = "material_change_found"
+            offer.terms_verified = False
+            offer.activation_allowed = False
+            offer.marketplace_listed = False
+            if offer.status == "approved":
+                offer.status = "suspended"
+            elif offer.status == "submitted_for_review":
+                offer.status = "draft"
+        else:
+            fetch_row.review_status = "source_unreliable"
+            offer.terms_verified = False
+            offer.activation_allowed = False
+            offer.marketplace_listed = False
+            if offer.status == "approved":
+                offer.status = "suspended"
+            elif offer.status == "submitted_for_review":
+                offer.status = "draft"
+
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=reviewer,
+            action="merchant.offer.terms_source_change_reviewed",
+            resource_type="merchant_offer",
+            resource_id=offer.id,
+            outcome=fetch_row.review_status,
+            details_json={
+                "snapshot_id": snapshot.id,
+                "fetch_record_id": fetch_row.id,
+                "review_decision": payload.decision,
+                "review_notes": payload.reviewer_notes,
+                "previous_offer_status": previous_offer_status,
+                "current_offer_status": offer.status,
+                "terms_verified": offer.terms_verified is True,
+                "activation_allowed": offer.activation_allowed is True,
+                "marketplace_listed": offer.marketplace_listed is True,
+            },
+        ))
+        await db.commit()
+        await db.refresh(fetch_row)
+        await db.refresh(offer)
+    return {
+        **_merchant_term_evidence_fetch_dict(fetch_row),
+        "offer_status": offer.status,
+        "terms_verified": offer.terms_verified is True,
+        "activation_allowed": offer.activation_allowed is True,
+        "marketplace_listed": offer.marketplace_listed is True,
+    }
+
+
 
 
 @api.post("/merchant/offers/{offer_id}/submit")

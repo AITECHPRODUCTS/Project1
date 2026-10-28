@@ -17,10 +17,12 @@ type TermDraft={
   cookie_days:string;attribution_window_days:string;allowed_regions:string;restricted_traffic_sources:string;
   source_url:string;evidence_type:"operator_observed"|"merchant_claim"|"network_reported"|"manual_import";evidence_excerpt:string;
 };
+type TermEvidenceReviewDecision="no_material_change"|"material_change_found"|"source_unreliable";
 type TermEvidenceFetch={
   id:string;merchant_offer_id:string;term_snapshot_id:string;source_url:string;fetch_status:string;
   http_status_code:number|null;content_type:string|null;response_bytes:number|null;content_sha256:string|null;
   previous_content_sha256:string|null;content_change_status:string;requires_human_review:boolean;
+  review_status:string;review_decision:string|null;review_notes:string|null;reviewed_by:string|null;reviewed_at:string|null;
   text_excerpt:string;etag:string|null;last_modified:string|null;error_code:string|null;fetched_at:string|null;
   provider_verified:boolean;requested_by:string;
 };
@@ -70,6 +72,9 @@ export default function MerchantOffersPage(){
   const [evidenceFetchHistory,setEvidenceFetchHistory]=useState<Record<string,TermEvidenceFetch[]>>({});
   const [evidenceHistoryVisibleId,setEvidenceHistoryVisibleId]=useState("");
   const [evidenceBusyId,setEvidenceBusyId]=useState("");
+  const [evidenceReviewBusyId,setEvidenceReviewBusyId]=useState("");
+  const [evidenceReviewNotes,setEvidenceReviewNotes]=useState<Record<string,string>>({});
+  const [evidenceReviewDecisions,setEvidenceReviewDecisions]=useState<Record<string,TermEvidenceReviewDecision|"" >>({});
   const [termBusyId,setTermBusyId]=useState("");
 
   const load=useCallback(async()=>{
@@ -133,6 +138,28 @@ export default function MerchantOffersPage(){
       setError(e instanceof Error?e.message:"Could not retrieve the cited terms page.");
     }finally{setEvidenceBusyId("")}
   };
+
+  const reviewFetchedSource=async(offer:MerchantOffer,snapshot:TermSnapshot,fetchRow:TermEvidenceFetch)=>{
+    const decision=evidenceReviewDecisions[fetchRow.id]||"";
+    const reviewerNotes=(evidenceReviewNotes[fetchRow.id]||"").trim();
+    if(!decision){setError("Choose a source-review decision before submitting.");return;}
+    if(reviewerNotes.length<10){setError("Add at least 10 characters of reviewer notes.");return;}
+    setEvidenceReviewBusyId(fetchRow.id);setError("");setNotice("");
+    try{
+      const result=await apiFetch<TermEvidenceFetch&{offer_status:string;terms_verified:boolean;activation_allowed:boolean;marketplace_listed:boolean}>(
+        "/api/merchant/offers/"+encodeURIComponent(offer.id)+"/term-snapshots/"+encodeURIComponent(snapshot.id)+"/fetches/"+encodeURIComponent(fetchRow.id)+"/review",
+        {method:"POST",body:JSON.stringify({decision,reviewer_notes:reviewerNotes})}
+      );
+      await Promise.all([loadEvidenceFetchHistory(offer.id,snapshot.id),load()]);
+      const consequence=decision==="no_material_change"
+        ?"No material terms change was reported by the reviewer; this action does not independently verify or approve terms."
+        :"Activation was disabled pending a new terms review.";
+      setNotice(offer.name+": source review recorded as "+result.review_status+". "+consequence);
+    }catch(e){
+      setError(e instanceof Error?e.message:"Could not record the source review decision.");
+    }finally{setEvidenceReviewBusyId("")}
+  };
+
   const toggleEvidenceFetchHistory=async(offerId:string,snapshotId:string)=>{
     if(evidenceHistoryVisibleId===snapshotId){setEvidenceHistoryVisibleId("");return;}
     setEvidenceHistoryVisibleId(snapshotId);
@@ -272,6 +299,16 @@ export default function MerchantOffersPage(){
                       <div className="flex flex-wrap justify-between gap-2"><strong className="text-xs">{fetchRow.fetch_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{fetchRow.fetched_at?new Date(fetchRow.fetched_at).toLocaleString():"Fetch time unavailable"}</span></div>
                       <p className="mt-1 text-xs text-slate-600">HTTP: {fetchRow.http_status_code??"not reached"} · Type: {fetchRow.content_type||"unknown"} · Bytes read: {fetchRow.response_bytes??"not read"} · Page hash: {fetchRow.content_change_status.replaceAll("_"," ")}</p>
                       {fetchRow.requires_human_review&&<p className="mt-1 text-xs font-bold text-amber-800">Source content differs from the previous successful retrieval. Review the page before relying on the earlier human terms check; this hash change does not prove material terms changed.</p>}
+                      {fetchRow.review_status==="pending_review"&&<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <label className={labelClass} htmlFor={"source-review-decision-"+fetchRow.id}>Human source-review decision</label>
+                        <select id={"source-review-decision-"+fetchRow.id} className={inputClass} value={evidenceReviewDecisions[fetchRow.id]||""} onChange={e=>setEvidenceReviewDecisions(prev=>({...prev,[fetchRow.id]:e.target.value as TermEvidenceReviewDecision|""}))}>
+                          <option value="">Choose a decision…</option><option value="no_material_change">No material terms change found</option><option value="material_change_found">Material terms change found</option><option value="source_unreliable">Source is unreliable</option>
+                        </select>
+                        <label className={labelClass+" mt-3"} htmlFor={"source-review-notes-"+fetchRow.id}>Reviewer notes</label>
+                        <textarea id={"source-review-notes-"+fetchRow.id} className={inputClass} rows={2} minLength={10} maxLength={3000} value={evidenceReviewNotes[fetchRow.id]||""} onChange={e=>setEvidenceReviewNotes(prev=>({...prev,[fetchRow.id]:e.target.value}))} required/>
+                        <button onClick={()=>void reviewFetchedSource(offer,snapshot,fetchRow)} disabled={evidenceReviewBusyId===fetchRow.id||!!busy} className="mt-3 rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{evidenceReviewBusyId===fetchRow.id?"Recording review…":"Record human review decision"}</button>
+                      </div>}
+                      {fetchRow.review_status!=="pending_review"&&fetchRow.review_status!=="not_required"&&<p className="mt-1 text-xs text-slate-600">Review status: {fetchRow.review_status.replaceAll("_"," ")} · Decision: {fetchRow.review_decision?.replaceAll("_"," ")||"not recorded"} · Reviewer: {fetchRow.reviewed_by||"unknown"}{fetchRow.reviewed_at?" · "+new Date(fetchRow.reviewed_at).toLocaleString():""}</p>}
                       {fetchRow.previous_content_sha256&&<p className="mt-1 break-all text-xs text-slate-500">Previous content SHA-256: {fetchRow.previous_content_sha256}</p>}
                       {fetchRow.content_sha256&&<p className="mt-1 break-all text-xs text-slate-500">SHA-256: {fetchRow.content_sha256}</p>}
                       {(fetchRow.etag||fetchRow.last_modified)&&<p className="mt-1 break-all text-xs text-slate-500">ETag: {fetchRow.etag||"not supplied"} · Last-Modified: {fetchRow.last_modified||"not supplied"}</p>}

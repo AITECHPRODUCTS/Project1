@@ -184,6 +184,7 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
                     "lead_magnet": "Browser UAT starter guide",
                     "audience": "affiliate marketers",
                 },
+                headers={"X-CSRF-Token": registered["csrf_token"]},
             )
             assert landing_response.status == 200, landing_response.text()
             landing_html = landing_response.text()

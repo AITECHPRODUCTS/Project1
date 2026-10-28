@@ -325,7 +325,7 @@ def test_platform_admin_can_sync_persisted_openaffiliate_catalog_explicitly():
             assert parse_qs(urlparse(calls[0]["url"]).query) == {"limit": ["100"]}
             assert calls[0]["csrf"] == "browser-admin-csrf-token"
             page.get_by_text("Last sync completed successfully.").wait_for(state="visible")
-            page.get_by_text("2 created · 1 updated · upstream registry total 23").wait_for(state="visible")
+            page.get_by_test_id("openaffiliate-sync-status").get_by_text("2 created · 1 updated · upstream registry total 23").wait_for(state="visible")
             page.get_by_test_id("sync-history-item-completed-0").wait_for(state="visible")
             page.get_by_test_id("sync-history-item-failed-1").wait_for(state="visible")
             page.get_by_text("Recorded error type: TimeoutError").wait_for(state="visible")

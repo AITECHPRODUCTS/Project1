@@ -102,6 +102,10 @@ export default function OfferCatalogPage() {
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [syncAccess, setSyncAccess] = useState<"checking" | "admin" | "not_admin">("checking");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [syncError, setSyncError] = useState("");
 
   const loadCatalog = useCallback(async (filters: Filters, nextOffset: number) => {
     const params = new URLSearchParams();
@@ -139,9 +143,48 @@ export default function OfferCatalogPage() {
     void loadCatalog(DEFAULT_FILTERS, 0);
   }, [loadCatalog]);
 
+  useEffect(() => {
+    let mounted = true;
+    void apiFetch<{ user?: { is_admin?: boolean; workspace_id?: string | null } }>("/api/auth/me")
+      .then(response => {
+        if (mounted) {
+          setSyncAccess(response.user?.is_admin === true && Boolean(response.user?.workspace_id) ? "admin" : "not_admin");
+        }
+      })
+      .catch(() => {
+        if (mounted) setSyncAccess("not_admin");
+      });
+    return () => { mounted = false; };
+  }, []);
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void loadCatalog(draftFilters, 0);
+  };
+
+  const syncOpenAffiliateCatalog = async () => {
+    setSyncing(true);
+    setSyncError("");
+    setSyncMessage("");
+    try {
+      const result = await apiFetch<{
+        created: number;
+        updated: number;
+        registry_total: number | null;
+        traffic_score_note: string;
+      }>("/api/offers/sync?limit=100", { method: "POST" });
+      const registryTotal = result.registry_total === null ? "unknown" : String(result.registry_total);
+      setSyncMessage(
+        "OpenAffiliate sync completed: " + result.created + " created, " + result.updated +
+        " updated; upstream registry total " + registryTotal +
+        ". Provider approval and source authenticity remain unverified."
+      );
+      await loadCatalog(activeFilters, catalog?.offset ?? 0);
+    } catch (cause) {
+      setSyncError(cause instanceof Error ? cause.message : "OpenAffiliate catalog sync failed.");
+    } finally {
+      setSyncing(false);
+    }
   };
   const previousPage = () => {
     if (!catalog || loading || catalog.offset === 0) return;
@@ -172,11 +215,28 @@ export default function OfferCatalogPage() {
           <div className="flex flex-wrap gap-2">
             <a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher marketplace</a>
             <a href="/merchant/offers" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant offers</a>
-            <button type="button" onClick={() => void loadCatalog(activeFilters, catalog?.offset ?? 0)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">
+            {syncAccess === "admin" && (
+              <button
+                type="button"
+                data-testid="sync-openaffiliate-catalog"
+                onClick={() => void syncOpenAffiliateCatalog()}
+                disabled={loading || syncing}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+              >
+                <RefreshCw size={15} className={syncing ? "animate-spin" : ""}/>
+                {syncing ? "Syncing OpenAffiliate..." : "Sync OpenAffiliate catalog"}
+              </button>
+            )}
+            <button type="button" onClick={() => void loadCatalog(activeFilters, catalog?.offset ?? 0)} disabled={loading || syncing} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">
               <RefreshCw size={15} className={loading ? "animate-spin" : ""}/> Refresh
             </button>
           </div>
         </header>
+        {syncAccess === "checking" && <p role="status" className="sr-only">Checking platform sync permissions</p>}
+        {syncAccess === "not_admin" && <p data-testid="sync-admin-gate" className="mt-3 text-xs text-slate-500">Provider catalog sync is restricted to Platform Super Admins with an active workspace.</p>}
+        {syncAccess === "admin" && <p className="mt-3 text-xs text-slate-500">Admin sync reads the configured OpenAffiliate directory and updates this shared catalog only. It does not submit applications, publish content, or change provider settings.</p>}
+        {syncMessage && <p role="status" data-testid="openaffiliate-sync-result" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{syncMessage}</p>}
+        {syncError && <p role="alert" data-testid="openaffiliate-sync-error" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">OpenAffiliate sync failed: {syncError}</p>}
 
         <section className="mt-7 rounded-3xl border border-white bg-white p-5 shadow-sm sm:p-7" aria-label="Offer catalog filters">
           <div className="flex items-center gap-3">

@@ -137,6 +137,20 @@ def test_affiliate_offer_catalog_searches_filters_sorts_and_paginates_without_cl
         browser = playwright.chromium.launch(headless=True)
         try:
             page = browser.new_page()
+
+            def handle_non_admin(route):
+                _fulfill_json(route, {
+                    "authenticated": True,
+                    "user": {
+                        "email": "workspace-owner@example.invalid",
+                        "is_admin": False,
+                        "workspace_id": "browser-workspace",
+                        "workspace_role": "owner",
+                    },
+                    "csrf_token": "browser-csrf-token",
+                })
+
+            page.route("**/api/auth/me", handle_non_admin)
             page.route("**/api/offers**", handle_catalog)
             page.goto(f"{BASE_URL}/offers", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Affiliate offer catalog").wait_for(state="visible")
@@ -158,6 +172,94 @@ def test_affiliate_offer_catalog_searches_filters_sorts_and_paginates_without_cl
             assert requests[-1]["q"] == ["analytics"]
             assert requests[-1]["network"] == ["clickbank"]
             assert requests[-1]["offset"] == ["0"]
+            assert page.locator("main [role='alert']").count() == 0
+            page.get_by_test_id("sync-admin-gate").wait_for(state="visible")
+            assert page.get_by_test_id("sync-openaffiliate-catalog").count() == 0
+        finally:
+            browser.close()
+
+
+def test_platform_admin_can_sync_persisted_openaffiliate_catalog_explicitly():
+    calls: list[dict[str, str]] = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_admin(route):
+                _fulfill_json(route, {
+                    "authenticated": True,
+                    "user": {
+                        "email": "platform-admin@example.invalid",
+                        "is_admin": True,
+                        "workspace_id": "platform-workspace",
+                        "workspace_role": "owner",
+                    },
+                    "csrf_token": "browser-admin-csrf-token",
+                })
+
+            def handle_offers(route):
+                if route.request.method == "POST":
+                    calls.append({
+                        "method": route.request.method,
+                        "url": route.request.url,
+                        "csrf": route.request.headers.get("x-csrf-token", ""),
+                    })
+                    _fulfill_json(route, {
+                        "created": 2,
+                        "updated": 1,
+                        "registry_total": 23,
+                        "traffic_score_note": "Unknown unless upstream actually supplies the field.",
+                    })
+                    return
+                _fulfill_json(route, {
+                    "count": 1,
+                    "total_count": 1,
+                    "offset": 0,
+                    "limit": 20,
+                    "data": [{
+                        "id": "synced-offer-1",
+                        "network": "openaffiliate",
+                        "external_id": "synced-offer-1",
+                        "name": "Synced partner program",
+                        "url": "https://merchant.example/offer",
+                        "category": "software",
+                        "description": "Directory entry returned by a successful sync fixture.",
+                        "reward_type": "percentage",
+                        "reward_value": "20",
+                        "cookie_days": 30,
+                        "traffic_score": None,
+                        "gravity_score": None,
+                        "normalized_gravity": None,
+                        "epc": None,
+                        "conversion_rate": None,
+                        "recurring_commission": None,
+                        "source_stars": None,
+                        "verified": False,
+                        "verification_basis": "provider_not_verified_or_unknown",
+                        "source_url": "https://provider.example/programs/synced-offer-1",
+                        "updated_at": None,
+                    }],
+                })
+
+            page.route("**/api/auth/me", handle_admin)
+            page.route("**/api/offers**", handle_offers)
+            page.goto(f"{BASE_URL}/offers", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Affiliate offer catalog").wait_for(state="visible")
+            button = page.get_by_role("button", name="Sync OpenAffiliate catalog")
+            button.wait_for(state="visible")
+            button.click()
+            page.get_by_test_id("openaffiliate-sync-result").wait_for(state="visible")
+            result_text = page.get_by_test_id("openaffiliate-sync-result").inner_text()
+            assert "2 created, 1 updated" in result_text
+            assert "upstream registry total 23" in result_text
+            assert "remain unverified" in result_text
+            page.get_by_text("Synced partner program").wait_for(state="visible")
+            assert len(calls) == 1
+            assert calls[0]["method"] == "POST"
+            assert urlparse(calls[0]["url"]).path == "/api/offers/sync"
+            assert parse_qs(urlparse(calls[0]["url"]).query) == {"limit": ["100"]}
+            assert calls[0]["csrf"] == "browser-admin-csrf-token"
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()

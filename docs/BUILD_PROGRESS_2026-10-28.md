@@ -3,16 +3,16 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Latest verified code candidate:** [3495403fc680c3b09222c63282f415987c376e45](https://github.com/AITECHPRODUCTS/Project1/commit/3495403fc680c3b09222c63282f415987c376e45)  
+**Latest verified code candidate:** [c84edd83ecf82cb0949dbf3f58fe9183e87356f9](https://github.com/AITECHPRODUCTS/Project1/commit/c84edd83ecf82cb0949dbf3f58fe9183e87356f9)  
 **Release status:** NOT RELEASE READY  
 
-## Latest verified checkpoint — upstream offer metric normalization (2026-10-28)
+## Latest verified checkpoint — offer metric and provider-flag integrity (2026-10-28)
 
-Code: [3495403fc680c3b09222c63282f415987c376e45](https://github.com/AITECHPRODUCTS/Project1/commit/3495403fc680c3b09222c63282f415987c376e45). `OpenAffiliateClient.adapt` now preserves unknown traffic/stars/cookie-duration metrics as unknown instead of scraping numbers from arbitrary prose or defaulting absent stars to zero; it strictly accepts bounded finite non-negative numeric values and exact bounded integer cookie days. Regression tests cover missing, valid, invalid, non-finite, negative, overflow, boolean, prose and explicit zero values.
+Verified code candidate: [c84edd83ecf82cb0949dbf3f58fe9183e87356f9](https://github.com/AITECHPRODUCTS/Project1/commit/c84edd83ecf82cb0949dbf3f58fe9183e87356f9). This includes OpenAffiliate metric normalization ([commit 3495403](https://github.com/AITECHPRODUCTS/Project1/commit/3495403fc680c3b09222c63282f415987c376e45)) and the offer-sync verification truthiness fix ([commit c84edd8](https://github.com/AITECHPRODUCTS/Project1/commit/c84edd83ecf82cb0949dbf3f58fe9183e87356f9)). Missing upstream metrics remain unknown; malformed numeric data cannot create fabricated metrics; and only a literal JSON boolean `true` can set the offer catalog’s provider-supplied verified flag.
 
-Exact-SHA [push CI 40730822687](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730822687) and [PR CI 40730834137](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730834137) passed. Python: **682 passed, 7 skipped, 5 warnings** on PR. Browser UAT: **5 passed** on each run. PostgreSQL, frontend/Docker, AI/RAG SBOM, security/dependency audit, secret scan and repository guard passed; push lockfile sync passed and PR lockfile sync was skipped by event condition.
+Exact-SHA checks for metric normalization: [push 40730822687](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730822687) / [PR 40730834137](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730834137), Python 682 passed/7 skipped/5 warnings. Exact-SHA checks for offer-sync guard: [push 40732449325](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40732449325) / [PR 40732462196](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40732462196), Python 683 passed/7 skipped/5 warnings. Browser UAT passed 5/5 on each of the four runs; PostgreSQL, frontend/Docker, AI/RAG SBOM, security/dependency audit, secret scan and repository guard passed. Push lockfile checks passed; PR lockfile checks were skipped by their configured event condition.
 
-This is not marketplace-source authentication. The release remains **NOT RELEASE READY** until authorized native provider contracts, all required S1–S8/53-skill acceptance, legal/licensing decisions, staging, rollback, monitoring and backup/restore evidence are complete.
+Production remains **NOT RELEASE READY**. Native provider authorization/source attestation, complete 53-skill S1–S8 acceptance, integration contract/sandbox UAT, owner legal/licensing decisions, staging deployment, rollback, monitoring and backup/restore remain outstanding.
 
 
 ## Previous verified feature slice — 2026-10-28 S1 offer metrics runtime

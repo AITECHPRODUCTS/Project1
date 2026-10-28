@@ -564,3 +564,10 @@
 - Missing upstream stars remain `null` rather than a fabricated numeric zero. Traffic scores accept only finite non-negative numeric values/numeric strings; cookie days accept only exact non-negative integers within storage bounds. Unparseable prose, booleans, negative, non-finite, fractional, and overflow values are retained as unknown. Explicit zero is preserved.
 - Exact-SHA push [40730822687](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730822687) and PR [40730834137](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730834137) both passed. Python 682 passed / 7 skipped / 5 warnings on PR, browser UAT 5/5 on both runs; all other applicable jobs passed (PR lockfile job skipped by event condition).
 - This corrects local normalization only. It does not verify source authenticity or enable new provider integration.
+
+
+## 2026-10-28 — Offer-sync verification flag fails closed (verified)
+
+- Implementation `backend/main.py::offers_sync`, tests `tests/test_offer_sync_platform_admin.py`, commit [c84edd83ecf82cb0949dbf3f58fe9183e87356f9](https://github.com/AITECHPRODUCTS/Project1/commit/c84edd83ecf82cb0949dbf3f58fe9183e87356f9). The route now accepts a positive provider-supplied verified flag only when the value is a literal JSON boolean `true`; truthy strings, numeric values and unknown values are rejected to false.
+- Regression cases verify literal true/false, string "false", string "true", numeric one, and missing/null values. Exact-SHA push [40732449325](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40732449325) and PR [40732462196](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40732462196) both passed. Python 683 passed / 7 skipped / 5 warnings; browser UAT 5/5 on each. All configured jobs passed; PR lockfile-sync skipped by event condition.
+- An explicit boolean still does not independently authenticate source origin or provider account; native provider provenance and authorization remain pending.

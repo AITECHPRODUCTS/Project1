@@ -39,7 +39,7 @@ class AggregatorWebhookAdapter(AffiliateNetworkAdapter):
         return hmac.compare_digest(expected, candidate.lower())
 
     @staticmethod
-    def _non_negative_amount(payload: dict[str, Any], field: str) -> float:
+    def _non_negative_amount(payload: dict[str, Any], field: str) -> Decimal:
         raw = payload.get(field, 0)
         if raw is None or raw == "":
             raw = 0
@@ -47,9 +47,19 @@ class AggregatorWebhookAdapter(AffiliateNetworkAdapter):
             amount = Decimal(str(raw))
         except (InvalidOperation, ValueError, TypeError) as exc:
             raise ValueError(f"{field} must be a valid non-negative amount") from exc
-        if not amount.is_finite() or amount < 0:
-            raise ValueError(f"{field} must be a valid non-negative amount")
-        return float(amount)
+        # ConversionLedgerEntry uses Numeric(18, 6): reject overflow and excess
+        # fractional precision before the database can silently round a value.
+        maximum = Decimal("999999999999.999999")
+        scale = Decimal("0.000001")
+        if not amount.is_finite() or amount < 0 or amount > maximum:
+            raise ValueError(f"{field} must be a valid non-negative amount within Numeric(18, 6)")
+        try:
+            normalized = amount.quantize(scale)
+        except InvalidOperation as exc:
+            raise ValueError(f"{field} must fit Numeric(18, 6)") from exc
+        if normalized != amount:
+            raise ValueError(f"{field} must have no more than 6 decimal places")
+        return normalized
 
     async def fetch_offers(self, *, query: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         # This webhook-only adapter has no offer-discovery API.

@@ -352,7 +352,7 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
             assert "cdn.tailwindcss.com" not in preview_html
             assert 'name="consent" value="yes" required' in preview_html
             assert 'name="workspace_token" value="' in preview_html
-            assert "Content-Security-Policy" in preview.headers
+            assert "content-security-policy" in {header.lower() for header in preview.headers}
             assert "noindex" in preview.headers.get("x-robots-tag", "")
 
             other = browser.new_context()

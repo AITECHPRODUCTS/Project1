@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import asyncio
+import hashlib
+import hmac
 import json
 import os
 import re
+import time
 import uuid
-from datetime import datetime, timezone
 
-from sqlalchemy import func, select
-
-from backend.database import SessionLocal
-from backend.models import Lead
-from backend.tenancy import workspace_scope
+from backend.config import get_settings
 
 from playwright.sync_api import sync_playwright
 
@@ -226,27 +223,52 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             )
             assert missing_consent.status == 422
 
-            # Seed an unsubscribed recipient and prove public capture cannot silently resubscribe them.
-            unsubscribed_email = f"unsubscribed-{uuid.uuid4().hex}@example.test"
-            async def seed_unsubscribed_lead():
-                now = datetime.now(timezone.utc)
-                with workspace_scope(workspace_id):
-                    async with SessionLocal() as db:
-                        db.add(Lead(
-                            workspace_id=workspace_id,
-                            email=unsubscribed_email,
-                            consent_at=now,
-                            consent_source="browser_uat_seed",
-                            lead_magnet="Prior resource",
-                            unsubscribed_at=now,
-                        ))
-                        await db.commit()
-            asyncio.run(seed_unsubscribed_lead())
+            # Capture a real consented lead, then exercise the signed unsubscribe route.
+            subscriber_email = f"subscriber-{uuid.uuid4().hex}@example.test"
+            captured = context.request.post(
+                f"{api_base}/api/public/leads/capture",
+                data={
+                    "email": subscriber_email,
+                    "consent": True,
+                    "lead_magnet": "Browser UAT starter guide",
+                    "audience": "affiliate marketers",
+                    "offer": {},
+                    "consent_source": "browser_uat",
+                    "workspace_token": workspace_token,
+                    "resubscribe_confirmed": False,
+                },
+                headers={"Accept": "application/json"},
+            )
+            assert captured.status == 201, captured.text()
+            captured_payload = captured.json()
+            lead_id = captured_payload["lead_id"]
+            assert captured_payload["workspace_id"] == registered["user"]["workspace_id"]
 
+            timestamp = int(time.time())
+            settings = get_settings()
+            signing_secret = (settings.tracking_hmac_secret or settings.app_session_secret).encode()
+            signature = hmac.new(
+                signing_secret,
+                f"unsubscribe:{lead_id}:{timestamp}".encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            unsubscribe = context.request.get(
+                f"{api_base}/unsubscribe/{lead_id}?ts={timestamp}&sig={signature}"
+            )
+            assert unsubscribe.status == 200, unsubscribe.text()
+            assert "You are unsubscribed" in unsubscribe.text()
+
+            leads_after_unsubscribe = context.request.get(f"{api_base}/api/leads")
+            assert leads_after_unsubscribe.status == 200, leads_after_unsubscribe.text()
+            lead = next(item for item in leads_after_unsubscribe.json()["data"] if item["id"] == lead_id)
+            assert lead["email"] == subscriber_email
+            assert lead["unsubscribed"] is True
+
+            # Consent alone must not silently reverse a previous unsubscribe decision.
             blocked_resubscribe = context.request.post(
                 f"{api_base}/api/public/leads/capture",
                 data={
-                    "email": unsubscribed_email,
+                    "email": subscriber_email,
                     "consent": True,
                     "lead_magnet": "Browser UAT starter guide",
                     "audience": "affiliate marketers",
@@ -259,15 +281,11 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             )
             assert blocked_resubscribe.status == 422
             assert "explicit resubscribe confirmation required" in blocked_resubscribe.json()["detail"]
-
-            async def verify_unsubscribed_state():
-                with workspace_scope(workspace_id):
-                    async with SessionLocal() as db:
-                        lead = await db.scalar(select(Lead).where(
-                            Lead.workspace_id == workspace_id,
-                            Lead.email == unsubscribed_email,
-                        ))
-                        return lead is not None and lead.unsubscribed_at is not None
-            assert asyncio.run(verify_unsubscribed_state()) is True
+            leads_still_suppressed = context.request.get(f"{api_base}/api/leads")
+            assert leads_still_suppressed.status == 200
+            still_unsubscribed = next(
+                item for item in leads_still_suppressed.json()["data"] if item["id"] == lead_id
+            )
+            assert still_unsubscribed["unsubscribed"] is True
         finally:
             browser.close()

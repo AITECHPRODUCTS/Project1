@@ -3,10 +3,23 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Verified code checkpoint:** 536428eab7c391b663bb311c5a2cf4aac1d4b854  
+**Verified code checkpoint:** dc998827d52a1a2c7973630f22df2642f058a8e6  
 **Release status:** NOT RELEASE READY
 
 This is a concise status note, not a replacement for the complete pending-build register, v4 requirements, or full traceability backlog.
+
+## 2026-10-28 latest verified checkpoint — unsubscribe safety and workflow test isolation
+
+- Exact verified SHA: dc998827d52a1a2c7973630f22df2642f058a8e6.
+- Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701960870
+- PR CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701969318
+- Both workflows passed. Python: 604 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition.
+- Unsubscribe GET presents a signed confirmation page without changing consent. A signed POST must carry a supported URL-encoded confirmation body, including the RFC 8058 one-click form. Invalid signature/expiry, wrong content type, malformed or oversized body fails closed. Opt-out suppresses pending/retry scheduled mail transactionally.
+- Browser UAT proves the GET did not change subscription state and explicit form POST did. A Playwright body-encoding mismatch was corrected by using its form parameter rather than a JSON-encoded dictionary.
+- Workflow cancellation regression uses file-backed SQLite with independent connections for concurrent pause/poll checks; this changes the test harness only.
+- Next S4 priority: add append-only consent evidence with exact disclosure text/version/purpose, source, timestamp and grant/withdraw/resubscribe events. Current Lead only keeps the latest consent timestamp/source, so historical consent proof remains incomplete. Applicable double-opt-in workflows remain an explicit gap.
+
+
 
 ## Newly implemented and verified in this checkpoint
 

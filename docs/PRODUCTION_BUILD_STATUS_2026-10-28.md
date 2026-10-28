@@ -2,7 +2,7 @@
 **As of:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Working branch:** `build/omni-affiliate-os-production`  
-**Latest verified code checkpoint:** 536428eab7c391b663bb311c5a2cf4aac1d4b854
+**Latest verified code checkpoint:** dc998827d52a1a2c7973630f22df2642f058a8e6
 
 ## What exists in the current implementation branch
 
@@ -20,7 +20,7 @@ This is a feature-oriented inventory, not a claim that every item is production 
 - **S6 attribution/finance:** signed/deduplicated conversion ingestion, append-only precise commission ledger, partial/full reversal handling, currency-separated summaries, evidence-based commission reconciliation candidates and manual review controls. Blank/reversal status hardening was verified on the checkpoint SHA.
 - **S7 automation/operations:** workflow checkpoints, human approval pauses, durable leases/heartbeats/recovery, cancellation handling, tenant-aware event boundaries, cost-budget reservations and a partial platform-admin read-only operations view.
 - **S8 learning:** RAG/learning data paths and aggregate dataset snapshots with review gates. Provider-attested outcome quality and promotion/rollback are not yet complete.
-- **Engineering evidence:** exact checkpoint 536428eab7c391b663bb311c5a2cf4aac1d4b854 passed both [push CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696184789) and [PR CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696194630): Python tests (597 passed, 7 skipped, 1 warning), PostgreSQL migration/concurrency tests, frontend production/Docker checks, AI/RAG dependency checks, security audit/SBOM, secret scan, repository guard and browser UAT succeeded. Push lockfile-sync succeeded; PR lockfile-sync was skipped by event condition.
+- **Engineering evidence:** exact checkpoint dc998827d52a1a2c7973630f22df2642f058a8e6 passed both [push CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701960870) and [PR CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701969318): Python tests (604 passed, 7 skipped, 5 warnings), PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security audit/SBOM, secret scan, repository guard and browser UAT all succeeded. Push lockfile-sync succeeded; PR lockfile-sync was skipped by event condition.
 
 ## What remains before production-live implementation
 
@@ -55,3 +55,11 @@ The recent handoff, second-pass audit, read-only repository audit, library/neste
 - ab384a02989b9423e987cb1a4a1a2e528ca4131e added content-hash comparison and migration 0023.
 - 536428eab7c391b663bb311c5a2cf4aac1d4b854 added review states/decision/audit trail and migration 0024. It requires an independent reviewer for changed-source pages; material-change and unreliable-source decisions disable internal activation. The no-material-change decision is still a human assertion, not provider attestation.
 - Both exact-checkpoint Actions workflows passed. The product remains NOT RELEASE READY: a successful public URL fetch is not equivalent to a verified merchant/network, and provider connections, all 53 skills' end-to-end parity, authorized ad operations, wider S1–S8 acceptance, staging, backup/restore, legal and repository-confidentiality gates remain open.
+
+
+## 2026-10-28 latest verified additions (checkpoint dc998827d52a1a2c7973630f22df2642f058a8e6)
+
+- Commit f7c8ce750f49ea799798bb9cdf75711dd74e7f9b changed unsubscribe to require a signed explicit POST and a non-mutating GET confirmation page. The signed link validates expiry/signature; the POST requires URL-encoded form content, validates request-body length, and supports RFC 8058 one-click POST. Pending/retry email items are suppressed in the same database transaction as opt-out.
+- Commits 4b576380b69eed9271c13757412b8278dabe8e2c and 806ad081ee4f461c0e7cf3c2ae97eee401efec93 fixed route-test setup/assertion issues without weakening endpoint behavior.
+- Commit 17641e89c6a3eb04102ca42e5a0e3f6b35ecddf5 updates browser UAT to confirm GET does not mutate the lead and explicit form POST does. Commit 295d127a2ca0988450fdbc91681890927c1af5de moves the concurrent workflow pause/cancel regression to file-backed SQLite with independent connections and asserts both durable pause records. Commit dc998827d52a1a2c7973630f22df2642f058a8e6 uses Playwright form encoding so browser UAT sends the intended URL-encoded body.
+- Both exact-SHA workflows passed. This verifies configured automated gates, not production readiness. The product remains NOT RELEASE READY. Versioned append-only consent evidence, applicable double-opt-in, provider authorization, all-skill end-to-end parity, authorized ad operations, staging, backup/restore, legal and repository confidentiality gates remain open.

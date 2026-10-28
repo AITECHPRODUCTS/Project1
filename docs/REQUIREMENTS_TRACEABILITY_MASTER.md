@@ -543,9 +543,9 @@
 - Scope remains **partial** at product level: this is a calculation over supplied operator evidence. Authorized marketplace adapters, source authenticity, live offer retrieval and browser end-to-end research acceptance are still required. The 53-skill parity inventory remains unchanged and no upstream skill is promoted to end-to-end complete.
 
 
-## 2026-10-28 — Safe ad budget guardrail runtime candidate (verification pending at record creation)
+## 2026-10-28 — Hardened ad guardrail runtime, verification pending
 
-- Implementation candidate [9aff881546655b627b878213c1fe9b84b1410472](https://github.com/AITECHPRODUCTS/Project1/commit/9aff881546655b627b878213c1fe9b84b1410472) adds `ads.guardrail_review` in `backend/services/skill_runtime.py`, reusing `backend/services/ad_guardrails.py::evaluate_ad_budget_guardrail`. It validates strict JSON fields, timezone-aware timestamps, bounded finite amounts, evidence status, counts and observations. It is review-only and never mutates provider state.
-- Tests cover provider-unverified fail-closed status, fresh cap-breach review signal, stale-evidence block, and seven malformed-input cases in `tests/test_skill_runtime.py`.
-- At record creation, full hosted checks for this candidate had not yet completed. Do not treat this entry as final hosted-CI evidence until the current head's push and PR workflows finish.
-- Scope remains partial against mandatory paid-ad requirements: live-account authorization, native provider-attested reporting, approved sandbox mutations and rollback/UAT remain separate acceptance gates.
+- Code commit: [9ccfb8480453a35311b7fdd451f6cbba0bcc3f71](https://github.com/AITECHPRODUCTS/Project1/commit/9ccfb8480453a35311b7fdd451f6cbba0bcc3f71), in `backend/services/skill_runtime.py` with regression tests in `tests/test_skill_runtime.py`.
+- Since the generic skill executor takes caller-controlled JSON, it no longer treats a supplied `evidence_status=provider_verified` value as source attestation. The authoritative evaluator always receives unverified evidence and fails closed. A separately nested hypothetical scenario may show potential breaches *if* a trusted source independently attested the input; it is explicitly non-actionable.
+- No live spend/pause/kill-switch action exists in this handler. It exposes `source_attestation_verified=false` and `operational_action_permitted=false`.
+- The correction's combined exact-SHA push and PR CI runs are pending at documentation time. Product-level paid-ad acceptance remains partial because source-provider authentication and authorized sandbox/live-account integration are still separate gates.

@@ -1,12 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-28
 
-## Candidate under verification — safe ad budget guardrail review handler (2026-10-28)
+## Candidate under verification — hardened ad guardrail runtime (2026-10-28)
 
-- Feature code candidate: [9aff881546655b627b878213c1fe9b84b1410472](https://github.com/AITECHPRODUCTS/Project1/commit/9aff881546655b627b878213c1fe9b84b1410472). It adds allowlisted `ads.guardrail_review` to the governed skill runtime and calls the existing `evaluate_ad_budget_guardrail` service after strict JSON, timestamp, numeric and observation checks.
-- It returns review signals only. It does not call an ad platform, authorize spend, pause campaigns, or engage an external kill switch. Unverified/mixed records, stale/future evidence, invalid amounts and malformed records fail closed or reject input.
-- Tests in `tests/test_skill_runtime.py` cover fresh provider-verified spend-cap breaches, unverified inputs, stale observations, invalid timestamps, malformed policy/caps, boolean counters, non-finite money and unexpected fields.
-- Verification status at record creation: hosted push/PR workflows for the resulting branch candidate have not yet completed. Do not count this handler as hosted-CI-verified until the final exact-SHA push and PR matrices conclude.
+- Feature code commit: [9ccfb8480453a35311b7fdd451f6cbba0bcc3f71](https://github.com/AITECHPRODUCTS/Project1/commit/9ccfb8480453a35311b7fdd451f6cbba0bcc3f71). The `ads.guardrail_review` skill runtime now treats all payload observations as caller-supplied and unattested even if the JSON claims `provider_verified`. The authoritative result fails closed; any possible breach is isolated inside `hypothetical_review` and labelled as a scenario requiring independent attestation.
+- This correction is important because the generic skill execution endpoint accepts user-supplied JSON. It must not turn an operator-entered status label into evidence that Meta, Google or another ad provider was authenticated. No live spend, pause, kill-switch or other provider action is authorized or performed by this handler.
+- Regression tests cover caller-claimed provider verification, blocked authoritative results, hypothetical spend-cap breach scenarios, stale scenario evidence, and invalid inputs.
+- Status of the corrected combined candidate: push/PR CI is pending after the final code plus documentation commit. Do not call this correction CI-verified until those exact-SHA runs complete.
 
 
 ## 2026-10-28 verified build — S1 offer-metrics runtime handler

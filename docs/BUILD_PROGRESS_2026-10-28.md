@@ -6,9 +6,10 @@
 **Latest verified source candidate:** [ca03d16af65c11f93f185fd7e2f33d3ad9598d41](https://github.com/AITECHPRODUCTS/Project1/commit/ca03d16af65c11f93f185fd7e2f33d3ad9598d41)  
 **Release status:** NOT RELEASE READY  
 
-## Candidate under CI — ad budget guardrail review (2026-10-28)
+## Candidate under verification — ad guardrail provenance correction (2026-10-28)
 
-Candidate implementation commit: [9aff881546655b627b878213c1fe9b84b1410472](https://github.com/AITECHPRODUCTS/Project1/commit/9aff881546655b627b878213c1fe9b84b1410472). This adds `ads.guardrail_review` on top of verified checkpoint [9342843bcf1b6b83755e9e83e58b8001632d0e6c](https://github.com/AITECHPRODUCTS/Project1/commit/9342843bcf1b6b83755e9e83e58b8001632d0e6c). It validates bounded policy/observation inputs and reuses the existing provider-evidence, freshness, sample-size and spend-cap evaluator. Tests cover blocked unverified data, stale evidence, cap-breach review signal and malformed values. It cannot spend, pause or call an external platform. Hosted CI for the combined candidate was pending at the time of this entry; the final exact-SHA run results govern current status. Product-level ad acceptance remains partial.
+Feature code commit [9ccfb8480453a35311b7fdd451f6cbba0bcc3f71](https://github.com/AITECHPRODUCTS/Project1/commit/9ccfb8480453a35311b7fdd451f6cbba0bcc3f71) prevents caller-controlled skill input from asserting authenticated provider evidence. The authoritative review result stays blocked pending independent verification; only a clearly named hypothetical scenario reports breaches that would exist if the inputs were later authenticated. Regression tests cover that distinction and stale/invalid inputs. The combined candidate's push and PR workflow results are pending and must be checked on the final SHA before marking the correction verified.
+
 
 ## Latest verified feature slice — 2026-10-28 S1 offer metrics runtime
 

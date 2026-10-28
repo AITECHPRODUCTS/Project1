@@ -27,7 +27,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
@@ -3886,6 +3886,9 @@ async def create_lead(
                 audience=payload.audience,
                 offer=payload.offer,
                 consent_source=payload.consent_source,
+                consent_text=payload.consent_text,
+                consent_version=payload.consent_version,
+                consent_purpose=payload.consent_purpose,
                 resubscribe_confirmed=payload.resubscribe_confirmed,
                 email_automation_id=payload.email_automation_id,
                 workspace_id=owner_workspace_id,
@@ -3907,6 +3910,54 @@ async def lead_capture(
     if not workspace_id:
         raise HTTPException(403, "Select an authorized workspace before capturing a lead")
     return await create_lead(payload, db, workspace_id=str(workspace_id))
+
+
+@api.get("/leads/{lead_id}/consent-events")
+async def lead_consent_events(
+    lead_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Read-only, workspace-scoped history of recorded consent changes."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing consent history")
+    with workspace_scope(workspace_id):
+        lead = await db.scalar(select(Lead.id).where(
+            Lead.id == lead_id,
+            Lead.workspace_id == workspace_id,
+        ))
+        if lead is None:
+            raise HTTPException(404, "Lead not found in the active workspace")
+        rows = list((await db.scalars(
+            select(LeadConsentEvent)
+            .where(
+                LeadConsentEvent.workspace_id == workspace_id,
+                LeadConsentEvent.lead_id == lead_id,
+            )
+            .order_by(LeadConsentEvent.observed_at.asc(), LeadConsentEvent.created_at.asc())
+            .limit(250)
+        )).all())
+    return {
+        "lead_id": lead_id,
+        "count": len(rows),
+        "read_only": True,
+        "data": [
+            {
+                "id": row.id,
+                "event_type": row.event_type,
+                "purpose": row.purpose,
+                "consent_text": row.consent_text,
+                "policy_version": row.policy_version,
+                "source": row.source,
+                "channel": row.channel,
+                "metadata": row.metadata_json or {},
+                "observed_at": row.observed_at.isoformat() if row.observed_at else None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ],
+    }
 
 
 @app.post("/api/public/leads/capture", status_code=201)

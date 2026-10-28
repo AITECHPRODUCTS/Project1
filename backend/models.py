@@ -163,6 +163,8 @@ def _guard_conversion_ledger_append_only(session: Session, flush_context, instan
     for entity in (*session.dirty, *session.deleted):
         if isinstance(entity, ConversionLedgerEntry):
             raise ValueError("Conversion ledger entries are append-only")
+        if isinstance(entity, LeadConsentEvent):
+            raise ValueError("Lead consent events are append-only")
 
 
 class WorkflowRun(TenantScopedMixin, Base):
@@ -299,6 +301,34 @@ class Lead(TenantScopedMixin, Base):
     engaged: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class LeadConsentEvent(TenantScopedMixin, Base):
+    """Append-only evidence of email-marketing consent grants and withdrawals.
+
+    lead_id intentionally has no FK: privacy deletion of a lead must not cascade
+    away the audit evidence. The retained identifier is a pseudonymous internal
+    UUID; a governed unlink/retention process remains a release requirement.
+    """
+
+    __tablename__ = "lead_consent_events"
+    __table_args__ = (
+        Index(
+            "ix_lead_consent_workspace_lead_created",
+            "workspace_id", "lead_id", "created_at",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    lead_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    purpose: Mapped[str] = mapped_column(String(80), nullable=False)
+    consent_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    source: Mapped[str] = mapped_column(String(180), nullable=False)
+    channel: Mapped[str] = mapped_column(String(40), nullable=False, default="email")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
 
 class ScheduledEmail(TenantScopedMixin, Base):
     __tablename__ = "scheduled_emails"

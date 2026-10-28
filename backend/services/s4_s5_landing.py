@@ -5,6 +5,11 @@ from typing import Any
 from backend.config import get_settings
 from backend.core.errors import IntegrationNotConfiguredError
 from backend.services.utm_attribution import normalize_utm_attribution
+from backend.services.consent_ledger import (
+    EMAIL_MARKETING_CONSENT_PURPOSE,
+    EMAIL_MARKETING_CONSENT_TEXT,
+    EMAIL_MARKETING_CONSENT_VERSION,
+)
 from backend.services.llm import llm_service
 from backend.services.url_safety import request_public_json
 def _esc(x:Any)->str:return html.escape(str(x),quote=True)
@@ -106,9 +111,12 @@ a{{color:var(--brand)}}
 <input type="hidden" name="lead_magnet" value="{_esc(lead_magnet)}">
 <input type="hidden" name="audience" value="{_esc(audience)}">
 <input type="hidden" name="consent_source" value="persisted_landing_page">
+<input type="hidden" name="consent_text" value="{_esc(EMAIL_MARKETING_CONSENT_TEXT)}">
+<input type="hidden" name="consent_version" value="{_esc(EMAIL_MARKETING_CONSENT_VERSION)}">
+<input type="hidden" name="consent_purpose" value="{_esc(EMAIL_MARKETING_CONSENT_PURPOSE)}">
 <label for="landing-email">Email address</label>
 <input id="landing-email" name="email" type="email" autocomplete="email" required maxlength="320">
-<label class="check"><input type="checkbox" name="consent" value="yes" required><span>I agree to receive this resource and related emails. I can unsubscribe at any time.</span></label>
+<label class="check"><input type="checkbox" name="consent" value="yes" required><span>{_esc(EMAIL_MARKETING_CONSENT_TEXT)}</span></label>
 <label class="check"><input type="checkbox" name="resubscribe_confirmed" value="yes"><span>If you previously unsubscribed, check this box to explicitly confirm you want to resubscribe and receive emails again.</span></label>
 <button type="submit">Send me the resource</button>
 </form>

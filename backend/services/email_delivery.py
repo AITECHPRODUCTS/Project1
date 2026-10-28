@@ -7,7 +7,12 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
 from backend.database import SessionLocal
-from backend.models import AuditLog,ContentAsset,Lead,ScheduledEmail
+from backend.models import AuditLog,ContentAsset,Lead,LeadConsentEvent,ScheduledEmail
+from backend.services.consent_ledger import (
+    EMAIL_MARKETING_CONSENT_PURPOSE,
+    EMAIL_MARKETING_CONSENT_TEXT,
+    EMAIL_MARKETING_CONSENT_VERSION,
+)
 from backend.tenancy import get_workspace_id, workspace_scope
 from backend.services.llm import llm_service
 from backend.services.s4_s5_landing import email_drip_sequence
@@ -40,6 +45,9 @@ async def capture_lead_and_schedule(
  audience: str,
  offer: dict[str, Any],
  consent_source: str = "website_form",
+ consent_text: str = EMAIL_MARKETING_CONSENT_TEXT,
+ consent_version: str = EMAIL_MARKETING_CONSENT_VERSION,
+ consent_purpose: str = EMAIL_MARKETING_CONSENT_PURPOSE,
  resubscribe_confirmed: bool = False,
  email_automation_id: str | None = None,
  workspace_id: str | None = None,
@@ -48,6 +56,12 @@ async def capture_lead_and_schedule(
  owner_workspace_id = _resolve_workspace_id(workspace_id)
  if consent is not True:
   raise ValueError("Explicit email consent is required")
+ if consent_text != EMAIL_MARKETING_CONSENT_TEXT:
+  raise ValueError("Consent wording does not match the currently approved text")
+ if consent_version != EMAIL_MARKETING_CONSENT_VERSION:
+  raise ValueError("Consent policy version is not current")
+ if consent_purpose != EMAIL_MARKETING_CONSENT_PURPOSE:
+  raise ValueError("Consent purpose is not supported")
  address = email_address.strip().lower()
  if len(address) > 320 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]{2,}", address):
   raise ValueError("A valid email address is required")
@@ -95,6 +109,23 @@ async def capture_lead_and_schedule(
    )
    session.add(lead)
    await session.flush()
+
+  session.add(LeadConsentEvent(
+   workspace_id=owner_workspace_id,
+   lead_id=lead.id,
+   event_type="resubscribed" if was_resubscribed else "consent_granted",
+   purpose=EMAIL_MARKETING_CONSENT_PURPOSE,
+   consent_text=EMAIL_MARKETING_CONSENT_TEXT,
+   policy_version=EMAIL_MARKETING_CONSENT_VERSION,
+   source=consent_source[:180],
+   channel="email",
+   metadata_json={
+    "explicit_checkbox_consent": True,
+    "explicit_resubscribe_confirmation": bool(was_resubscribed and resubscribe_confirmed),
+    "evidence_text_is_canonical": True,
+   },
+   observed_at=now,
+  ))
 
   if normalize_utm_attribution(utm_attribution):
    lead.metadata_json = merge_lead_attribution_metadata(
@@ -689,6 +720,22 @@ async def unsubscribe_lead(session: AsyncSession, lead_id: str) -> bool:
    .execution_options(synchronize_session=False)
   )
   cancelled = int(result.rowcount or 0)
+  if not previously_unsubscribed:
+   session.add(LeadConsentEvent(
+    workspace_id=workspace_id,
+    lead_id=lead.id,
+    event_type="unsubscribed",
+    purpose=EMAIL_MARKETING_CONSENT_PURPOSE,
+    consent_text=None,
+    policy_version=EMAIL_MARKETING_CONSENT_VERSION,
+    source="signed_unsubscribe_link",
+    channel="email",
+    metadata_json={
+     "pending_messages_cancelled": cancelled,
+     "explicit_post_confirmation": True,
+    },
+    observed_at=datetime.now(timezone.utc),
+   ))
   if not previously_unsubscribed or cancelled:
    session.add(AuditLog(
     workspace_id=workspace_id,

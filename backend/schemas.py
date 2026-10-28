@@ -8,6 +8,11 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator, model_validator
+from backend.services.consent_ledger import (
+    EMAIL_MARKETING_CONSENT_PURPOSE,
+    EMAIL_MARKETING_CONSENT_TEXT,
+    EMAIL_MARKETING_CONSENT_VERSION,
+)
 
 
 class LoginRequest(BaseModel):
@@ -140,6 +145,9 @@ class LeadCaptureRequest(BaseModel):
     audience: str = Field(min_length=2, max_length=500)
     offer: dict[str, Any] = Field(default_factory=dict)
     consent_source: str = Field(default="website_form", max_length=180)
+    consent_text: str = Field(default=EMAIL_MARKETING_CONSENT_TEXT, min_length=10, max_length=1000)
+    consent_version: str = Field(default=EMAIL_MARKETING_CONSENT_VERSION, min_length=1, max_length=80)
+    consent_purpose: Literal["email_marketing"] = EMAIL_MARKETING_CONSENT_PURPOSE
     resubscribe_confirmed: bool = False
     workspace_token: str | None = Field(default=None, max_length=1024)
     email_automation_id: str | None = Field(default=None, min_length=36, max_length=36)
@@ -165,6 +173,20 @@ class LeadCaptureRequest(BaseModel):
     def require_explicit_consent(cls, value: bool) -> bool:
         if value is not True:
             raise ValueError("Explicit email consent is required")
+        return value
+
+    @field_validator("consent_text")
+    @classmethod
+    def require_canonical_consent_text(cls, value: str) -> str:
+        if value != EMAIL_MARKETING_CONSENT_TEXT:
+            raise ValueError("Consent wording does not match the currently approved text")
+        return value
+
+    @field_validator("consent_version")
+    @classmethod
+    def require_current_consent_version(cls, value: str) -> str:
+        if value != EMAIL_MARKETING_CONSENT_VERSION:
+            raise ValueError("Consent policy version is not current")
         return value
 
 

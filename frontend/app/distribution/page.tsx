@@ -34,6 +34,16 @@ const statusName = (value: string) => value === "pending_review" ? "Pending revi
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "The distribution queue request failed.";
 const displayDate = (value: string | null) => value ? new Date(value).toLocaleString() : "Not scheduled";
 
+// randomUUID is unavailable in some older/embedded browser contexts. Keep the
+// queue's idempotency header functional there by falling back to cryptographic
+// random bytes rather than disabling queue creation or using Math.random.
+const createIdempotencyKey = () => {
+  if (typeof crypto.randomUUID === "function") return "distribution-" + crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return "distribution-" + Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
 export default function DistributionQueuePage() {
   const [assets, setAssets] = useState<QueueAsset[]>([]);
   const [items, setItems] = useState<QueueItem[]>([]);
@@ -71,7 +81,7 @@ export default function DistributionQueuePage() {
     try {
       await apiFetch<QueueItem>("/api/distribution/queue", {
         method: "POST",
-        headers: { "Idempotency-Key": "distribution-" + crypto.randomUUID() },
+        headers: { "Idempotency-Key": createIdempotencyKey() },
         body: JSON.stringify({
           content_asset_id: assetId, channel,
           scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,

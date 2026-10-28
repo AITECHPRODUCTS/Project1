@@ -63,6 +63,7 @@ from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
+from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
 from backend.services.tracking_service import choose_destination,destination_healthy,record_click_and_resolve,verify_click_signature
 from backend.services.url_safety import validate_public_http_url
@@ -2759,7 +2760,9 @@ def _landing_page_summary(row: ContentAsset) -> dict[str, Any]:
     }
 
 
-def _render_saved_landing_page(row: ContentAsset) -> str:
+def _render_saved_landing_page(
+    row: ContentAsset, *, utm_attribution: dict[str, Any] | None = None
+) -> str:
     metadata = dict(row.metadata_json or {})
     return render_workspace_landing_page(
         headline=row.title,
@@ -2770,6 +2773,7 @@ def _render_saved_landing_page(row: ContentAsset) -> str:
         lead_magnet=str(metadata.get("lead_magnet") or "Free resource"),
         audience=str(metadata.get("audience") or "website subscriber"),
         workspace_token=issue_workspace_token(str(row.workspace_id), "lead_capture"),
+        utm_attribution=utm_attribution,
     )
 
 
@@ -3005,7 +3009,9 @@ async def public_landing_page(
     ))
     if row is None:
         raise HTTPException(404, "Landing page not found")
-    return HTMLResponse(_render_saved_landing_page(row), headers={
+    return HTMLResponse(
+        _render_saved_landing_page(row, utm_attribution=normalize_utm_attribution(request.query_params)),
+        headers={
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -3278,6 +3284,9 @@ async def create_lead(
                 resubscribe_confirmed=payload.resubscribe_confirmed,
                 email_automation_id=payload.email_automation_id,
                 workspace_id=owner_workspace_id,
+                utm_attribution=normalize_utm_attribution({
+                    name: getattr(payload, name) for name in UTM_FIELD_LIMITS
+                }),
             )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -3443,7 +3452,8 @@ async def leads(
     return {"count": len(rows), "data": [
         {"id": x.id, "email": x.email, "lead_magnet": x.lead_magnet,
          "consented_at": x.consent_at.isoformat(), "unsubscribed": x.unsubscribed_at is not None,
-         "purchased": x.purchased_at is not None}
+         "purchased": x.purchased_at is not None,
+         "attribution": lead_attribution_summary(x.metadata_json)}
         for x in rows
     ]}
 

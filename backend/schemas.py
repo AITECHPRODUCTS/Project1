@@ -144,6 +144,21 @@ class LeadCaptureRequest(BaseModel):
     workspace_token: str | None = Field(default=None, max_length=1024)
     email_automation_id: str | None = Field(default=None, min_length=36, max_length=36)
     duration_days: int = Field(default=5, ge=5, le=7)
+    utm_source: str | None = Field(default=None, max_length=120)
+    utm_medium: str | None = Field(default=None, max_length=80)
+    utm_campaign: str | None = Field(default=None, max_length=200)
+    utm_content: str | None = Field(default=None, max_length=200)
+    utm_term: str | None = Field(default=None, max_length=160)
+
+    @field_validator("utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", mode="before")
+    @classmethod
+    def normalize_utm_value(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, (str, int, float)):
+            raise ValueError("UTM attribution values must be plain text")
+        normalized = "".join(character for character in str(value) if character.isprintable()).strip()
+        return normalized or None
 
     @field_validator("consent")
     @classmethod

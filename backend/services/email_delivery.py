@@ -13,6 +13,7 @@ from backend.services.llm import llm_service
 from backend.services.s4_s5_landing import email_drip_sequence
 from backend.services.email_automation_builder import build_email_automation, resolve_next_email_step
 from backend.services.jurisdiction_compliance import find_current_assessment
+from backend.services.utm_attribution import merge_lead_attribution_metadata, normalize_utm_attribution
 def _unsubscribe_url(lead_id:str,ts:int|None=None)->str:
  s=get_settings();ts=ts or int(time.time());secret=s.tracking_hmac_secret or s.app_session_secret;sig=hmac.new(secret.encode(),f"unsubscribe:{lead_id}:{ts}".encode(),hashlib.sha256).hexdigest();return f"{s.app_public_url.rstrip('/')}/unsubscribe/{lead_id}?ts={ts}&sig={sig}"
 def _fallback(day:int,magnet:str,offer:dict[str,Any])->tuple[str,str]:
@@ -42,6 +43,7 @@ async def capture_lead_and_schedule(
  resubscribe_confirmed: bool = False,
  email_automation_id: str | None = None,
  workspace_id: str | None = None,
+ utm_attribution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
  owner_workspace_id = _resolve_workspace_id(workspace_id)
  if consent is not True:
@@ -93,6 +95,11 @@ async def capture_lead_and_schedule(
    )
    session.add(lead)
    await session.flush()
+
+  if normalize_utm_attribution(utm_attribution):
+   lead.metadata_json = merge_lead_attribution_metadata(
+    lead.metadata_json, utm_attribution, observed_at=now
+   )
 
   if email_automation_id:
    automation_id = str(email_automation_id).strip()

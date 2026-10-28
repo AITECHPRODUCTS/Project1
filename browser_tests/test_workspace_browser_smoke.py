@@ -410,6 +410,43 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
             assert refreshed.status == 200
             assert 'name="workspace_token" value="' in refreshed.text()
 
+            utm_email = f"utm-capture-{uuid.uuid4().hex}@example.test"
+            tracked_url = (
+                published["public_url"]
+                + "?utm_source=weekly%20newsletter&utm_medium=email"
+                + "&utm_campaign=creator_launch&utm_content=guide%20%26%20checklist"
+                + "&utm_term=solo_creator&utm_id=ignored"
+            )
+            tracked_page = context.new_page()
+            tracked_response = tracked_page.goto(tracked_url, wait_until="domcontentloaded")
+            assert tracked_response is not None and tracked_response.status == 200
+            tracked_html = tracked_page.content()
+            assert 'name="utm_source" value="weekly newsletter"' in tracked_html
+            assert 'name="utm_medium" value="email"' in tracked_html
+            assert 'name="utm_campaign" value="creator_launch"' in tracked_html
+            assert 'name="utm_content" value="guide &amp; checklist"' in tracked_html
+            assert 'name="utm_term" value="solo_creator"' in tracked_html
+            assert 'name="utm_id"' not in tracked_html
+            tracked_page.get_by_label("Email address").fill(utm_email)
+            tracked_page.locator('input[name="consent"]').check()
+            tracked_page.get_by_role("button", name="Send me the resource").click()
+            tracked_page.get_by_role("heading", name="You're on the list").wait_for(state="visible")
+
+            lead_response = context.request.get(api_base + "/api/leads")
+            assert lead_response.status == 200, lead_response.text()
+            tracked_lead = next(
+                item for item in lead_response.json()["data"] if item["email"] == utm_email
+            )
+            expected_utm = {
+                "utm_source": "weekly newsletter",
+                "utm_medium": "email",
+                "utm_campaign": "creator_launch",
+                "utm_content": "guide & checklist",
+                "utm_term": "solo_creator",
+            }
+            assert tracked_lead["attribution"]["first_touch"] == expected_utm
+            assert tracked_lead["attribution"]["last_touch"] == expected_utm
+
             # A persisted draft is not public until owner/admin confirmation.
             published_card = page.locator('[data-testid="landing-page-' + asset_id + '"]')
             published_card.get_by_role("button", name="Unpublish page").wait_for(state="visible")

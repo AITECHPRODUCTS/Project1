@@ -4,6 +4,7 @@ from datetime import datetime,timezone
 from typing import Any
 from backend.config import get_settings
 from backend.core.errors import IntegrationNotConfiguredError
+from backend.services.utm_attribution import normalize_utm_attribution
 from backend.services.llm import llm_service
 from backend.services.url_safety import request_public_json
 def _esc(x:Any)->str:return html.escape(str(x),quote=True)
@@ -33,6 +34,7 @@ def render_workspace_landing_page(
     lead_magnet: str = "Free resource",
     audience: str = "website subscriber",
     workspace_token: str | None = None,
+    utm_attribution: dict[str, Any] | None = None,
 ) -> str:
     """Render a standalone, escaped, consent-gated workspace landing page.
 
@@ -57,6 +59,10 @@ def render_workspace_landing_page(
     token_input = (
         f'<input type="hidden" name="workspace_token" value="{_esc(workspace_token)}">'
         if workspace_token else ""
+    )
+    utm_inputs = "".join(
+        f'<input type="hidden" name="{name}" value="{_esc(value)}">'
+        for name, value in normalize_utm_attribution(utm_attribution).items()
     )
     return f'''<!doctype html>
 <html lang="en">
@@ -96,6 +102,7 @@ a{{color:var(--brand)}}
 <ul>{safe_bullets}</ul>
 <form action="/api/public/leads/capture" method="post">
 {token_input}
+{utm_inputs}
 <input type="hidden" name="lead_magnet" value="{_esc(lead_magnet)}">
 <input type="hidden" name="audience" value="{_esc(audience)}">
 <input type="hidden" name="consent_source" value="persisted_landing_page">

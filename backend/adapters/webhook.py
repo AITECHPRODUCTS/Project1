@@ -59,7 +59,10 @@ class AggregatorWebhookAdapter(AffiliateNetworkAdapter):
             raise ValueError(f"{field} must fit Numeric(18, 6)") from exc
         if normalized != amount:
             raise ValueError(f"{field} must have no more than 6 decimal places")
-        return normalized
+        # Preserve the caller's Decimal exponent so existing API response strings
+        # (for example, remaining_commission='0.75') do not change merely because
+        # the input was validated against the six-place ledger scale.
+        return amount
 
     async def fetch_offers(self, *, query: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         # This webhook-only adapter has no offer-discovery API.

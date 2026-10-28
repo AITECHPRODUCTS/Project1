@@ -445,3 +445,121 @@ def test_conversion_webhook_accepts_network_specific_secret(monkeypatch):
         assert ledger_entry.evidence_status == "signed_webhook_verified"
     finally:
         main.app.dependency_overrides.pop(get_session, None)
+
+
+
+def test_conversion_webhook_records_bounded_partial_reversal(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    click = SimpleNamespace(click_id="click-refund", workspace_id="workspace-1")
+    parent = SimpleNamespace(
+        id="original-conversion", status="approved", commission=1.25, revenue=9.50, currency="USD"
+    )
+    session, override = fake_session(click, None, parent)
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps({
+        "event_id": "evt-partial-refund-1",
+        "click_id": "click-refund",
+        "status": "partial_refund",
+        "original_event_id": "evt-original-1",
+        "commission": "0.50",
+        "revenue": "2.00",
+        "currency": "USD",
+    }, separators=(",", ":")).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 200
+        assert response.json()["status"] == "recorded"
+        assert response.json()["commission_adjustment"] == -0.5
+        assert response.json()["revenue_adjustment"] == -2.0
+        assert response.json()["remaining_commission"] == "0.75"
+        assert response.json()["remaining_revenue"] == "7.5"
+        assert parent.status == "partially_reversed"
+        added = [call.args[0] for call in session.add.call_args_list]
+        reversal = next(value for value in added if isinstance(value, Conversion))
+        ledger = next(value for value in added if isinstance(value, ConversionLedgerEntry))
+        assert reversal.status == "partially_reversed"
+        assert reversal.commission == -0.5
+        assert reversal.revenue == -2.0
+        assert ledger.entry_type == "reversal"
+        assert ledger.commission_amount == Decimal("-0.5")
+        assert ledger.revenue_amount == Decimal("-2.0")
+        assert ledger.original_event_id == "evt-original-1"
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+def test_conversion_webhook_rejects_partial_reversal_above_remaining_balance(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    click = SimpleNamespace(click_id="click-refund", workspace_id="workspace-1")
+    parent = SimpleNamespace(
+        id="original-conversion", status="approved", commission=1.25, revenue=9.50, currency="USD"
+    )
+    session, override = fake_session(click, None, parent)
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps({
+        "event_id": "evt-partial-refund-too-large",
+        "click_id": "click-refund",
+        "status": "partial_refund",
+        "original_event_id": "evt-original-1",
+        "commission": "1.26",
+        "revenue": "1.00",
+        "currency": "USD",
+    }, separators=(",", ":")).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 422
+        assert "exceeds the remaining" in response.json()["detail"]
+        assert session.add.call_count == 0
+        session.commit.assert_not_awaited()
+        assert parent.status == "approved"
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+
+
+def test_conversion_webhook_full_reversal_offsets_only_remaining_amount_after_partial(monkeypatch):
+    monkeypatch.setattr(main.settings, "affiliate_webhook_secret", SECRET)
+    click = SimpleNamespace(click_id="click-refund", workspace_id="workspace-1")
+    parent = SimpleNamespace(
+        id="original-conversion", status="partially_reversed", commission=1.25, revenue=9.50, currency="USD"
+    )
+    session, override = fake_session(click, None, parent, Decimal("-0.50"), Decimal("-2.00"))
+    main.app.dependency_overrides[get_session] = override
+    body = json.dumps({
+        "event_id": "evt-final-refund",
+        "click_id": "click-refund",
+        "status": "refunded",
+        "original_event_id": "evt-original-1",
+        "currency": "USD",
+    }, separators=(",", ":")).encode()
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/webhooks/conversions/example-network",
+                content=body,
+                headers=signed_headers(body),
+            )
+        assert response.status_code == 200
+        assert response.json()["commission_adjustment"] == -0.75
+        assert response.json()["revenue_adjustment"] == -7.5
+        assert response.json()["remaining_commission"] == "0"
+        assert response.json()["remaining_revenue"] == "0"
+        assert parent.status == "reversed"
+        added = [call.args[0] for call in session.add.call_args_list]
+        reversal = next(value for value in added if isinstance(value, Conversion))
+        ledger = next(value for value in added if isinstance(value, ConversionLedgerEntry))
+        assert reversal.commission == -0.75
+        assert reversal.revenue == -7.5
+        assert ledger.commission_amount == Decimal("-0.75")
+        assert ledger.revenue_amount == Decimal("-7.5")
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)

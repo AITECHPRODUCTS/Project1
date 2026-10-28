@@ -270,3 +270,5 @@ These additive rules apply to every future Project1 build session.
 14. The live `docs/skill-parity-matrix.csv` currently contains 53 rows, all marked `partial`; historical audit summaries showing 47 partial / 6 not implemented are stale and must not override the current CSV or `scripts/verify_skill_registry.py`. Update the status ledger and backlog to match the live matrix, and preserve the canonical status-count phrase expected by the parity guard.
 
 15. Email opt-out is a durable suppression state. Re-subscription must require both fresh affirmative consent and an explicit confirmation flag, write a privacy-minimizing audit event, preserve old suppressed delivery history, and schedule a new idempotent sequence without reviving canceled messages.
+
+16. Conversion reversal processing must preserve an append-only signed ledger, serialize against the original conversion row, allow explicit partial-refund events only when their offsets do not exceed the remaining original amounts, and make later full reversals offset only the remaining balance. Unmatched partial reversals must be rejected rather than guessed.

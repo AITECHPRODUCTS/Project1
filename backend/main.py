@@ -5882,27 +5882,118 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
   return JSONResponse(status_code=202,content={"status":"unmatched_quarantined","stored":False,"reason":"The click id cannot be mapped to a workspace."})
  set_workspace_id(click.workspace_id)
  if await db.scalar(select(Conversion.id).where(Conversion.network==net,Conversion.external_event_id==eid)):return {"status":"duplicate_ignored"}
- status=event["status"];reversal=status in {"reversed","refunded","chargeback","clawback","reversal","commission_reversal"}
- commission=event["commission"];revenue=event["revenue"]
- original_id=str(p.get("original_event_id") or p.get("parent_transaction_id") or "").strip()
- if len(original_id)>255:raise HTTPException(422,"original_event_id must be 255 characters or fewer")
+ currency = str(p.get("currency") or "USD").strip().upper()
+ if len(currency) != 3 or not currency.isalpha():
+  raise HTTPException(422, "currency must be a three-letter code")
+ status = event["status"]
+ partial_reversal = status in {"partial_refund", "partial_reversal", "partial_chargeback"}
+ reversal = partial_reversal or status in {"reversed", "refunded", "chargeback", "clawback", "reversal", "commission_reversal"}
+ commission = Decimal(str(event["commission"]))
+ revenue = Decimal(str(event["revenue"]))
+ original_id = str(p.get("original_event_id") or p.get("parent_transaction_id") or "").strip()
+ if len(original_id) > 255:
+  raise HTTPException(422, "original_event_id must be 255 characters or fewer")
+ remaining_commission = None
+ remaining_revenue = None
  if reversal:
-  parent=await db.scalar(select(Conversion).where(Conversion.network==str(p.get("original_network") or net).lower(),Conversion.external_event_id==original_id).with_for_update()) if original_id else None
-  if parent and parent.status=="reversed":return {"status":"duplicate_reversal_ignored","original_event_id":original_id}
-  if parent:commission=-abs(parent.commission);revenue=-abs(parent.revenue);parent.status="reversed";status="reversed"
+  original_network = str(p.get("original_network") or net).lower()
+  parent = await db.scalar(
+   select(Conversion)
+   .where(Conversion.network == original_network, Conversion.external_event_id == original_id)
+   .with_for_update()
+  ) if original_id else None
+  if partial_reversal and parent is None:
+   raise HTTPException(422, "Partial reversal requires a known original conversion")
+  if parent and parent.status == "reversed":
+   return {"status": "duplicate_reversal_ignored", "original_event_id": original_id}
+  if parent:
+   parent_currency = str(getattr(parent, "currency", currency) or currency).upper()
+   if parent_currency != currency:
+    raise HTTPException(422, "Reversal currency must match the original conversion")
+   prior_commission = Decimal("0")
+   prior_revenue = Decimal("0")
+   if parent.status == "partially_reversed":
+    prior_commission = Decimal(str(await db.scalar(
+     select(func.coalesce(func.sum(ConversionLedgerEntry.commission_amount), 0)).where(
+      ConversionLedgerEntry.workspace_id == click.workspace_id,
+      ConversionLedgerEntry.network == net,
+      ConversionLedgerEntry.entry_type == "reversal",
+      ConversionLedgerEntry.original_event_id == original_id,
+     )
+    ) or 0))
+    prior_revenue = Decimal(str(await db.scalar(
+     select(func.coalesce(func.sum(ConversionLedgerEntry.revenue_amount), 0)).where(
+      ConversionLedgerEntry.workspace_id == click.workspace_id,
+      ConversionLedgerEntry.network == net,
+      ConversionLedgerEntry.entry_type == "reversal",
+      ConversionLedgerEntry.original_event_id == original_id,
+     )
+    ) or 0))
+   remaining_commission = max(abs(Decimal(str(parent.commission or 0))) + prior_commission, Decimal("0"))
+   remaining_revenue = max(abs(Decimal(str(parent.revenue or 0))) + prior_revenue, Decimal("0"))
+   if partial_reversal:
+    requested_commission = commission
+    requested_revenue = revenue
+    if requested_commission == 0 and requested_revenue == 0:
+     raise HTTPException(422, "Partial reversal must include a commission or revenue amount")
+    if requested_commission > remaining_commission or requested_revenue > remaining_revenue:
+     raise HTTPException(422, "Partial reversal exceeds the remaining original amounts")
+    commission = -requested_commission
+    revenue = -requested_revenue
+    remaining_commission -= requested_commission
+    remaining_revenue -= requested_revenue
+    status = "reversed" if remaining_commission == 0 and remaining_revenue == 0 else "partially_reversed"
+    parent.status = status
+   else:
+    if remaining_commission == 0 and remaining_revenue == 0:
+     return {"status": "duplicate_reversal_ignored", "original_event_id": original_id}
+    commission = -remaining_commission
+    revenue = -remaining_revenue
+    remaining_commission = Decimal("0")
+    remaining_revenue = Decimal("0")
+    status = "reversed"
+    parent.status = "reversed"
   else:
-   if not commission and not revenue:raise HTTPException(422,"Unmatched reversal must include commission or revenue offset")
-   commission=-abs(commission);revenue=-abs(revenue);status="reversal_unmatched"
- currency=str(p.get("currency") or "USD").strip().upper()
- if len(currency)!=3 or not currency.isalpha():raise HTTPException(422,"currency must be a three-letter code")
- row=Conversion(workspace_id=click.workspace_id,network=net,external_event_id=eid,click_id=click_id,utm_source=p.get("utm_source"),utm_medium=p.get("utm_medium"),utm_campaign=p.get("utm_campaign"),utm_content=p.get("utm_content"),hook=p.get("hook") or p.get("utm_content"),commission=commission,revenue=revenue,currency=currency,status=status,event_json={**p,"reversal":reversal,"original_event_id":original_id or None});ledger_row=ConversionLedgerEntry(workspace_id=click.workspace_id,network=net,external_event_id=eid,click_id=click_id,entry_type="reversal" if reversal else "conversion",original_event_id=original_id or None,commission_amount=Decimal(str(commission)),revenue_amount=Decimal(str(revenue)),currency=currency,status=status,evidence_status="signed_webhook_verified",source_event_json={**p,"reversal":reversal,"original_event_id":original_id or None},observed_at=datetime.now(timezone.utc));db.add(row);db.add(ledger_row)
- try:await db.commit()
+   if not commission and not revenue:
+    raise HTTPException(422, "Unmatched reversal must include commission or revenue offset")
+   if partial_reversal:
+    raise HTTPException(422, "Partial reversal requires a known original conversion")
+   commission = -abs(commission)
+   revenue = -abs(revenue)
+   status = "reversal_unmatched"
+ row = Conversion(
+  workspace_id=click.workspace_id, network=net, external_event_id=eid, click_id=click_id,
+  utm_source=p.get("utm_source"), utm_medium=p.get("utm_medium"), utm_campaign=p.get("utm_campaign"),
+  utm_content=p.get("utm_content"), hook=p.get("hook") or p.get("utm_content"),
+  commission=float(commission), revenue=float(revenue), currency=currency, status=status,
+  event_json={**p, "reversal": reversal, "partial_reversal": partial_reversal, "original_event_id": original_id or None},
+ )
+ ledger_row = ConversionLedgerEntry(
+  workspace_id=click.workspace_id, network=net, external_event_id=eid, click_id=click_id,
+  entry_type="reversal" if reversal else "conversion", original_event_id=original_id or None,
+  commission_amount=commission, revenue_amount=revenue, currency=currency, status=status,
+  evidence_status="signed_webhook_verified",
+  source_event_json={**p, "reversal": reversal, "partial_reversal": partial_reversal, "original_event_id": original_id or None},
+  observed_at=datetime.now(timezone.utc),
+ )
+ db.add(row)
+ db.add(ledger_row)
+ try:
+  await db.commit()
  except IntegrityError as exc:
   await db.rollback()
-  duplicate=await db.scalar(select(Conversion.id).where(Conversion.network==net,Conversion.external_event_id==eid))
-  if duplicate:return {"status":"duplicate_ignored"}
-  raise HTTPException(409,"Conversion could not be persisted because of an integrity conflict") from exc
- return {"status":"recorded","conversion_id":row.id,"reversal":reversal,"commission_adjustment":commission}
+  duplicate = await db.scalar(select(Conversion.id).where(Conversion.network == net, Conversion.external_event_id == eid))
+  if duplicate:
+   return {"status": "duplicate_ignored"}
+  raise HTTPException(409, "Conversion could not be persisted because of an integrity conflict") from exc
+ response = {
+  "status": "recorded", "conversion_id": row.id, "reversal": reversal,
+  "commission_adjustment": float(commission), "revenue_adjustment": float(revenue),
+ }
+ if remaining_commission is not None and remaining_revenue is not None:
+  response["remaining_commission"] = str(remaining_commission)
+  response["remaining_revenue"] = str(remaining_revenue)
+ return response
 @app.get("/r/{campaign_id}")
 async def redirect_campaign(campaign_id:str,request:Request,db:AsyncSession=Depends(get_session)):
  with workspace_scope(None):

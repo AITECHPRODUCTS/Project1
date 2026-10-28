@@ -103,6 +103,6 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             page = context.new_page()
             page.goto(BASE_URL, wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
-            page.get_by_text(email, exact=True).wait_for(state="visible")
+            page.locator("#overview").get_by_text(email, exact=True).wait_for(state="visible")
         finally:
             browser.close()

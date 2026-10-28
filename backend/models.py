@@ -702,3 +702,44 @@ class MarketplaceApplication(TenantScopedMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class DistributionQueueItem(TenantScopedMixin, Base):
+    """Immutable content snapshot awaiting human review and separate provider dispatch."""
+
+    __tablename__ = "distribution_queue_items"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "idempotency_key", name="uq_distribution_queue_workspace_key"),
+        Index("ix_distribution_queue_workspace_status_schedule", "workspace_id", "status", "scheduled_at"),
+        Index("ix_distribution_queue_workspace_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_asset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("content_assets.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    source_asset_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    content_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_body: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_urls_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    channel: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_jurisdictions_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending_review", nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    external_post_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

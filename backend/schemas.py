@@ -1855,6 +1855,52 @@ class BioLinkPublishRequest(BaseModel):
     def normalize_bio_publish_tags(cls, values: list[str]) -> list[str]:
         return list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))[:20]
 
+DistributionChannel = Literal[
+    "meta", "facebook", "instagram", "tiktok", "youtube", "youtube_shorts",
+    "pinterest", "reddit", "quora", "x", "linkedin", "telegram",
+    "whatsapp_business", "wordpress", "ghost", "email",
+]
+
+
+class DistributionQueueCreateRequest(BaseModel):
+    content_asset_id: str = Field(min_length=36, max_length=36)
+    channel: DistributionChannel
+    scheduled_at: datetime | None = None
+
+    @field_validator("scheduled_at")
+    @classmethod
+    def require_future_timezone_aware_schedule(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Scheduled distribution time must include a timezone")
+        normalized = value.astimezone(timezone.utc)
+        if normalized <= datetime.now(timezone.utc):
+            raise ValueError("Scheduled distribution time must be in the future")
+        return normalized
+
+
+class DistributionQueueApproveRequest(BaseModel):
+    confirm_content_review: bool = False
+    target_jurisdictions: list[str] = Field(min_length=1, max_length=50)
+    reviewer_note: str = Field(default="", max_length=4000)
+
+    @field_validator("target_jurisdictions")
+    @classmethod
+    def normalize_distribution_jurisdictions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().upper() for value in values if str(value).strip()))
+        if not normalized or any(
+            not re.fullmatch(r"(?:[A-Z]{2}(?:-[A-Z0-9]{1,6})?|EU|EEA|GLOBAL)", value)
+            for value in normalized
+        ):
+            raise ValueError("Use ISO-style country/subdivision codes or EU, EEA, GLOBAL")
+        return normalized
+
+
+class DistributionQueueCancelRequest(BaseModel):
+    confirm_cancel: bool = False
+
+
 class GitHubPagesDeployRequest(BaseModel):
     """Deploy only an existing, generated bio-link asset to the server-configured target."""
     asset_id: str = Field(min_length=1, max_length=36)

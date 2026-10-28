@@ -472,3 +472,70 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
             assert context.request.get(published["public_url"]).status == 404
         finally:
             browser.close()
+
+
+
+def test_distribution_queue_is_persisted_review_gated_and_never_claims_sent():
+    api_base = "http://127.0.0.1:8000"
+    email = f"distribution-queue-{uuid.uuid4().hex}@example.test"
+    password = "Distribution-Queue-strong-password-2026!"
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            registration = context.request.post(
+                api_base + "/api/auth/register",
+                data={"email": email, "password": password, "workspace_name": "Distribution Queue UAT"},
+            )
+            assert registration.status == 201, registration.text()
+            asset_response = context.request.post(
+                api_base + "/api/content/infographic",
+                data={
+                    "title": "A reviewed creator checklist",
+                    "subtitle": "A practical distribution example",
+                    "audience": "Independent creators",
+                    "key_points": [
+                        "Verify all product facts",
+                        "Show affiliate disclosures clearly",
+                        "Review audience and channel policies",
+                    ],
+                    "source_urls": ["https://example.invalid/creator-checklist"],
+                },
+            )
+            assert asset_response.status == 201, asset_response.text()
+            asset_id = asset_response.json()["asset_id"]
+
+            page = context.new_page()
+            page.goto(BASE_URL + "/distribution", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Distribution queue").wait_for(state="visible")
+            page.get_by_label("Saved content asset").select_option(asset_id)
+            page.get_by_label("Target channel").select_option("pinterest")
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/distribution/queue") and response.request.method == "POST"
+            ) as create_info:
+                page.get_by_role("button", name="Add to review queue").click()
+            created_response = create_info.value
+            assert created_response.status == 201, created_response.text()
+            item = created_response.json()
+            assert item["status"] == "pending_review" and item["external_submission_status"] == "not_attempted"
+            card = page.locator('[data-testid="distribution-queue-' + item["id"] + '"]')
+            card.get_by_text("Pending review", exact=True).wait_for(state="visible")
+            card.get_by_text("Not sent", exact=False).wait_for(state="visible")
+
+            page.get_by_label("Target jurisdictions for review").fill("US, IN")
+            card.get_by_label("I reviewed this content for the selected jurisdictions.").check()
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/distribution/queue/" + item["id"] + "/approve")
+                and response.request.method == "POST"
+            ) as approve_info:
+                card.get_by_role("button", name="Approve for dispatch review").click()
+            approved_response = approve_info.value
+            assert approved_response.status == 200, approved_response.text()
+            approved = approved_response.json()
+            assert approved["status"] == "approved_waiting_for_dispatch"
+            assert approved["external_submission_status"] == "not_attempted" and approved["external_post_id"] is None
+            card.get_by_text("Approved — not sent", exact=True).wait_for(state="visible")
+            card.get_by_text("a separate dispatch confirmation and verified provider capability are required", exact=False).wait_for(state="visible")
+        finally:
+            browser.close()

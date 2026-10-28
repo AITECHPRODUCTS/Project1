@@ -25,10 +25,10 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -5392,6 +5392,288 @@ def _bio_link_asset_dict(row: ContentAsset, *, include_html: bool = False) -> di
     if include_html:
         result["html"] = row.body
     return result
+
+
+
+def _distribution_queue_item_dict(row: DistributionQueueItem, *, replayed: bool = False) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "workspace_id": row.workspace_id,
+        "source_asset_id": row.source_asset_id,
+        "source_asset_type": row.source_asset_type,
+        "title": row.content_title,
+        "channel": row.channel,
+        "content_sha256": row.content_sha256,
+        "source_urls": list(row.source_urls_json or []),
+        "target_jurisdictions": list(row.target_jurisdictions_json or []),
+        "scheduled_at": row.scheduled_at.isoformat() if row.scheduled_at else None,
+        "status": row.status,
+        "created_by": row.created_by,
+        "reviewed_by": row.reviewed_by,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "reviewer_note": row.reviewer_note,
+        "cancelled_by": row.cancelled_by,
+        "cancelled_at": row.cancelled_at.isoformat() if row.cancelled_at else None,
+        "external_post_id": row.external_post_id,
+        "attempt_count": int(row.attempt_count or 0),
+        "external_submission_status": "not_attempted" if not row.external_post_id else "provider_id_recorded",
+        "dispatch_confirmation_required": True,
+        "execution_boundary": "Queueing and review do not publish content. Provider readiness, current compliance, scope, idempotency, and explicit per-action dispatch confirmation remain separate.",
+        "replayed": replayed,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@api.get("/distribution/queue/assets")
+async def list_distribution_queue_assets(
+    limit: int = Query(default=100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing queueable content")
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(ContentAsset)
+            .where(
+                ContentAsset.workspace_id == workspace_id,
+                ContentAsset.body != "",
+                ContentAsset.status.notin_(("rejected", "archived", "cancelled")),
+            )
+            .order_by(ContentAsset.created_at.desc())
+            .limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [
+        {
+            "id": row.id,
+            "title": row.title,
+            "asset_type": row.asset_type,
+            "status": row.status,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]}
+
+
+@api.get("/distribution/queue")
+async def list_distribution_queue_items(
+    limit: int = Query(default=100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing the distribution queue")
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(DistributionQueueItem)
+            .where(DistributionQueueItem.workspace_id == workspace_id)
+            .order_by(DistributionQueueItem.created_at.desc())
+            .limit(limit)
+        )).all())
+    return {"count": len(rows), "data": [_distribution_queue_item_dict(row) for row in rows]}
+
+
+@api.post("/distribution/queue", status_code=201)
+async def create_distribution_queue_item(
+    payload: DistributionQueueCreateRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before queueing content")
+    idempotency_key = str(request.headers.get("Idempotency-Key") or "").strip()
+    if not EXTERNAL_IDEMPOTENCY_KEY_RE.fullmatch(idempotency_key):
+        raise HTTPException(428, "A valid Idempotency-Key header is required to prevent duplicate queue items")
+
+    request_payload = {
+        "content_asset_id": payload.content_asset_id,
+        "channel": payload.channel,
+        "scheduled_at": payload.scheduled_at.isoformat() if payload.scheduled_at else None,
+    }
+    request_hash = hashlib.sha256(
+        json.dumps(request_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+
+    with workspace_scope(workspace_id):
+        existing = await db.scalar(select(DistributionQueueItem).where(
+            DistributionQueueItem.workspace_id == workspace_id,
+            DistributionQueueItem.idempotency_key == idempotency_key,
+        ))
+        if existing is not None:
+            if existing.request_hash != request_hash:
+                raise HTTPException(409, "This idempotency key was already used for a different queue request")
+            return _distribution_queue_item_dict(existing, replayed=True)
+
+        asset = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == payload.content_asset_id,
+            ContentAsset.workspace_id == workspace_id,
+        ))
+        if asset is None:
+            raise HTTPException(404, "Content asset not found in the active workspace")
+        body = str(asset.body or "")
+        if not body.strip():
+            raise HTTPException(422, "The selected content asset has no content to queue")
+        if len(body) > 200_000:
+            raise HTTPException(413, "The selected content snapshot exceeds the 200,000-character queue limit")
+
+        content_sha256 = hashlib.sha256(
+            (str(asset.asset_type) + "\0" + str(asset.title) + "\0" + body).encode("utf-8")
+        ).hexdigest()
+        row = DistributionQueueItem(
+            workspace_id=workspace_id,
+            source_asset_id=asset.id,
+            source_asset_type=str(asset.asset_type)[:100],
+            content_title=str(asset.title)[:500],
+            content_body=body,
+            content_sha256=content_sha256,
+            source_urls_json=[str(item)[:2048] for item in (asset.source_urls or []) if isinstance(item, str)][:20],
+            channel=payload.channel,
+            target_jurisdictions_json=[],
+            scheduled_at=payload.scheduled_at,
+            status="pending_review",
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+            created_by=actor,
+        )
+        db.add(row)
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="distribution.queue_item.created",
+            resource_type="distribution_queue_item",
+            resource_id=row.id,
+            outcome="pending_review",
+            details_json={
+                "source_asset_id": asset.id,
+                "source_asset_type": asset.asset_type,
+                "channel": payload.channel,
+                "content_sha256": content_sha256,
+                "scheduled_at": payload.scheduled_at.isoformat() if payload.scheduled_at else None,
+                "external_submission_performed": False,
+            },
+        ))
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            existing = await db.scalar(select(DistributionQueueItem).where(
+                DistributionQueueItem.workspace_id == workspace_id,
+                DistributionQueueItem.idempotency_key == idempotency_key,
+            ))
+            if existing is not None and existing.request_hash == request_hash:
+                return _distribution_queue_item_dict(existing, replayed=True)
+            raise HTTPException(409, "Queue idempotency key conflicts with an existing request")
+        await db.refresh(row)
+        return _distribution_queue_item_dict(row)
+
+
+@api.post("/distribution/queue/{item_id}/approve")
+async def approve_distribution_queue_item(
+    item_id: str,
+    payload: DistributionQueueApproveRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before approving queue items")
+    if str(user.get("workspace_role") or "") not in {"owner", "admin"}:
+        raise HTTPException(403, "Only a workspace owner or admin may approve distribution queue items")
+    if payload.confirm_content_review is not True:
+        raise HTTPException(409, "Explicit confirmation that the content and target scope were reviewed is required")
+
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(DistributionQueueItem).where(
+            DistributionQueueItem.id == item_id,
+            DistributionQueueItem.workspace_id == workspace_id,
+        ))
+        if row is None:
+            raise HTTPException(404, "Distribution queue item not found in the active workspace")
+        if row.status != "pending_review":
+            raise HTTPException(409, "Only items pending review can be approved")
+        if row.scheduled_at:
+            scheduled_at = row.scheduled_at
+            if scheduled_at.tzinfo is None or scheduled_at.utcoffset() is None:
+                scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+            else:
+                scheduled_at = scheduled_at.astimezone(timezone.utc)
+            if scheduled_at <= datetime.now(timezone.utc):
+                raise HTTPException(409, "The scheduled time has passed; create a new queue item with a future schedule")
+        row.status = "approved_waiting_for_dispatch"
+        row.target_jurisdictions_json = list(payload.target_jurisdictions)
+        row.reviewed_by = actor
+        row.reviewed_at = datetime.now(timezone.utc)
+        row.reviewer_note = payload.reviewer_note.strip()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="distribution.queue_item.approved",
+            resource_type="distribution_queue_item",
+            resource_id=row.id,
+            outcome="approved_waiting_for_dispatch",
+            details_json={
+                "target_jurisdictions": list(payload.target_jurisdictions),
+                "reviewer_note": payload.reviewer_note.strip()[:4000],
+                "external_submission_performed": False,
+                "dispatch_confirmation_required": True,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+        return _distribution_queue_item_dict(row)
+
+
+@api.post("/distribution/queue/{item_id}/cancel")
+async def cancel_distribution_queue_item(
+    item_id: str,
+    payload: DistributionQueueCancelRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before cancelling queue items")
+    if payload.confirm_cancel is not True:
+        raise HTTPException(409, "Explicit queue cancellation confirmation is required")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    role = str(user.get("workspace_role") or "")
+
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(DistributionQueueItem).where(
+            DistributionQueueItem.id == item_id,
+            DistributionQueueItem.workspace_id == workspace_id,
+        ))
+        if row is None:
+            raise HTTPException(404, "Distribution queue item not found in the active workspace")
+        is_creator = row.created_by.casefold() == actor.casefold()
+        if not is_creator and role not in {"owner", "admin"}:
+            raise HTTPException(403, "Only the creator or a workspace owner/admin may cancel this queue item")
+        if row.status == "cancelled":
+            return _distribution_queue_item_dict(row)
+        if row.status not in {"pending_review", "approved_waiting_for_dispatch"}:
+            raise HTTPException(409, "Only undispatched queue items can be cancelled")
+        row.status = "cancelled"
+        row.cancelled_by = actor
+        row.cancelled_at = datetime.now(timezone.utc)
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="distribution.queue_item.cancelled",
+            resource_type="distribution_queue_item",
+            resource_id=row.id,
+            outcome="cancelled",
+            details_json={"external_submission_performed": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+        return _distribution_queue_item_dict(row)
 
 
 @api.get("/distribution/bio-links")

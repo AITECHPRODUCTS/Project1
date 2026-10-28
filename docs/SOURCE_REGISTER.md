@@ -80,3 +80,8 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Preserve the existing full-source register and deduplicate identical attachment copies by content hash. Historical ZIPs/bundles remain reference snapshots, never the current GitHub source of truth.
 - The previous 2026-10-28 note saying the reversal-aware learning change awaited CI is superseded: commit `f2bc061ed41b799cb44132ba887b791851304df3` introduced the behavior; regression coverage was extended at `899265bb9cba7db973b7b91d0aa95c7e2052d34f`. Exact-SHA push [40648503523](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40648503523) and PR [40648508574](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40648508574) both passed, including PostgreSQL integration (7 passed in 1.69s). The durable implementation status is recorded in `docs/IMPLEMENTATION_STATUS.md`; external provider UAT and production release gates remain open.
 - The next known acceptance gap is browser-level journey/accessibility verification. Existing Next.js typecheck, production build and container HTTP smoke tests are not browser UAT.
+
+
+## 2026-10-28 browser acceptance follow-up
+- The previously recorded browser-UAT gap has been partially closed by the verified Chromium suite and real authenticated workspace journey documented in `docs/IMPLEMENTATION_STATUS.md`. Exact-SHA push/PR runs `40651721191` and `40651726705` passed at commit `97bc4551de400929635206a462861460d1e52b6e`; the suite reports 3 passed on each run.
+- Remaining browser coverage gap: authenticated content draft creation, offer validation, and lead capture are not yet exercised end-to-end. Do not equate this narrow UAT suite with full product acceptance or production readiness.

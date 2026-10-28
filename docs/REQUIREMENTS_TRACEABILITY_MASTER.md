@@ -499,3 +499,13 @@
 - **Implementation:** blank or whitespace-only evidence statuses now fall back to `pending_verification`; a narrow status classifier excludes explicit `fully_reversed`, `fully_refunded`, `charge_back`, and `commission_reversed` aliases after normalization. No fuzzy inference is used.
 - **Tests:** `tests/test_commission_reconciliation.py` adds whitespace-default and multiple reversal-alias regression coverage.
 - **Verification:** implementation candidate; exact-head CI is required before the behavior is considered verified. No payout is confirmed and no ledger state is mutated.
+
+
+## 2026-10-28 additive traceability — commission blank-status and reversal hardening (verified)
+
+- **Requirement:** S6 commission matching must safely default blank evidence statuses and exclude explicitly reversed/refunded/chargeback conversions without fuzzy classification.
+- **Implementation:** `backend/services/commission_reconciliation.py` normalizes status variants, defaults blank evidence status to `pending_verification`, and excludes explicit fully-reversed/refunded, charge-back and commission-reversed aliases.
+- **Tests:** `tests/test_commission_reconciliation.py` covers whitespace-only evidence status and explicit reversal spelling variants.
+- **Exact commit:** `32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969`.
+- **Verification:** push [40678582977](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678582977) and PR [40678593095](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678593095) completed successfully; Python, PostgreSQL, frontend/Docker, AI/RAG, security, secret scan, repo guard and browser UAT passed. PR lockfile-sync was skipped by configured event condition.
+- **Scope boundary:** no payout is confirmed; provider-specific reconciliation evidence and production finance UAT remain outstanding.

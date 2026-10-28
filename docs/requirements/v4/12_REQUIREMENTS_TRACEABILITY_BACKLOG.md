@@ -376,3 +376,6 @@
 - Tests: `tests/test_ad_budget_guardrails.py` covers stale evidence, historical data plus fresh latest evidence, and materially future-dated observations.
 - Exact-SHA CI: commit `3bc5770f3c89561e13686ea9c0023dd1ebbf5d78`; push [40636590192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40636590192) all 8 jobs passed; PR [40636595214](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40636595214) all required jobs passed (lockfile-sync skipped for PR). Python 532 passed, 3 skipped, one warning.
 - Safety boundary: this evaluator remains a recommendation only; it does not call provider APIs, authorize spend or execute a pause. Live provider polling contracts and account-level UAT remain open.
+
+
+| R-21 | S6 commission reconciliation status hardening | `backend/services/commission_reconciliation.py`, `tests/test_commission_reconciliation.py`, exact commit `32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969` | Implemented and exact-head push/PR CI passed: [push](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678582977), [PR](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678593095) | Live network statement contracts, provider-authenticated evidence, PostgreSQL finance tenant UAT, currency minor-unit policies and end-to-end finance browser UAT |

@@ -1078,4 +1078,13 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Fixed whitespace-only evidence status handling: blank/whitespace values now use the documented `pending_verification` default rather than becoming an unknown reviewed status.
 - Added conservative explicit aliases for fully reversed/refunded, charge-back, and commission-reversed conversion statuses. These aliases are normalized first and excluded from candidate matches; unrelated statuses are not guessed to mean reversal.
 - Regression coverage: whitespace-only evidence status continues through review matching; explicit reversal variants never become commission candidates.
-- Candidate commit: pending creation in this checkpoint. Verify exact-head push and PR workflows before calling this change CI-verified. Reconciliation remains review-only and never confirms a payout.
+- Commit: [`32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969`](https://github.com/AITECHPRODUCTS/Project1/commit/32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969). Exact-head push run [40678582977](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678582977) and PR run [40678593095](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678593095) both completed successfully. Python, PostgreSQL integration, frontend production/Docker, AI/RAG, security audit, secret scan, repository guard, and browser UAT passed; PR lockfile-sync was skipped by its configured event condition. Reconciliation remains review-only and never confirms a payout.
+
+
+## 2026-10-28 checkpoint — verified commission-status hardening and current build boundary
+
+- Exact implementation commit: `32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969`.
+- Exact push CI: [40678582977](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678582977) — completed successfully.
+- Exact PR CI: [40678593095](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678593095) — completed successfully. The PR lockfile-sync job was skipped by the workflow's configured condition, not failed.
+- Code slice: whitespace-only reconciliation evidence status defaults to pending verification; explicit fully-reversed/refunded, charge-back and commission-reversed status variants are excluded from candidate matching. Matching remains review-only and no payout is confirmed.
+- No overall product-completion percentage is inferred from the 53-row skill parity inventory. Production release remains blocked by provider authorization/contracts, full tenant/SaaS acceptance, legal/license decisions, staging deployment, restore/rollback rehearsal, operational monitoring and full browser/accessibility UAT.

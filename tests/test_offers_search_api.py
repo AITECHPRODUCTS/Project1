@@ -116,18 +116,18 @@ def test_offer_catalog_searches_description_and_keeps_unknown_metrics_unknown(of
 def test_offer_catalog_sorts_null_metrics_last_and_paginates(offer_catalog_client):
     first_page = offer_catalog_client.get(
         "/api/offers",
-        params={"sort_by": "epc", "sort_order": "desc", "limit": 2},
+        params={"sort_by": "epc", "sort_order": "desc", "limit": 3},
     )
     assert first_page.status_code == 200
     first = first_page.json()
-    assert first["count"] == 2
+    assert first["count"] == 3
     assert first["total_count"] == 5
     assert [item["external_id"] for item in first["data"]] == [
-        "jv-analytics-suite", "oa-analytics-pro",
+        "jv-analytics-suite", "oa-analytics-pro", "cb-analytics-basic",
     ]
     second_page = offer_catalog_client.get(
         "/api/offers",
-        params={"sort_by": "epc", "sort_order": "desc", "limit": 2, "offset": 2},
+        params={"sort_by": "epc", "sort_order": "desc", "limit": 3, "offset": 3},
     )
     assert second_page.status_code == 200
     second = second_page.json()

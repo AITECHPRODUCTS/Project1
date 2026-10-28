@@ -274,3 +274,5 @@ These additive rules apply to every future Project1 build session.
 16. Conversion reversal processing must preserve an append-only signed ledger, serialize against the original conversion row, allow explicit partial-refund events only when their offsets do not exceed the remaining original amounts, and make later full reversals offset only the remaining balance. Unmatched partial reversals must be rejected rather than guessed.
 
 17. Financial reversal acceptance must include a real PostgreSQL ledger test: partial reversal then full reversal must offset only the remaining balance, preserve immutable ledger entries, and net both commission and revenue to zero. Mocked route tests alone do not establish database correctness.
+
+18. Public landing pages must expose separate controls for consent to receive marketing emails and optional explicit re-subscription confirmation. Never make the re-subscribe checkbox required for first-time subscribers; server-side logic must still require it when the existing lead is unsubscribed.

@@ -3,7 +3,7 @@
 **Snapshot date:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Implementation branch:** build/omni-affiliate-os-production  
-**Code candidate reviewed:** [5b42d37185b5f7d86faca5c47ba1ec24c2a848f3](https://github.com/AITECHPRODUCTS/Project1/commit/5b42d37185b5f7d86faca5c47ba1ec24c2a848f3)  
+**Latest verified code candidate:** [602f761732ce8930bc103ed3f19b13ee524dc6a3](https://github.com/AITECHPRODUCTS/Project1/commit/602f761732ce8930bc103ed3f19b13ee524dc6a3)  
 **Release status: NOT RELEASE READY.** This is a compact handoff/status summary, not a claim of full product completion.
 
 ## What is built in the current branch
@@ -15,14 +15,14 @@
 - **Ads and finance controls:** draft ad planning/creative variants, budget guardrails and kill-switch review states, signed normalized performance ingestion from a separately trusted collector, conversion webhooks/idempotency, immutable commission observations and review-only reconciliation signals. The collector HMAC does not itself verify a native ad platform, and no external ad action or payout is implied.
 - **Durable automation and learning foundation:** workflow checkpoints/leases/review pauses, resource budget controls, a local SQLite vector index, and evidence-aware performance recommendations. Production queue operations, staged model evaluation and outcome-grounded learning remain partial.
 - **Governed skill packages — new slice:** versioned workspace-scoped package creation and immutable human review; constrained JSON schema validation; three code-owned deterministic runtime handlers (content.extractive_summary, research.keyword_extract, analytics.roas_calculator); fixture tests that compare actual outputs; approved-package execution API POST /api/skills/packages/{id}/execute; input/output checks; package checksum revalidation; and audit records containing input/output hashes. User-authored Markdown is never executed, and the new handlers perform no network calls or external changes.
+- **Latest numeric hardening (602f761):** schema min/max constraints now reject boolean, malformed, NaN and infinite bounds without triggering type-comparison errors. The ROAS handler bounds spend/commission/threshold values, enforces six-decimal representability and stops safely if the computed ratio exceeds its documented output range. This remains a deterministic local review signal only.
 
 ## Exact-candidate verification
 
-For code candidate 5b42d37185b5f7d86faca5c47ba1ec24c2a848f3:
+For code candidate 602f761732ce8930bc103ed3f19b13ee524dc6a3:
 
-- [Push CI run 40719626368](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40719626368) completed successfully, including Python, PostgreSQL integration, frontend typecheck/production build/Docker smoke, AI/RAG dependency verification, SBOM/license and security audit, secret scan, repository guard, browser UAT and lockfile sync.
-- [PR CI run 40719638066](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40719638066) has Python, PostgreSQL integration, frontend/Docker, AI/RAG, security audit, secret scan and repository guard green; browser UAT was still in progress at the time of this snapshot. PR lockfile sync is skipped by its configured event condition. Recheck that run before treating PR CI as fully green.
-- Python run summary: **631 passed, 7 skipped, 5 warnings**. The warnings include existing dependency/framework warnings; they are not described as failures.
+- [Push CI run 40721720474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721720474) and [PR CI run 40721732685](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721732685) both completed successfully on this exact SHA. Both passed Python, PostgreSQL migration/concurrency, frontend typecheck/production build/Docker smoke, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured event condition.
+- Python run summary on both runs: **640 passed, 7 skipped, 5 warnings**. Browser UAT passed 5 tests in push and PR. The warnings include existing dependency/framework warnings; they are not described as failures.
 
 This proves the configured CI scope for the candidate, not all requirements, all skills, provider UAT or production deployment.
 
@@ -45,4 +45,4 @@ Real provider credentials, account scopes/approvals, sender-domain setup, a cont
 
 ## Next engineering action
 
-Continue on the same existing branch. Recheck the pending PR browser-UAT result for 5b42d37; then continue the highest-priority unblocked vertical slice, including tests and traceability. Do not mark the product/skill matrix complete, merge PR #1, enable live ad spend/publishing, or claim production deployment until the associated acceptance and owner-controlled gates are evidenced.
+Continue on the same existing branch. Recheck the exact current branch head and Actions status before each write; the numeric hardening slice is verified on 602f761. Then continue the highest-priority unblocked vertical slice, including tests and traceability. Do not mark the product/skill matrix complete, merge PR #1, enable live ad spend/publishing, or claim production deployment until the associated acceptance and owner-controlled gates are evidenced.

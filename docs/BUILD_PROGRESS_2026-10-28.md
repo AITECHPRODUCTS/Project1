@@ -3,7 +3,7 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Latest verified code candidate:** [5b42d37185b5f7d86faca5c47ba1ec24c2a848f3](https://github.com/AITECHPRODUCTS/Project1/commit/5b42d37185b5f7d86faca5c47ba1ec24c2a848f3)  
+**Latest verified code candidate:** [602f761732ce8930bc103ed3f19b13ee524dc6a3](https://github.com/AITECHPRODUCTS/Project1/commit/602f761732ce8930bc103ed3f19b13ee524dc6a3)  
 **Release status:** NOT RELEASE READY  
 **Compact snapshot:** [Built work and remaining production work](BUILD_SUMMARY_AND_REMAINING_PRODUCTION_WORK_2026-10-28.md)
 
@@ -11,7 +11,7 @@
 
 - `0f1db72dd9f99a192fd25be224ddcfe9419a5f1e` introduces the code-owned handler registry and package fixture runtime, migration `0027_skill_runtime_handlers`, package integrity verification, input/output validation and audited execution. The only executable handlers are deterministic local extractive summary, keyword extraction and ROAS calculation review signal; no user-authored Markdown or external action is executed.
 - `5b42d37185b5f7d86faca5c47ba1ec24c2a848f3` adds handler selection and execution/result surfaces to the existing Skill Studio UI.
-- Exact SHA push workflow [40719626368](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40719626368) passed including Python (631 passed, 7 skipped, 5 warnings), PostgreSQL migration/concurrency, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard, browser UAT and lockfile sync. Exact SHA PR workflow [40719638066](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40719638066) had all non-browser jobs green; browser UAT remained in progress at the latest check and must be rechecked.
+- Exact SHA push workflow [40721720474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721720474) and PR workflow [40721732685](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721732685) both completed successfully including Python, PostgreSQL migration/concurrency, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard and browser UAT. Python: 640 passed, 7 skipped, 5 warnings. Browser UAT: 5 passed on each run; push lockfile sync passed and PR lockfile sync was skipped by its configured event condition.
 - The create-skill row stays **partial**. The 53-row matrix has 53 partial and zero end-to-end-complete skills; three deterministic handlers are not parity for the 53 upstream skills.
 
 ## CI license evidence update
@@ -143,3 +143,8 @@ Provider credentials/approvals, staging environment, backup destination, licensi
 Continue only in the existing branch. Pick the highest-priority unblocked requirement, implement a vertical slice with tests and traceability, inspect exact-SHA push and PR workflow logs, fix regressions before proceeding, and record implemented/tested/provider-verified/deployed as separate statuses.
 
 Do not merge the draft PR or claim production-live readiness until the full release gates have evidence.
+
+
+## Latest verified numeric safety refinement — 602f761732ce8930bc103ed3f19b13ee524dc6a3
+
+Schema minimum/maximum constraints now reject boolean, malformed, NaN and infinite values without type-comparison exceptions. The skill ROAS handler has bounded Decimal inputs, six-decimal precision checks and an explicit computed-ratio ceiling; it returns review-only results and executes no remote campaign action. Added regression coverage for malformed bounds, over-precision money and extreme ratios. Exact push/PR workflows 40721720474 and 40721732685 passed; Python 640 passed, 7 skipped, 5 warnings, and browser UAT 5 passed each.

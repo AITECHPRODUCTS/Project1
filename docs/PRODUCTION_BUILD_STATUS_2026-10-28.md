@@ -2,7 +2,7 @@
 **As of:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Working branch:** `build/omni-affiliate-os-production`  
-**Latest verified code candidate:** [5b42d37185b5f7d86faca5c47ba1ec24c2a848f3](https://github.com/AITECHPRODUCTS/Project1/commit/5b42d37185b5f7d86faca5c47ba1ec24c2a848f3) — push CI passed (run 40719626368); see [compact built-versus-pending summary](BUILD_SUMMARY_AND_REMAINING_PRODUCTION_WORK_2026-10-28.md). PR run 40719638066 browser UAT was still in progress at last check.
+**Latest verified code candidate:** [602f761732ce8930bc103ed3f19b13ee524dc6a3](https://github.com/AITECHPRODUCTS/Project1/commit/602f761732ce8930bc103ed3f19b13ee524dc6a3) — exact push [40721720474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721720474) and PR [40721732685](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721732685) both completed successfully. See [compact built-versus-pending summary](BUILD_SUMMARY_AND_REMAINING_PRODUCTION_WORK_2026-10-28.md).
 
 ## Latest verified vertical slice — governed skill runtime
 
@@ -92,3 +92,11 @@ The recent handoff, second-pass audit, read-only repository audit, library/neste
 - Commits 4b576380b69eed9271c13757412b8278dabe8e2c and 806ad081ee4f461c0e7cf3c2ae97eee401efec93 fixed route-test setup/assertion issues without weakening endpoint behavior.
 - Commit 17641e89c6a3eb04102ca42e5a0e3f6b35ecddf5 updates browser UAT to confirm GET does not mutate the lead and explicit form POST does. Commit 295d127a2ca0988450fdbc91681890927c1af5de moves the concurrent workflow pause/cancel regression to file-backed SQLite with independent connections and asserts both durable pause records. Commit dc998827d52a1a2c7973630f22df2642f058a8e6 uses Playwright form encoding so browser UAT sends the intended URL-encoded body.
 - Both exact-SHA workflows passed. This verifies configured automated gates, not production readiness. The product remains NOT RELEASE READY. Versioned append-only consent evidence, applicable double-opt-in, provider authorization, all-skill end-to-end parity, authorized ad operations, staging, backup/restore, legal and repository confidentiality gates remain open.
+
+
+## Latest verified numeric hardening — schema bounds and ROAS calculation
+
+- Exact commit: 602f761732ce8930bc103ed3f19b13ee524dc6a3.
+- Skill JSON schema numeric bounds reject booleans, malformed types, NaN and infinity and avoid comparing invalid values. The local ROAS handler bounds financial inputs, rejects unrepresentable precision and limits extreme result ranges; it still never changes a provider campaign.
+- Push run 40721720474 and PR run 40721732685 both passed all configured jobs. Python: 640 passed, 7 skipped, 5 warnings; browser UAT: 5 passed in each run. PR lockfile sync was skipped by configured event condition.
+- Production status remains NOT RELEASE READY; the bounded skill runtime does not complete the 53-skill parity target or provider-backed ad integration.

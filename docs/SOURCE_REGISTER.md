@@ -98,3 +98,10 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Exact push workflow 40719626368 passed all configured jobs, including browser UAT and lockfile sync. Python: 631 passed, 7 skipped, 5 warnings. The exact PR workflow 40719638066 had all non-browser jobs green; browser UAT remained in progress at last check.
 - This work closes a narrow runtime test gap for three deterministic local handlers, not the 53-skill project goal. No user-supplied Markdown is executed. The broader skill parity row stays partial.
 - License evidence is distinguished by inventory: production frontend SBOM passed policy with 19 components and no exceptions, while the complete build/install inventory still emits two temporary build-only LGPL notices expiring 2026-11-02. Do not distribute based on that notice; retain the maintainer/legal decision or remove the dependency before expiry.
+
+
+## 2026-10-28 latest verified code candidate — skill numeric-boundary hardening
+
+- Exact candidate 602f761732ce8930bc103ed3f19b13ee524dc6a3 validates malformed/non-finite JSON schema bounds and out-of-range or over-precision numeric input to the deterministic local ROAS handler.
+- Added regression tests; exact push run 40721720474 and PR run 40721732685 completed successfully. Python: 640 passed, 7 skipped, 5 warnings; browser UAT: 5 passed in both. All other configured jobs, including PostgreSQL migration/concurrency, frontend/Docker, AI/RAG and security/SBOM passed.
+- All 53 skill rows remain partial; this is a narrow hardening step. Current release blockers include provider-backed acceptance, staging/restore, two temporary build-only LGPL inventory notices expiring 2026-11-02, and owner decision on repository visibility.

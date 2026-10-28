@@ -164,7 +164,10 @@ async def test_automation_delivery_is_deferred_without_current_email_marketing_c
         async with sessions() as session:
             due = await session.get(ScheduledEmail, due_id)
         assert due is not None and due.status == "scheduled"
-        assert due.send_at > datetime.now(timezone.utc)
+        stored_send_at = due.send_at
+        if stored_send_at.tzinfo is None:
+            stored_send_at = stored_send_at.replace(tzinfo=timezone.utc)
+        assert stored_send_at > datetime.now(timezone.utc)
         assert "compliance assessment required" in (due.last_error or "").lower()
         assert due.attempts == 0
     finally:

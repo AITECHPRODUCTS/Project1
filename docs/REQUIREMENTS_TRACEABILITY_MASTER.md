@@ -476,3 +476,12 @@
 - **Tests:** `tests/test_webhook_adapter.py` adds exact Decimal preservation at six fractional places and overflow/excess-scale negative cases. Existing signature and event-ID checks remain in the same suite.
 - **Code/test commits:** `f69e49b0346e6d9bfdc4f6ffb9522143e551e63f`, `ec9dee0c13a123b3571ceb86facb1004a11ab383`.
 - **Status:** Implemented and verified on code candidate `658142f6bb98617f635ea452ebda8ee0e7841aa1` by exact-SHA Actions run [40670389433](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40670389433), which passed Python, PostgreSQL integration, browser UAT, frontend/Docker, AI/RAG, security audit, secret scan and repository guard. Later documentation commits require their own current-head check. No provider-specific contract or production-readiness claim is implied.
+
+
+## 2026-10-28 additive traceability note — exact commission reconciliation
+
+- **Requirement:** S6 commission/evidence matching must not invent currency, round unlike monetary amounts into a match, or represent an email-derived candidate as verified payment.
+- **Implementation:** `backend/services/commission_reconciliation.py` parses exact `Decimal` amounts, validates Numeric(18,6) representability, requires an explicit three-letter currency code, and matches exact amount/network/currency tuples. No payout state is changed or confirmed.
+- **Tests:** `tests/test_commission_reconciliation.py` covers false cent-rounded matches, six-decimal exact matching, excess precision and absent currency, in addition to existing ambiguous/reversed/non-confirmation tests.
+- **Verification:** exact candidate `d10258653c4e400cf483c006af47a64f1d3bcbaf`; push [40674307123](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40674307123) and PR [40674316496](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40674316496) both passed. Python: 558 passed, 7 skipped, 1 warning; PostgreSQL, frontend, AI/RAG, security, secret scan, repo guard and browser UAT passed.
+- **Remaining evidence:** provider-specific reconciliation contracts, currency-specific minor-unit policies, live provider authorization and production finance UAT remain unverified.

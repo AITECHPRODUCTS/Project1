@@ -109,6 +109,7 @@ async def test_concurrent_workers_atomically_claim_and_send_a_due_email_once(tmp
         assert call["url"] == "https://api.resend.com/emails"
         assert call["headers"]["Idempotency-Key"] == f"scheduled-email/{workspace_id}/{message_id}"
         assert call["json"]["headers"]["List-Unsubscribe"] == "<https://app.example.test/unsubscribe/lead?ts=123&sig=stable>"
+        assert call["json"]["headers"]["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
         async with sessions() as db:
             row = await db.get(ScheduledEmail, message_id)
         assert row is not None

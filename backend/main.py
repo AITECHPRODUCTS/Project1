@@ -3,6 +3,7 @@ import asyncio,base64,hashlib,hmac,json,logging,re,secrets,time
 import httpx
 from uuid import UUID
 from contextlib import asynccontextmanager
+from html import escape as html_escape
 from html.parser import HTMLParser
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
@@ -6979,13 +6980,116 @@ async def platform_admin_audit(
 
 app.include_router(api)
 
+UNSUBSCRIBE_LINK_MAX_AGE_SECONDS = 31_536_000
+UNSUBSCRIBE_POST_BODY_LIMIT = 4096
+UNSUBSCRIBE_RESPONSE_HEADERS = {
+    "Cache-Control": "no-store, max-age=0",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+}
+
+
+def _validate_unsubscribe_signature(lead_id: str, ts: int, sig: str) -> None:
+    if abs(int(time.time()) - ts) > UNSUBSCRIBE_LINK_MAX_AGE_SECONDS:
+        raise HTTPException(410, "Unsubscribe link expired")
+    secret = settings.tracking_hmac_secret or settings.app_session_secret
+    expected = hmac.new(
+        secret.encode(),
+        f"unsubscribe:{lead_id}:{ts}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        raise HTTPException(403, "Invalid unsubscribe signature")
+
+
+async def _validate_unsubscribe_post_body(request: Request) -> None:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type != "application/x-www-form-urlencoded":
+        raise HTTPException(415, "Unsubscribe POST requires form-urlencoded content")
+
+    raw_length = request.headers.get("content-length")
+    if raw_length is not None:
+        try:
+            declared_length = int(raw_length)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "Invalid unsubscribe request length") from exc
+        if declared_length < 0:
+            raise HTTPException(400, "Invalid unsubscribe request length")
+        if declared_length > UNSUBSCRIBE_POST_BODY_LIMIT:
+            raise HTTPException(413, "Unsubscribe request body exceeds the size limit")
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > UNSUBSCRIBE_POST_BODY_LIMIT:
+            raise HTTPException(413, "Unsubscribe request body exceeds the size limit")
+        body.extend(chunk)
+    try:
+        encoded = bytes(body).decode("ascii")
+        fields = parse_qsl(
+            encoded,
+            keep_blank_values=True,
+            strict_parsing=True,
+            max_num_fields=2,
+        )
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid unsubscribe request body") from exc
+
+    # RFC 8058 one-click clients send List-Unsubscribe=One-Click. Browser
+    # confirmation uses the single explicit confirm=unsubscribe field below.
+    if fields not in ([("List-Unsubscribe", "One-Click")], [("confirm", "unsubscribe")]):
+        raise HTTPException(400, "Unsubscribe confirmation is required")
+
+
+def _unsubscribe_response(title: str, message: str, form_action: str | None = None) -> HTMLResponse:
+    if form_action is None:
+        action_html = ""
+    else:
+        safe_action = html_escape(form_action, quote=True)
+        action_html = (
+            f'<form method="post" action="{safe_action}">'
+            '<input type="hidden" name="confirm" value="unsubscribe">'
+            '<button type="submit">Unsubscribe</button></form>'
+        )
+    body = (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{html_escape(title)}</title></head><body>"
+        f"<main><h1>{html_escape(title)}</h1><p>{html_escape(message)}</p>"
+        f"{action_html}</main></body></html>"
+    )
+    return HTMLResponse(body, headers=UNSUBSCRIBE_RESPONSE_HEADERS)
+
+
 @app.get("/unsubscribe/{lead_id}")
-async def unsubscribe(lead_id:str,ts:int=Query(...),sig:str=Query(...),db:AsyncSession=Depends(get_session)):
- if abs(int(time.time())-ts)>31536000:raise HTTPException(410,"Unsubscribe link expired")
- secret=settings.tracking_hmac_secret or settings.app_session_secret;expected=hmac.new(secret.encode(),f"unsubscribe:{lead_id}:{ts}".encode(),hashlib.sha256).hexdigest()
- if not hmac.compare_digest(sig,expected):raise HTTPException(403,"Invalid unsubscribe signature")
- if not await unsubscribe_lead(db,lead_id):raise HTTPException(404,"Lead not found")
- return HTMLResponse("<!doctype html><html><body style='font-family:system-ui;background:#f8fafc;color:#1e293b;padding:48px'><h1>You are unsubscribed</h1><p>No further email sequence messages will be sent.</p></body></html>")
+async def unsubscribe_confirmation(lead_id: str, ts: int = Query(...), sig: str = Query(...)):
+    """Validate a signed unsubscribe link without mutating consent on a scanner-friendly GET."""
+    _validate_unsubscribe_signature(lead_id, ts, sig)
+    action = f"/unsubscribe/{lead_id}?ts={ts}&sig={sig}"
+    return _unsubscribe_response(
+        "Confirm unsubscribe",
+        "Open this page only if you want to stop receiving marketing email. Select Unsubscribe to confirm. Opening the link alone does not change your preferences.",
+        action,
+    )
+
+
+@app.post("/unsubscribe/{lead_id}")
+async def unsubscribe_confirmed(
+    lead_id: str,
+    request: Request,
+    ts: int = Query(...),
+    sig: str = Query(...),
+    db: AsyncSession = Depends(get_session),
+):
+    """Apply a signed opt-out only through explicit browser confirmation or RFC 8058 one-click POST."""
+    _validate_unsubscribe_signature(lead_id, ts, sig)
+    await _validate_unsubscribe_post_body(request)
+    if not await unsubscribe_lead(db, lead_id):
+        raise HTTPException(404, "Lead not found")
+    return _unsubscribe_response(
+        "You are unsubscribed",
+        "No further email sequence messages will be sent. This preference has been recorded.",
+    )
 MAX_AFFILIATE_WEBHOOK_BODY_BYTES = 256 * 1024
 
 

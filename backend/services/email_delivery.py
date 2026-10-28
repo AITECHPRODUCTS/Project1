@@ -620,7 +620,10 @@ async def send_due_emails(
        "subject": message.subject,
        "html": message.body_html,
        "text": message.body_text,
-       "headers": {"List-Unsubscribe": f"<{unsubscribe_url}>"},
+       "headers": {
+        "List-Unsubscribe": f"<{unsubscribe_url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+       },
       },
       headers={
        "Authorization": f"Bearer {settings.resend_api_key}",

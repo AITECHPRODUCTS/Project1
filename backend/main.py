@@ -1213,10 +1213,12 @@ async def offers(
         ordering = (Offer.verified.desc(), Offer.name.asc())
     else:
         sort_column = getattr(Offer, sort_by)
+        # Keep the ORDER BY expression in a one-item tuple. Expanding a bare
+        # SQLAlchemy expression with *ordering invokes its unsupported __getitem__.
         ordering = (
-            sort_column.asc().nullslast()
-            if sort_order == "asc"
-            else sort_column.desc().nullslast()
+            sort_column.asc().nullslast(),
+        ) if sort_order == "asc" else (
+            sort_column.desc().nullslast(),
         )
     rows = list((await db.scalars(
         stmt.order_by(*ordering).offset(offset).limit(limit)

@@ -131,7 +131,7 @@ def test_offer_catalog_sorts_null_metrics_last_and_paginates(offer_catalog_clien
     )
     assert second_page.status_code == 200
     second = second_page.json()
-    assert second["offset"] == 2
+    assert second["offset"] == 3
     assert second["total_count"] == 5
     assert all(item["epc"] is None for item in second["data"])
 

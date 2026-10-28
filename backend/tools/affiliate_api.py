@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio, json, re, time
+import asyncio, json, math, re, time
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -8,10 +8,60 @@ import httpx
 from backend.config import get_settings
 from backend.services.url_safety import open_public_http_response, read_limited_response
 
+ 
+MAX_COOKIE_DAYS = 2_147_483_647
+_NUMBER_TEXT = re.compile(r"(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
+_COOKIE_DAYS_TEXT = re.compile(r"(?:(?:\d{1,3}(?:,\d{3})+)|\d+)\s*(?:days?|d)?\Z", re.IGNORECASE)
+
+
+def _non_negative_finite_float(value: Any) -> float | None:
+    """Parse a numeric value without extracting guessed numbers from provider prose."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, str):
+        candidate = value.strip()
+        if len(candidate) > 64 or not _NUMBER_TEXT.fullmatch(candidate):
+            return None
+        candidate = candidate.replace(",", "")
+    elif isinstance(value, (int, float)):
+        candidate = value
+    else:
+        return None
+    try:
+        number = float(candidate)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    if not math.isfinite(number) or number < 0:
+        return None
+    return number
+
+
+def _non_negative_cookie_days(value: Any) -> int | None:
+    """Parse cookie duration only as an exact non-negative integer supported by SQL Integer."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        days = value
+    elif isinstance(value, float):
+        if not math.isfinite(value) or not value.is_integer():
+            return None
+        days = int(value)
+    elif isinstance(value, str):
+        candidate = value.strip()
+        if len(candidate) > 64 or not _COOKIE_DAYS_TEXT.fullmatch(candidate):
+            return None
+        candidate = re.sub(r"\s*(?:days?|d)\Z", "", candidate, flags=re.IGNORECASE)
+        days = int(candidate.replace(",", "").strip())
+    else:
+        return None
+    if days < 0 or days > MAX_COOKIE_DAYS:
+        return None
+    return days
+
 @dataclass(frozen=True)
 class AffiliateProgram:
     id: str; slug: str; name: str; url: str | None; description: str; reward_type: str | None
-    reward_value: str | None; cookie_days: int | None; traffic_score: float | None; stars_count: float
+    reward_value: str | None; cookie_days: int | None; traffic_score: float | None; stars_count: float | None
     category: str | None; tags: tuple[str,...]; verified: bool | None; raw: dict[str, Any]
     def as_dict(self) -> dict[str, Any]:
         data=asdict(self); data["tags"]=list(self.tags); return data
@@ -72,18 +122,15 @@ class OpenAffiliateClient:
         commission=row.get("commission") if isinstance(row.get("commission"),dict) else {}
         reward_type=commission.get("type",row.get("reward_type",row.get("Reward Type")))
         reward_value=commission.get("rate",row.get("reward_value",row.get("Reward")))
-        cookie=row.get("cookieDays",row.get("cookie_days",row.get("Cookie Days")))
-        traffic=row.get("traffic_score",row.get("Traffic Score")); stars=row.get("stars",row.get("stars_count",0)) or 0
-        try:
-            if isinstance(cookie,str): cookie_match=re.search(r"\d+",cookie.replace(",","")); cookie=int(cookie_match.group()) if cookie_match else None
-            else: cookie=int(cookie) if cookie is not None else None
-        except (ValueError,TypeError): cookie=None
-        try:
-            if isinstance(traffic,str): traffic_match=re.search(r"-?\d+(?:\.\d+)?",traffic.replace(",","")); traffic=float(traffic_match.group()) if traffic_match else None
-            else: traffic=float(traffic) if traffic is not None else None
-        except (ValueError,TypeError): traffic=None
-        try: stars=float(stars)
-        except (ValueError,TypeError): stars=0.0
+        cookie_raw=row.get("cookieDays")
+        if cookie_raw is None: cookie_raw=row.get("cookie_days",row.get("Cookie Days"))
+        traffic_raw=row.get("traffic_score")
+        if traffic_raw is None: traffic_raw=row.get("Traffic Score")
+        stars_raw=row.get("stars")
+        if stars_raw is None: stars_raw=row.get("stars_count")
+        cookie=_non_negative_cookie_days(cookie_raw)
+        traffic=_non_negative_finite_float(traffic_raw)
+        stars=_non_negative_finite_float(stars_raw)
         slug=str(row.get("slug") or row.get("id") or "")
         tags=row.get("tags") if isinstance(row.get("tags"),list) else []
         return AffiliateProgram(slug,slug,str(row.get("name") or "Unnamed program"),row.get("url"),str(row.get("description") or row.get("shortDescription") or ""),

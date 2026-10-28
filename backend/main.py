@@ -3911,7 +3911,14 @@ async def lead_capture(
     workspace_id = user.get("workspace_id")
     if not workspace_id:
         raise HTTPException(403, "Select an authorized workspace before capturing a lead")
-    return await create_lead(payload, db, workspace_id=str(workspace_id))
+    result = await create_lead(payload, db, workspace_id=str(workspace_id))
+    if result.get("status") == "confirmation_delivery_failed":
+        return JSONResponse(status_code=503, content=result)
+    if result.get("status") in {"confirmation_pending", "confirmation_delivery_pending", "confirmation_already_pending"}:
+        return JSONResponse(status_code=202, content=result)
+    if int(result.get("emails_scheduled", 0) or 0) == 0:
+        return JSONResponse(status_code=202, content=result)
+    return result
 
 
 @api.get("/leads/{lead_id}/consent-events")
@@ -3987,12 +3994,51 @@ async def public_lead_capture(request: Request, db: AsyncSession = Depends(get_s
         raise HTTPException(403, "A valid workspace landing token is required for public lead capture")
     with workspace_scope(workspace_id):
         result = await create_lead(payload, db, workspace_id=workspace_id)
+
+    state = str(result.get("status") or "")
+    scheduled = int(result.get("emails_scheduled", 0) or 0)
     if "application/json" in request.headers.get("accept", ""):
-        return result
+        if state == "confirmation_delivery_failed":
+            return JSONResponse(status_code=503, content=result)
+        if state in {"confirmation_pending", "confirmation_delivery_pending", "confirmation_already_pending"}:
+            return JSONResponse(status_code=202, content=result)
+        if scheduled == 0:
+            return JSONResponse(status_code=202, content=result)
+        return JSONResponse(status_code=201, content=result)
+
+    if state == "confirmation_delivery_failed":
+        title = "We couldn't send the confirmation email"
+        message = "No marketing emails were queued. Please try again later or contact the workspace owner."
+        status_code = 503
+    elif state == "confirmation_pending":
+        title = "Check your email to confirm"
+        message = "We sent a confirmation link. No marketing email sequence will be sent until you confirm your address."
+        status_code = 202
+    elif state == "confirmation_delivery_pending":
+        title = "Your confirmation is being processed"
+        message = "No marketing email sequence has been queued. Please check your email shortly before submitting again."
+        status_code = 202
+    elif state == "confirmation_already_pending":
+        title = "A confirmation is already pending"
+        message = "This new signup was not queued. No second confirmation email was sent; confirm the existing request or retry this signup after five minutes."
+        status_code = 202
+    elif scheduled > 0:
+        title = "You're on the list"
+        message = "Your consent-based email sequence was queued."
+        status_code = 201
+    else:
+        title = "Signup received"
+        message = "Your signup was received, but no email sequence was queued."
+        status_code = 202
+
     return HTMLResponse(
-        "<!doctype html><html><body style='font-family:system-ui;background:#f8fafc;padding:48px;color:#1e293b'>"
-        "<h1>You're on the list</h1><p>Your consent-based email sequence was queued.</p></body></html>",
-        status_code=201,
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{html_escape(title)}</title></head>"
+        "<body style='font-family:system-ui;background:#f8fafc;padding:48px;color:#1e293b'>"
+        f"<h1>{html_escape(title)}</h1><p>{html_escape(message)}</p></body></html>",
+        status_code=status_code,
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff"},
     )
 
 @app.get("/api/public/webinars/{public_id}")

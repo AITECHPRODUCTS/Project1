@@ -60,6 +60,36 @@ async def test_double_opt_in_sends_confirmation_but_queues_no_marketing_until_co
         assert requested["emails_scheduled"] == 0 and requested["confirmation_email_sent"] is True
         assert len(calls) == 1 and calls[0][0] == "https://api.resend.com/emails"
         assert calls[0][1]["headers"]["Idempotency-Key"].startswith("email-consent-confirmation/")
+
+        # A repeat of the same signup must reuse the active token, not resend.
+        with workspace_scope(WORKSPACE_ID):
+            async with sessions() as session:
+                duplicate = await email_delivery.capture_lead_and_schedule(
+                    session, email_address="reader@example.invalid", consent=True,
+                    lead_magnet="A helpful guide", audience="independent creators",
+                    offer={"name": "Example offer"}, consent_source="persisted_landing_page",
+                    consent_text=EMAIL_MARKETING_CONSENT_TEXT, consent_version=EMAIL_MARKETING_CONSENT_VERSION,
+                    consent_purpose=EMAIL_MARKETING_CONSENT_PURPOSE, workspace_id=WORKSPACE_ID,
+                )
+        assert duplicate["status"] == "confirmation_pending"
+        assert duplicate["duplicate_request_suppressed"] is True
+        assert duplicate["emails_scheduled"] == 0
+        assert len(calls) == 1
+
+        # A different requested resource cannot silently replace the one bound
+        # to the existing active token during the short duplicate-suppression window.
+        with workspace_scope(WORKSPACE_ID):
+            async with sessions() as session:
+                different_request = await email_delivery.capture_lead_and_schedule(
+                    session, email_address="reader@example.invalid", consent=True,
+                    lead_magnet="A different guide", audience="independent creators",
+                    offer={"name": "Example offer"}, consent_source="persisted_landing_page",
+                    consent_text=EMAIL_MARKETING_CONSENT_TEXT, consent_version=EMAIL_MARKETING_CONSENT_VERSION,
+                    consent_purpose=EMAIL_MARKETING_CONSENT_PURPOSE, workspace_id=WORKSPACE_ID,
+                )
+        assert different_request["status"] == "confirmation_already_pending"
+        assert different_request["duplicate_request_suppressed"] is True
+        assert len(calls) == 1
         confirmation_url = calls[0][1]["json_body"]["text"].splitlines()[-1]
         token = confirmation_url.split("token=", 1)[1]
         token_hash = hashlib.sha256(token.encode()).hexdigest()

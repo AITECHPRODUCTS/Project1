@@ -56,10 +56,6 @@ async def _request_email_consent_confirmation(
  utm_attribution: dict[str, Any] | None,
 ) -> dict[str, Any]:
  settings = get_settings()
- if not (settings.resend_api_key and settings.resend_from_email):
-  raise ConsentConfirmationDeliveryUnavailable(
-   "Email double opt-in is enabled but RESEND_API_KEY and RESEND_FROM_EMAIL are not configured."
-  )
  if email_automation_id:
   automation_id = str(email_automation_id).strip()
   asset = await session.scalar(select(ContentAsset).where(
@@ -80,6 +76,59 @@ async def _request_email_consent_confirmation(
    raise ValueError("The approved email automation must declare at least one target jurisdiction")
 
  now = datetime.now(timezone.utc)
+ normalized_utm = normalize_utm_attribution(utm_attribution)
+ snapshot = {
+  "lead_magnet": lead_magnet[:300],
+  "audience": audience[:500],
+  "offer": offer if isinstance(offer, dict) else {},
+  "consent_source": consent_source[:180],
+  "resubscribe_confirmed": bool(resubscribe_confirmed),
+  "email_automation_id": str(email_automation_id).strip() if email_automation_id else None,
+  "utm_attribution": normalized_utm,
+ }
+ # Reuse recent active requests instead of sending repeated confirmations.
+ # A different signup payload cannot silently replace the original pending request.
+ if lead is not None:
+  recent = await session.scalar(select(EmailConsentConfirmation).where(
+   EmailConsentConfirmation.workspace_id == workspace_id,
+   EmailConsentConfirmation.lead_id == lead.id,
+   EmailConsentConfirmation.status.in_(["pending_delivery", "sent"]),
+   EmailConsentConfirmation.expires_at > now,
+  ).order_by(EmailConsentConfirmation.created_at.desc()).limit(1))
+  if recent is not None:
+   created_at = recent.created_at
+   if created_at.tzinfo is None:
+    created_at = created_at.replace(tzinfo=timezone.utc)
+   if now - created_at < timedelta(minutes=5):
+    previous_snapshot = dict(recent.request_json or {})
+    same_request = previous_snapshot == snapshot
+    same_resubscribe_intent = previous_snapshot.get("resubscribe_confirmed") == bool(resubscribe_confirmed)
+    if same_resubscribe_intent:
+     email_sent = recent.status == "sent"
+     if same_request and email_sent:
+      response_status = "confirmation_pending"
+      note = "A valid confirmation email was sent recently. No duplicate was sent; use that email's link to confirm."
+     elif same_request:
+      response_status = "confirmation_delivery_pending"
+      note = "A confirmation email is being processed. No second email or marketing sequence was queued."
+     else:
+      response_status = "confirmation_already_pending"
+      note = "A different signup request already has a recent confirmation. No second email was sent; confirm the existing request first or retry after five minutes."
+     return {
+      "lead_id": lead.id,
+      "workspace_id": workspace_id,
+      "status": response_status,
+      "confirmation_email_sent": email_sent,
+      "emails_scheduled": 0,
+      "confirmation_expires_at": recent.expires_at.isoformat(),
+      "duplicate_request_suppressed": True,
+      "note": note,
+     }
+
+ if not (settings.resend_api_key and settings.resend_from_email):
+  raise ConsentConfirmationDeliveryUnavailable(
+   "Email double opt-in is enabled but RESEND_API_KEY and RESEND_FROM_EMAIL are not configured."
+  )
  if lead is None:
   lead = Lead(
    workspace_id=workspace_id, email=email_address, consent_at=now,
@@ -93,7 +142,6 @@ async def _request_email_consent_confirmation(
   lead.consent_source = consent_source[:180]
   lead.lead_magnet = lead_magnet[:300]
 
- normalized_utm = normalize_utm_attribution(utm_attribution)
  if normalized_utm:
   lead.metadata_json = merge_lead_attribution_metadata(lead.metadata_json, normalized_utm, observed_at=now)
 
@@ -122,15 +170,6 @@ async def _request_email_consent_confirmation(
 
  token = secrets.token_urlsafe(32)
  token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
- snapshot = {
-  "lead_magnet": lead_magnet[:300],
-  "audience": audience[:500],
-  "offer": offer if isinstance(offer, dict) else {},
-  "consent_source": consent_source[:180],
-  "resubscribe_confirmed": bool(resubscribe_confirmed),
-  "email_automation_id": str(email_automation_id).strip() if email_automation_id else None,
-  "utm_attribution": normalized_utm,
- }
  confirmation = EmailConsentConfirmation(
   workspace_id=workspace_id, lead_id=lead.id, token_hash=token_hash,
   status="pending_delivery", request_json=snapshot, expires_at=now + timedelta(hours=48),

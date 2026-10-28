@@ -33,13 +33,15 @@ def test_skill_package_builder_supports_keyboard_navigation_and_rejects_invalid_
             assert page.get_by_label("Skill ID").is_visible()
             assert page.get_by_label("Input JSON schema").is_visible()
             assert page.get_by_role("button", name="Validate and save package").is_visible()
+            page.get_by_text("No packages in the active workspace yet.").wait_for(state="visible")
+            assert page.locator("main [role='alert']").count() == 0
 
             page.keyboard.press("Tab")
             assert page.evaluate("document.activeElement?.tagName") == "A"
 
             page.get_by_label("Input JSON schema").fill("{")
             page.get_by_role("button", name="Validate and save package").click()
-            page.get_by_role("alert").wait_for(state="visible")
+            page.locator("main [role='alert']").wait_for(state="visible")
             assert posted == []
             assert "No packages in the active workspace yet." in page.locator("main").inner_text()
         finally:
@@ -58,6 +60,8 @@ def test_ad_guardrails_browser_exposes_read_only_provider_boundary():
             page.route("**/api/ads/**", handle_ads)
             page.goto(f"{BASE_URL}/ads/guardrails", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Ad budget guardrails").wait_for(state="visible")
+            page.get_by_text("No ad plans exist in this workspace yet.").wait_for(state="visible")
+            assert page.locator("main [role='alert']").count() == 0
             text = page.locator("main").inner_text().lower()
             assert "provider execution remains disabled" in text
             assert "no ad plans exist in this workspace yet" in text

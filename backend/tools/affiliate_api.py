@@ -36,6 +36,12 @@ def _non_negative_finite_float(value: Any) -> float | None:
     return number
 
 
+
+def _rating_0_to_5(value: Any) -> float | None:
+    """Keep a source rating only when it fits the documented five-star scale."""
+    rating = _non_negative_finite_float(value)
+    return rating if rating is not None and rating <= 5 else None
+
 def _non_negative_cookie_days(value: Any) -> int | None:
     """Parse cookie duration only as an exact non-negative integer supported by SQL Integer."""
     if isinstance(value, bool) or value is None:
@@ -130,7 +136,7 @@ class OpenAffiliateClient:
         if stars_raw is None: stars_raw=row.get("stars_count")
         cookie=_non_negative_cookie_days(cookie_raw)
         traffic=_non_negative_finite_float(traffic_raw)
-        stars=_non_negative_finite_float(stars_raw)
+        stars=_rating_0_to_5(stars_raw)
         slug=str(row.get("slug") or row.get("id") or "")
         tags=row.get("tags") if isinstance(row.get("tags"),list) else []
         return AffiliateProgram(slug,slug,str(row.get("name") or "Unnamed program"),row.get("url"),str(row.get("description") or row.get("shortDescription") or ""),

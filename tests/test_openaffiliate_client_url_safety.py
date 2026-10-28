@@ -111,6 +111,8 @@ def test_openaffiliate_adapt_parses_only_typed_finite_non_negative_metrics():
         ({"cookieDays": "999999999999", "traffic_score": "1e309", "stars_count": "not-a-number"}, None, None, None),
         ({"cookieDays": True, "traffic_score": True, "stars_count": False}, None, None, None),
         ({"cookieDays": "roughly 30 days", "traffic_score": "Traffic score: 73", "stars_count": None}, None, None, None),
+        ({"stars_count": "5.01"}, None, None, None),
+        ({"stars_count": 100}, None, None, None),
     ],
 )
 def test_openaffiliate_adapt_rejects_invalid_metrics_without_inventing_values(
@@ -138,3 +140,13 @@ def test_openaffiliate_adapt_preserves_explicit_zero_metrics():
     assert program.cookie_days == 0
     assert program.traffic_score == 0.0
     assert program.stars_count == 0.0
+
+
+def test_openaffiliate_adapt_accepts_five_star_rating_boundary():
+    program = OpenAffiliateClient.adapt({
+        "id": "offer-five-stars",
+        "name": "Maximum supported rating",
+        "stars_count": "5.0",
+    })
+
+    assert program.stars_count == 5.0

@@ -2,9 +2,16 @@
 **As of:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Working branch:** `build/omni-affiliate-os-production`  
-**Latest verified code candidate:** [602f761732ce8930bc103ed3f19b13ee524dc6a3](https://github.com/AITECHPRODUCTS/Project1/commit/602f761732ce8930bc103ed3f19b13ee524dc6a3) — exact push [40721720474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721720474) and PR [40721732685](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721732685) both completed successfully. See [compact built-versus-pending summary](BUILD_SUMMARY_AND_REMAINING_PRODUCTION_WORK_2026-10-28.md).
+**Latest verified code candidate:** [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb) — exact push [40736669386](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736669386) and PR [40736678275](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736678275) both completed successfully. See [compact built-versus-pending summary](BUILD_SUMMARY_AND_REMAINING_PRODUCTION_WORK_2026-10-28.md).
 
-## Latest verified vertical slice — governed skill runtime
+## Latest verified checkpoint — persisted affiliate offer catalog UI (2026-10-28)
+
+- Code [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb) adds `frontend/app/offers/page.tsx` over the existing persisted `GET /api/offers` API. It supports search and qualification filters, sort direction with null-last behavior, 20-row pagination, honest unknown metric display, an unattested provider-claim warning, safe HTTPS offer/source links, and loading/error/empty/refresh behavior. The dashboard and publisher marketplace link to the catalog.
+- Exact push [40736669386](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736669386) and PR [40736678275](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736678275) both passed. Python 687 passed / 7 skipped / 5 warnings, browser UAT 6/6 on both; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile sync passed; PR lockfile-sync was skipped by configured event condition.
+- This is the first user-facing persisted external-offer catalog slice. It does not fetch live provider data or verify provider identity/account eligibility. Native marketplace authorization/contracts, all 53 skills and S1–S8 acceptance, and release/deployment/legal/backup gates remain open.
+
+
+## Previous verified vertical slice — governed skill runtime
 
 - Code commit `0f1db72dd9f99a192fd25be224ddcfe9419a5f1e` added migration `0027_skill_runtime_handlers`, three allowlisted deterministic handlers, actual runtime fixture execution/output comparison, strict finite-number checks, workspace-scoped approval-gated `POST /api/skills/packages/{id}/execute`, package integrity rechecking and audit hashes.
 - Commit `5b42d37185b5f7d86faca5c47ba1ec24c2a848f3` wired the runtime handler picker, sample contracts and execution UI into the existing Skill Studio without executing user-authored Markdown or allowing external side effects.

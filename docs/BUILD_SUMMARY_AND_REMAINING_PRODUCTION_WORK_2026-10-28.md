@@ -3,16 +3,16 @@
 **Snapshot date:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code candidate:** [c84edd83ecf82cb0949dbf3f58fe9183e87356f9](https://github.com/AITECHPRODUCTS/Project1/commit/c84edd83ecf82cb0949dbf3f58fe9183e87356f9)  
+**Latest verified code candidate:** [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb)  
 **Release status: NOT RELEASE READY.** This is a compact handoff/status summary, not a claim of full product completion.
 
-## Latest verified checkpoint — offer metric and provider-flag integrity (2026-10-28)
+## Latest verified checkpoint — persisted affiliate offer catalog UI (2026-10-28)
 
-Verified code candidate: [c84edd83ecf82cb0949dbf3f58fe9183e87356f9](https://github.com/AITECHPRODUCTS/Project1/commit/c84edd83ecf82cb0949dbf3f58fe9183e87356f9). This includes OpenAffiliate metric normalization ([commit 3495403](https://github.com/AITECHPRODUCTS/Project1/commit/3495403fc680c3b09222c63282f415987c376e45)) and the offer-sync verification truthiness fix ([commit c84edd8](https://github.com/AITECHPRODUCTS/Project1/commit/c84edd83ecf82cb0949dbf3f58fe9183e87356f9)). Missing upstream metrics remain unknown; malformed numeric data cannot create fabricated metrics; and only a literal JSON boolean `true` can set the offer catalog’s provider-supplied verified flag.
+Code candidate [1fc52aa8da1a6b7b4097ce37df820710d1fd7abb](https://github.com/AITECHPRODUCTS/Project1/commit/1fc52aa8da1a6b7b4097ce37df820710d1fd7abb) adds an actual Next.js catalog page at `/offers`, wired to persisted `GET /api/offers`. It includes text/network/category/reward filters, recurring-commission/cookie/verification filters, supported sort options and null-last direction, pagination (20 per page), clear/refresh/loading/error/empty states, and navigation from the existing growth dashboard and publisher marketplace. Missing metrics render as **Unknown**; EPC is not attributed a currency the database does not store; provider verification displays as “Provider claimed — not independently attested”; offer/source links must be HTTPS. Browser acceptance checks first-page results, unknown metrics, unattested-claim copy, pagination, and search filters.
 
-Exact-SHA checks for metric normalization: [push 40730822687](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730822687) / [PR 40730834137](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40730834137), Python 682 passed/7 skipped/5 warnings. Exact-SHA checks for offer-sync guard: [push 40732449325](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40732449325) / [PR 40732462196](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40732462196), Python 683 passed/7 skipped/5 warnings. Browser UAT passed 5/5 on each of the four runs; PostgreSQL, frontend/Docker, AI/RAG SBOM, security/dependency audit, secret scan and repository guard passed. Push lockfile checks passed; PR lockfile checks were skipped by their configured event condition.
+Exact-SHA [push CI 40736669386](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736669386) and [PR CI 40736678275](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40736678275) both completed successfully. Python: **687 passed, 7 skipped, 5 warnings** on PR. Browser UAT: **6 passed** on both runs. PostgreSQL migration/concurrency, frontend typecheck/production build/Docker smoke, AI/RAG SBOM, security/dependency audit, secret scan, repository guard and push lockfile-sync passed; PR lockfile-sync was skipped by the configured event condition.
 
-Production remains **NOT RELEASE READY**. Native provider authorization/source attestation, complete 53-skill S1–S8 acceptance, integration contract/sandbox UAT, owner legal/licensing decisions, staging deployment, rollback, monitoring and backup/restore remain outstanding.
+This closes the first user-facing persisted affiliate-catalog slice, not live marketplace research. Native provider authentication, source attestation, terms/eligibility freshness, complete S1–S8/53-skill acceptance and all release gates remain. Product status remains **NOT RELEASE READY**.
 
 
 ## Previous verified feature slice — 2026-10-28 S1 offer metrics runtime

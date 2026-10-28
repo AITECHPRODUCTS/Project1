@@ -1044,3 +1044,14 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Verification: the exact-SHA hosted CI run was observed as pending with no job results returned at the time this entry was prepared. **Do not count this slice as CI-verified until the current branch head's Python, PostgreSQL, browser, frontend, AI/RAG, security and repository-guard jobs are inspected.** Local execution of the repository suite was not available through this connector session.
 - Remaining S6 gaps: provider-specific signature vectors and authorization, late/replay/partial-reversal contract coverage, currency-specific minor-unit policy, PostgreSQL ledger immutability/reversal checks on the exact new SHA, provider statement reconciliation and finance UI/browser acceptance.
 - Product release remains **NOT RELEASE READY**; this change does not establish provider connectivity, legal clearance, deployment health, backup/restore or full S1–S8 completion.
+
+
+
+
+## 2026-10-28 verification follow-up — decimal scale regression resolved
+
+- The first hosted run after introducing exact Decimal parsing exposed a response-compatibility regression: the partial-reversal API returned `"0.750000"` instead of the existing `"0.75"` (and `"7.50"` instead of `"7.5"`). This was caused by preserving Decimal scale in the response string, not by incorrect ledger arithmetic.
+- Fix: `backend/main.py` now formats remaining balances with `format(value.normalize(), "f")`, preserving the existing response contract while the ledger still stores exact Numeric values. `backend/adapters/webhook.py` validates six-place representability but returns the original Decimal value rather than quantizing its exponent.
+- Exact candidate commit: `658142f6bb98617f635ea452ebda8ee0e7841aa1`.
+- Exact-SHA GitHub Actions PR run [40670389433](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40670389433) completed **successfully**: Python, PostgreSQL integration, frontend/Docker, AI/RAG, security audit, secret scan, repository guard, and browser UAT all passed. `lockfile-sync` was skipped on the PR event as configured. The earlier failing run was `40670198989`; its Python/PostgreSQL failure was traced to the response-scale mismatch above, and the follow-up run passed after the fix.
+- This is verification of the exact code candidate, not production certification. The documentation commits that follow this note trigger new checks and their exact current head must also be inspected. External provider authorization, license/legal release decision, staging, backup/restore/rollback and production health remain open.

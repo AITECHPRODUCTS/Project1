@@ -33,7 +33,7 @@ async def test_postgres_budget_lock_blocks_second_connection_until_commit():
         )
     )
 
-    test_engine = create_async_engine(str(engine.url), pool_pre_ping=True)
+    test_engine = create_async_engine(engine.url.render_as_string(hide_password=False), pool_pre_ping=True)
     sessions = async_sessionmaker(test_engine, expire_on_commit=False)
     try:
         async with sessions() as first:
@@ -65,7 +65,7 @@ async def test_postgres_concurrent_reservations_cannot_overspend_workspace_budge
     assert spec is not None and spec.loader is not None
     replica = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(replica)
-    test_engine = create_async_engine(str(engine.url), pool_pre_ping=True)
+    test_engine = create_async_engine(engine.url.render_as_string(hide_password=False), pool_pre_ping=True)
     sessions = async_sessionmaker(test_engine, expire_on_commit=False)
     monkeypatch.setattr(resource_budget, "SessionLocal", sessions)
     replica.SessionLocal = sessions

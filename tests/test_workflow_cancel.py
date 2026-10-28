@@ -15,7 +15,7 @@ from backend.core.state_machine import WorkflowRunner, WorkflowStep
 from backend.models import AuditLog, PausedSession, WorkflowRun, Workspace
 
 
-def _runner_db(monkeypatch):
+async def _runner_db(monkeypatch):
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -32,7 +32,7 @@ def _runner_db(monkeypatch):
             db.add(Workspace(id="cancel-workspace-b", name="Cancel workspace B", slug="cancel-workspace-b"))
             await db.commit()
 
-    asyncio.run(seed())
+    await seed()
     return engine, sessions
 
 
@@ -53,7 +53,7 @@ async def _insert_run(sessions, *, sid="workflow-cancel-1", workspace_id="cancel
 
 @pytest.mark.asyncio
 async def test_cancel_during_running_stage_finishes_that_stage_then_skips_later_stages(monkeypatch):
-    engine, sessions = _runner_db(monkeypatch)
+    engine, sessions = await _runner_db(monkeypatch)
     runner = WorkflowRunner()
     started = asyncio.Event()
     release_stage = asyncio.Event()
@@ -105,7 +105,7 @@ async def test_cancel_during_running_stage_finishes_that_stage_then_skips_later_
 
 @pytest.mark.asyncio
 async def test_cancel_before_execution_is_durable_and_first_handler_never_runs(monkeypatch):
-    engine, sessions = _runner_db(monkeypatch)
+    engine, sessions = await _runner_db(monkeypatch)
     runner=WorkflowRunner()
     called=[]
     async def should_not_run(state):
@@ -130,7 +130,7 @@ async def test_cancel_before_execution_is_durable_and_first_handler_never_runs(m
 
 @pytest.mark.asyncio
 async def test_cancel_is_workspace_scoped_and_repeated_request_is_idempotent(monkeypatch):
-    engine, sessions=_runner_db(monkeypatch)
+    engine, sessions=await _runner_db(monkeypatch)
     runner=WorkflowRunner()
     try:
         await _insert_run(sessions)
@@ -154,7 +154,7 @@ async def test_cancel_is_workspace_scoped_and_repeated_request_is_idempotent(mon
 async def test_cancellation_while_paused_wakes_worker_and_clears_persisted_hitl_response(monkeypatch):
     from backend.core.errors import VerificationRequiredError
 
-    engine, sessions=_runner_db(monkeypatch)
+    engine, sessions=await _runner_db(monkeypatch)
     runner=WorkflowRunner()
     started=asyncio.Event()
     calls=[]

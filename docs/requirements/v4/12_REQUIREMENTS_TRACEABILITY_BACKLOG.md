@@ -354,3 +354,9 @@
 - Failure evidence: pre-fix SHA `a9a76b66586bf22b4d39762f2a894ae9eb3cef2f`; push [40628516136](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40628516136) and PR [40628523691](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40628523691) failed in the Python test job. Exact log: 529 passed, 3 skipped, 1 failed because `observed_statistics` was empty for a source containing `30%`.
 - Fix candidate: correct percent-token boundary handling and extend regression assertions to currency, percent words, plural units and snapshot-hash linkage.
 - Status: awaiting exact-SHA hosted verification; do not mark R-02 or the release gate complete until both push and PR checks pass.
+
+
+## R-02 — source statistic extraction regression verified (2026-10-28)
+- Exact SHA `2677741f65aedc1c9c53a53fa5dd3c412abde273`; push [40634328707](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40634328707) and PR [40634334600](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40634334600) both completed successfully.
+- Push: all eight jobs succeeded, including PostgreSQL integration and lockfile sync. PR: all required jobs succeeded; lockfile sync is push-only and was skipped. Python: 530 passed, 3 skipped, one existing warning. PostgreSQL migration upgrade/downgrade/drift and concurrent conversion-reversal/workflow-lease checks passed.
+- Status: **verified at source and hosted CI level**. Production/release readiness remains blocked by separate staging, provider, license and deployment evidence gates.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 
 from datetime import date, datetime, timezone
@@ -1846,6 +1847,7 @@ class SkillPackageCreateRequest(BaseModel):
     version: str = Field(min_length=5, max_length=40)
     description: str = Field(min_length=10, max_length=3000)
     stage: SkillStage
+    runtime_handler: Literal["none", "content.extractive_summary", "research.keyword_extract", "analytics.roas_calculator"] = "none"
     capabilities: list[str] = Field(min_length=1, max_length=50)
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
@@ -1883,6 +1885,20 @@ class SkillPackageCreateRequest(BaseModel):
         if not normalized or any(not re.fullmatch(r"[a-z][a-z0-9_.:-]{1,119}", value) for value in normalized):
             raise ValueError("Capabilities must be lowercase identifiers such as content.draft or analytics.read")
         return normalized
+
+
+class SkillPackageExecuteRequest(BaseModel):
+    input: dict[str, Any] = Field(max_length=100)
+
+    @model_validator(mode="after")
+    def validate_bounded_json_input(self) -> "SkillPackageExecuteRequest":
+        try:
+            encoded = json.dumps(self.input, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Runtime input must contain finite JSON values only") from exc
+        if len(encoded.encode("utf-8")) > 32 * 1024:
+            raise ValueError("Runtime input exceeds the 32 KiB execution limit")
+        return self
 
 
 class SkillPackageReviewRequest(BaseModel):

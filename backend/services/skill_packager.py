@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from typing import Any
+
+from backend.services.skill_runtime import SUPPORTED_RUNTIME_HANDLERS, execute_skill_handler
 
 
 _ALLOWED_SCHEMA_KEYWORDS = {
@@ -124,10 +127,13 @@ def _value_errors(value: Any, schema: dict[str, Any], *, path: str, depth: int =
         if "pattern" in schema and isinstance(schema["pattern"], str) and not re.search(schema["pattern"], value):
             errors.append(f"{path}: string does not match pattern")
     elif isinstance(value, (int, float)) and not isinstance(value, bool):
-        if "minimum" in schema and value < schema["minimum"]:
-            errors.append(f"{path}: number is less than minimum")
-        if "maximum" in schema and value > schema["maximum"]:
-            errors.append(f"{path}: number is greater than maximum")
+        if isinstance(value, float) and not math.isfinite(value):
+            errors.append(f"{path}: number must be finite")
+        else:
+            if "minimum" in schema and value < schema["minimum"]:
+                errors.append(f"{path}: number is less than minimum")
+            if "maximum" in schema and value > schema["maximum"]:
+                errors.append(f"{path}: number is greater than maximum")
     elif isinstance(value, list):
         if len(value) < schema.get("minItems", 0):
             errors.append(f"{path}: array has fewer items than minItems")
@@ -162,8 +168,16 @@ def _canonical_manifest(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
+def validate_skill_value(value: Any, schema: dict[str, Any], *, path: str = "input") -> list[str]:
+    """Validate JSON-compatible runtime input or output against a bounded package schema."""
+    return _value_errors(value, schema, path=path)
+
+
 def build_skill_package(payload: dict[str, Any]) -> dict[str, Any]:
-    """Validate a declarative package contract and return a stable content checksum."""
+    """Validate a package and run only a code-owned pure handler against fixtures when selected."""
+    runtime_handler = str(payload.get("runtime_handler") or "none")
+    if runtime_handler not in SUPPORTED_RUNTIME_HANDLERS:
+        raise ValueError("runtime_handler must be a supported built-in handler key")
     schema_errors = _schema_errors(payload["input_schema"], path="input_schema")
     schema_errors.extend(_schema_errors(payload["output_schema"], path="output_schema"))
     if schema_errors:
@@ -173,23 +187,46 @@ def build_skill_package(payload: dict[str, Any]) -> dict[str, Any]:
     for fixture in payload["test_cases"]:
         input_errors = _value_errors(fixture["input"], payload["input_schema"], path="input")
         output_errors = _value_errors(fixture["expected_output"], payload["output_schema"], path="expected_output")
-        passed = not input_errors and not output_errors
+        runtime_errors: list[str] = []
+        runtime_performed = False
+        runtime_matches: bool | None = None
+        if runtime_handler != "none" and not input_errors:
+            runtime_performed = True
+            try:
+                actual_output = execute_skill_handler(runtime_handler, fixture["input"])
+                runtime_output_errors = _value_errors(actual_output, payload["output_schema"], path="runtime_output")
+                runtime_errors.extend(runtime_output_errors)
+                runtime_matches = not runtime_output_errors and actual_output == fixture["expected_output"]
+                if not runtime_matches and not runtime_output_errors:
+                    runtime_errors.append("runtime_output: actual output does not exactly match expected_output")
+            except ValueError as exc:
+                runtime_matches = False
+                runtime_errors.append(f"runtime_handler: {str(exc)[:240]}")
+        passed = not input_errors and not output_errors and (
+            runtime_handler == "none" or (runtime_performed and runtime_matches is True)
+        )
         cases.append({
             "name": fixture["name"],
             "passed": passed,
             "input_errors": input_errors,
             "expected_output_errors": output_errors,
-            "execution_performed": False,
+            "runtime_execution_performed": runtime_performed,
+            "runtime_output_matches_expected": runtime_matches,
+            "runtime_errors": runtime_errors[:10],
+            "execution_performed": runtime_performed,
         })
     passed_count = sum(1 for case in cases if case["passed"])
     risky = sorted(
         capability for capability in payload["capabilities"]
         if any(part in capability for part in _RISKY_CAPABILITY_PARTS)
     )
+    runtime_count = sum(1 for case in cases if case["runtime_execution_performed"])
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "input_schema_valid": True,
         "output_schema_valid": True,
+        "runtime_handler": runtime_handler,
+        "runtime_handler_allowlisted": True,
         "fixture_count": len(cases),
         "fixtures_passed": passed_count,
         "fixtures_failed": len(cases) - passed_count,
@@ -198,10 +235,17 @@ def build_skill_package(payload: dict[str, Any]) -> dict[str, Any]:
         "capabilities_requiring_human_review": risky,
         "declarative_only": True,
         "skill_instructions_executed": False,
-        "runtime_execution_tested": False,
+        "runtime_execution_tested": runtime_count > 0,
+        "runtime_fixtures_executed": runtime_count,
+        "external_actions_executed": False,
         "warnings": [
-            "Fixtures validate input/output JSON contracts only; they do not execute or prove the skill instructions.",
-            "Approval records an operator review and does not grant provider credentials, API scopes, publishing access, or financial authority.",
+            "Package Markdown remains declarative data and is never executed as code.",
+            (
+                "Fixtures executed the selected allowlisted, deterministic local handler; this does not prove arbitrary instructions or external integrations."
+                if runtime_handler != "none" else
+                "Fixtures validate input/output JSON contracts only; no runtime handler was selected."
+            ),
+            "Approval does not grant provider credentials, API scopes, publishing access, or financial authority.",
         ],
     }
     manifest = {
@@ -211,6 +255,7 @@ def build_skill_package(payload: dict[str, Any]) -> dict[str, Any]:
         "description": payload["description"],
         "stage": payload["stage"],
         "capabilities": payload["capabilities"],
+        "runtime_handler": runtime_handler,
         "input_schema": payload["input_schema"],
         "output_schema": payload["output_schema"],
         "instructions_markdown": payload["instructions_markdown"],

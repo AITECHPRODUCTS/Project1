@@ -543,6 +543,7 @@ class SkillPackage(TenantScopedMixin, Base):
     version: Mapped[str] = mapped_column(String(40), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     stage: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    runtime_handler: Mapped[str] = mapped_column(String(80), default="none", server_default="none", nullable=False)
     capabilities_json: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
     input_schema_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
     output_schema_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)

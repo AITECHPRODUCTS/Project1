@@ -30,7 +30,7 @@ from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -51,7 +51,8 @@ from backend.services.internal_linking import recommend_internal_links as recomm
 from backend.services.purple_cow_audit import audit_purple_cow_positioning as audit_purple_cow_positioning_service
 from backend.services.github_pages_deployer import GitHubPagesConfigurationError,deploy_github_pages_html,github_pages_readiness,verify_github_pages_html
 from backend.services.bio_link_page import build_bio_link_page
-from backend.services.skill_packager import build_skill_package
+from backend.services.skill_packager import build_skill_package,validate_skill_value
+from backend.services.skill_runtime import SUPPORTED_RUNTIME_HANDLERS,execute_skill_handler
 from backend.services.skill_finder import find_skills as find_skills_service
 from backend.services.proprietary_data_generator import build_proprietary_dataset as build_proprietary_dataset_service
 from backend.services.cms_publisher import publish_article
@@ -650,6 +651,7 @@ def _skill_package_dict(row: SkillPackage, *, include_contract: bool = True) -> 
         "version": row.version,
         "description": row.description,
         "stage": row.stage,
+        "runtime_handler": row.runtime_handler or "none",
         "capabilities": list(row.capabilities_json or []),
         "validation_report": dict(row.validation_report_json or {}),
         "package_sha256": row.package_sha256,
@@ -660,7 +662,11 @@ def _skill_package_dict(row: SkillPackage, *, include_contract: bool = True) -> 
         "reviewer_notes": row.reviewer_notes,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "execution_boundary": "Declarative package only; instructions are not executed and approval does not authorize external actions.",
+        "execution_boundary": (
+            "Allowlisted built-in handler executes deterministic local logic; package Markdown is never executed and no external action is authorized."
+            if row.runtime_handler and row.runtime_handler != "none"
+            else "Declarative package only; instructions are not executed and approval does not authorize external actions."
+        ),
     }
     if include_contract:
         result.update({
@@ -723,6 +729,7 @@ async def create_skill_package(
             version=payload.version,
             description=payload.description,
             stage=payload.stage,
+            runtime_handler=payload.runtime_handler,
             capabilities_json=payload.capabilities,
             input_schema_json=payload.input_schema,
             output_schema_json=payload.output_schema,
@@ -777,6 +784,110 @@ async def get_skill_package(
     if row is None:
         raise HTTPException(404, "Skill package not found in the active workspace")
     return _skill_package_dict(row)
+
+
+@api.post("/skills/packages/{package_id}/execute")
+async def execute_skill_package(
+    package_id: str,
+    payload: SkillPackageExecuteRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before executing a skill package")
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(SkillPackage).where(
+            SkillPackage.id == package_id,
+            SkillPackage.workspace_id == workspace_id,
+        ))
+    if row is None:
+        raise HTTPException(404, "Skill package not found in the active workspace")
+    if row.status != "approved":
+        raise HTTPException(409, "Only an approved skill package can be executed")
+    runtime_handler = str(row.runtime_handler or "none")
+    if runtime_handler == "none" or runtime_handler not in SUPPORTED_RUNTIME_HANDLERS:
+        raise HTTPException(409, "This package has no supported built-in runtime handler")
+
+    package_manifest = {
+        "skill_id": row.skill_id,
+        "display_name": row.display_name,
+        "version": row.version,
+        "description": row.description,
+        "stage": row.stage,
+        "runtime_handler": runtime_handler,
+        "capabilities": list(row.capabilities_json or []),
+        "input_schema": dict(row.input_schema_json or {}),
+        "output_schema": dict(row.output_schema_json or {}),
+        "instructions_markdown": row.instructions_markdown,
+        "test_cases": list(row.fixtures_json or []),
+    }
+    try:
+        rebuilt = build_skill_package(package_manifest)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(409, "Stored skill package failed integrity validation; create a reviewed new version") from exc
+    if rebuilt["package_sha256"] != row.package_sha256:
+        raise HTTPException(409, "Stored skill package checksum no longer matches its immutable contract")
+    input_errors = validate_skill_value(payload.input, row.input_schema_json, path="input")
+    if input_errors:
+        raise HTTPException(422, {
+            "code": "SKILL_RUNTIME_INPUT_INVALID",
+            "message": "Runtime input does not match the package input schema",
+            "errors": input_errors[:20],
+        })
+    try:
+        output = execute_skill_handler(runtime_handler, payload.input)
+    except ValueError as exc:
+        raise HTTPException(422, "Runtime input could not be processed by the selected handler") from exc
+    output_errors = validate_skill_value(output, row.output_schema_json, path="output")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    if output_errors:
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="skill_package.execution_failed",
+            resource_type="skill_package",
+            resource_id=row.id,
+            outcome="output_contract_violation",
+            details_json={"runtime_handler": runtime_handler, "package_sha256": row.package_sha256, "error_count": len(output_errors)},
+        ))
+        await db.commit()
+        raise HTTPException(500, "Built-in handler output failed the reviewed contract; no external action was taken")
+
+    canonical_input = json.dumps(payload.input, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    canonical_output = json.dumps(output, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    db.add(AuditLog(
+        workspace_id=workspace_id,
+        actor=actor,
+        action="skill_package.executed",
+        resource_type="skill_package",
+        resource_id=row.id,
+        outcome="executed",
+        details_json={
+            "skill_id": row.skill_id,
+            "version": row.version,
+            "runtime_handler": runtime_handler,
+            "package_sha256": row.package_sha256,
+            "input_sha256": hashlib.sha256(canonical_input).hexdigest(),
+            "output_sha256": hashlib.sha256(canonical_output).hexdigest(),
+            "external_actions_executed": False,
+            "skill_instructions_executed": False,
+        },
+    ))
+    await db.commit()
+    return {
+        "status": "executed",
+        "package_id": row.id,
+        "skill_id": row.skill_id,
+        "version": row.version,
+        "runtime_handler": runtime_handler,
+        "package_sha256": row.package_sha256,
+        "result": output,
+        "deterministic": True,
+        "skill_instructions_executed": False,
+        "external_actions_executed": False,
+        "requires_human_approval_for_external_actions": True,
+    }
 
 
 @api.post("/skills/packages/{package_id}/review")

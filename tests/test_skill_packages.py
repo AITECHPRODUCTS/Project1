@@ -225,3 +225,90 @@ def test_failed_fixture_is_stored_as_draft_and_cannot_be_approved(monkeypatch):
             assert review.json()["detail"]["code"] == "SKILL_CONTRACT_FIXTURES_FAILED"
     finally:
         asyncio.run(engine.dispose())
+
+
+
+def test_runtime_bound_skill_package_requires_approval_executes_safely_and_is_workspace_scoped(monkeypatch):
+    engine, _, active = _setup(monkeypatch)
+    extract_text = "Alpha helps teams. Beta improves workflows. Gamma supports analysis."
+    payload = package_payload(
+        skill_id="content/extractive-summary-runtime",
+        display_name="Extractive summary runtime",
+        runtime_handler="content.extractive_summary",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "minLength": 1, "maxLength": 20000},
+                "max_sentences": {"type": "integer", "minimum": 1, "maximum": 10},
+            },
+            "required": ["text", "max_sentences"],
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "maxLength": 20000},
+                "sentence_count": {"type": "integer", "minimum": 0, "maximum": 10},
+                "source_character_count": {"type": "integer", "minimum": 0, "maximum": 20000},
+            },
+            "required": ["summary", "sentence_count", "source_character_count"],
+            "additionalProperties": False,
+        },
+        test_cases=[{
+            "name": "reviewed summary output",
+            "input": {"text": extract_text, "max_sentences": 2},
+            "expected_output": {
+                "summary": "Alpha helps teams. Beta improves workflows.",
+                "sentence_count": 2,
+                "source_character_count": len(extract_text),
+            },
+        }],
+    )
+    try:
+        with TestClient(main.app) as client:
+            created = client.post("/api/skills/packages", json=payload)
+            assert created.status_code == 201, created.text
+            package = created.json()
+            assert package["runtime_handler"] == "content.extractive_summary"
+            assert package["validation_report"]["runtime_execution_tested"] is True
+            assert package["validation_report"]["all_fixtures_passed"] is True
+
+            denied_before_review = client.post(
+                f"/api/skills/packages/{package['id']}/execute",
+                json={"input": {"text": extract_text, "max_sentences": 2}},
+            )
+            assert denied_before_review.status_code == 409
+
+            approved = client.post(f"/api/skills/packages/{package['id']}/review", json={
+                "decision": "approve",
+                "confirm_contract_reviewed": True,
+                "reviewer_notes": "Reviewed deterministic handler and exact fixture output.",
+            })
+            assert approved.status_code == 200, approved.text
+            response = client.post(
+                f"/api/skills/packages/{package['id']}/execute",
+                json={"input": {"text": extract_text, "max_sentences": 2}},
+            )
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["status"] == "executed"
+            assert body["result"]["summary"] == "Alpha helps teams. Beta improves workflows."
+            assert body["result"]["sentence_count"] == 2
+            assert body["skill_instructions_executed"] is False
+            assert body["external_actions_executed"] is False
+            assert body["requires_human_approval_for_external_actions"] is True
+
+            invalid = client.post(
+                f"/api/skills/packages/{package['id']}/execute",
+                json={"input": {"text": extract_text, "max_sentences": 99}},
+            )
+            assert invalid.status_code == 422
+
+            active["workspace_id"] = "skill-workspace-b"
+            cross_workspace = client.post(
+                f"/api/skills/packages/{package['id']}/execute",
+                json={"input": {"text": extract_text, "max_sentences": 2}},
+            )
+            assert cross_workspace.status_code == 404
+    finally:
+        asyncio.run(engine.dispose())

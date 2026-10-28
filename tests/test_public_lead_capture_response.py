@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
@@ -59,7 +60,7 @@ def test_public_signup_html_reports_confirmation_delivery_failure_honestly(monke
         with TestClient(main.app) as client:
             response = client.post("/api/public/leads/capture", json=_payload())
         assert response.status_code == 503
-        assert "couldn't send the confirmation email" in response.text
+        assert "couldn't send the confirmation email" in html.unescape(response.text)
         assert "No marketing emails were queued" in response.text
         assert "Your consent-based email sequence was queued." not in response.text
     finally:
@@ -95,7 +96,7 @@ def test_public_signup_html_only_reports_queued_when_messages_exist(monkeypatch)
         with TestClient(main.app) as client:
             response = client.post("/api/public/leads/capture", json=_payload())
         assert response.status_code == 201
-        assert "You're on the list" in response.text
+        assert "You're on the list" in html.unescape(response.text)
         assert "Your consent-based email sequence was queued." in response.text
     finally:
         main.app.dependency_overrides.pop(get_session, None)

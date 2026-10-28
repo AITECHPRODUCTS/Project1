@@ -27,14 +27,10 @@ def _signed_params(lead_id: str, ts: int) -> dict[str, str]:
 
 
 def _configure(monkeypatch):
-    monkeypatch.setattr(
-        main,
-        "settings",
-        SimpleNamespace(
-            tracking_hmac_secret=SECRET,
-            app_session_secret="fallback-session-secret",
-        ),
-    )
+    # Preserve all application settings used by the app lifespan; only replace
+    # the signing inputs required by this endpoint's test.
+    monkeypatch.setattr(main.settings, "tracking_hmac_secret", SECRET)
+    monkeypatch.setattr(main.settings, "app_session_secret", "fallback-session-secret")
     db = SimpleNamespace()
     async def session_override():
         yield db

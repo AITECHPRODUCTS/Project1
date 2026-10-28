@@ -28,7 +28,7 @@ from backend.database import SessionLocal,close_db,get_session,init_db
 from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -62,7 +62,7 @@ from backend.services.offer_intelligence import compute_offer_metrics
 from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
-from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,social_media_scheduler,squeeze_page_builder,value_ladder_architect
+from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.s6_s8_analytics import self_improver_loop
 from backend.services.tracking_service import choose_destination,destination_healthy,record_click_and_resolve,verify_click_signature
 from backend.services.url_safety import validate_public_http_url
@@ -2737,6 +2737,281 @@ async def landing_page(
             workspace_token=issue_workspace_token(owner_workspace_id, "lead_capture"),
         )
     return HTMLResponse(html)
+
+
+
+
+def _landing_page_summary(row: ContentAsset) -> dict[str, Any]:
+    metadata = dict(row.metadata_json or {})
+    published = row.status == "published"
+    return {
+        "id": row.id,
+        "title": row.title,
+        "status": row.status,
+        "public_url": metadata.get("public_url") if published else None,
+        "preview_url": "/api/landing/pages/" + row.id + "/preview",
+        "requires_review": not published,
+        "publishing_started": published,
+        "privacy_url": metadata.get("privacy_url"),
+        "lead_magnet": metadata.get("lead_magnet"),
+        "audience": metadata.get("audience"),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _render_saved_landing_page(row: ContentAsset) -> str:
+    metadata = dict(row.metadata_json or {})
+    return render_workspace_landing_page(
+        headline=row.title,
+        subheadline=str(metadata.get("subheadline") or ""),
+        benefit_bullets=[str(item) for item in metadata.get("benefit_bullets", []) if str(item).strip()],
+        privacy_url=str(metadata.get("privacy_url") or ""),
+        affiliate_disclosure=metadata.get("affiliate_disclosure"),
+        lead_magnet=str(metadata.get("lead_magnet") or "Free resource"),
+        audience=str(metadata.get("audience") or "website subscriber"),
+        workspace_token=issue_workspace_token(str(row.workspace_id), "lead_capture"),
+    )
+
+
+@api.get("/landing/pages")
+async def list_landing_pages(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing landing pages")
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(ContentAsset)
+            .where(
+                ContentAsset.workspace_id == workspace_id,
+                ContentAsset.asset_type == "landing_page",
+            )
+            .order_by(ContentAsset.created_at.desc())
+            .limit(100)
+        )).all())
+    return {"count": len(rows), "data": [_landing_page_summary(row) for row in rows]}
+
+
+@api.post("/landing/pages", status_code=201)
+async def create_landing_page_draft(
+    payload: LandingPageRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating a landing-page draft")
+    if payload.form_action != "/api/public/leads/capture":
+        raise HTTPException(422, "Persisted landing pages must use the consent-gated lead-capture endpoint")
+
+    asset_id = secrets.token_hex(18)
+    metadata = {
+        "schema_version": 1,
+        "subheadline": payload.subheadline,
+        "benefit_bullets": [str(item) for item in payload.benefit_bullets],
+        "privacy_url": payload.privacy_url,
+        "affiliate_disclosure": payload.affiliate_disclosure,
+        "lead_magnet": payload.lead_magnet,
+        "audience": payload.audience,
+        "created_by": str(user.get("email") or "unknown")[:320],
+        "requires_review": True,
+        "external_publication_started": False,
+    }
+    # Store token-free HTML; preview/public requests get a freshly signed token.
+    html = render_workspace_landing_page(
+        headline=payload.headline,
+        subheadline=payload.subheadline,
+        benefit_bullets=payload.benefit_bullets,
+        privacy_url=payload.privacy_url,
+        affiliate_disclosure=payload.affiliate_disclosure,
+        lead_magnet=payload.lead_magnet,
+        audience=payload.audience,
+        workspace_token=None,
+    )
+    with workspace_scope(workspace_id):
+        row = ContentAsset(
+            id=asset_id,
+            workspace_id=workspace_id,
+            asset_type="landing_page",
+            title=payload.headline,
+            body=html,
+            status="draft",
+            source_urls=[payload.privacy_url],
+            metadata_json=metadata,
+        )
+        db.add(row)
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown")[:320],
+            action="landing_page.draft_created",
+            resource_type="content_asset",
+            resource_id=asset_id,
+            outcome="draft",
+            details_json={
+                "headline": payload.headline[:250],
+                "privacy_url": payload.privacy_url,
+                "requires_review": True,
+                "external_publication_started": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+        return _landing_page_summary(row)
+
+
+@api.get("/landing/pages/{asset_id}/preview", response_class=HTMLResponse)
+async def preview_landing_page(
+    asset_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before previewing a landing page")
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "landing_page",
+        ))
+    if row is None:
+        raise HTTPException(404, "Landing page not found in the active workspace")
+    return HTMLResponse(_render_saved_landing_page(row), headers={
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Robots-Tag": "noindex",
+        "Referrer-Policy": "no-referrer",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
+    })
+
+
+@api.post("/landing/pages/{asset_id}/publish")
+async def publish_landing_page(
+    asset_id: str,
+    payload: LandingPagePublishRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before publishing a landing page")
+    if str(user.get("workspace_role") or "") not in {"owner", "admin"}:
+        raise HTTPException(403, "Only a workspace owner or admin may approve public landing-page publication")
+    if payload.confirm_public_publish is not True:
+        raise HTTPException(409, "Public landing-page publication requires explicit confirmation")
+
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "landing_page",
+        ))
+        if row is None:
+            raise HTTPException(404, "Landing page not found in the active workspace")
+        if row.status == "published":
+            return _landing_page_summary(row)
+        if row.status != "draft":
+            raise HTTPException(409, "Only a draft landing page can be published")
+        metadata = dict(row.metadata_json or {})
+        public_url = settings.app_public_url.rstrip("/") + "/p/" + row.id
+        metadata.update({
+            "public_url": public_url,
+            "published_at": datetime.now(timezone.utc).isoformat(),
+            "published_by": str(user.get("email") or "unknown")[:320],
+            "requires_review": False,
+            "external_publication_started": True,
+        })
+        row.metadata_json = metadata
+        row.status = "published"
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown")[:320],
+            action="landing_page.published",
+            resource_type="content_asset",
+            resource_id=row.id,
+            outcome="published",
+            details_json={
+                "public_url": public_url,
+                "explicit_confirmation": True,
+                "external_publication_started": True,
+            },
+        ))
+        await db.commit()
+        await db.refresh(row)
+        return _landing_page_summary(row)
+
+
+@api.post("/landing/pages/{asset_id}/unpublish")
+async def unpublish_landing_page(
+    asset_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before unpublishing a landing page")
+    if str(user.get("workspace_role") or "") not in {"owner", "admin"}:
+        raise HTTPException(403, "Only a workspace owner or admin may unpublish a landing page")
+
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "landing_page",
+        ))
+        if row is None:
+            raise HTTPException(404, "Landing page not found in the active workspace")
+        if row.status == "draft":
+            return _landing_page_summary(row)
+        if row.status != "published":
+            raise HTTPException(409, "Only a published landing page can be unpublished")
+        metadata = dict(row.metadata_json or {})
+        metadata.pop("public_url", None)
+        metadata.update({
+            "unpublished_at": datetime.now(timezone.utc).isoformat(),
+            "unpublished_by": str(user.get("email") or "unknown")[:320],
+            "requires_review": True,
+            "external_publication_started": False,
+        })
+        row.metadata_json = metadata
+        row.status = "draft"
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown")[:320],
+            action="landing_page.unpublished",
+            resource_type="content_asset",
+            resource_id=row.id,
+            outcome="unpublished",
+            details_json={"public_url": None, "external_publication_started": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+        return _landing_page_summary(row)
+
+
+@app.get("/p/{asset_id}", response_class=HTMLResponse, include_in_schema=False)
+async def public_landing_page(
+    asset_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    await public_rate_limit(request)
+    row = await db.scalar(select(ContentAsset).where(
+        ContentAsset.id == asset_id,
+        ContentAsset.asset_type == "landing_page",
+        ContentAsset.status == "published",
+    ))
+    if row is None:
+        raise HTTPException(404, "Landing page not found")
+    return HTMLResponse(_render_saved_landing_page(row), headers={
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
+    })
+
 
 
 @api.post("/landing/email-drip")

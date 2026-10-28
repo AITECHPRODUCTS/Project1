@@ -21,6 +21,98 @@ def squeeze_page_builder(*,headline:str,subheadline:str,benefit_bullets:list[str
  if not privacy_url.startswith(("https://","http://")):raise ValueError("privacy_url must be absolute HTTP(S)")
  bullets="".join(f'<li class="flex gap-3"><span aria-hidden="true">✓</span><span>{_esc(x)}</span></li>' for x in benefit_bullets[:8]);disclosure=affiliate_disclosure or "Disclosure: I may earn a commission from qualifying purchases through affiliate links."
  return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>{_esc(headline)}</title><script src="https://cdn.tailwindcss.com"></script><style>body{{background:#f8fafc;color:#1e293b}}.card{{box-shadow:8px 8px 16px #d1d9e6,-8px -8px 16px #fff}}.glass{{backdrop-filter:blur(16px);background:rgba(255,255,255,.78)}}</style></head><body><main class="min-h-screen p-4 py-12 flex items-center justify-center"><section class="card glass max-w-2xl w-full rounded-3xl p-8 sm:p-12"><p class="text-sm uppercase tracking-widest font-semibold text-indigo-600">A practical resource</p><h1 class="text-3xl sm:text-5xl font-bold mt-4">{_esc(headline)}</h1><p class="mt-5 text-lg text-slate-600">{_esc(subheadline)}</p><ul class="mt-8 space-y-3">{bullets}</ul><form class="mt-8 grid gap-4" action="{_esc(form_action)}" method="post"><input type="hidden" name="lead_magnet" value="{_esc(lead_magnet)}"><input type="hidden" name="audience" value="{_esc(audience)}"><input type="hidden" name="consent_source" value="squeeze_page">{f'<input type="hidden" name="workspace_token" value="{_esc(workspace_token)}">' if workspace_token else ""}<label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254" class="rounded-xl border border-slate-300 bg-white px-4 py-3"><label class="flex items-start gap-3 text-sm text-slate-600"><input type="checkbox" name="consent" value="yes" required class="mt-1"><span>I agree to receive this resource and related emails. I can unsubscribe at any time.</span></label><label class="flex items-start gap-3 text-sm text-slate-600"><input type="checkbox" name="resubscribe_confirmed" value="yes" class="mt-1"><span>If you previously unsubscribed, check this box to explicitly confirm you want to resubscribe and receive emails again.</span></label><button class="rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-700 transition-all duration-300" type="submit">Send me the resource</button></form><p class="mt-5 text-xs text-slate-500">By submitting, you agree to our <a class="underline" href="{_esc(privacy_url)}">Privacy Policy</a>.</p><p class="mt-5 text-xs text-slate-500">{_esc(disclosure)}</p></section></main></body></html>'''
+
+
+def render_workspace_landing_page(
+    *,
+    headline: str,
+    subheadline: str,
+    benefit_bullets: list[str],
+    privacy_url: str,
+    affiliate_disclosure: str | None = None,
+    lead_magnet: str = "Free resource",
+    audience: str = "website subscriber",
+    workspace_token: str | None = None,
+) -> str:
+    """Render a standalone, escaped, consent-gated workspace landing page.
+
+    Unlike the legacy squeeze-page prototype, this renderer has no remote
+    script or stylesheet dependency and can be served with a restrictive CSP.
+    The signed workspace token is supplied at request time, never persisted
+    in the landing-page content record.
+    """
+    if not headline.strip() or not subheadline.strip():
+        raise ValueError("headline and subheadline are required")
+    if not privacy_url.startswith(("https://", "http://")):
+        raise ValueError("privacy_url must be an absolute HTTP(S) URL")
+    if not benefit_bullets or len(benefit_bullets) > 8:
+        raise ValueError("provide between one and eight benefit bullets")
+
+    safe_bullets = "".join(
+        f"<li>{_esc(item)}</li>" for item in benefit_bullets if str(item).strip()
+    )
+    disclosure = affiliate_disclosure or (
+        "Disclosure: I may earn a commission from qualifying purchases through affiliate links."
+    )
+    token_input = (
+        f'<input type="hidden" name="workspace_token" value="{_esc(workspace_token)}">'
+        if workspace_token else ""
+    )
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>{_esc(headline)}</title>
+<style>
+:root{{--ink:#172033;--muted:#516079;--line:#d9e0ec;--brand:#4338ca;--surface:#fff;--wash:#f5f7fb}}
+*{{box-sizing:border-box}}
+body{{margin:0;background:var(--wash);color:var(--ink);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55}}
+main{{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 16px}}
+article{{width:100%;max-width:720px;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:clamp(24px,5vw,56px);box-shadow:0 18px 56px rgba(23,32,51,.08)}}
+.eyebrow{{color:var(--brand);font-size:.78rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}}
+h1{{font-size:clamp(2rem,5vw,3.3rem);line-height:1.08;letter-spacing:-.035em;margin:14px 0}}
+.intro{{font-size:1.1rem;color:var(--muted)}}
+ul{{padding-left:22px;margin:28px 0;color:var(--muted)}}
+li{{margin:10px 0;padding-left:4px}}
+form{{display:grid;gap:14px;margin-top:28px}}
+label{{font-weight:650;font-size:.94rem}}
+input[type=email]{{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:12px;font:inherit}}
+.check{{display:flex;align-items:flex-start;gap:10px;color:var(--muted);font-weight:500}}
+.check input{{margin-top:5px;flex:none}}
+button{{padding:14px 18px;border:0;border-radius:12px;background:var(--brand);color:white;font:inherit;font-weight:800;cursor:pointer}}
+button:focus-visible,input:focus-visible,a:focus-visible{{outline:3px solid #818cf8;outline-offset:3px}}
+small{{display:block;color:var(--muted);margin-top:22px;font-size:.82rem}}
+a{{color:var(--brand)}}
+</style>
+</head>
+<body>
+<main>
+<article>
+<p class="eyebrow">A practical resource</p>
+<h1>{_esc(headline)}</h1>
+<p class="intro">{_esc(subheadline)}</p>
+<ul>{safe_bullets}</ul>
+<form action="/api/public/leads/capture" method="post">
+{token_input}
+<input type="hidden" name="lead_magnet" value="{_esc(lead_magnet)}">
+<input type="hidden" name="audience" value="{_esc(audience)}">
+<input type="hidden" name="consent_source" value="persisted_landing_page">
+<label for="landing-email">Email address</label>
+<input id="landing-email" name="email" type="email" autocomplete="email" required maxlength="320">
+<label class="check"><input type="checkbox" name="consent" value="yes" required><span>I agree to receive this resource and related emails. I can unsubscribe at any time.</span></label>
+<label class="check"><input type="checkbox" name="resubscribe_confirmed" value="yes"><span>If you previously unsubscribed, check this box to explicitly confirm you want to resubscribe and receive emails again.</span></label>
+<button type="submit">Send me the resource</button>
+</form>
+<small>By submitting, you agree to our <a href="{_esc(privacy_url)}" rel="noopener noreferrer">Privacy Policy</a>.</small>
+<small>{_esc(disclosure)}</small>
+</article>
+</main>
+</body>
+</html>'''
+
+
 def email_drip_sequence(*,audience:str,lead_magnet:str,affiliate_offer:dict[str,Any],duration_days:int=5)->list[dict[str,Any]]:
  duration_days=max(5,min(int(duration_days),7))
  if not audience.strip() or not lead_magnet.strip():raise ValueError("audience and lead_magnet are required")

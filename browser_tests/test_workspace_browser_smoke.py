@@ -289,3 +289,138 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             assert still_unsubscribed["unsubscribed"] is True
         finally:
             browser.close()
+
+
+
+def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish():
+    api_base = "http://127.0.0.1:8000"
+    email = f"landing-pages-{uuid.uuid4().hex}@example.test"
+    workspace_name = f"Landing Workspace {uuid.uuid4().hex[:8]}"
+    password = "Landing-UAT-strong-password-2026!"
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            registration = context.request.post(
+                api_base + "/api/auth/register",
+                data={"email": email, "password": password, "workspace_name": workspace_name},
+            )
+            assert registration.status == 201, registration.text()
+            registered = registration.json()
+            csrf = registered["csrf_token"]
+
+            page = context.new_page()
+            page.goto(BASE_URL + "/landing-pages", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Landing pages and funnels").wait_for(state="visible")
+            page.get_by_label("Headline").fill("A clear creator guide")
+            page.get_by_label("Subheadline").fill("A practical, evidence-first resource for independent creators.")
+            page.get_by_label("Benefit bullets (one per line)").fill(
+                "Choose products using consistent criteria\n"
+                "Verify claims against official sources\n"
+                "Keep limitations visible before deciding"
+            )
+            page.get_by_label("Privacy policy URL").fill("https://example.com/privacy")
+            page.get_by_label("Lead magnet / resource").fill("Creator starter guide")
+            page.get_by_label("Audience").fill("Independent creators")
+            page.get_by_label("Affiliate disclosure").fill(
+                "Disclosure: this resource may contain affiliate links and qualifying purchases may earn a commission."
+            )
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/landing/pages")
+                and response.request.method == "POST"
+            ) as create_info:
+                page.get_by_role("button", name="Save landing page draft").click()
+            created_response = create_info.value
+            assert created_response.status == 201, created_response.text()
+            created = created_response.json()
+            asset_id = created["id"]
+            assert created["status"] == "draft"
+            assert created["public_url"] is None
+            assert created["requires_review"] is True
+            assert created["publishing_started"] is False
+            assert context.request.get(api_base + "/p/" + asset_id).status == 404
+
+            draft_card = page.locator('[data-testid="landing-page-' + asset_id + '"]')
+            draft_card.get_by_role("heading", name="A clear creator guide").wait_for(state="visible")
+            publish_button = draft_card.get_by_role("button", name="Publish page")
+            assert publish_button.is_disabled()
+
+            preview = context.request.get(api_base + created["preview_url"])
+            assert preview.status == 200, preview.text()
+            preview_html = preview.text()
+            assert "cdn.tailwindcss.com" not in preview_html
+            assert 'name="consent" value="yes" required' in preview_html
+            assert 'name="workspace_token" value="' in preview_html
+            assert "Content-Security-Policy" in preview.headers
+            assert "noindex" in preview.headers.get("x-robots-tag", "")
+
+            other = browser.new_context()
+            try:
+                other_email = f"landing-other-{uuid.uuid4().hex}@example.test"
+                other_registration = other.request.post(
+                    api_base + "/api/auth/register",
+                    data={
+                        "email": other_email,
+                        "password": "Other-Landing-UAT-password-2026!",
+                        "workspace_name": "Other Landing Workspace",
+                    },
+                )
+                assert other_registration.status == 201, other_registration.text()
+                other_session = other_registration.json()
+                assert other.request.get(api_base + created["preview_url"]).status == 404
+                other_publish = other.request.post(
+                    api_base + "/api/landing/pages/" + asset_id + "/publish",
+                    data={"confirm_public_publish": True},
+                    headers={"X-CSRF-Token": other_session["csrf_token"]},
+                )
+                assert other_publish.status == 404
+            finally:
+                other.dispose()
+
+            denied = context.request.post(
+                api_base + "/api/landing/pages/" + asset_id + "/publish",
+                data={"confirm_public_publish": False},
+                headers={"X-CSRF-Token": csrf},
+            )
+            assert denied.status == 409
+            assert context.request.get(api_base + "/p/" + asset_id).status == 404
+
+            draft_card.get_by_label("I reviewed this page and approve making it public.").check()
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/landing/pages/" + asset_id + "/publish")
+                and response.request.method == "POST"
+            ) as publish_info:
+                publish_button.click()
+            published_response = publish_info.value
+            assert published_response.status == 200, published_response.text()
+            published = published_response.json()
+            assert published["status"] == "published"
+            assert published["public_url"] == api_base + "/p/" + asset_id
+            assert published["publishing_started"] is True
+
+            public_page = context.request.get(published["public_url"])
+            assert public_page.status == 200, public_page.text()
+            public_html = public_page.text()
+            assert 'name="workspace_token" value="' in public_html
+            assert 'name="consent" value="yes" required' in public_html
+            assert "cdn.tailwindcss.com" not in public_html
+            assert "content-security-policy" in public_page.headers
+            refreshed = context.request.get(published["public_url"])
+            assert refreshed.status == 200
+            assert 'name="workspace_token" value="' in refreshed.text()
+
+            # A persisted draft is not public until owner/admin confirmation.
+            published_card = page.locator('[data-testid="landing-page-' + asset_id + '"]')
+            published_card.get_by_role("button", name="Unpublish page").wait_for(state="visible")
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/landing/pages/" + asset_id + "/unpublish")
+                and response.request.method == "POST"
+            ) as unpublish_info:
+                published_card.get_by_role("button", name="Unpublish page").click()
+            unpublish_response = unpublish_info.value
+            assert unpublish_response.status == 200, unpublish_response.text()
+            assert unpublish_response.json()["status"] == "draft"
+            assert context.request.get(published["public_url"]).status == 404
+        finally:
+            browser.close()

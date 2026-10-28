@@ -171,6 +171,10 @@ class LandingPageRequest(BaseModel):
     audience: str = Field(default="website subscriber", min_length=2, max_length=500)
 
 
+class LandingPagePublishRequest(BaseModel):
+    confirm_public_publish: bool = False
+
+
 class CMSPublishRequest(BaseModel):
     provider: Literal["wordpress", "ghost"]
     target_jurisdictions: list[str] = Field(default_factory=list, max_length=50)

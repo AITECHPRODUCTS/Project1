@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     x_bearer_token: str = ""
     pinterest_access_token: str = ""
     publishing_dry_run: bool = True
+    # Enable recipient-confirmed opt-in before any marketing sequence delivery.
+    email_double_opt_in_required: bool = False
     video_output_dir: str = "./storage/videos"
     content_max_llm_tokens: int = 2500
     resource_budget_usd_per_day: float = 5.0

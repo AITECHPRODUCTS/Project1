@@ -294,6 +294,7 @@ class Lead(TenantScopedMixin, Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     email: Mapped[str] = mapped_column(String(320), index=True)
     consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    email_consent_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     consent_source: Mapped[str] = mapped_column(String(180), default="website_form")
     lead_magnet: Mapped[str] = mapped_column(String(300), default="")
     unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -328,6 +329,26 @@ class LeadConsentEvent(TenantScopedMixin, Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class EmailConsentConfirmation(TenantScopedMixin, Base):
+    """One-time confirmation request. Only the SHA-256 token hash is persisted."""
+    __tablename__ = "email_consent_confirmations"
+    __table_args__ = (
+        Index("ix_email_consent_workspace_lead_created", "workspace_id", "lead_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    lead_id: Mapped[str] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending_delivery", index=True)
+    request_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class ScheduledEmail(TenantScopedMixin, Base):

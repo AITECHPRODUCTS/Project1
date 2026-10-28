@@ -1,5 +1,6 @@
 from __future__ import annotations
-import asyncio,hashlib,hmac,html,json,re,time
+import asyncio,hashlib,hmac,html,json,re,secrets,time
+from urllib.parse import quote
 from datetime import datetime,timedelta,timezone
 from typing import Any
 from backend.services.url_safety import request_public_json
@@ -7,7 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
 from backend.database import SessionLocal
-from backend.models import AuditLog,ContentAsset,Lead,LeadConsentEvent,ScheduledEmail
+from backend.models import AuditLog,ContentAsset,EmailConsentConfirmation,Lead,LeadConsentEvent,ScheduledEmail
 from backend.services.consent_ledger import (
     EMAIL_MARKETING_CONSENT_PURPOSE,
     EMAIL_MARKETING_CONSENT_TEXT,
@@ -36,6 +37,202 @@ def _resolve_workspace_id(workspace_id: str | None = None) -> str:
  return resolved_workspace_id
 
 
+class ConsentConfirmationDeliveryUnavailable(RuntimeError):
+ """Raised before lead mutation when a required confirmation provider is not configured."""
+
+
+async def _request_email_consent_confirmation(
+ session: AsyncSession,
+ *,
+ workspace_id: str,
+ lead: Lead | None,
+ email_address: str,
+ lead_magnet: str,
+ audience: str,
+ offer: dict[str, Any],
+ consent_source: str,
+ resubscribe_confirmed: bool,
+ email_automation_id: str | None,
+ utm_attribution: dict[str, Any] | None,
+) -> dict[str, Any]:
+ settings = get_settings()
+ if not (settings.resend_api_key and settings.resend_from_email):
+  raise ConsentConfirmationDeliveryUnavailable(
+   "Email double opt-in is enabled but RESEND_API_KEY and RESEND_FROM_EMAIL are not configured."
+  )
+ if email_automation_id:
+  automation_id = str(email_automation_id).strip()
+  asset = await session.scalar(select(ContentAsset).where(
+   ContentAsset.id == automation_id,
+   ContentAsset.workspace_id == workspace_id,
+   ContentAsset.asset_type == "email_automation",
+  ))
+  if asset is None or asset.status != "approved":
+   raise ValueError("Select an approved email automation in the active workspace")
+  try:
+   graph = json.loads(asset.body)
+   built = build_email_automation(graph)
+  except (json.JSONDecodeError, ValueError) as exc:
+   raise ValueError("The selected email automation graph is invalid; create and review a new version") from exc
+  if built["sha256"] != (asset.metadata_json or {}).get("graph_sha256"):
+   raise ValueError("The selected email automation checksum does not match its reviewed version")
+  if not list(built["graph"].get("target_jurisdictions") or []):
+   raise ValueError("The approved email automation must declare at least one target jurisdiction")
+
+ now = datetime.now(timezone.utc)
+ if lead is None:
+  lead = Lead(
+   workspace_id=workspace_id, email=email_address, consent_at=now,
+   consent_source=consent_source[:180], lead_magnet=lead_magnet[:300],
+  )
+  session.add(lead)
+  await session.flush()
+ else:
+  # Preserve an existing unsubscribe until an explicit confirmation is complete.
+  lead.consent_at = now
+  lead.consent_source = consent_source[:180]
+  lead.lead_magnet = lead_magnet[:300]
+
+ normalized_utm = normalize_utm_attribution(utm_attribution)
+ if normalized_utm:
+  lead.metadata_json = merge_lead_attribution_metadata(lead.metadata_json, normalized_utm, observed_at=now)
+
+ # Old queued messages are ineligible while a new confirmation is pending.
+ await session.execute(
+  update(ScheduledEmail)
+  .where(
+   ScheduledEmail.workspace_id == workspace_id,
+   ScheduledEmail.lead_id == lead.id,
+   ScheduledEmail.status.in_(["scheduled", "retry"]),
+  )
+  .values(status="suppressed", claimed_at=None,
+          last_error="Marketing delivery blocked while explicit double opt-in confirmation is pending.")
+  .execution_options(synchronize_session=False)
+ )
+ await session.execute(
+  update(EmailConsentConfirmation)
+  .where(
+   EmailConsentConfirmation.workspace_id == workspace_id,
+   EmailConsentConfirmation.lead_id == lead.id,
+   EmailConsentConfirmation.status.in_(["pending_delivery", "sent", "delivery_failed"]),
+  )
+  .values(status="superseded", superseded_at=now)
+  .execution_options(synchronize_session=False)
+ )
+
+ token = secrets.token_urlsafe(32)
+ token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+ snapshot = {
+  "lead_magnet": lead_magnet[:300],
+  "audience": audience[:500],
+  "offer": offer if isinstance(offer, dict) else {},
+  "consent_source": consent_source[:180],
+  "resubscribe_confirmed": bool(resubscribe_confirmed),
+  "email_automation_id": str(email_automation_id).strip() if email_automation_id else None,
+  "utm_attribution": normalized_utm,
+ }
+ confirmation = EmailConsentConfirmation(
+  workspace_id=workspace_id, lead_id=lead.id, token_hash=token_hash,
+  status="pending_delivery", request_json=snapshot, expires_at=now + timedelta(hours=48),
+ )
+ session.add(confirmation)
+ await session.flush()
+ session.add(LeadConsentEvent(
+  workspace_id=workspace_id, lead_id=lead.id,
+  event_type="consent_confirmation_requested",
+  purpose=EMAIL_MARKETING_CONSENT_PURPOSE,
+  consent_text=EMAIL_MARKETING_CONSENT_TEXT,
+  policy_version=EMAIL_MARKETING_CONSENT_VERSION,
+  source=consent_source[:180], channel="email",
+  metadata_json={
+   "explicit_checkbox_consent": True,
+   "explicit_resubscribe_confirmation": bool(resubscribe_confirmed),
+   "confirmation_id": confirmation.id,
+   "double_opt_in_required": True,
+   "marketing_mail_scheduled": False,
+  },
+  observed_at=now,
+ ))
+ session.add(AuditLog(
+  workspace_id=workspace_id, actor="recipient",
+  action="email.consent.confirmation_requested", resource_type="lead",
+  resource_id=lead.id, outcome="pending_delivery",
+  details_json={
+   "confirmation_id": confirmation.id, "double_opt_in_required": True,
+   "provider_called": False, "marketing_mail_scheduled": False,
+  },
+ ))
+ await session.commit()
+
+ confirmation_url = settings.app_public_url.rstrip("/") + "/email-consent/confirm?token=" + quote(token, safe="")
+ text_body = (
+  "Confirm your email address to enable the email subscription you requested. "
+  "This link expires in 48 hours. If you did not request this, ignore this message.\n\n"
+  + confirmation_url
+ )
+ html_body = (
+  "<!doctype html><html lang=\"en\"><body>"
+  "<h1>Confirm your email subscription</h1>"
+  "<p>Confirm your email address to enable the email subscription you requested.</p>"
+  "<p>This link expires in 48 hours. If you did not request this, ignore this message.</p>"
+  f'<p><a href="{html.escape(confirmation_url, quote=True)}">Confirm email address</a></p>'
+  "</body></html>"
+ )
+ try:
+  response = await request_public_json(
+   "https://api.resend.com/emails", method="POST",
+   json_body={
+    "from": settings.resend_from_email, "to": [lead.email],
+    "subject": "Confirm your email subscription", "html": html_body, "text": text_body,
+   },
+   headers={
+    "Authorization": f"Bearer {settings.resend_api_key}",
+    "Idempotency-Key": f"email-consent-confirmation/{workspace_id}/{confirmation.id}",
+   },
+   timeout=20, max_bytes=1_000_000,
+  )
+  if not isinstance(response, dict) or not response.get("id"):
+   raise ValueError("Email provider did not return a message identifier")
+ except Exception as exc:
+  await session.refresh(confirmation)
+  if confirmation.status == "pending_delivery":
+   confirmation.status = "delivery_failed"
+   confirmation.last_error = type(exc).__name__[:180]
+   session.add(AuditLog(
+    workspace_id=workspace_id, actor="system",
+    action="email.consent.confirmation_delivery_failed",
+    resource_type="lead", resource_id=lead.id, outcome="delivery_failed",
+    details_json={"confirmation_id": confirmation.id, "error_type": type(exc).__name__, "provider_called": True},
+   ))
+   await session.commit()
+  return {
+   "lead_id": lead.id, "workspace_id": workspace_id,
+   "status": "confirmation_delivery_failed", "confirmation_email_sent": False,
+   "emails_scheduled": 0, "retryable": True,
+   "note": "No marketing email was queued. Restore the confirmation-email provider and submit the signup again or ask a workspace owner to resend confirmation.",
+  }
+
+ await session.refresh(confirmation)
+ if confirmation.status == "pending_delivery":
+  confirmation.status = "sent"
+  confirmation.sent_at = datetime.now(timezone.utc)
+  confirmation.provider_message_id = str(response["id"])[:255]
+  confirmation.last_error = None
+  session.add(AuditLog(
+   workspace_id=workspace_id, actor="system",
+   action="email.consent.confirmation_sent", resource_type="lead",
+   resource_id=lead.id, outcome="sent",
+   details_json={"confirmation_id": confirmation.id, "provider_message_id": confirmation.provider_message_id},
+  ))
+  await session.commit()
+ return {
+  "lead_id": lead.id, "workspace_id": workspace_id,
+  "status": "confirmation_pending", "confirmation_email_sent": confirmation.status == "sent",
+  "emails_scheduled": 0, "confirmation_expires_at": confirmation.expires_at.isoformat(),
+  "note": "Confirm the email address before marketing emails can be scheduled or delivered.",
+ }
+
+
 async def capture_lead_and_schedule(
  session: AsyncSession,
  *,
@@ -52,6 +249,8 @@ async def capture_lead_and_schedule(
  email_automation_id: str | None = None,
  workspace_id: str | None = None,
  utm_attribution: dict[str, Any] | None = None,
+ consent_confirmation_verified: bool = False,
+ record_consent_event: bool = True,
 ) -> dict[str, Any]:
  owner_workspace_id = _resolve_workspace_id(workspace_id)
  if consent is not True:
@@ -77,6 +276,19 @@ async def capture_lead_and_schedule(
   was_resubscribed = bool(lead and lead.unsubscribed_at)
   if was_resubscribed and resubscribe_confirmed is not True:
    raise ValueError("Address previously unsubscribed; explicit resubscribe confirmation required")
+  settings = get_settings()
+  needs_confirmation = bool(
+   settings.email_double_opt_in_required
+   and not consent_confirmation_verified
+   and (lead is None or lead.email_consent_confirmed_at is None or was_resubscribed)
+  )
+  if needs_confirmation:
+   return await _request_email_consent_confirmation(
+    session, workspace_id=owner_workspace_id, lead=lead, email_address=address,
+    lead_magnet=lead_magnet, audience=audience, offer=offer,
+    consent_source=consent_source, resubscribe_confirmed=resubscribe_confirmed,
+    email_automation_id=email_automation_id, utm_attribution=utm_attribution,
+   )
   if was_resubscribed:
    previous_unsubscribed_at = lead.unsubscribed_at
    lead.unsubscribed_at = None
@@ -110,22 +322,24 @@ async def capture_lead_and_schedule(
    session.add(lead)
    await session.flush()
 
-  session.add(LeadConsentEvent(
-   workspace_id=owner_workspace_id,
-   lead_id=lead.id,
-   event_type="resubscribed" if was_resubscribed else "consent_granted",
-   purpose=EMAIL_MARKETING_CONSENT_PURPOSE,
-   consent_text=EMAIL_MARKETING_CONSENT_TEXT,
-   policy_version=EMAIL_MARKETING_CONSENT_VERSION,
-   source=consent_source[:180],
-   channel="email",
-   metadata_json={
-    "explicit_checkbox_consent": True,
-    "explicit_resubscribe_confirmation": bool(was_resubscribed and resubscribe_confirmed),
-    "evidence_text_is_canonical": True,
-   },
-   observed_at=now,
-  ))
+  if record_consent_event:
+   session.add(LeadConsentEvent(
+    workspace_id=owner_workspace_id,
+    lead_id=lead.id,
+    event_type="resubscribed" if was_resubscribed else "consent_granted",
+    purpose=EMAIL_MARKETING_CONSENT_PURPOSE,
+    consent_text=EMAIL_MARKETING_CONSENT_TEXT,
+    policy_version=EMAIL_MARKETING_CONSENT_VERSION,
+    source=consent_source[:180],
+    channel="email",
+    metadata_json={
+     "explicit_checkbox_consent": True,
+     "explicit_resubscribe_confirmation": bool(was_resubscribed and resubscribe_confirmed),
+     "evidence_text_is_canonical": True,
+     "email_confirmed": bool(consent_confirmation_verified),
+    },
+    observed_at=now,
+   ))
 
   if normalize_utm_attribution(utm_attribution):
    lead.metadata_json = merge_lead_attribution_metadata(
@@ -461,6 +675,137 @@ async def _queue_next_automation_step(
  ))
 
 
+async def confirm_email_consent(session: AsyncSession, token: str) -> dict[str, Any]:
+ """Confirm a one-time token by hash and schedule marketing only after explicit confirmation."""
+ if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+  raise ValueError("Invalid or expired email confirmation token")
+ token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+ with workspace_scope(None):
+  observed = await session.scalar(select(EmailConsentConfirmation).where(
+   EmailConsentConfirmation.token_hash == token_hash,
+  ))
+ if observed is None:
+  raise ValueError("Invalid or expired email confirmation token")
+ workspace_id = str(observed.workspace_id or "")
+ if not workspace_id:
+  raise ValueError("Email confirmation has no valid workspace")
+ with workspace_scope(workspace_id):
+  confirmation = await session.scalar(select(EmailConsentConfirmation).where(
+   EmailConsentConfirmation.id == observed.id,
+   EmailConsentConfirmation.workspace_id == workspace_id,
+   EmailConsentConfirmation.token_hash == token_hash,
+  ))
+  if confirmation is None:
+   raise ValueError("Invalid or expired email confirmation token")
+  if confirmation.status != "sent":
+   raise ValueError("Email confirmation token is already used, cancelled or superseded")
+  now = datetime.now(timezone.utc)
+  expires_at = confirmation.expires_at
+  if expires_at.tzinfo is None:
+   expires_at = expires_at.replace(tzinfo=timezone.utc)
+  if expires_at <= now:
+   confirmation.status = "expired"
+   await session.commit()
+   raise ValueError("Email confirmation token has expired")
+  lead = await session.scalar(select(Lead).where(
+   Lead.id == confirmation.lead_id,
+   Lead.workspace_id == workspace_id,
+  ))
+  if lead is None:
+   confirmation.status = "cancelled"
+   await session.commit()
+   raise ValueError("Email confirmation is no longer available")
+  snapshot = dict(confirmation.request_json or {})
+  resubscribe_confirmed = snapshot.get("resubscribe_confirmed") is True
+  if lead.unsubscribed_at and not resubscribe_confirmed:
+   confirmation.status = "cancelled"
+   await session.commit()
+   raise ValueError("This address has unsubscribed; submit a fresh form with explicit resubscribe confirmation")
+  confirmation.status = "confirmed"
+  confirmation.confirmed_at = now
+  lead.email_consent_confirmed_at = now
+  session.add(LeadConsentEvent(
+   workspace_id=workspace_id,
+   lead_id=lead.id,
+   event_type="resubscribed" if resubscribe_confirmed else "consent_confirmed",
+   purpose=EMAIL_MARKETING_CONSENT_PURPOSE,
+   consent_text=EMAIL_MARKETING_CONSENT_TEXT,
+   policy_version=EMAIL_MARKETING_CONSENT_VERSION,
+   source=str(snapshot.get("consent_source") or "website_form")[:180],
+   channel="email",
+   metadata_json={
+    "confirmation_id": confirmation.id,
+    "double_opt_in_confirmed": True,
+    "email_provider_message_id": confirmation.provider_message_id,
+    "explicit_resubscribe_confirmation": resubscribe_confirmed,
+   },
+   observed_at=now,
+  ))
+  result = await capture_lead_and_schedule(
+   session,
+   email_address=lead.email,
+   consent=True,
+   lead_magnet=str(snapshot.get("lead_magnet") or lead.lead_magnet or "Requested resource"),
+   audience=str(snapshot.get("audience") or "website subscriber"),
+   offer=snapshot.get("offer") if isinstance(snapshot.get("offer"), dict) else {},
+   consent_source=str(snapshot.get("consent_source") or "website_form"),
+   consent_text=EMAIL_MARKETING_CONSENT_TEXT,
+   consent_version=EMAIL_MARKETING_CONSENT_VERSION,
+   consent_purpose=EMAIL_MARKETING_CONSENT_PURPOSE,
+   resubscribe_confirmed=resubscribe_confirmed,
+   email_automation_id=snapshot.get("email_automation_id"),
+   workspace_id=workspace_id,
+   utm_attribution=snapshot.get("utm_attribution") if isinstance(snapshot.get("utm_attribution"), dict) else None,
+   consent_confirmation_verified=True,
+   record_consent_event=False,
+  )
+  return {
+   "status": "confirmed", "lead_id": lead.id, "workspace_id": workspace_id,
+   "emails_scheduled": int(result.get("emails_scheduled", 0) or 0),
+   "confirmation_id": confirmation.id,
+  }
+
+
+async def resend_email_consent_confirmation(
+ session: AsyncSession, *, workspace_id: str, lead_id: str
+) -> dict[str, Any]:
+ """Issue a fresh token to a workspace-authorized operator without storing raw tokens."""
+ settings = get_settings()
+ if not settings.email_double_opt_in_required:
+  raise ValueError("Email double opt-in is not enabled for this environment")
+ if not (settings.resend_api_key and settings.resend_from_email):
+  raise ConsentConfirmationDeliveryUnavailable(
+   "Email double opt-in is enabled but RESEND_API_KEY and RESEND_FROM_EMAIL are not configured."
+  )
+ with workspace_scope(workspace_id):
+  lead = await session.scalar(select(Lead).where(
+   Lead.id == lead_id, Lead.workspace_id == workspace_id,
+  ))
+  if lead is None:
+   raise ValueError("Lead not found in the active workspace")
+  if lead.email_consent_confirmed_at is not None and lead.unsubscribed_at is None:
+   raise ValueError("This lead already has a confirmed active email consent")
+  previous = await session.scalar(select(EmailConsentConfirmation).where(
+   EmailConsentConfirmation.workspace_id == workspace_id,
+   EmailConsentConfirmation.lead_id == lead_id,
+  ).order_by(EmailConsentConfirmation.created_at.desc()).limit(1))
+  if previous is None:
+   raise ValueError("No stored consent confirmation request exists; the recipient must submit the consent form first")
+  snapshot = dict(previous.request_json or {})
+  if lead.unsubscribed_at and snapshot.get("resubscribe_confirmed") is not True:
+   raise ValueError("The recipient must explicitly confirm resubscription on the signup form")
+  return await _request_email_consent_confirmation(
+   session, workspace_id=workspace_id, lead=lead, email_address=lead.email,
+   lead_magnet=str(snapshot.get("lead_magnet") or lead.lead_magnet or "Requested resource"),
+   audience=str(snapshot.get("audience") or "website subscriber"),
+   offer=snapshot.get("offer") if isinstance(snapshot.get("offer"), dict) else {},
+   consent_source=str(snapshot.get("consent_source") or "website_form"),
+   resubscribe_confirmed=snapshot.get("resubscribe_confirmed") is True,
+   email_automation_id=snapshot.get("email_automation_id"),
+   utm_attribution=snapshot.get("utm_attribution") if isinstance(snapshot.get("utm_attribution"), dict) else None,
+  )
+
+
 async def send_due_emails(
  session: AsyncSession | None = None,
  *,
@@ -573,6 +918,18 @@ async def send_due_emails(
      message.status = "suppressed"
      message.claimed_at = None
      message.last_error = "Lead is missing or has unsubscribed"
+     skipped += 1
+     continue
+    if settings.email_double_opt_in_required and lead.email_consent_confirmed_at is None:
+     message.status = "suppressed"
+     message.claimed_at = None
+     message.last_error = "Marketing delivery blocked until recipient confirms the email address."
+     session.add(AuditLog(
+      workspace_id=owner_workspace_id, actor="system",
+      action="email_marketing.delivery_blocked", resource_type="scheduled_email",
+      resource_id=message.id, outcome="double_opt_in_required",
+      details_json={"lead_id": lead.id, "provider_called": False},
+     ))
      skipped += 1
      continue
     if message.condition_json.get("skip_days_3_4_if_purchased") and lead.purchased_at:
@@ -702,9 +1059,9 @@ async def unsubscribe_lead(session: AsyncSession, lead_id: str) -> bool:
   if not previously_unsubscribed:
    lead.unsubscribed_at = datetime.now(timezone.utc)
 
-  # Cancel pending/retry items in the same transaction as the suppression record.
-  # Items already in "sending" have been claimed by an active worker and are
-  # checked against the current Lead opt-out before the provider request.
+  # Cancel pending/retry items and confirmation tokens in the same transaction
+  # as the opt-out record. Workers recheck suppression immediately before send.
+  now = datetime.now(timezone.utc)
   result = await session.execute(
    update(ScheduledEmail)
    .where(
@@ -720,6 +1077,16 @@ async def unsubscribe_lead(session: AsyncSession, lead_id: str) -> bool:
    .execution_options(synchronize_session=False)
   )
   cancelled = int(result.rowcount or 0)
+  await session.execute(
+   update(EmailConsentConfirmation)
+   .where(
+    EmailConsentConfirmation.workspace_id == workspace_id,
+    EmailConsentConfirmation.lead_id == lead.id,
+    EmailConsentConfirmation.status.in_(["pending_delivery", "sent", "delivery_failed"]),
+   )
+   .values(status="cancelled", superseded_at=now)
+   .execution_options(synchronize_session=False)
+  )
   if not previously_unsubscribed:
    session.add(LeadConsentEvent(
     workspace_id=workspace_id,

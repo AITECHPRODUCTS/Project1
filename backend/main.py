@@ -27,7 +27,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
@@ -56,7 +56,7 @@ from backend.services.skill_finder import find_skills as find_skills_service
 from backend.services.proprietary_data_generator import build_proprietary_dataset as build_proprietary_dataset_service
 from backend.services.cms_publisher import publish_article
 from backend.services.external_action_registry import EXTERNAL_IDEMPOTENCY_KEY_RE, claim_external_action as _claim_external_action, external_action_failure_status as _external_action_failure_status, finish_external_action as _finish_external_action
-from backend.services.email_delivery import capture_lead_and_schedule,send_due_emails,unsubscribe_lead
+from backend.services.email_delivery import ConsentConfirmationDeliveryUnavailable,capture_lead_and_schedule,confirm_email_consent,resend_email_consent_confirmation,send_due_emails,unsubscribe_lead
 from backend.services.email_automation_builder import build_email_automation,simulate_email_automation
 from backend.services.integration_registry import build_network_registry
 from backend.services.capability_matrix import build_capability_matrix
@@ -3896,6 +3896,8 @@ async def create_lead(
                     name: getattr(payload, name) for name in UTM_FIELD_LIMITS
                 }),
             )
+    except ConsentConfirmationDeliveryUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -7110,6 +7112,126 @@ def _unsubscribe_response(title: str, message: str, form_action: str | None = No
         f"{action_html}</main></body></html>"
     )
     return HTMLResponse(body, headers=UNSUBSCRIBE_RESPONSE_HEADERS)
+
+
+def _email_consent_confirmation_response(title: str, message: str, token: str | None = None) -> HTMLResponse:
+    action_html = ""
+    if token is not None:
+        safe_token = html_escape(token, quote=True)
+        action_html = (
+            '<form method="post" action="/email-consent/confirm">'
+            f'<input type="hidden" name="token" value="{safe_token}">'
+            '<input type="hidden" name="confirm" value="yes">'
+            '<button type="submit">Confirm email subscription</button></form>'
+        )
+    body = (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{html_escape(title)}</title></head><body>"
+        f"<main><h1>{html_escape(title)}</h1><p>{html_escape(message)}</p>"
+        f"{action_html}</main></body></html>"
+    )
+    return HTMLResponse(body, headers={
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "X-Robots-Tag": "noindex, nofollow",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
+    })
+
+
+@app.get("/email-consent/confirm")
+async def email_consent_confirmation_page(
+    request: Request,
+    token: str = Query(..., min_length=32, max_length=128),
+    db: AsyncSession = Depends(get_session),
+):
+    """Scanner-safe GET: display an explicit form without changing consent state."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+        raise HTTPException(403, "Invalid or expired confirmation link")
+    await public_rate_limit(request)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    with workspace_scope(None):
+        row = await db.scalar(select(EmailConsentConfirmation).where(EmailConsentConfirmation.token_hash == token_hash))
+    if row is None or row.status != "sent":
+        raise HTTPException(410, "Confirmation link is no longer valid")
+    expiry = row.expires_at
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    if expiry <= datetime.now(timezone.utc):
+        return _email_consent_confirmation_response(
+            "Confirmation link expired", "Request a fresh confirmation email to continue."
+        )
+    return _email_consent_confirmation_response(
+        "Confirm email subscription",
+        "Confirm your email address only if you requested this subscription. Opening this page does not change your consent.",
+        token,
+    )
+
+
+@app.post("/email-consent/confirm")
+async def email_consent_confirmation_submit(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Explicit POST confirms a one-time token; GET requests never change subscription state."""
+    await public_rate_limit(request)
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if media_type != "application/x-www-form-urlencoded":
+        raise HTTPException(415, "Submit the explicit confirmation form")
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared_length = int(content_length)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "Invalid Content-Length") from exc
+        if declared_length < 0:
+            raise HTTPException(400, "Invalid Content-Length")
+        if declared_length > 4096:
+            raise HTTPException(413, "Confirmation form is too large")
+    body = await request.body()
+    if len(body) > 4096:
+        raise HTTPException(413, "Confirmation form is too large")
+    try:
+        fields = parse_qsl(body.decode("utf-8"), keep_blank_values=True, strict_parsing=True, max_num_fields=4)
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid confirmation form") from exc
+    values = dict(fields)
+    if len(values) != len(fields) or values.get("confirm") != "yes":
+        raise HTTPException(400, "Explicit confirmation is required")
+    try:
+        await confirm_email_consent(db, values.get("token", ""))
+    except ValueError as exc:
+        message = str(exc).lower()
+        code = 410 if "expired" in message or "no longer valid" in message or "already used" in message else 409
+        raise HTTPException(code, "Confirmation could not be applied. Request a fresh confirmation email if needed.") from exc
+    return _email_consent_confirmation_response(
+        "Email address confirmed",
+        "Your email address has been confirmed. The requested email sequence has been considered for scheduling.",
+    )
+
+
+@api.post("/leads/{lead_id}/consent-confirmation/resend")
+async def resend_lead_consent_confirmation(
+    lead_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before resending confirmation")
+    if str(user.get("workspace_role") or "") not in {"owner", "admin"}:
+        raise HTTPException(403, "Only a workspace owner or admin may resend consent confirmation")
+    if not settings.email_double_opt_in_required:
+        raise HTTPException(409, "Email double opt-in is not enabled")
+    try:
+        with workspace_scope(workspace_id):
+            return await resend_email_consent_confirmation(db, workspace_id=workspace_id, lead_id=lead_id)
+    except ConsentConfirmationDeliveryUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.get("/unsubscribe/{lead_id}")

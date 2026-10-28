@@ -21,6 +21,7 @@ def graph_payload(**overrides):
         "description": "A useful opt-in email journey with purchase and engagement branches.",
         "version": "1.0.0",
         "entry_step_id": "welcome",
+        "target_jurisdictions": ["US"],
         "nodes": [
             {"id": "welcome", "kind": "email", "subject": "Your guide is ready",
              "body_text": "Thanks for requesting the guide. Start with one practical step.",

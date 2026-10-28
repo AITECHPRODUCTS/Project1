@@ -2898,6 +2898,7 @@ async def create_lead(
                 audience=payload.audience,
                 offer=payload.offer,
                 consent_source=payload.consent_source,
+                email_automation_id=payload.email_automation_id,
                 workspace_id=owner_workspace_id,
             )
     except ValueError as exc:
@@ -3080,6 +3081,7 @@ def _email_automation_dict(row: ContentAsset, *, include_graph: bool = True) -> 
         "version": str(metadata.get("version") or ""),
         "status": row.status,
         "entry_step_id": str(metadata.get("entry_step_id") or ""),
+        "target_jurisdictions": list(metadata.get("target_jurisdictions") or []),
         "node_count": int(metadata.get("node_count") or 0),
         "validation_report": dict(metadata.get("validation_report") or {}),
         "graph_sha256": str(metadata.get("graph_sha256") or ""),
@@ -3148,6 +3150,7 @@ async def create_email_automation(
             "description": built["graph"]["description"],
             "version": built["graph"]["version"],
             "entry_step_id": built["graph"]["entry_step_id"],
+            "target_jurisdictions": list(built["graph"].get("target_jurisdictions") or []),
             "node_count": len(built["graph"]["nodes"]),
             "graph_sha256": built["sha256"],
             "validation_report": built["validation_report"],
@@ -3256,6 +3259,8 @@ async def review_email_automation(
     except (json.JSONDecodeError, ValueError) as exc:
         raise HTTPException(409, "Stored graph is invalid; create a new version before review") from exc
     if payload.decision == "approve":
+        if not built["graph"].get("target_jurisdictions"):
+            raise HTTPException(409, "Set at least one target jurisdiction before approving an automation for possible delivery")
         if payload.confirm_graph_reviewed is not True:
             raise HTTPException(409, "Approval requires confirm_graph_reviewed=true after reviewing every branch and message")
         if built["sha256"] != metadata.get("graph_sha256"):

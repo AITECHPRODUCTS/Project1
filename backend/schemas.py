@@ -98,12 +98,21 @@ class EmailAutomationCreateRequest(BaseModel):
     description: str = Field(min_length=10, max_length=3000)
     version: str = Field(default="1.0.0", min_length=5, max_length=40)
     entry_step_id: str = Field(min_length=1, max_length=64)
+    target_jurisdictions: list[str] = Field(default_factory=list, max_length=50)
     nodes: list[dict[str, Any]] = Field(min_length=2, max_length=30)
 
     @field_validator("name", "description", "version", "entry_step_id")
     @classmethod
     def normalize_email_automation_fields(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("target_jurisdictions")
+    @classmethod
+    def normalize_email_automation_jurisdictions(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(str(value).strip().upper() for value in values if str(value).strip()))
+        if len(normalized) > 50 or any(not re.fullmatch(r"(?:[A-Z]{2}(?:-[A-Z0-9]{1,6})?|EU|EEA|GLOBAL)", value) for value in normalized):
+            raise ValueError("Use ISO-style jurisdiction codes or EU, EEA, GLOBAL")
+        return normalized
 
 
 class EmailAutomationReviewRequest(BaseModel):
@@ -132,6 +141,7 @@ class LeadCaptureRequest(BaseModel):
     offer: dict[str, Any] = Field(default_factory=dict)
     consent_source: str = Field(default="website_form", max_length=180)
     workspace_token: str | None = Field(default=None, max_length=1024)
+    email_automation_id: str | None = Field(default=None, min_length=36, max_length=36)
     duration_days: int = Field(default=5, ge=5, le=7)
 
     @field_validator("consent")

@@ -8,7 +8,7 @@ type Node = {
  next_step_id?:string;has_affiliate_links?:boolean;affiliate_disclosure?:string;
  condition?:"purchased"|"not_purchased"|"engaged"|"not_engaged";true_step_id?:string;false_step_id?:string;
 };
-type Graph = {schema_version:number;name:string;description:string;version:string;entry_step_id:string;nodes:Node[]};
+type Graph = {schema_version:number;name:string;description:string;version:string;entry_step_id:string;target_jurisdictions:string[];nodes:Node[]};
 type Simulation = {graph_sha256:string;path:string[];emails:Array<{step_id:string;subject:string;body_text:string;scheduled_offset_days:number;affiliate_disclosure_required:boolean;affiliate_disclosure:string|null}>;stopped:boolean;stop_reason:string;provider_calls_made:number;messages_scheduled:number};
 type Automation = {
  id:string;name:string;description:string;version:string;status:string;entry_step_id:string;node_count:number;
@@ -20,7 +20,7 @@ type ListResult={count:number;data:Automation[]};
 const field="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
 const label="block text-sm font-semibold text-slate-700";
 const initialGraph:Graph={
- schema_version:1,name:"Creator nurture",description:"A consent-based email journey with purchase and engagement branches.",version:"1.0.0",entry_step_id:"welcome",
+ schema_version:1,name:"Creator nurture",description:"A consent-based email journey with purchase and engagement branches.",version:"1.0.0",entry_step_id:"welcome",target_jurisdictions:["US"],
  nodes:[
   {id:"welcome",kind:"email",subject:"Your guide is ready",body_text:"Thanks for requesting the guide. Start with one practical step.",delay_days:0,next_step_id:"purchase-check"},
   {id:"purchase-check",kind:"branch",condition:"purchased",true_step_id:"purchased-stop",false_step_id:"engagement-check"},
@@ -38,6 +38,7 @@ export default function EmailAutomationsPage(){
  const [name,setName]=useState(initialGraph.name);
  const [description,setDescription]=useState(initialGraph.description);
  const [version,setVersion]=useState(initialGraph.version);
+ const [targetJurisdictions,setTargetJurisdictions]=useState("US");
  const [entry,setEntry]=useState(initialGraph.entry_step_id);
  const [nodesJson,setNodesJson]=useState(pretty(initialGraph.nodes));
  const [selected,setSelected]=useState<Automation|null>(null);
@@ -58,7 +59,7 @@ export default function EmailAutomationsPage(){
   try{
    const nodes=JSON.parse(nodesJson) as Node[];
    const result=await apiFetch<Automation>("/api/email/automations",{method:"POST",body:JSON.stringify({
-    name,description,version,entry_step_id:entry,nodes
+    name,description,version,entry_step_id:entry,target_jurisdictions:targetJurisdictions.split(",").map(v=>v.trim().toUpperCase()).filter(Boolean),nodes
    })});
    setSelected(result);setSimulation(null);setNotice("Saved graph as review-required version "+result.version+". It has not been activated or sent.");
    await load();
@@ -100,6 +101,7 @@ export default function EmailAutomationsPage(){
    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-xl font-bold">Create graph version</h2><form onSubmit={create} className="mt-4 space-y-4">
     <label className={label}>Automation name<input className={field} value={name} onChange={e=>setName(e.target.value)} required minLength={3} maxLength={180}/></label>
     <div className="grid gap-3 sm:grid-cols-2"><label className={label}>Semantic version<input className={field} value={version} onChange={e=>setVersion(e.target.value)} pattern="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?" required/></label><label className={label}>Entry step ID<input className={field} value={entry} onChange={e=>setEntry(e.target.value)} required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}"/></label></div>
+    <label className={label}>Target jurisdictions<input className={field} value={targetJurisdictions} onChange={e=>setTargetJurisdictions(e.target.value)} placeholder="US, GB, IN" required/><span className="mt-1 block text-xs font-normal text-slate-500">An approved graph is checked against a current email-marketing assessment for all listed jurisdictions before each provider send.</span></label>
     <label className={label}>Purpose and audience<textarea className={field} rows={2} value={description} onChange={e=>setDescription(e.target.value)} required minLength={10}/></label>
     <label className={label}>Branch graph JSON<textarea className={field+" font-mono text-xs"} rows={22} value={nodesJson} onChange={e=>setNodesJson(e.target.value)} required spellCheck={false}/><span className="mt-1 block text-xs font-normal text-slate-500">Nodes are email, branch (purchased / not_purchased / engaged / not_engaged), or stop. All nodes must be reachable and the graph must be acyclic.</span></label>
     <button type="submit" disabled={busy} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?"Saving…":"Validate and save review-required graph"}</button>

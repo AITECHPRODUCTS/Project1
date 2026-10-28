@@ -5,6 +5,8 @@ import json
 import re
 from typing import Any
 
+from backend.services.jurisdiction_compliance import normalize_jurisdictions
+
 
 _MAX_NODES = 30
 _STEP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
@@ -32,6 +34,16 @@ def build_email_automation(payload: dict[str, Any]) -> dict[str, Any]:
     version = _nonblank(payload.get("version"), "version", 40)
     if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?", version):
         raise ValueError("version must use semantic versioning such as 1.0.0")
+    target_jurisdictions = payload.get("target_jurisdictions", [])
+    if target_jurisdictions is None:
+        target_jurisdictions = []
+    if not isinstance(target_jurisdictions, list) or len(target_jurisdictions) > 50:
+        raise ValueError("target_jurisdictions must be a list with at most 50 values")
+    try:
+        normalized_targets = normalize_jurisdictions(target_jurisdictions) if target_jurisdictions else []
+    except ValueError as exc:
+        raise ValueError(f"Invalid target_jurisdictions: {exc}") from exc
+
     entry_id = payload.get("entry_step_id")
     if not isinstance(entry_id, str) or not _STEP_ID.fullmatch(entry_id):
         raise ValueError("entry_step_id must be a valid step identifier")
@@ -145,6 +157,7 @@ def build_email_automation(payload: dict[str, Any]) -> dict[str, Any]:
         "description": description,
         "version": version,
         "entry_step_id": entry_id,
+        "target_jurisdictions": normalized_targets,
         "nodes": nodes,
     }
     checksum = hashlib.sha256(_canonical_json(graph)).hexdigest()
@@ -227,3 +240,40 @@ def simulate_email_automation(
         path.append(f"{node['id']}:{'true' if outcome else 'false'}")
         node_id = node["true_step_id"] if outcome else node["false_step_id"]
     raise RuntimeError("Validated graph unexpectedly exceeded its bounded traversal length")
+
+
+
+def resolve_next_email_step(
+    graph: dict[str, Any],
+    *,
+    current_step_id: str | None = None,
+    purchased: bool = False,
+    engaged: bool = False,
+) -> dict[str, Any] | None:
+    """Resolve the next email node after a prior email or from graph entry."""
+    normalized = build_email_automation(graph)["graph"]
+    by_id = {node["id"]: node for node in normalized["nodes"]}
+    if current_step_id is None:
+        cursor = normalized["entry_step_id"]
+    else:
+        current = by_id.get(current_step_id)
+        if current is None or current["kind"] != "email":
+            raise ValueError("current_step_id must reference an email step in the automation graph")
+        cursor = current["next_step_id"]
+    context = {
+        "purchased": bool(purchased),
+        "not_purchased": not bool(purchased),
+        "engaged": bool(engaged),
+        "not_engaged": not bool(engaged),
+    }
+    branch_path: list[str] = []
+    for _ in range(len(by_id)):
+        node = by_id[cursor]
+        if node["kind"] == "email":
+            return {"step": node, "branch_path": branch_path}
+        if node["kind"] == "stop":
+            return None
+        outcome = bool(context[node["condition"]])
+        branch_path.append(f"{node['id']}:{'true' if outcome else 'false'}")
+        cursor = node["true_step_id"] if outcome else node["false_step_id"]
+    raise RuntimeError("Validated email graph exceeded bounded traversal")

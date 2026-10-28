@@ -47,3 +47,44 @@ def test_conversion_currency_is_bounded():
  assert row.currency=="usd"
 def test_lead_capture_requires_explicit_consent_value():
  with pytest.raises(Exception):LeadCaptureRequest(email="a@example.com",consent=False,lead_magnet="Guide",audience="Beginners")
+
+
+
+@pytest.mark.parametrize(
+    "measurement_kwargs",
+    [
+        {"clicks": -1},
+        {"clicks": 1.5},
+        {"conversions": -1},
+        {"clicks": 4, "conversions": 1.5},
+        {"clicks": 4, "conversions": True},
+        {"total_revenue": -0.01},
+        {"total_revenue": float("nan")},
+        {"total_revenue": float("inf")},
+        {"total_revenue": True},
+        {"gravity_weight": float("nan")},
+        {"gravity_weight": float("inf")},
+        {"gravity_weight": True},
+    ],
+)
+def test_offer_metric_inputs_reject_invalid_measurements(measurement_kwargs):
+    with pytest.raises(ValueError):
+        compute_offer_metrics({"reward_type": "one-time"}, **measurement_kwargs)
+
+
+@pytest.mark.parametrize("gravity", [-1, float("nan"), float("inf"), "nan", "invalid", True])
+def test_invalid_offer_gravity_is_reported_as_unknown(gravity):
+    result = compute_offer_metrics({"gravity_score": gravity})
+    assert result["gravity_score"] is None
+    assert result["normalized_gravity"] is None
+
+
+def test_offer_metrics_preserve_valid_zero_and_unknown_measurements():
+    measured = compute_offer_metrics({}, clicks=3, conversions=0, total_revenue=0)
+    assert measured["epc"] == 0
+    assert measured["conversion_rate"] == 0
+    assert measured["measurement_basis"]["clicks"] == 3
+
+    unknown = compute_offer_metrics({}, clicks=0, conversions=0, total_revenue=0)
+    assert unknown["epc"] is None
+    assert unknown["conversion_rate"] is None

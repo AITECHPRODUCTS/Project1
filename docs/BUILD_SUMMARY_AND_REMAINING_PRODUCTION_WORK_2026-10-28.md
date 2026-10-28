@@ -6,6 +6,11 @@
 **Latest verified code candidate:** [602f761732ce8930bc103ed3f19b13ee524dc6a3](https://github.com/AITECHPRODUCTS/Project1/commit/602f761732ce8930bc103ed3f19b13ee524dc6a3)  
 **Release status: NOT RELEASE READY.** This is a compact handoff/status summary, not a claim of full product completion.
 
+## Latest code slice awaiting full CI — 2026-10-28
+
+Code commit: [440d378d7588081f6e072e18e35bd7573543f89a](https://github.com/AITECHPRODUCTS/Project1/commit/440d378d7588081f6e072e18e35bd7573543f89a). Added a fourth safe, code-owned skill handler, `research.offer_metrics`, reusing validated measured-offer calculations; adds test coverage for correct outputs, unknown data, invalid measurements and real package-fixture execution. No external network or account actions occur. Push run [40723239709](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40723239709) and PR run [40723248888](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40723248888) were in progress at the time of this status update. The previous fully verified code candidate remains `602f761732ce8930bc103ed3f19b13ee524dc6a3` until the new runs are confirmed complete. This does not promote any skill to end-to-end complete and does not change the release verdict.
+
+
 ## What is built in the current branch
 
 - **Application foundation:** FastAPI backend, SQLAlchemy persistence, Alembic migration history through migration 0027_skill_runtime_handlers, workspace-scoped API boundaries, and a Next.js/TypeScript light-mode growth cockpit.

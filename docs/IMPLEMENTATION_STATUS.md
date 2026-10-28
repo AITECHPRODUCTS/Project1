@@ -1,6 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-28
 
+## 2026-10-28 in-progress code slice — S1 offer metrics runtime handler
+
+- Code commit: [440d378d7588081f6e072e18e35bd7573543f89a](https://github.com/AITECHPRODUCTS/Project1/commit/440d378d7588081f6e072e18e35bd7573543f89a). Added allowlisted `research.offer_metrics` handler to the governed skill runtime. It reuses the existing validated offer-metrics service to calculate EPC, conversion rate and gravity normalization only from supplied values; missing measurements remain unknown. It rejects unknown top-level inputs and invalid count/revenue/weight values. No network calls, offer scraping, provider claims or external actions are performed.
+- Tests added in `tests/test_skill_runtime.py`: valid measured metrics; missing/unknown values; malformed, non-finite, inconsistent and unexpected inputs; and a governed skill-package fixture that executes the handler and checks actual output equality.
+- Exact-SHA workflow links: [push run 40723239709](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40723239709) and [PR run 40723248888](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40723248888). At this note's creation, these full runs were still in progress. The PR Python, PostgreSQL integration, secret-scan, repository-guard and AI/RAG jobs had passed; frontend/Docker and security audit were still running. Therefore this slice is **implemented, CI not yet fully verified** in this note. Update after both exact-SHA runs conclude.
+- Acceptance still outstanding for the S1 product journey: verified inputs from an authorized affiliate source, source provenance/freshness and external provider contracts. This local calculation handler does not satisfy provider connectivity or end-to-end S1 completion.
+
+
 ## 2026-10-28 verified checkpoint — double opt-in and truthful signup outcomes
 
 - Verified feature/test SHA: `22b64068cb06d5085761aad986e3787a59634981`. [Push CI run 40713741377](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713741377) and [PR CI run 40713751355](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40713751355) both completed successfully on feature/test checkpoint `22b64068cb06d5085761aad986e3787a59634981`. Python: **619 passed, 7 skipped, 5 warnings**. PostgreSQL migration/concurrency, frontend typecheck/build/final Docker smoke, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition. The predecessor feature-code push/PR attempt exposed two test assertions comparing raw HTML with rendered copy; `22b6406` fixes the assertions to decode HTML entities while keeping production escaping intact.

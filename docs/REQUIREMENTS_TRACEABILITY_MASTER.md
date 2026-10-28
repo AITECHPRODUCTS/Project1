@@ -532,3 +532,12 @@
 - **Tests:** tests/test_skill_packages.py covers NaN/infinite and malformed schema bounds. tests/test_skill_runtime.py covers out-of-range/over-precision monetary inputs and extreme computed ROAS.
 - **Exact candidate:** 602f761732ce8930bc103ed3f19b13ee524dc6a3. Push [40721720474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721720474) and PR [40721732685](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40721732685) completed successfully. Python: 640 passed, 7 skipped, 5 warnings; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard and browser UAT passed. PR lockfile sync was skipped by configured event condition.
 - **Boundary:** this verifies one deterministic local handler and schema validation, not provider-backed ad optimization or end-to-end parity of all 53 skills. Production remains NOT RELEASE READY.
+
+
+
+## 2026-10-28 — S1 offer metrics skill runtime extension
+
+- Implementation: `backend/services/skill_runtime.py` handler `research.offer_metrics`, delegated to `backend/services/offer_intelligence.py::compute_offer_metrics`; regression and package-runtime fixture coverage in `tests/test_skill_runtime.py`.
+- Acceptance covered by code/tests: calculate EPC from supplied revenue/clicks, conversion rate from supplied conversions/clicks, return supplied gravity plus explicit weight normalization, preserve unknowns as `null`, reject malformed numeric inputs and conversion counts exceeding clicks, and execute only through the built-in allowlist.
+- Evidence state: implementation commit [440d378d7588081f6e072e18e35bd7573543f89a](https://github.com/AITECHPRODUCTS/Project1/commit/440d378d7588081f6e072e18e35bd7573543f89a). Hosted push/PR runs [40723239709](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40723239709) / [40723248888](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40723248888) were still running when this note was written; do not count it as fully verified until exact-SHA runs finish.
+- Scope remains **partial** at product level: this is a pure calculation over operator-supplied evidence. Authorized marketplace adapters, provider source authenticity, live offer retrieval and browser end-to-end research acceptance are still required. The 53-skill parity inventory remains unchanged.

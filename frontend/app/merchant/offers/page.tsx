@@ -18,7 +18,7 @@ type TermDraft={
   source_url:string;evidence_type:"operator_observed"|"merchant_claim"|"network_reported"|"manual_import";evidence_excerpt:string;
 };
 type TermSnapshot={
-  id:string;terms_version:string;commission_type:string;commission_value:string;commission_currency:string;
+  id:string;sequence_number:number;terms_version:string;commission_type:string;commission_value:string;commission_currency:string;
   cookie_days:number|null;attribution_window_days:number|null;allowed_regions:string[];restricted_traffic_sources:string[];
   source_url:string;evidence_type:string;evidence_excerpt:string;observed_at:string|null;captured_at:string|null;
   terms_sha256:string;change_status:string;changed_fields:string[];requires_revalidation:boolean;
@@ -223,7 +223,7 @@ export default function MerchantOffersPage(){
               <button onClick={()=>void saveTermSnapshot(offer)} disabled={termBusyId===offer.id||!!busy} className="mt-4 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{termBusyId===offer.id?"Saving snapshot…":"Save immutable terms snapshot"}</button>
               <div className="mt-5">
                 <h5 className="text-xs font-black uppercase tracking-wider text-slate-600">Term history</h5>
-                {(termHistory[offer.id]||[]).length===0?<p className="mt-2 text-xs text-slate-500">No snapshots are stored yet.</p>:<div className="mt-2 grid gap-2">{termHistory[offer.id]?.map(snapshot=><div key={snapshot.id} className="rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{snapshot.change_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{snapshot.captured_at?new Date(snapshot.captured_at).toLocaleString():"Capture time unavailable"}</span></div><p className="mt-1 text-xs text-slate-600">Changed fields: {snapshot.changed_fields.length?snapshot.changed_fields.join(", "):"none"}</p><p className="mt-1 break-all text-xs text-slate-500">SHA-256: {snapshot.terms_sha256}</p><p className="mt-1 text-xs text-amber-800">Unverified operator-supplied record · provider verified: no · source fetched: no</p></div>)}</div>}
+                {(termHistory[offer.id]||[]).length===0?<p className="mt-2 text-xs text-slate-500">No snapshots are stored yet.</p>:<div className="mt-2 grid gap-2">{termHistory[offer.id]?.map(snapshot=><div key={snapshot.id} className="rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{"Snapshot #"+snapshot.sequence_number+" · "+snapshot.change_status.replaceAll("_"," ")}</strong><span className="text-xs text-slate-500">{snapshot.captured_at?new Date(snapshot.captured_at).toLocaleString():"Capture time unavailable"}</span></div><p className="mt-1 text-xs text-slate-600">Changed fields: {snapshot.changed_fields.length?snapshot.changed_fields.join(", "):"none"}</p><p className="mt-1 break-all text-xs text-slate-500">SHA-256: {snapshot.terms_sha256}</p><p className="mt-1 text-xs text-amber-800">Unverified operator-supplied record · provider verified: no · source fetched: no</p></div>)}</div>}
               </div>
             </section>}
           </article>)}

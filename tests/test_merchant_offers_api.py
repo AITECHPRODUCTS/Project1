@@ -214,6 +214,7 @@ def test_term_snapshots_record_baseline_changes_and_unverified_provenance(tmp_pa
             assert history.status_code == 200, history.text
             assert history.json()["count"] == 3
             assert history.json()["data"][0]["terms_sha256"] == result["terms_sha256"]
+            assert [row["sequence_number"] for row in history.json()["data"]] == [3, 2, 1]
     finally:
         cleanup(engine, client)
 

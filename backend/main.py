@@ -1263,6 +1263,7 @@ def _merchant_offer_term_snapshot_dict(row: MerchantOfferTermSnapshot) -> dict[s
     return {
         "id": row.id,
         "merchant_offer_id": row.merchant_offer_id,
+        "sequence_number": row.sequence_number,
         "terms_version": row.terms_version,
         "commission_type": row.commission_type,
         "commission_value": format(Decimal(row.commission_value), "f"),
@@ -1393,6 +1394,7 @@ async def capture_merchant_offer_term_snapshot(
             MerchantOfferTermSnapshot.workspace_id == workspace_id,
             MerchantOfferTermSnapshot.merchant_offer_id == offer.id,
         ).order_by(
+            MerchantOfferTermSnapshot.sequence_number.desc(),
             MerchantOfferTermSnapshot.captured_at.desc(),
             MerchantOfferTermSnapshot.created_at.desc(),
             MerchantOfferTermSnapshot.id.desc(),
@@ -1445,6 +1447,7 @@ async def capture_merchant_offer_term_snapshot(
         snapshot = MerchantOfferTermSnapshot(
             workspace_id=workspace_id,
             merchant_offer_id=offer.id,
+            sequence_number=(latest.sequence_number + 1 if latest is not None else 1),
             terms_version=report["current_terms"]["terms_version"],
             commission_type=report["current_terms"]["commission_type"],
             commission_value=Decimal(report["current_terms"]["commission_value"]),
@@ -1523,6 +1526,7 @@ async def list_merchant_offer_term_snapshots(
             MerchantOfferTermSnapshot.workspace_id == workspace_id,
             MerchantOfferTermSnapshot.merchant_offer_id == offer.id,
         ).order_by(
+            MerchantOfferTermSnapshot.sequence_number.desc(),
             MerchantOfferTermSnapshot.captured_at.desc(),
             MerchantOfferTermSnapshot.created_at.desc(),
             MerchantOfferTermSnapshot.id.desc(),

@@ -16,6 +16,7 @@ def upgrade() -> None:
         sa.Column("workspace_id", sa.String(length=36), nullable=False),
         sa.Column("id", sa.String(length=36), primary_key=True, nullable=False),
         sa.Column("merchant_offer_id", sa.String(length=36), nullable=False),
+        sa.Column("sequence_number", sa.Integer(), nullable=False),
         sa.Column("terms_version", sa.String(length=120), nullable=False),
         sa.Column("commission_type", sa.String(length=40), nullable=False),
         sa.Column("commission_value", sa.Numeric(12, 4), nullable=False),

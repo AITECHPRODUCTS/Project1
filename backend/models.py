@@ -684,6 +684,7 @@ class MerchantOfferTermSnapshot(TenantScopedMixin, Base):
     merchant_offer_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("merchant_offers.id", ondelete="RESTRICT"), nullable=False
     )
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     terms_version: Mapped[str] = mapped_column(String(120), nullable=False)
     commission_type: Mapped[str] = mapped_column(String(40), nullable=False)
     commission_value: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)

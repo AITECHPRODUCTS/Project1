@@ -357,7 +357,7 @@ app.add_middleware(FinancialSandboxMiddleware)
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(WorkspaceContextMiddleware)
 app.add_middleware(SessionMiddleware,secret_key=settings.app_session_secret,session_cookie="affiliate_os_session",max_age=43200,same_site="lax",https_only=settings.app_env=="production")
-app.add_middleware(CORSMiddleware,allow_origins=settings.allowed_origins,allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],allow_headers=["Authorization","Content-Type","X-Affiliate-Signature","X-CSRF-Token"])
+app.add_middleware(CORSMiddleware,allow_origins=settings.allowed_origins,allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],allow_headers=["Authorization","Content-Type","Idempotency-Key","X-Affiliate-Signature","X-CSRF-Token"])
 
 async def require_auth(
     request: Request,

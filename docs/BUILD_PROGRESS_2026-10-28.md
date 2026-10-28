@@ -3,7 +3,7 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Verified code checkpoint:** f787358479d27490f3e4e8b516eab5c27f2e84be  
+**Verified code checkpoint:** 536428eab7c391b663bb311c5a2cf4aac1d4b854  
 **Release status:** NOT RELEASE READY
 
 This is a concise status note, not a replacement for the complete pending-build register, v4 requirements, or full traceability backlog.
@@ -18,7 +18,7 @@ This is a concise status note, not a replacement for the complete pending-build 
 - Computes stable SHA-256 term fingerprints and field-level before/after comparisons. Each offer's history has a monotonic sequence number so equal timestamps cannot reorder entries.
 - Material changes disable terms verification and activation; approved offers are suspended and internally unlisted pending revalidation.
 - Added a merchant-offer terms editor/history view and tests for baseline, unchanged/changed terms, suspension, workspace scoping and invalid evidence input.
-- Important limitation: URLs are stored as references but are not fetched. Records are operator-supplied and remain explicitly unverified; selecting "network reported" does not prove network verification. The endpoints expose append-only capture/history behavior, not a provider-verification service.
+- Important limitation: term snapshots retain operator-supplied values and do not fetch URLs during capture. A separate explicit fetch action can retrieve a cited public HTTPS page through the DNS-pinned, redirect-disabled, byte-limited helper; this proves only that a response was retrieved, not that the page belongs to the claimed merchant/network or that its text is true. The fetch result is immutable evidence metadata and never automatically verifies or approves the offer.
 
 ### 2. Offer metric integrity
 
@@ -27,14 +27,30 @@ This is a concise status note, not a replacement for the complete pending-build 
 - Invalid, negative or non-finite source gravity values remain unknown, instead of allowing NaN/Infinity to enter normalized scores.
 - Added regression tests for invalid values and valid-zero versus unknown measurements.
 
+## 3. Bounded public-source retrieval and content-change detection
+
+- Added migration 0022, append-only fetch result records and workspace-scoped fetch/history endpoints. Fetches are explicit user actions and use the existing DNS-pinned SSRF-safe public fetch boundary.
+- Requires HTTPS; redirects are not followed; only HTML/XHTML/plain text is accepted; response is capped at 1.5 MB and an 8-second timeout. Each attempt stores outcome/status, content type, bytes, SHA-256, bounded extracted text excerpt, ETag/Last-Modified, error code, timestamp and actor. Script/style content is removed from the excerpt.
+- Migration 0023 compares successful body hashes and records baseline, unchanged, changed or non-comparable results. A full-page hash signals a source-page change; it does not claim commission terms changed.
+- No page content is executed. Provider verification and offer approval remain false unless a separately defined, evidenced human workflow changes internal state.
+
+## 4. Independent human review of source-page changes
+
+- Migration 0024 adds reviewer decision, notes, reviewer identity, review time and review status.
+- Only a changed page awaiting review can be reviewed. Self-review by the offer creator or snapshot creator is denied, review notes must be meaningful, and repeat decisions on an already reviewed fetch are rejected.
+- Decisions: no material change, material change found, or source unreliable. Material-change/unreliable decisions disable activation, unlist internally and suspend a previously approved offer. “No material change” records only a human decision; it is not automated/provider verification.
+- The UI exposes the review decision and evidence history. The action is audited; no external publish/network operation is triggered.
+
+## Exact hosted verification for checkpoint 536428eab7c391b663bb311c5a2cf4aac1d4b854
+
+- Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696184789
+- PR CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696194630
+
+Both exact-SHA workflows completed successfully. The Python suite reported 597 passed, 7 skipped and 1 warning. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repo guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition. This evidence is not production deployment or provider integration proof.
+
 ## Exact hosted verification
 
-Both workflows completed successfully on the exact code checkpoint:
-
-- Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685285720
-- PR CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685291821
-
-Verified gates included Python tests (585 passed, 7 skipped), PostgreSQL migration upgrade/downgrade/drift and concurrency tests, frontend typecheck/production build/Docker smoke, AI/RAG dependency checks, security audit/SBOM and license checks, secret scan, repository guard and browser UAT. Push lockfile-sync passed. PR lockfile-sync was skipped by the workflow's event condition.
+Historical checkpoint f787358479d27490f3e4e8b516eab5c27f2e84be passed both workflows. The current authoritative verification for the latest feature slice is recorded in section 5 above.
 
 CI success verifies the code candidate under the automated checks above. It does not establish live provider connectivity, legal clearance, production deployment or end-to-end product completion.
 

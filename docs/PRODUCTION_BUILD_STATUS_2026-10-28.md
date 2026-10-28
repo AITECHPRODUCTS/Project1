@@ -2,7 +2,7 @@
 **As of:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Working branch:** `build/omni-affiliate-os-production`  
-**Latest verified code checkpoint:** f787358479d27490f3e4e8b516eab5c27f2e84be
+**Latest verified code checkpoint:** 536428eab7c391b663bb311c5a2cf4aac1d4b854
 
 ## What exists in the current implementation branch
 
@@ -10,7 +10,8 @@ This is a feature-oriented inventory, not a claim that every item is production 
 
 - **Core platform:** FastAPI backend, SQLAlchemy persistence, migrations, workspace-scoped APIs, authentication/role gates, audit events, Docker/Compose and a Next.js/TypeScript control center.
 - **S1 research:** affiliate offer directory/adapters, evidence-aware offer scoring, traffic screening and provider-readiness catalogue.
-- **Offer terms evidence:** append-only capture/history endpoints, normalized SHA-256 fingerprints, deterministic per-offer sequencing, field-level change reports and fail-closed revalidation when material terms change. Captured URLs are not fetched and records are not provider-verified by this feature.
+- **Offer terms evidence:** append-only terms snapshots with normalized SHA-256 fingerprints, deterministic per-offer sequencing, and field-level term diffs. Each snapshot has an explicit, bounded HTTPS source-fetch action using the existing DNS-pinned SSRF-safe fetch boundary; redirects are not followed, response size/type are constrained, and fetch attempts store a content hash, excerpt, response metadata, status and audit record. Retrieval proves only that a response was fetched—not provider identity, material-terms truth or offer approval.
+- **Source freshness/review:** successful fetches compare the full response-body SHA-256 against the previous successful retrieval for the same snapshot. First fetch, unchanged content, changed content and non-comparable errors are distinguished. Changed pages require a separate reviewer decision and notes. A material-change or unreliable-source decision disables activation and suspends an approved offer; a no-material-change decision is only a reviewer attestation and does not become automated provider verification.
 - **Offer metric integrity:** supplied click/conversion counts and revenue now reject negative, fractional-count, boolean and non-finite inputs instead of silently clamping or truncating; malformed/non-finite source gravity remains unknown.
 - **S2–S3 content and SEO:** source-backed content draft helpers, LLM abstraction, content decay/moat planning, SEO-related helpers and RAG ingestion/retrieval.
 - **S4 leads/funnels:** landing/lead capture, consent-aware email queue, webinar registration and opt-in controls.
@@ -19,7 +20,7 @@ This is a feature-oriented inventory, not a claim that every item is production 
 - **S6 attribution/finance:** signed/deduplicated conversion ingestion, append-only precise commission ledger, partial/full reversal handling, currency-separated summaries, evidence-based commission reconciliation candidates and manual review controls. Blank/reversal status hardening was verified on the checkpoint SHA.
 - **S7 automation/operations:** workflow checkpoints, human approval pauses, durable leases/heartbeats/recovery, cancellation handling, tenant-aware event boundaries, cost-budget reservations and a partial platform-admin read-only operations view.
 - **S8 learning:** RAG/learning data paths and aggregate dataset snapshots with review gates. Provider-attested outcome quality and promotion/rollback are not yet complete.
-- **Engineering evidence:** exact checkpoint f787358479d27490f3e4e8b516eab5c27f2e84be passed both [push CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685285720) and [PR CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685291821): Python tests, PostgreSQL migration/concurrency tests, frontend production/Docker checks, AI/RAG dependencies, security audit/SBOM, secret scan, repository guard and browser UAT succeeded. Push lockfile-sync succeeded; PR lockfile-sync was skipped by event condition.
+- **Engineering evidence:** exact checkpoint 536428eab7c391b663bb311c5a2cf4aac1d4b854 passed both [push CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696184789) and [PR CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696194630): Python tests (597 passed, 7 skipped, 1 warning), PostgreSQL migration/concurrency tests, frontend production/Docker checks, AI/RAG dependency checks, security audit/SBOM, secret scan, repository guard and browser UAT succeeded. Push lockfile-sync succeeded; PR lockfile-sync was skipped by event condition.
 
 ## What remains before production-live implementation
 
@@ -46,3 +47,11 @@ The recent handoff, second-pass audit, read-only repository audit, library/neste
 - Commit a4006fa8170c88c8928da7d481748122b0faf3ec: merchant offer term snapshot API, storage model/migration 0021, deterministic per-offer history sequencing, comparison and revalidation controls, operator-facing terms/history UI and regression tests. Snapshot URLs are reference-only; this code does not fetch the URL or claim provider verification.
 - Commit f787358479d27490f3e4e8b516eab5c27f2e84be: strict offer measurement validation and regression coverage for invalid counts/revenue/gravity inputs.
 - The exact candidate is verified by both linked workflows. Production-live readiness remains NOT RELEASE READY because provider authorization, provider-attested metrics, all-skill end-to-end parity, controlled deployment and operational/legal release gates remain open.
+
+
+## 2026-10-28 latest verified additions (checkpoint 536428eab7c391b663bb311c5a2cf4aac1d4b854)
+
+- 7eb66842cbb5370f5715567bc57404d87daabd9d added explicit source retrieval attempts and migration 0022.
+- ab384a02989b9423e987cb1a4a1a2e528ca4131e added content-hash comparison and migration 0023.
+- 536428eab7c391b663bb311c5a2cf4aac1d4b854 added review states/decision/audit trail and migration 0024. It requires an independent reviewer for changed-source pages; material-change and unreliable-source decisions disable internal activation. The no-material-change decision is still a human assertion, not provider attestation.
+- Both exact-checkpoint Actions workflows passed. The product remains NOT RELEASE READY: a successful public URL fetch is not equivalent to a verified merchant/network, and provider connections, all 53 skills' end-to-end parity, authorized ad operations, wider S1–S8 acceptance, staging, backup/restore, legal and repository-confidentiality gates remain open.

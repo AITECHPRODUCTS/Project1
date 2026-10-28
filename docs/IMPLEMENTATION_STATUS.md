@@ -1,8 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-28
 
+## 2026-10-28 verified build checkpoint — source evidence and human review
+- Verified code checkpoint: 536428eab7c391b663bb311c5a2cf4aac1d4b854. [Push workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696184789) and [PR workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40696194630) both completed successfully. Python: 597 passed, 7 skipped, 1 warning. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repo guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition.
+- Added explicit bounded HTTPS source fetches for offer terms (migration 0022), recorded body-hash comparisons across successive fetches (migration 0023), and a second-person human-review flow for changed pages (migration 0024). The fetch uses the existing DNS-pinned public HTTP helper; it refuses HTTP, does not follow redirects, caps response bytes and text types, persists safe retrieval metadata and hashes, and audits the attempt.
+- Changed source page content opens human review; it is not assumed that a page hash change means the terms changed. The review records decision, notes, reviewer and time. Material-change or unreliable-source findings invalidate internal term verification and activation; no external network approval or provider verification is inferred.
+- Release status remains NOT RELEASE READY. See docs/BUILD_PROGRESS_2026-10-28.md for remaining production work.
+
 ## 2026-10-28 verified build checkpoint — offer terms and metric integrity
-- Verified code checkpoint: f787358479d27490f3e4e8b516eab5c27f2e84be. [Push workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685285720) and [PR workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40685291821) both completed successfully. Python: 585 passed, 7 skipped; PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition.
+- Historical checkpoint f787358479d27490f3e4e8b516eab5c27f2e84be passed its push and PR workflows; current authoritative evidence is the latest 536428eab7c391b663bb311c5a2cf4aac1d4b854 run documented above.
 - Added merchant offer term snapshots with an Alembic migration, workspace-scoped capture/history APIs, SHA-256 fingerprints, deterministic per-offer sequence numbers, field-level comparisons, audit events, a terms-history UI and revalidation gating. This is operator-evidence capture; it does not fetch evidence URLs or establish provider verification.
 - Fixed offer metric handling so negative or non-finite revenue, invalid/fractional counts, booleans and invalid weights raise validation errors instead of being silently clamped/truncated. Invalid/non-finite source gravity remains unknown.
 - Release status remains NOT RELEASE READY. See docs/BUILD_PROGRESS_2026-10-28.md for the current feature list and remaining production work.

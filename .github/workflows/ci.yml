@@ -234,6 +234,8 @@ jobs:
           export APP_ENV=test
           export DATABASE_URL=sqlite+aiosqlite:///./storage/browser-uat.db
           export APP_SESSION_SECRET=browser-uat-only-secret-not-for-deployment
+          export INITIAL_ADMIN_EMAIL=browser-admin@example.test
+          export INITIAL_ADMIN_PASSWORD=Browser-UAT-admin-password-2026!
           export CORS_ORIGINS=http://127.0.0.1:3100
           mkdir -p storage
           python -m alembic upgrade head

@@ -3,7 +3,7 @@
 **Date:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Prior verified code head:** d87349b5c13a1e5f4dfa11a577d627028b5b064b  
+**Verified feature-code checkpoint:** 8addf2b83991ca8015b4496704ef6a159b0a0a4a  
 **Release decision:** **NOT RELEASE READY**
 
 This note is a concise operational summary. The detailed feature backlog remains in Pasted markdown(3).md and the repository's docs/REQUIREMENTS_TRACEABILITY_MASTER.md, docs/IMPLEMENTATION_STATUS.md, docs/SOURCE_REGISTER.md and docs/skill-parity-matrix.csv.
@@ -20,7 +20,7 @@ This note is a concise operational summary. The detailed feature backlog remains
 - S7 persisted workflow checkpoints, human approval pauses, retry/recovery, leases/heartbeats and cancellation handling.
 - 53 upstream skills mapped in a parity matrix; the documented result is 53 partial, 0 end-to-end complete.
 
-## Implemented in this checkpoint (CI pending until exact candidate checks finish)
+## Implemented and verified in this checkpoint
 
 - S4 consent-evidence ledger for consent_granted, resubscribed and unsubscribed events, with timestamp, source, purpose, exact approved wording/version and metadata.
 - Canonical consent wording/version enforced server-side and included in the persisted landing-page form. User-supplied replacement wording or outdated policy versions are rejected.
@@ -28,11 +28,11 @@ This note is a concise operational summary. The detailed feature backlog remains
 - Regression tests cover exact rendered copy, schema tampering, record creation, opt-out idempotency/suppression, ORM immutability and tenant-scoped history retrieval.
 - Privacy caveat: this immutable ledger intentionally avoids cascading removal with a lead row; governed unlink/anonymization/retention handling remains a release requirement. This does not implement double opt-in. Applicable jurisdiction-specific double-opt-in remains pending.
 
-## Current exact baseline CI evidence
+## Exact feature-commit CI evidence
 
-The code head before this increment, d87349b5c13a1e5f4dfa11a577d627028b5b064b, has successful push run [40703340663](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40703340663) and PR run [40703352459](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40703352459). The PR workflow job summaries show Python/tests, PostgreSQL migration/concurrency, frontend typecheck/build/container smoke, AI/RAG profile, dependency/SBOM audit, secret scan, repository guard and browser UAT passed; PR lockfile-sync was skipped by its event condition while the push lockfile-sync passed.
+Code commit 8addf2b83991ca8015b4496704ef6a159b0a0a4a has green [push CI run 40706775818](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706775818) and [PR CI run 40706784399](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706784399). Both completed successfully. Python: 610 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT all passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its event condition. These runs verify the feature-code commit, not any later code changes.
 
-The new commit's CI result must be checked on its exact SHA before this increment is marked verified. A passing CI workflow is not proof of deployment or live provider readiness.
+Successful CI is not proof of production deployment or live provider readiness.
 
 ## Highest-priority remaining work before production-live
 

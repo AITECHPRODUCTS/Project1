@@ -1,11 +1,17 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-28
 
-## 2026-10-28 verified checkpoint — unsubscribe safety and workflow test isolation
+## 2026-10-28 verified checkpoint — immutable lead consent evidence
+- Feature-code SHA: 8addf2b83991ca8015b4496704ef6a159b0a0a4a. [Push CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706775818) and [PR CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706784399) both completed successfully. Python: 610 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its event condition.
+- Migration 0025 and LeadConsentEvent add workspace-scoped evidence for consent grant, resubscription and unsubscribe. Grant events store the canonical displayed consent copy/version, purpose, source and timestamp. ORM and PostgreSQL/SQLite migration triggers enforce append-only history.
+- The consent schema rejects client-substituted copy and non-current versions. Persisted landing pages display and submit the same canonical wording/version. GET /api/leads/{lead_id}/consent-events returns read-only workspace-scoped history.
+- Remaining S4 issues: applicable double opt-in, purpose/jurisdiction-specific policy review and governed privacy unlink/anonymization/retention. This does not claim universal legal compliance.
+
+## Historical verified checkpoint — unsubscribe safety and workflow test isolation
 - Verified code checkpoint: dc998827d52a1a2c7973630f22df2642f058a8e6. [Push workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701960870) and [PR workflow](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701969318) both completed successfully. Python: 604 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition.
 - Unsubscribe is GET-safe: opening a signed URL renders a confirmation page and does not change consent. A separate signed POST is required for browser confirmation; RFC 8058 one-click POST remains supported. Request content type/body length, signature and expiry are checked; response headers prevent caching/referrer leakage and remote script/resource loading; pending/retry scheduled emails are suppressed transactionally on opt-out.
 - Browser UAT asserts the initial GET leaves the lead subscribed, then submits an actual URL-encoded form POST and verifies the lead is suppressed. Workflow pause/cancel regression uses file-backed SQLite for the concurrent worker/poller test; this was test-harness isolation, not a runtime workflow code change.
-- Open S4 gap for the next slice: Lead currently stores only current consent timestamp/source. An immutable event ledger with exact consent text/version/purpose and applicable double-opt-in flow remains unfinished. Do not claim universal jurisdictional consent compliance.
+- Historical gap at this checkpoint: Lead stored only the latest consent timestamp/source. The subsequent feature commit added the immutable event ledger; applicable double opt-in and universal jurisdictional compliance remain open.
 - Release status remains NOT RELEASE READY. See docs/BUILD_PROGRESS_2026-10-28.md and docs/REQUIREMENTS_TRACEABILITY_MASTER.md for remaining work.
 
 ## 2026-10-28 verified build checkpoint — source evidence and human review

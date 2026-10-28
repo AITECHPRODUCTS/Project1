@@ -2,7 +2,14 @@
 **As of:** 28 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Working branch:** `build/omni-affiliate-os-production`  
-**Latest verified code checkpoint:** dc998827d52a1a2c7973630f22df2642f058a8e6
+**Latest verified feature-code checkpoint:** 8addf2b83991ca8015b4496704ef6a159b0a0a4a
+
+## 2026-10-28 verified increment — lead consent evidence
+
+Code commit 8addf2b83991ca8015b4496704ef6a159b0a0a4a has green [push CI run 40706775818](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706775818) and [PR CI run 40706784399](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706784399). Both completed successfully. Python: 610 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT all passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its event condition. These runs verify the feature-code commit, not any later code changes.
+
+- Migration 0025 adds tenant-scoped consent evidence. Grant, resubscription and unsubscribe events are recorded with timestamp, source, purpose and versioned canonical wording. ORM and database guards protect immutability; read access is limited to the active workspace.
+- This closes the previously noted gap for recording exact current email-marketing consent text/version. It does not implement universal double opt-in, the privacy unlink/anonymization workflow, or all jurisdiction-specific legal requirements.
 
 ## What exists in the current implementation branch
 
@@ -20,7 +27,7 @@ This is a feature-oriented inventory, not a claim that every item is production 
 - **S6 attribution/finance:** signed/deduplicated conversion ingestion, append-only precise commission ledger, partial/full reversal handling, currency-separated summaries, evidence-based commission reconciliation candidates and manual review controls. Blank/reversal status hardening was verified on the checkpoint SHA.
 - **S7 automation/operations:** workflow checkpoints, human approval pauses, durable leases/heartbeats/recovery, cancellation handling, tenant-aware event boundaries, cost-budget reservations and a partial platform-admin read-only operations view.
 - **S8 learning:** RAG/learning data paths and aggregate dataset snapshots with review gates. Provider-attested outcome quality and promotion/rollback are not yet complete.
-- **Engineering evidence:** exact checkpoint dc998827d52a1a2c7973630f22df2642f058a8e6 passed both [push CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701960870) and [PR CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701969318): Python tests (604 passed, 7 skipped, 5 warnings), PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security audit/SBOM, secret scan, repository guard and browser UAT all succeeded. Push lockfile-sync succeeded; PR lockfile-sync was skipped by event condition.
+- **Prior checkpoint engineering evidence:** exact checkpoint dc998827d52a1a2c7973630f22df2642f058a8e6 passed both [push CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701960870) and [PR CI](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701969318): Python tests (604 passed, 7 skipped, 5 warnings), PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security audit/SBOM, secret scan, repository guard and browser UAT all succeeded. Push lockfile-sync succeeded; PR lockfile-sync was skipped by event condition.
 
 ## What remains before production-live implementation
 

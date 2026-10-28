@@ -3,12 +3,22 @@
 **As of:** 28 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Verified code checkpoint:** dc998827d52a1a2c7973630f22df2642f058a8e6  
+**Latest verified feature-code checkpoint:** 8addf2b83991ca8015b4496704ef6a159b0a0a4a  
 **Release status:** NOT RELEASE READY
 
-This is a concise status note, not a replacement for the complete pending-build register, v4 requirements, or full traceability backlog.
+This is a concise status note, not a replacement for the complete pending-build register, v4 requirements, or full traceability backlog. The newest verified feature-code checkpoint is recorded first below.
 
-## 2026-10-28 latest verified checkpoint — unsubscribe safety and workflow test isolation
+## 2026-10-28 verified checkpoint — immutable lead consent evidence
+
+- Feature-code SHA: 8addf2b83991ca8015b4496704ef6a159b0a0a4a.
+- Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706775818
+- PR CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40706784399
+- Both runs completed successfully. Python: 610 passed, 7 skipped, 5 warnings. PostgreSQL migration/concurrency, frontend production/Docker, AI/RAG, security/SBOM, secret scan, repository guard and browser UAT passed. Push lockfile-sync passed; PR lockfile-sync was skipped by event condition.
+- Added migration 0025 and a tenant-scoped consent event model. Grant, resubscription and unsubscribe events record exact canonical wording/version where applicable, purpose, source, channel and timestamp. Database triggers and ORM guards prevent update/delete. A read-only, workspace-scoped API exposes event history.
+- Regression coverage verifies exact form copy, rejection of altered wording/old versions, persisted grant evidence, idempotent unsubscribe/suppression, ORM immutability and scoped history access.
+- Remaining S4 work: applicable double opt-in, purpose-specific consent beyond email marketing, policy/legal review and governed unlink/anonymization/retention. The consent ledger does not establish universal compliance.
+
+## Prior verified checkpoint — unsubscribe safety and workflow test isolation
 
 - Exact verified SHA: dc998827d52a1a2c7973630f22df2642f058a8e6.
 - Push CI: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40701960870
@@ -17,7 +27,7 @@ This is a concise status note, not a replacement for the complete pending-build 
 - Unsubscribe GET presents a signed confirmation page without changing consent. A signed POST must carry a supported URL-encoded confirmation body, including the RFC 8058 one-click form. Invalid signature/expiry, wrong content type, malformed or oversized body fails closed. Opt-out suppresses pending/retry scheduled mail transactionally.
 - Browser UAT proves the GET did not change subscription state and explicit form POST did. A Playwright body-encoding mismatch was corrected by using its form parameter rather than a JSON-encoded dictionary.
 - Workflow cancellation regression uses file-backed SQLite with independent connections for concurrent pause/poll checks; this changes the test harness only.
-- Next S4 priority: add append-only consent evidence with exact disclosure text/version/purpose, source, timestamp and grant/withdraw/resubscribe events. Current Lead only keeps the latest consent timestamp/source, so historical consent proof remains incomplete. Applicable double-opt-in workflows remain an explicit gap.
+- This historical S4 gap was addressed in the later consent-evidence checkpoint below. Applicable double opt-in and governed privacy unlink/retention remain open.
 
 
 

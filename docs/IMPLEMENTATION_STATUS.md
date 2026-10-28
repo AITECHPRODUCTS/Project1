@@ -1,5 +1,5 @@
 # Implementation status — Project1 / OmniAffiliateOS
-Updated: 2026-10-27
+Updated: 2026-10-28
 
 ## Repository/build
 - Canonical repository: https://github.com/AITECHPRODUCTS/Project1 (public).
@@ -14,7 +14,7 @@ FastAPI endpoints, SQLAlchemy persistence models, S1–S8 workflow runner, workf
 A provider being catalogued does not mean the account is connected. A configured secret does not prove approved scope or successful authentication. Current adapter coverage is a mixture of directory adapter, operator-configured boundary and catalog-only entries. No provider is marked production verified by configuration alone. Automated public publishing, KYC/application approval and paid-ad operations require authorized provider access and policy-compliant scopes.
 
 ## Skill parity
-See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 53 partial and 0 not implemented, 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
+See `skill-parity-matrix.csv`: 53 skill rows are explicitly traced. Current matrix is 47 partial, 6 not implemented, and 0 fully implemented end-to-end. These 53 rows are a skill inventory only, not overall product-completion percentages. That is a gap ledger—not a claim that reference skill text equals working runtime behavior.
 
 ## Evidence
 The GitHub Actions run linked from the repository is the authoritative check result. Local static source checks do not replace provider tests, browser UAT, backup/restore tests, PostgreSQL migration testing, or deployment health verification.
@@ -975,3 +975,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The new freshness gate blocks guardrail decisions when any creative/platform's latest provider-verified observation is older than 24 hours or more than five minutes in the future. Regression tests cover stale evidence, historical snapshots with a fresh latest point, and materially future-dated evidence. The evaluator still performs no remote ad action.
 - The prior “unresolved frontend LGPL items” note describes the full build/install inventory, not proof that restricted native packages ship. Current frontend CI passed the production-tree dependency verifier, which checks the actual pruned runtime and fails if `sharp` or `@img/sharp-libvips` is installed; the separate production SBOM is checked without exceptions. Keep legal review and the expiring build-only inventory notice tracked, but do not misstate build-only optional packages as confirmed production runtime contents.
 - Remaining release gates include owner decision on public repository visibility/IP exposure, real staging proxy/egress validation, authorized provider scopes and live UAT, deployment smoke, monitoring/SLO, backup/restore, and browser/accessibility acceptance.
+
+
+## 2026-10-28 implementation update — distributed resource-budget reservation lock
+- `backend/services/resource_budget.py` now acquires a PostgreSQL transaction-scoped advisory lock keyed by a fixed resource-budget namespace and the authorized workspace before reading daily/per-niche usage and writing a reservation. This closes the multi-process check-then-insert race for a workspace without changing the public API or tenant accounting.
+- SQLite and other non-PostgreSQL development/test dialects do not execute PostgreSQL-only SQL; the existing process-local asyncio lock remains in place for those environments.
+- Regression coverage compiles the lock statement for PostgreSQL, verifies namespace/workspace parameters differ by tenant, and confirms non-PostgreSQL sessions do not execute advisory SQL. These are unit tests, not a substitute for a concurrent multi-connection PostgreSQL stress test.
+- Exact-SHA hosted CI and the PostgreSQL concurrency stress acceptance must be checked before treating this slice as verified. Release readiness remains NOT RELEASE READY.

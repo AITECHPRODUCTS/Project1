@@ -143,3 +143,55 @@ def test_resource_and_learning_routes_deny_users_without_workspace(monkeypatch):
         client.post("/api/analytics/self-improve"),
     ]
     assert [response.status_code for response in responses] == [403, 403]
+
+
+@pytest.mark.asyncio
+async def test_postgres_resource_budget_lock_is_namespaced_and_workspace_scoped():
+    from sqlalchemy.dialects import postgresql
+
+    class FakeBind:
+        dialect = type("Dialect", (), {"name": "postgresql"})()
+
+    class FakeSession:
+        def __init__(self):
+            self.statement = None
+
+        def get_bind(self):
+            return FakeBind()
+
+        async def execute(self, statement):
+            self.statement = statement
+
+    first = FakeSession()
+    await resource_budget._acquire_workspace_budget_lock(first, "workspace-a")
+    assert first.statement is not None
+    compiled = first.statement.compile(dialect=postgresql.dialect())
+    assert "pg_advisory_xact_lock" in str(compiled)
+    assert "omni-affiliate-os/resource-budget/v1" in compiled.params.values()
+    assert "workspace-a" in compiled.params.values()
+
+    second = FakeSession()
+    await resource_budget._acquire_workspace_budget_lock(second, "workspace-b")
+    second_compiled = second.statement.compile(dialect=postgresql.dialect())
+    assert "workspace-b" in second_compiled.params.values()
+    assert compiled.params != second_compiled.params
+
+
+@pytest.mark.asyncio
+async def test_non_postgres_resource_budget_lock_does_not_issue_advisory_sql():
+    class FakeBind:
+        dialect = type("Dialect", (), {"name": "sqlite"})()
+
+    class FakeSession:
+        def __init__(self):
+            self.executed = False
+
+        def get_bind(self):
+            return FakeBind()
+
+        async def execute(self, statement):
+            self.executed = True
+
+    db = FakeSession()
+    await resource_budget._acquire_workspace_budget_lock(db, "workspace-a")
+    assert db.executed is False

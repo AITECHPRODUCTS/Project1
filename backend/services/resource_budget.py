@@ -14,6 +14,26 @@ from backend.tenancy import get_workspace_id, workspace_scope
 _lock = asyncio.Lock()
 
 
+async def _acquire_workspace_budget_lock(db, workspace_id: str) -> None:
+    """Serialize budget check-and-reserve across replicas on PostgreSQL.
+
+    The lock is transaction-scoped, so it remains held through both cap checks
+    and the reservation commit. SQLite/development retains the process-local
+    asyncio lock in reserve(); production deployments should use PostgreSQL.
+    """
+    bind = db.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    await db.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                func.hashtext("omni-affiliate-os/resource-budget/v1"),
+                func.hashtext(workspace_id),
+            )
+        )
+    )
+
+
 def _resolve_workspace_id(workspace_id: str | None = None) -> str:
     active = get_workspace_id()
     requested = str(workspace_id).strip() if workspace_id else None
@@ -50,8 +70,11 @@ async def reserve(
 
     # ResourceUsage is tenant-scoped, so both the daily cap and per-niche cap
     # are calculated inside the same authorized workspace context.
+    # PostgreSQL's transaction-scoped advisory lock closes the cross-process
+    # race between checking usage and inserting a new reservation.
     with workspace_scope(owner_workspace_id):
         async with _lock, SessionLocal() as db:
+            await _acquire_workspace_budget_lock(db, owner_workspace_id)
             total = float(
                 await db.scalar(
                     select(func.coalesce(func.sum(ResourceUsage.estimated_cost_usd), 0.0)).where(

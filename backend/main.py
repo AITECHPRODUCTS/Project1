@@ -9,14 +9,14 @@ from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qsl,urlencode,urlparse,urlunparse
-from typing import Any
+from typing import Any, Literal
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter,Depends,FastAPI,HTTPException,Query,Request,WebSocket,WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse,JSONResponse,RedirectResponse
 from pwdlib import PasswordHash
-from sqlalchemy import func,select
+from sqlalchemy import func,or_,select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
@@ -1168,11 +1168,95 @@ async def knowledge_status():
  path=Path(settings.chroma_persist_dir)
  return {"available":path.exists() and any(path.glob("**/*")),"storage_configured":bool(settings.chroma_persist_dir),"collection":"affiliate_doctrine","required_references":["offer-frameworks.md","platform-rules.md","seo-strategy.md","social-data-providers.md"]}
 @api.get("/offers")
-async def offers(q:str|None=None,limit:int=Query(50,ge=1,le=200),db:AsyncSession=Depends(get_session)):
- stmt=select(Offer)
- if q:stmt=stmt.where(Offer.name.ilike(f"%{q[:100]}%"))
- rows=list((await db.scalars(stmt.order_by(Offer.verified.desc(),Offer.name).limit(limit))).all())
- return {"count":len(rows),"data":[{"id":o.id,"network":o.network,"external_id":o.external_id,"name":o.name,"url":o.url,"category":o.category,"description":o.description,"reward_type":o.reward_type,"reward_value":o.reward_value,"cookie_days":o.cookie_days,"traffic_score":o.traffic_score,"gravity_score":o.gravity_score,"normalized_gravity":o.normalized_gravity,"epc":o.epc,"conversion_rate":o.conversion_rate,"recurring_commission":o.recurring_commission,"source_stars":o.source_stars,"verified":o.verified,"source_url":o.source_url} for o in rows]}
+async def offers(
+    q: str | None = Query(default=None, min_length=1, max_length=100),
+    network: str | None = Query(default=None, min_length=1, max_length=100),
+    category: str | None = Query(default=None, min_length=1, max_length=200),
+    reward_type: str | None = Query(default=None, min_length=1, max_length=100),
+    recurring_commission: bool | None = None,
+    min_cookie_days: int | None = Query(default=None, ge=0, le=2_147_483_647),
+    provider_claimed_verified: bool | None = None,
+    sort_by: Literal[
+        "name", "network", "cookie_days", "traffic_score", "gravity_score",
+        "epc", "conversion_rate", "source_stars", "updated_at",
+    ] | None = None,
+    sort_order: Literal["asc", "desc"] = "asc",
+    offset: int = Query(default=0, ge=0, le=100_000),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_session),
+):
+    """Search the persisted shared offer catalog without implying provider authentication."""
+    stmt = select(Offer)
+    normalized_q = q.strip() if q else ""
+    if normalized_q:
+        pattern = f"%{normalized_q}%"
+        stmt = stmt.where(or_(
+            Offer.name.ilike(pattern),
+            Offer.description.ilike(pattern),
+            Offer.category.ilike(pattern),
+        ))
+    if network:
+        stmt = stmt.where(func.lower(Offer.network) == network.strip().lower())
+    if category:
+        stmt = stmt.where(Offer.category.ilike(f"%{category.strip()}%"))
+    if reward_type:
+        stmt = stmt.where(func.lower(Offer.reward_type) == reward_type.strip().lower())
+    if recurring_commission is not None:
+        stmt = stmt.where(Offer.recurring_commission.is_(recurring_commission))
+    if min_cookie_days is not None:
+        stmt = stmt.where(Offer.cookie_days >= min_cookie_days)
+    if provider_claimed_verified is not None:
+        stmt = stmt.where(Offer.verified.is_(provider_claimed_verified))
+
+    total_count = int(await db.scalar(select(func.count()).select_from(stmt.subquery()) ) or 0)
+    if sort_by is None:
+        ordering = (Offer.verified.desc(), Offer.name.asc())
+    else:
+        sort_column = getattr(Offer, sort_by)
+        ordering = (
+            sort_column.asc().nullslast()
+            if sort_order == "asc"
+            else sort_column.desc().nullslast()
+        )
+    rows = list((await db.scalars(
+        stmt.order_by(*ordering).offset(offset).limit(limit)
+    )).all())
+    return {
+        "count": len(rows),
+        "total_count": total_count,
+        "offset": offset,
+        "limit": limit,
+        "data": [
+            {
+                "id": offer.id,
+                "network": offer.network,
+                "external_id": offer.external_id,
+                "name": offer.name,
+                "url": offer.url,
+                "category": offer.category,
+                "description": offer.description,
+                "reward_type": offer.reward_type,
+                "reward_value": offer.reward_value,
+                "cookie_days": offer.cookie_days,
+                "traffic_score": offer.traffic_score,
+                "gravity_score": offer.gravity_score,
+                "normalized_gravity": offer.normalized_gravity,
+                "epc": offer.epc,
+                "conversion_rate": offer.conversion_rate,
+                "recurring_commission": offer.recurring_commission,
+                "source_stars": offer.source_stars,
+                "verified": offer.verified,
+                "verification_basis": (
+                    "provider_claimed_unattested"
+                    if offer.verified
+                    else "provider_not_verified_or_unknown"
+                ),
+                "source_url": offer.source_url,
+                "updated_at": offer.updated_at.isoformat() if offer.updated_at else None,
+            }
+            for offer in rows
+        ],
+    }
 @api.post("/offers/sync")
 async def offers_sync(
     q: str | None = None,

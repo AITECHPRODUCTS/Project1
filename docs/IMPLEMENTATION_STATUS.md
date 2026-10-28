@@ -1032,3 +1032,15 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Repair commit: `e4333ae0aadfa8996f1011ca08d51092a3e06d71`. Exact-commit PR CI run: [40667431166](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40667431166). At the time of this entry the run was pending; do not mark the repair verified until all jobs, especially browser-uat, complete successfully.
 - Requirement-source recovery: the recent 28 October handoff/audit and 27 October master handoff, source inventory, second-pass audit, and branch requirements/traceability/status ledgers were inspected. The original user requirements remain the authority for full S1–S8 scope; repeated archived files must be deduplicated by content hash. The separate newer already-live application ZIP remains absent from the current Library inventory and must not be claimed as reviewed.
 - Release state remains **NOT RELEASE READY**. Hosted CI does not prove provider authorization, production deployment, backup/restore, end-to-end skill parity, or legal clearance. Reconcile the current license-policy report and owner visibility decision before any release recommendation.
+
+
+
+## 2026-10-28 continuation — exact conversion-ledger money parsing
+
+- Scope: S6 signed conversion webhook parsing, a correctness gap called out by the 27 October audit. The webhook adapter previously converted validated `Decimal` values to binary `float` before the ledger route converted them back to `Decimal`, which could lose precision for high-precision amounts.
+- Implementation: `backend/adapters/webhook.py` now returns normalized `Decimal` amounts, rejects non-finite/negative values, rejects amounts beyond `Numeric(18, 6)`, and rejects values that would require rounding beyond six fractional digits. This aligns parser output with the append-only ledger precision contract and avoids silent database rounding.
+- Regression coverage: `tests/test_webhook_adapter.py` asserts exact six-place values and rejection of excess scale and Numeric(18, 6) overflow, while retaining invalid amount, signature, event-ID, and normalization coverage.
+- Commits for this slice: parser `f69e49b0346e6d9bfdc4f6ffb9522143e551e63f`; regression tests `ec9dee0c13a123b3571ceb86facb1004a11ab383`.
+- Verification: the exact-SHA hosted CI run was observed as pending with no job results returned at the time this entry was prepared. **Do not count this slice as CI-verified until the current branch head's Python, PostgreSQL, browser, frontend, AI/RAG, security and repository-guard jobs are inspected.** Local execution of the repository suite was not available through this connector session.
+- Remaining S6 gaps: provider-specific signature vectors and authorization, late/replay/partial-reversal contract coverage, currency-specific minor-unit policy, PostgreSQL ledger immutability/reversal checks on the exact new SHA, provider statement reconciliation and finance UI/browser acceptance.
+- Product release remains **NOT RELEASE READY**; this change does not establish provider connectivity, legal clearance, deployment health, backup/restore or full S1–S8 completion.

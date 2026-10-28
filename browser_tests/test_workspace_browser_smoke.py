@@ -270,7 +270,7 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
 
             unsubscribe = context.request.post(
                 unsubscribe_url,
-                data={"confirm": "unsubscribe"},
+                form={"confirm": "unsubscribe"},
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             assert unsubscribe.status == 200, unsubscribe.text()

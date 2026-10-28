@@ -313,7 +313,7 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
             page = context.new_page()
             page.goto(BASE_URL + "/landing-pages", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Landing pages and funnels").wait_for(state="visible")
-            page.get_by_label("Headline").fill("A clear creator guide")
+            page.get_by_label("Headline", exact=True).fill("A clear creator guide")
             page.get_by_label("Subheadline").fill("A practical, evidence-first resource for independent creators.")
             page.get_by_label("Benefit bullets (one per line)").fill(
                 "Choose products using consistent criteria\n"

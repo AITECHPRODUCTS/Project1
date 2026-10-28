@@ -489,6 +489,7 @@ def test_distribution_queue_is_persisted_review_gated_and_never_claims_sent():
                 data={"email": email, "password": password, "workspace_name": "Distribution Queue UAT"},
             )
             assert registration.status == 201, registration.text()
+            registered_session = registration.json()
             asset_response = context.request.post(
                 api_base + "/api/content/infographic",
                 data={
@@ -502,6 +503,7 @@ def test_distribution_queue_is_persisted_review_gated_and_never_claims_sent():
                     ],
                     "source_urls": ["https://example.invalid/creator-checklist"],
                 },
+                headers={"X-CSRF-Token": registered_session["csrf_token"]},
             )
             assert asset_response.status == 201, asset_response.text()
             asset_id = asset_response.json()["asset_id"]

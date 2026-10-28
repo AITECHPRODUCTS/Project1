@@ -368,3 +368,11 @@
 - Regression tests: `tests/test_ad_budget_guardrails.py` covers stale evidence, historical data plus fresh latest evidence, and materially future-dated observations.
 - Safety boundary: this evaluator remains a recommendation only; it does not call provider APIs, authorize spend or execute a pause.
 - Status: **candidate / CI pending** at the time this record was written. Promote only after exact-SHA push and PR workflows pass and logs are inspected. Live provider polling contracts and account-level UAT remain open.
+
+
+## Ads safety follow-up — freshness of provider evidence (2026-10-28, verified)
+- Requirement: S6 / targeted-ad guardrails must not make a current spend, ROAS or CPA decision from stale or implausibly future-dated provider observations.
+- Implementation: `backend/services/ad_guardrails.py`; latest observation per platform/creative must be no older than 24 hours and not more than five minutes in the future. Historical daily snapshots remain included in campaign totals when each creative/platform has a fresh latest observation.
+- Tests: `tests/test_ad_budget_guardrails.py` covers stale evidence, historical data plus fresh latest evidence, and materially future-dated observations.
+- Exact-SHA CI: commit `3bc5770f3c89561e13686ea9c0023dd1ebbf5d78`; push [40636590192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40636590192) all 8 jobs passed; PR [40636595214](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40636595214) all required jobs passed (lockfile-sync skipped for PR). Python 532 passed, 3 skipped, one warning.
+- Safety boundary: this evaluator remains a recommendation only; it does not call provider APIs, authorize spend or execute a pause. Live provider polling contracts and account-level UAT remain open.

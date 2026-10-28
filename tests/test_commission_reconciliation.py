@@ -57,3 +57,45 @@ def test_reconciliation_excludes_reversed_conversions_and_already_reviewed_evide
     assert report["data"][1]["reconciliation_status"] == "already_reviewed"
     assert report["data"][1]["payout_confirmed"] is False
     assert report["counts"]["already_reviewed"] == 1
+
+
+def test_reconciliation_does_not_round_distinct_commissions_to_cents():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.501", "currency": "USD"}],
+        [{"id": "conv-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "approved"}],
+    )
+
+    assert report["data"][0]["reconciliation_status"] == "unmatched"
+    assert report["data"][0]["candidate_conversion_ids"] == []
+
+
+def test_reconciliation_preserves_six_decimal_precision_without_rounding():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.500001", "currency": "USD"}],
+        [
+            {"id": "exact", "network": "acme", "commission": "12.500001", "currency": "USD", "status": "approved"},
+            {"id": "rounded", "network": "acme", "commission": "12.50", "currency": "USD", "status": "approved"},
+        ],
+    )
+
+    assert report["data"][0]["reconciliation_status"] == "possible_match"
+    assert report["data"][0]["candidate_conversion_ids"] == ["exact"]
+
+
+def test_reconciliation_rejects_amounts_outside_ledger_precision():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.5000001", "currency": "USD"}],
+        [{"id": "conv-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "approved"}],
+    )
+
+    assert report["data"][0]["reconciliation_status"] == "unmatched"
+
+
+def test_reconciliation_never_infers_missing_currency_as_usd():
+    report = build_commission_reconciliation(
+        [{"id": "mail-1", "network": "acme", "commission": "12.50"}],
+        [{"id": "conv-1", "network": "acme", "commission": "12.50", "currency": "USD", "status": "approved"}],
+    )
+
+    assert report["data"][0]["reconciliation_status"] == "unmatched"
+    assert report["data"][0]["currency"] is None

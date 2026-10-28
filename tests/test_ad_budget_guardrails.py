@@ -167,3 +167,30 @@ def test_guardrail_api_persists_policy_and_manual_kill_switch_latch():
             "confirm_reset": True, "reason": "Reset after looking at the latest unverified report.",
         })
         assert unsafe_reset.status_code == 409, unsafe_reset.text
+
+
+def test_guardrail_accepts_exact_freshness_and_clock_skew_boundaries():
+    # The configured limits are inclusive: exactly 24 hours old is still fresh,
+    # and exactly five minutes of future clock skew is tolerated.
+    fresh_now = datetime(2026, 10, 28, 18, 0, tzinfo=timezone.utc)
+    exactly_24_hours_old = observation(day=27, spend="10.00", commission="20.00", hour=18)
+    fresh = evaluate_ad_budget_guardrail(
+        policy=policy(minimum_roas=Decimal("0"), maximum_cpa_usd=None),
+        observations=[exactly_24_hours_old],
+        now=fresh_now,
+    )
+    assert fresh["freshness_gate"]["passed"] is True
+    assert fresh["freshness_gate"]["stale_creatives"] == []
+    assert fresh["status"] == "monitoring"
+
+    skew_now = datetime(2026, 10, 27, 18, 0, tzinfo=timezone.utc)
+    exactly_five_minutes_ahead = observation(day=27, spend="10.00", commission="20.00", hour=18)
+    exactly_five_minutes_ahead.observed_at = datetime(2026, 10, 27, 18, 5, tzinfo=timezone.utc)
+    future = evaluate_ad_budget_guardrail(
+        policy=policy(minimum_roas=Decimal("0"), maximum_cpa_usd=None),
+        observations=[exactly_five_minutes_ahead],
+        now=skew_now,
+    )
+    assert future["freshness_gate"]["passed"] is True
+    assert future["freshness_gate"]["future_dated_creatives"] == []
+    assert future["status"] == "monitoring"

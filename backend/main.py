@@ -403,6 +403,16 @@ async def require_auth(
         if settings.app_env == "production" and (not workspace_id or not user_id):
             raise HTTPException(403, "Select an authorized workspace before using workspace data")
         if workspace_id and user_id and user_id != "local":
+            # Session cookies are signed, but their authorization fields can become
+            # stale after account suspension or platform-admin revocation. Re-read
+            # the authoritative account row on every authenticated workspace request.
+            account = await db.get(UserAccount, str(user_id))
+            if account is None or not bool(account.is_active):
+                request.session.clear()
+                raise HTTPException(403, "Account is inactive or no longer available")
+            user["email"] = account.email
+            user["is_admin"] = bool(account.is_admin)
+
             membership = await db.scalar(
                 select(WorkspaceMembership).where(
                     WorkspaceMembership.workspace_id == str(workspace_id),

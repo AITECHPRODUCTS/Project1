@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import json
@@ -163,3 +164,118 @@ def test_lead_csv_export_refuses_oversized_result_instead_of_truncating():
     finally:
         client.close()
         _reset_overrides()
+
+
+def test_lead_csv_export_runs_against_persisted_workspace_rows(tmp_path):
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///" + str(tmp_path / "lead-export.sqlite3"),
+        poolclass=NullPool,
+    )
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def prepare_database():
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with sessions() as db:
+            workspace_a = Workspace(name="Export Workspace A", slug="export-workspace-a")
+            workspace_b = Workspace(name="Export Workspace B", slug="export-workspace-b")
+            db.add_all([workspace_a, workspace_b])
+            await db.flush()
+
+            with workspace_scope(workspace_a.id):
+                db.add_all([
+                    Lead(
+                        id="11111111-1111-4111-8111-111111111111",
+                        workspace_id=workspace_a.id,
+                        email="newsletter-reader@example.invalid",
+                        consent_at=OBSERVED_AT,
+                        email_consent_confirmed_at=OBSERVED_AT,
+                        consent_source="persisted_landing_page",
+                        lead_magnet="Creator guide",
+                        metadata_json={"attribution": {
+                            "first_touch": {"utm_source": "newsletter"},
+                            "last_touch": {"utm_medium": "email"},
+                            "last_touch_at": OBSERVED_AT.isoformat(),
+                        }},
+                    ),
+                    Lead(
+                        id="22222222-2222-4222-8222-222222222222",
+                        workspace_id=workspace_a.id,
+                        email="social-reader@example.invalid",
+                        consent_at=OBSERVED_AT,
+                        consent_source="persisted_landing_page",
+                        lead_magnet="Social guide",
+                        metadata_json={"attribution": {
+                            "first_touch": {"utm_source": "social"},
+                            "last_touch": {"utm_medium": "social"},
+                        }},
+                    ),
+                ])
+            with workspace_scope(workspace_b.id):
+                db.add(Lead(
+                    id="33333333-3333-4333-8333-333333333333",
+                    workspace_id=workspace_b.id,
+                    email="other-tenant@example.invalid",
+                    consent_at=OBSERVED_AT,
+                    consent_source="persisted_landing_page",
+                    lead_magnet="Newsletter guide",
+                    metadata_json={"attribution": {
+                        "first_touch": {"utm_source": "newsletter"},
+                    }},
+                ))
+            await db.commit()
+            return workspace_a.id, workspace_b.id
+
+    workspace_a, workspace_b = asyncio.run(prepare_database())
+
+    async def override_get_session():
+        async with sessions() as db:
+            yield db
+
+    main.app.dependency_overrides[get_session] = override_get_session
+    main.app.dependency_overrides[main.require_auth] = lambda: {
+        "user_id": "exporter-user",
+        "workspace_id": workspace_a,
+        "email": "exporter@example.invalid",
+    }
+    try:
+        with TestClient(main.app) as client:
+            response = client.get("/api/leads/export.csv?search=newsletter")
+        assert response.status_code == 200, response.text
+        rows = list(csv.DictReader(io.StringIO(response.text)))
+        assert len(rows) == 1
+        assert rows[0]["email"] == "newsletter-reader@example.invalid"
+        assert rows[0]["first_touch_utm_source"] == "newsletter"
+        assert rows[0]["consent_source"] == "persisted_landing_page"
+        assert "other-tenant@example.invalid" not in response.text
+        assert "social-reader@example.invalid" not in response.text
+
+        async def inspect_persisted_audit():
+            async with sessions() as db:
+                with workspace_scope(workspace_a):
+                    audit_rows = list((await db.scalars(
+                        select(AuditLog).where(
+                            AuditLog.workspace_id == workspace_a,
+                            AuditLog.action == "leads.export_csv",
+                        )
+                    )).all())
+                workspace_b_audits = list((await db.scalars(
+                    select(AuditLog).where(
+                        AuditLog.workspace_id == workspace_b,
+                        AuditLog.action == "leads.export_csv",
+                    )
+                )).all())
+                return audit_rows, workspace_b_audits
+
+        audit_rows, workspace_b_audits = asyncio.run(inspect_persisted_audit())
+        assert len(audit_rows) == 1
+        assert audit_rows[0].outcome == "completed"
+        assert audit_rows[0].details_json["matching_rows"] == 1
+        assert audit_rows[0].details_json["search_value_recorded"] is False
+        assert audit_rows[0].details_json["lead_values_recorded"] is False
+        assert workspace_b_audits == []
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+        main.app.dependency_overrides.pop(main.require_auth, None)
+        asyncio.run(engine.dispose())
+

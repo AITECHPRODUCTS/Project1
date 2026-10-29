@@ -1,11 +1,18 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 workspace-scoped lead CSV export (CI pending)
+## 2026-10-29 real SQLite lead export integration test (CI pending)
+
+- Added a database-backed API integration test with two workspaces and three persisted leads. It searches by first-touch UTM, verifies the export contains only the matching lead in the active workspace, and checks that the successful export audit row persisted only for that workspace with no search/lead values in details.
+- The existing mocked tests still cover HTTP 403 without workspace, row-cap rejection/HTTP 413, response headers and spreadsheet formula escaping. This increment adds real database query/serialization coverage; it does not implement external CRM synchronization.
+- Exact-SHA push and PR CI is pending.
+
+
+## 2026-10-29 verified workspace-scoped lead CSV export
 
 - Added `GET /api/leads/export.csv`, reusing the same workspace predicate and global email/resource/first-touch/last-touch UTM search as the paginated lead list. Export columns include current lead fields, consent timestamps/source, subscription/purchase state and allowlisted UTM attribution.
 - Successful and oversized export attempts are audit logged with row count and a boolean search-present flag; audit details deliberately omit search values and lead values. Responses are no-store, formula-leading cells are escaped for spreadsheet use, and over 10,000 matching leads return HTTP 413 rather than a silent partial export.
-- The leads page exposes an accessible Export CSV link based on global search, explicitly stating that the current-page UTM quick filter is not applied. API tests cover tenant filtering, formula safety, audit privacy and overflow handling; browser acceptance checks link scope. Exact-SHA push and PR verification is pending.
+- The leads page exposes an accessible Export CSV link based on global search, explicitly stating that the current-page UTM quick filter is not applied. API tests cover tenant filtering, formula safety, audit privacy and overflow handling; browser acceptance checks link scope. Exact-SHA push [40833516478](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833516478) and PR [40833522299](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833522299) passed. Python 751 passed, 7 skipped, 5 warnings; browser UAT 20 passed; PostgreSQL, frontend, security audit, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured condition.
 
 
 ## 2026-10-29 verified global UTM attribution search

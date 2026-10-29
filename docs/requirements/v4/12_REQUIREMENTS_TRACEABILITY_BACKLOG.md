@@ -401,3 +401,9 @@
 - Current lead workspace view supports bounded pagination, stale-page recovery, global search across email/resource and allowlisted first/last-touch UTM values, and a read-only view of consent history. Exact-SHA push/PR evidence for global UTM search passed on `448c281f31d4576adee77774bfc1c2d786223bc9` (Python 748 passed; browser UAT 19 passed).
 - New candidate `/api/leads/export.csv` reuses the same workspace and global-search filter. It logs export attempts without search/lead values, escapes spreadsheet-formula cells, sets no-store headers, and fails closed above 10,000 rows. API and browser tests are pending exact-SHA CI.
 - Still partial: external CRM sync, full consent lifecycle journey UAT, email-provider verification, retention/deletion policy acceptance and complete production end-to-end coverage.
+
+
+## 2026-10-29 lead CSV export database acceptance (CI pending)
+
+- Initial export feature passed exact-SHA push [40833516478](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833516478) and PR [40833522299](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833522299), with Python 751 passed / 7 skipped and browser UAT 20 passed. It has a workspace-scoped query, explicit global search scope, audit metadata without search or lead values, formula escaping and a 10,000-row rejection cap.
+- Added a persisted SQLite integration test across two workspaces to prove the search/export result and audit persistence at the database boundary. Exact-SHA CI is pending.

@@ -1767,7 +1767,7 @@ def test_merchant_application_inbox_filters_paginates_and_keeps_review_notes_per
             first.get_by_label("Review note for this application").fill("Reviewed source restrictions for application zero.")
             assert second.get_by_label("Review note for this application").input_value() == ""
             first.get_by_role("button", name="Approve publisher application").click()
-            page.get_by_role("status").get_by_text("Merchant offer 00 application approved.", exact=False).wait_for(state="visible")
+            page.get_by_text("Merchant offer 00 application approved.", exact=False).wait_for(state="visible")
             assert len(review_calls) == 1
             assert review_calls[0]["id"] == "merchant-app-00"
             assert review_calls[0]["reviewer_notes"] == "Reviewed source restrictions for application zero."

@@ -112,7 +112,7 @@ export default function MerchantApplicationsPage(){
           </article>)}
         </div>
         {queue&&queue.total_count>queue.limit&&<nav aria-label="Merchant application pagination" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm text-slate-600">Showing {pageStart}–{pageEnd} of {queue.total_count} applications</p>
+          <p className="text-sm text-slate-600">Page {Math.floor(queue.offset/queue.limit)+1} of {Math.max(1,Math.ceil(queue.total_count/queue.limit))}</p>
           <div className="flex gap-2"><button type="button" onClick={()=>void load(statusFilter,Math.max(0,queue.offset-queue.limit))} disabled={!canGoPrevious} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold disabled:opacity-40">Previous page</button><button type="button" onClick={()=>void load(statusFilter,queue.offset+queue.limit)} disabled={!canGoNext} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold disabled:opacity-40">Next page</button></div>
         </nav>}
       </section>

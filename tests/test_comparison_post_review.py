@@ -15,7 +15,7 @@ from backend.database import Base
 from backend.models import AuditLog, ContentAsset, Workspace
 from backend.schemas import ComparisonPostReviewRequest
 from backend.tenancy import workspace_scope
-from backend.services.comparison_integrity import build_source_snapshot_manifest, sha256_text, source_snapshot_manifest_sha256
+from backend.services.comparison_integrity import build_source_snapshot_manifest, comparison_evidence_payload_sha256, sha256_text, source_snapshot_manifest_sha256
 
 
 def review_payload(content_sha256: str, **overrides):
@@ -90,6 +90,40 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
             }]
             snapshot_manifest = build_source_snapshot_manifest(snapshots)
             snapshot_manifest_hash = source_snapshot_manifest_sha256(snapshot_manifest)
+            review_metadata = {
+                "schema_version": 1,
+                "asset_title": "Reviewable comparison",
+                "source_urls": ["https://vendor.example/product"],
+                "topic": "Reviewable comparison",
+                "audience": "Test editors",
+                "affiliate_disclosure": "Disclosure: This is a review test disclaimer.",
+                "revision_number": 2,
+                "revision_of_asset_id": None,
+                "revision_root_asset_id": asset_id,
+                "products": [{"name": "Reviewable comparison", "facts": {"Price": "$20"}}],
+                "decision_criteria": ["Price"],
+                "comparison_table": [{"criterion": "Price", "values": [{"product": "Reviewable comparison", "value": "$20"}]}],
+                "unknown_fact_count": 0,
+                "word_count": 8,
+                "minimum_word_target": 300,
+                "minimum_word_target_met": False,
+                "evidence_status": "operator_supplied_unverified",
+                "product_facts_independently_verified": False,
+                "external_product_sources_fetched": False,
+                "source_snapshots": snapshots,
+                "source_snapshot_manifest": snapshot_manifest,
+                "source_snapshot_manifest_sha256": snapshot_manifest_hash,
+                "fact_evidence": [{"product": "Reviewable comparison", "fact_name": "Price", "supplied_value": "$20"}],
+                "evidence_summary": {"exact_text_match_count": 1},
+                "model_provider": "test-model",
+                "content_sha256": content_hash,
+                "publishing_started": False,
+            }
+            evidence_payload_hash = comparison_evidence_payload_sha256(review_metadata)
+            review_metadata["evidence_payload_sha256"] = evidence_payload_hash
+            review_metadata["review_status"] = "pending_review"
+            review_metadata["review_history"] = []
+            review_metadata["requires_review"] = True
             with workspace_scope("review-workspace"):
                 session.add(ContentAsset(
                     id=asset_id,
@@ -99,21 +133,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
                     body=content,
                     status="draft",
                     source_urls=["https://vendor.example/product"],
-                    metadata_json={
-                        "schema_version": 1,
-                        "topic": "Reviewable comparison",
-                        "revision_number": 2,
-                        "revision_root_asset_id": asset_id,
-                        "content_sha256": content_hash,
-                        "source_snapshots": snapshots,
-                        "source_snapshot_manifest": snapshot_manifest,
-                        "source_snapshot_manifest_sha256": snapshot_manifest_hash,
-                        "review_status": "pending_review",
-                        "review_history": [],
-                        "requires_review": True,
-                        "publishing_started": False,
-                        "product_facts_independently_verified": False,
-                    },
+                    metadata_json=review_metadata,
                 ))
                 await session.flush()
                 session.add(AuditLog(
@@ -126,6 +146,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
                     details_json={
                         "content_sha256": content_hash,
                         "source_snapshot_manifest_sha256": snapshot_manifest_hash,
+                        "evidence_payload_sha256": evidence_payload_hash,
                     },
                 ))
             await session.commit()
@@ -189,6 +210,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
             assert detail.headers["cache-control"] == "no-store"
             assert detail.json()["review_status"] == "approved"
             assert detail.json()["content_sha256"] == content_hash
+            assert detail.json()["evidence_payload_integrity_status"] == "verified"
             assert detail.json()["review_history"][-1]["content_sha256"] == content_hash
 
         async def read_records():
@@ -208,6 +230,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
         assert row.metadata_json["publishing_started"] is False
         assert audit is not None and audit.outcome == "editorial_approved"
         assert audit.details_json["content_sha256"] == content_hash
+        assert audit.details_json["evidence_payload_sha256"] == evidence_payload_hash
         assert audit.details_json["publishing_started"] is False
         assert audit.details_json["product_facts_independently_verified"] is False
     finally:

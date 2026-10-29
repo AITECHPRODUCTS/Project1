@@ -17,6 +17,7 @@ from backend.models import AuditLog, ContentAsset, Workspace
 from backend.schemas import ComparisonPostRequest
 from backend.services import comparison_post_writer as comparison_service
 from backend.tenancy import workspace_scope
+from backend.services.comparison_integrity import comparison_evidence_payload_sha256
 
 
 def valid_payload(**overrides):
@@ -339,6 +340,7 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             assert detail.json()["evidence_summary"]["source_snapshots_fetched"] == 1
             assert detail.json()["content_integrity_status"] == "verified"
             assert detail.json()["source_snapshot_integrity_status"] == "verified"
+            assert detail.json()["evidence_payload_integrity_status"] == "verified"
             assert detail.json()["integrity_review_blocked"] is False
             assert detail.headers["cache-control"] == "no-store"
             active["workspace_id"] = "other-workspace"
@@ -364,6 +366,15 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
                         snapshots = [dict(value) for value in metadata["source_snapshots"]]
                         snapshots[0]["excerpt"] = str(snapshots[0]["excerpt"]) + " changed after persistence"
                         metadata["source_snapshots"] = snapshots
+                        comparison_table = [
+                            {**item, "values": [dict(value) for value in item.get("values", [])]}
+                            for item in metadata["comparison_table"]
+                        ]
+                        comparison_table[0]["values"][0]["value"] = "Tampered structured fact value"
+                        metadata["comparison_table"] = comparison_table
+                        fact_evidence = [dict(item) for item in metadata["fact_evidence"]]
+                        fact_evidence[0]["supplied_value"] = "Tampered structured evidence value"
+                        metadata["fact_evidence"] = fact_evidence
                         row.metadata_json = metadata
                         row.body = (row.body or "") + "<p>Changed after persistence</p>"
                         await session.commit()
@@ -374,6 +385,7 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             tampered_body = tampered_detail.json()
             assert tampered_body["content_integrity_status"] == "mismatch"
             assert tampered_body["source_snapshot_integrity_status"] == "mismatch"
+            assert tampered_body["evidence_payload_integrity_status"] == "mismatch"
             assert tampered_body["integrity_review_blocked"] is True
             review_attempt = client.post(
                 "/api/content/comparison-posts/" + revision_result["asset_id"] + "/review",
@@ -428,6 +440,8 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
         assert asset.metadata_json["content_sha256"] == expected_body_hash
         assert audit.details_json["content_sha256"] == expected_body_hash
         assert audit.details_json["source_snapshot_manifest_sha256"] == asset.metadata_json["source_snapshot_manifest_sha256"]
+        assert asset.metadata_json["evidence_payload_sha256"] == audit.details_json["evidence_payload_sha256"]
+        assert asset.metadata_json["evidence_payload_sha256"] == comparison_evidence_payload_sha256(asset.metadata_json)
         assert revision_asset is not None and revision_asset.workspace_id == active["workspace_id"]
         assert revision_asset.id != asset.id and revision_asset.status == "draft"
         assert revision_asset.title == revision_result["title"] and revision_asset.body != original_html

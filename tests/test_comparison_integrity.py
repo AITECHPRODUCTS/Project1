@@ -4,6 +4,7 @@ import copy
 
 from backend.services.comparison_integrity import (
     build_source_snapshot_manifest,
+    comparison_evidence_payload_sha256,
     evaluate_comparison_integrity,
     sha256_text,
     source_snapshot_manifest_sha256,
@@ -34,14 +35,25 @@ def _metadata(body, snapshots=None):
     content_digest = sha256_text(body)
     manifest_digest = source_snapshot_manifest_sha256(manifest)
     metadata = {
+        "asset_title": "Alpha comparison",
+        "source_urls": ["https://vendor.example/alpha"],
+        "topic": "Alpha comparison",
+        "products": [{"name": "Alpha", "facts": {"Price": "$20"}}],
+        "decision_criteria": ["Price"],
+        "comparison_table": [{"criterion": "Price", "values": [{"product": "Alpha", "value": "$20"}]}],
+        "fact_evidence": [{"product": "Alpha", "fact_name": "Price", "supplied_value": "$20"}],
+        "evidence_summary": {"exact_text_match_count": 1},
         "content_sha256": content_digest,
         "source_snapshots": copy.deepcopy(source_snapshots),
         "source_snapshot_manifest": manifest,
         "source_snapshot_manifest_sha256": manifest_digest,
     }
+    evidence_digest = comparison_evidence_payload_sha256(metadata)
+    metadata["evidence_payload_sha256"] = evidence_digest
     audit = {
         "content_sha256": content_digest,
         "source_snapshot_manifest_sha256": manifest_digest,
+        "evidence_payload_sha256": evidence_digest,
     }
     return metadata, audit
 
@@ -97,4 +109,30 @@ def test_comparison_integrity_checks_creation_audit_binding():
     audit["content_sha256"] = "f" * 64
     result = evaluate_comparison_integrity(body, metadata, audit)
     assert result["content_integrity_status"] == "mismatch"
+    assert result["integrity_verified"] is False
+
+
+def test_comparison_integrity_detects_structured_comparison_table_mutation():
+    body = "<article><h1>Alpha comparison</h1></article>"
+    metadata, audit = _metadata(body)
+    metadata["comparison_table"][0]["values"][0]["value"] = "$999 after persistence"
+    result = evaluate_comparison_integrity(body, metadata, audit)
+    assert result["content_integrity_status"] == "verified"
+    assert result["source_snapshot_integrity_status"] == "verified"
+    assert result["evidence_payload_integrity_status"] == "mismatch"
+    assert result["integrity_verified"] is False
+
+
+def test_comparison_integrity_detects_fact_evidence_and_audit_binding_mutation():
+    body = "<article><h1>Alpha comparison</h1></article>"
+    metadata, audit = _metadata(body)
+    metadata["fact_evidence"][0]["supplied_value"] = "$999 after persistence"
+    result = evaluate_comparison_integrity(body, metadata, audit)
+    assert result["evidence_payload_integrity_status"] == "mismatch"
+    assert result["integrity_verified"] is False
+
+    metadata, audit = _metadata(body)
+    audit["evidence_payload_sha256"] = "f" * 64
+    result = evaluate_comparison_integrity(body, metadata, audit)
+    assert result["evidence_payload_integrity_status"] == "mismatch"
     assert result["integrity_verified"] is False

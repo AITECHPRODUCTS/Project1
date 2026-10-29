@@ -78,7 +78,7 @@ from backend.services.s1_research import competitor_spy,monopoly_niche_finder,tr
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
 from backend.services.comparison_post_writer import build_comparison_post as comparison_post_writer_service
 from backend.services.comparison_draft_revisions import reserve_comparison_revision_number
-from backend.services.comparison_integrity import build_source_snapshot_manifest, evaluate_comparison_integrity, sha256_text, source_snapshot_manifest_sha256
+from backend.services.comparison_integrity import build_source_snapshot_manifest, evaluate_comparison_integrity, sha256_text, source_snapshot_manifest_sha256, comparison_evidence_payload_sha256
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
@@ -3872,6 +3872,8 @@ async def create_comparison_post(
         "content_sha256": persisted_content_sha256,
         "source_snapshot_manifest": source_snapshot_manifest,
         "source_snapshot_manifest_sha256": snapshot_manifest_sha256,
+        "asset_title": str(result["title"])[:500],
+        "source_urls": result["source_urls"] if isinstance(result.get("source_urls"), list) else [],
         "topic": payload.topic,
         "audience": payload.audience,
         "affiliate_disclosure": payload.affiliate_disclosure,
@@ -3919,6 +3921,9 @@ async def create_comparison_post(
             # Assign a new dict rather than mutating the same JSON object already
             # attached to the ORM instance; SQLAlchemy then persists the root ID.
             asset.metadata_json = {**asset_metadata, "revision_root_asset_id": root_id}
+        persisted_metadata = dict(asset.metadata_json) if isinstance(asset.metadata_json, dict) else dict(asset_metadata)
+        evidence_payload_digest = comparison_evidence_payload_sha256(persisted_metadata)
+        asset.metadata_json = {**persisted_metadata, "evidence_payload_sha256": evidence_payload_digest}
         db.add(AuditLog(
             workspace_id=workspace_id,
             actor=actor,
@@ -3936,6 +3941,7 @@ async def create_comparison_post(
                 "exact_text_not_found_count": (result.get("evidence_summary") or {}).get("exact_text_not_found_count", 0),
                 "content_sha256": persisted_content_sha256,
                 "source_snapshot_manifest_sha256": snapshot_manifest_sha256,
+                "evidence_payload_sha256": evidence_payload_digest,
                 "revision_number": revision_number,
                 "revision_of_asset_id": revision_parent_id,
                 "revision_root_asset_id": root_id,
@@ -3956,6 +3962,8 @@ async def create_comparison_post(
     result["content_sha256"] = persisted_content_sha256
     result["content_integrity_status"] = "verified"
     result["source_snapshot_integrity_status"] = "verified"
+    result["evidence_payload_sha256"] = evidence_payload_digest
+    result["evidence_payload_integrity_status"] = "verified"
     result["integrity_review_blocked"] = False
     result["review_block_reason"] = None
     result["review_status"] = "pending_review"
@@ -4059,9 +4067,12 @@ async def get_comparison_post(
     if row is None:
         raise HTTPException(404, "Comparison draft was not found in this workspace")
     metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    integrity_metadata = dict(metadata)
+    integrity_metadata["asset_title"] = row.title
+    integrity_metadata["source_urls"] = row.source_urls if isinstance(row.source_urls, list) else []
     integrity = evaluate_comparison_integrity(
         row.body,
-        metadata,
+        integrity_metadata,
         creation_audit.details_json if creation_audit is not None and isinstance(creation_audit.details_json, dict) else None,
     )
     products = metadata.get("products") if isinstance(metadata.get("products"), list) else []
@@ -4080,7 +4091,7 @@ async def get_comparison_post(
     is_workspace_reviewer = str(user.get("workspace_role") or "").lower() in {"owner", "admin"}
     integrity_review_blocked = not bool(integrity["integrity_verified"])
     review_block_reason = None if not integrity_review_blocked else (
-        "Saved article or source evidence no longer matches its creation-time integrity baseline. "
+        "Saved article, source evidence, or structured comparison metadata no longer matches its creation-time integrity baseline. "
         "Create a new revision before editorial review."
     )
     try:
@@ -4119,6 +4130,8 @@ async def get_comparison_post(
         "content_sha256": integrity["actual_content_sha256"],
         "content_integrity_status": integrity["content_integrity_status"],
         "source_snapshot_integrity_status": integrity["source_snapshot_integrity_status"],
+        "evidence_payload_sha256": integrity["actual_evidence_payload_sha256"],
+        "evidence_payload_integrity_status": integrity["evidence_payload_integrity_status"],
         "integrity_review_blocked": integrity_review_blocked,
         "review_block_reason": review_block_reason,
         "review_status": saved_review_status,
@@ -4182,6 +4195,8 @@ async def review_comparison_post(
         if row.status != "draft":
             raise HTTPException(409, "Only a saved draft revision can receive an editorial review")
         metadata = dict(row.metadata_json) if isinstance(row.metadata_json, dict) else {}
+        metadata["asset_title"] = row.title
+        metadata["source_urls"] = row.source_urls if isinstance(row.source_urls, list) else []
         review_status = str(metadata.get("review_status") or "pending_review")
         if review_status != "pending_review":
             raise HTTPException(
@@ -4196,7 +4211,7 @@ async def review_comparison_post(
         if not integrity["integrity_verified"]:
             raise HTTPException(
                 409,
-                "Saved article or source evidence does not match its creation-time integrity baseline; create a new revision before review.",
+                "Saved article, source evidence, or structured comparison metadata does not match its creation-time integrity baseline; create a new revision before review.",
             )
         content_sha256 = integrity["actual_content_sha256"]
         if not hmac.compare_digest(content_sha256, payload.expected_content_sha256):
@@ -4253,6 +4268,8 @@ async def review_comparison_post(
                 "revision_number": revision_number,
                 "content_sha256": content_sha256,
                 "source_snapshot_manifest_sha256": metadata.get("source_snapshot_manifest_sha256"),
+                "evidence_payload_sha256": metadata.get("evidence_payload_sha256"),
+                "evidence_payload_integrity_verified": True,
                 "content_integrity_verified": True,
                 "source_snapshot_integrity_verified": True,
                 "product_facts_independently_verified": False,
@@ -4280,6 +4297,8 @@ async def review_comparison_post(
         "content_sha256": content_sha256,
         "content_integrity_status": "verified",
         "source_snapshot_integrity_status": "verified",
+        "evidence_payload_sha256": integrity["actual_evidence_payload_sha256"],
+        "evidence_payload_integrity_status": "verified",
         "integrity_review_blocked": False,
         "requires_review": False,
         "publishing_started": False,

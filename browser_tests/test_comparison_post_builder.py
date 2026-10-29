@@ -285,6 +285,7 @@ def test_owner_can_approve_exact_comparison_revision_without_publishing():
         "content_sha256": content_hash,
         "content_integrity_status": "verified",
         "source_snapshot_integrity_status": "verified",
+        "evidence_payload_integrity_status": "verified",
         "integrity_review_blocked": False,
         "review_block_reason": None,
         "is_workspace_reviewer": True,

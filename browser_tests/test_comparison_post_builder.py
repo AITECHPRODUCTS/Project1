@@ -85,7 +85,7 @@ def test_comparison_writer_saves_review_draft_and_displays_unknown_facts():
             page.get_by_text("Fetched snapshots", exact=True).wait_for(state="visible")
             page.get_by_text("S01 · Alpha evidence · fetched", exact=True).wait_for(state="visible")
             page.get_by_text("Not supplied — verify", exact=True).wait_for(state="visible")
-            page.get_by_text("operator supplied unverified", exact=False).wait_for(state="visible")
+            page.get_by_text("public snapshot captured not fact verified", exact=False).wait_for(state="visible")
             page.get_by_title("Comparison article preview").wait_for(state="visible")
             assert len(posted) == 1
             assert posted[0]["topic"] == "Affiliate analytics tools compared"

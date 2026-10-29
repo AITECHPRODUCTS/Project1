@@ -23,6 +23,13 @@ The durable record was created during recovery and then updated with the complet
 - Exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) passed on `10c985564dfea7b9494ecdf7bd0045753ef8c00c`: Python 764 passed, 7 skipped, 5 warnings; browser UAT 22 passed; PostgreSQL, frontend, security audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
 - This probe verifies database query reachability only—not migration freshness, workers/queues, real staging, monitoring, restore or provider connectivity.
 
+## Paid-ad ROAS numeric input validation — verified on b538a03718d7e912925ee08aaf9ea249445c9220
+
+- Replaced silent `max(0, value)` clamping with validation for non-empty campaign identifiers and finite, non-negative spend, commission and threshold numbers. Booleans, NaN, infinity, negatives and ratio overflow are rejected; the API returns HTTP 422 rather than emitting misleading financial recommendations.
+- Added `tests/test_ad_manager_validation.py` covering valid and zero-spend behavior, invalid numeric values, ratio overflow, missing/blank campaign IDs and API error responses.
+- Exact-SHA push [40843642045](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843642045) and PR [40843648833](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843648833) passed on `b538a03718d7e912925ee08aaf9ea249445c9220`: Python **781 passed, 7 skipped, 5 warnings**; browser UAT **22 passed**; PostgreSQL integration, frontend build, security/SBOM audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- ROAS output is still recommendation-only and never performs campaign mutations. Credentialed ad-network UAT, live spend control and provider-attested campaign metrics remain unverified.
+
 ## Work present in the implementation branch (not all live-connected)
 
 - FastAPI/SQLAlchemy services, Alembic migrations, workspace-scoped authorization patterns, audit records and workflow S1–S8 foundations.
@@ -33,6 +40,8 @@ The durable record was created during recovery and then updated with the complet
 - Docker/Compose, CI, migration/security/license checks, source/requirements matrices and browser tests.
 
 ## Highest-priority remaining work
+
+The latest implementation slice is verified at `b538a03718d7e912925ee08aaf9ea249445c9220` (push [40843642045](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843642045); PR [40843648833](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843648833)). The push and PR jobs passed; the PR lockfile-sync job was skipped under its configured push-only condition.
 
 1. **Test repair verified** (push [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396), PR [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094)). The **database readiness probe is also verified** at `10c985564dfea7b9494ecdf7bd0045753ef8c00c` (push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161), PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920)). Re-run all required workflows after subsequent source changes; skipped jobs are not passes.
 2. **Close acceptance gaps:** map every product requirement and all 53 skills to real code paths, persistence, role/tenant protections, API contracts, negative tests and browser acceptance. Distinguish implemented, partial, stub/catalogue-only, and not implemented.

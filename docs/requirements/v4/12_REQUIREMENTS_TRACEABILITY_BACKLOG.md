@@ -451,3 +451,11 @@
 - Exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) passed on `10c985564dfea7b9494ecdf7bd0045753ef8c00c`: Python 764 passed, 7 skipped, 5 warnings; browser UAT 22 passed; PostgreSQL, frontend, security audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
 - This probe verifies database query reachability only—not migration freshness, workers/queues, real staging, monitoring, restore or provider connectivity.
 
+
+
+## 2026-10-29 paid-ad ROAS numeric input validation — verified
+
+- `evaluate_roas` rejects negative, boolean and non-finite financial inputs rather than clamping them; it rejects blank/oversized campaign identifiers and ratio overflow.
+- `POST /api/ads/evaluate` now returns HTTP 422 for invalid input rather than returning a derived stop-loss recommendation.
+- Exact-SHA push [40843642045](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843642045) and PR [40843648833](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843648833) passed at `b538a03718d7e912925ee08aaf9ea249445c9220`: Python 781 passed, 7 skipped, 5 warnings; browser UAT 22 passed; PostgreSQL, frontend, security/SBOM, AI profile, secret scan, repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by design.
+- This does not provide live ad-network performance ingestion, authorize spend, or execute remote campaign changes. Provider credentials and account-level UAT remain release gates.

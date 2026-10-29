@@ -1,11 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## Paid-ad ROAS numeric input validation (candidate; CI pending)
+## Paid-ad ROAS numeric input validation — verified on b538a03718d7e912925ee08aaf9ea249445c9220
 
-- Replaced silent `max(0, value)` clamping with explicit validation for non-empty campaign identifiers and finite, non-negative spend, commission and threshold numbers. Boolean, NaN, infinity, negative values and ratio overflow fail closed with HTTP 422 at the endpoint.
-- Recommendations remain review-only; this change does not execute campaign actions. Exact-head push/PR CI and browser UAT are required before marking verified.
-
+- Replaced silent `max(0, value)` clamping with validation for non-empty campaign identifiers and finite, non-negative spend, commission and threshold numbers. Booleans, NaN, infinity, negatives and ratio overflow are rejected; the API returns HTTP 422 rather than emitting misleading financial recommendations.
+- Added `tests/test_ad_manager_validation.py` covering valid and zero-spend behavior, invalid numeric values, ratio overflow, missing/blank campaign IDs and API error responses.
+- Exact-SHA push [40843642045](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843642045) and PR [40843648833](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843648833) passed on `b538a03718d7e912925ee08aaf9ea249445c9220`: Python **781 passed, 7 skipped, 5 warnings**; browser UAT **22 passed**; PostgreSQL integration, frontend build, security/SBOM audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- ROAS output is still recommendation-only and never performs campaign mutations. Credentialed ad-network UAT, live spend control and provider-attested campaign metrics remain unverified.
 
 ## 2026-10-29 database readiness probe — verified
 

@@ -17,8 +17,8 @@ from playwright.sync_api import sync_playwright
 BASE_URL = os.environ.get("BROWSER_BASE_URL", "http://127.0.0.1:3100")
 
 
-def _fulfill_json(route, payload: dict) -> None:
-    route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "http://127.0.0.1:3100", "access-control-allow-credentials": "true"}, body=json.dumps(payload))
+def _fulfill_json(route, payload: dict, status: int = 200) -> None:
+    route.fulfill(status=status, content_type="application/json", headers={"access-control-allow-origin": "http://127.0.0.1:3100", "access-control-allow-credentials": "true"}, body=json.dumps(payload))
 
 
 def test_skill_package_builder_supports_keyboard_navigation_and_rejects_invalid_schema_without_post():
@@ -1078,7 +1078,7 @@ def test_offer_shortlist_ui_creates_saves_compares_and_removes_persisted_catalog
             page.get_by_role("heading", name="Affiliate offer catalog").wait_for(state="visible")
             page.get_by_label("Create a saved list").fill("Creator research")
             page.get_by_role("button", name="Create list").click()
-            page.get_by_role("status", name="").filter(has_text="Saved offer list created").wait_for(state="visible")
+            page.get_by_test_id("shortlist-message").filter(has_text="Saved offer list created").wait_for(state="visible")
             page.get_by_label("Choose list to manage").select_option("shortlist-1")
             page.get_by_role("button", name="Save to selected list").click()
             page.get_by_test_id("selected-shortlist-items").get_by_text("Creator Suite").wait_for(state="visible")

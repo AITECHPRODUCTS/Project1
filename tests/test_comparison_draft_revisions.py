@@ -27,6 +27,7 @@ async def test_revision_sequence_is_monotonic_and_seeds_from_existing_history():
             await connection.run_sync(Base.metadata.create_all)
         async with sessions() as session:
             session.add(Workspace(id=workspace_id, name="Revision sequence", slug="revision-sequence"))
+            await session.flush()
             with workspace_scope(workspace_id):
                 session.add(ContentAsset(
                     id=root_id,

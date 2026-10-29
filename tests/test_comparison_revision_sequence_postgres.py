@@ -30,6 +30,7 @@ async def test_concurrent_postgres_revision_reservations_are_unique_and_monotoni
     async def prepare():
         async with sessions() as session:
             session.add(Workspace(id=workspace_id, name="Concurrent revisions", slug=f"revision-{workspace_id[:12]}"))
+            await session.flush()
             with workspace_scope(workspace_id):
                 session.add(ContentAsset(
                     id=root_id,

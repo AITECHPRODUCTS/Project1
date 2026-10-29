@@ -280,6 +280,153 @@ class ComparisonPostRequest(BaseModel):
         return self
 
 
+class ListicleProductInput(ComparisonProductInput):
+    """A listicle product with bounded operator facts and an optional explicit affiliate relationship."""
+
+    facts: dict[str, str] = Field(min_length=1, max_length=8)
+    affiliate_url: str | None = Field(default=None, max_length=2048)
+    affiliate_relationship: Literal["editorial", "affiliate_primary", "affiliate_secondary"] = "editorial"
+
+    @field_validator("facts")
+    @classmethod
+    def normalize_listicle_facts(cls, values: dict[str, str]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        seen: set[str] = set()
+        if not 1 <= len(values) <= 8:
+            raise ValueError("each listicle product must include between one and eight supplied facts")
+        for raw_key, raw_value in values.items():
+            key = " ".join(str(raw_key).split())[:80]
+            fact = str(raw_value).strip()
+            if not key or not fact:
+                raise ValueError("listicle fact names and values must not be blank")
+            if key.casefold() in seen:
+                raise ValueError("listicle fact names must be unique, ignoring case")
+            if len(fact) > 400:
+                raise ValueError("each listicle fact value must be at most 400 characters")
+            seen.add(key.casefold())
+            normalized[key] = fact
+        return normalized
+
+    @field_validator("affiliate_url")
+    @classmethod
+    def validate_listicle_affiliate_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        parsed = urlparse(normalized)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or len(normalized) > 2048
+        ):
+            raise ValueError("affiliate destination must be an absolute HTTPS URL without embedded credentials")
+        host = parsed.hostname.lower().rstrip(".")
+        if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".test")):
+            raise ValueError("affiliate destination must not use a local or internal hostname")
+        sensitive_query_keys = {
+            "access_token", "api_key", "apikey", "auth", "authorization", "bearer",
+            "client_secret", "credential", "jwt", "key", "password", "private_key",
+            "secret", "sig", "signature", "token", "x_amz_credential", "x_amz_signature",
+        }
+        for raw_key, _ in parse_qsl(parsed.query, keep_blank_values=True):
+            normalized_key = re.sub(r"[^a-z0-9]+", "_", raw_key.casefold()).strip("_")
+            if normalized_key in sensitive_query_keys:
+                raise ValueError("affiliate destination must not include credential-like query parameters")
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            raise ValueError("affiliate destination must not use a private or non-public IP address")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_affiliate_relationship(self) -> "ListicleProductInput":
+        if self.affiliate_relationship == "editorial" and self.affiliate_url:
+            raise ValueError("products with an affiliate URL must be marked primary or secondary affiliate")
+        if self.affiliate_relationship != "editorial" and not self.affiliate_url:
+            raise ValueError("affiliate relationships require an explicit HTTPS affiliate destination")
+        return self
+
+
+class ListiclePostRequest(BaseModel):
+    """Create a review-required listicle draft from operator-supplied product facts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(min_length=3, max_length=300)
+    audience: str = Field(min_length=2, max_length=300)
+    target_keyword: str | None = Field(default=None, max_length=180)
+    products: list[ListicleProductInput] = Field(min_length=5, max_length=12)
+    evaluation_criteria: list[str] = Field(
+        default_factory=lambda: ["fit for audience", "supplied features", "pricing clarity", "limitations"],
+        min_length=3,
+        max_length=8,
+    )
+    affiliate_disclosure: str = Field(
+        default="Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.",
+        min_length=20,
+        max_length=1200,
+    )
+    minimum_words: int = Field(default=1500, ge=800, le=4500)
+    tone: Literal["conversational", "professional"] = "professional"
+
+    @field_validator("topic", "audience", "affiliate_disclosure")
+    @classmethod
+    def normalize_listicle_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("this field must not be blank")
+        return normalized
+
+    @field_validator("target_keyword")
+    @classmethod
+    def normalize_listicle_keyword(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("target keyword must not be blank when supplied")
+        return normalized
+
+    @field_validator("evaluation_criteria")
+    @classmethod
+    def normalize_listicle_criteria(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in values:
+            criterion = " ".join(str(raw).split())[:100]
+            if not criterion:
+                raise ValueError("evaluation criteria must not be blank")
+            if criterion.casefold() in seen:
+                raise ValueError("evaluation criteria must be unique, ignoring case")
+            seen.add(criterion.casefold())
+            normalized.append(criterion)
+        if not 3 <= len(normalized) <= 8:
+            raise ValueError("provide three to eight evaluation criteria")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_listicle_products(self) -> "ListiclePostRequest":
+        names = [product.name.casefold() for product in self.products]
+        if len(set(names)) != len(names):
+            raise ValueError("listicle product names must be unique, ignoring case")
+        source_urls = {url for product in self.products for url in product.source_urls}
+        if len(source_urls) > 10:
+            raise ValueError("a listicle can contain no more than ten unique source URLs total")
+        primary_positions = [
+            position for position, product in enumerate(self.products, start=1)
+            if product.affiliate_relationship == "affiliate_primary"
+        ]
+        if len(primary_positions) > 1:
+            raise ValueError("a listicle can have no more than one primary affiliate product")
+        if primary_positions and primary_positions[0] > 3:
+            raise ValueError("the primary affiliate product must appear within the first three supplied positions")
+        return self
+
+
 class ComparisonPostReviewRequest(BaseModel):
     """Human editorial decision bound to the exact content hash of one saved draft revision."""
 

@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -77,6 +77,7 @@ from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
 from backend.services.comparison_post_writer import build_comparison_post as comparison_post_writer_service
+from backend.services.listicle_writer import build_listicle_post as listicle_writer_service
 from backend.services.comparison_draft_revisions import reserve_comparison_revision_number
 from backend.services.comparison_integrity import build_source_snapshot_manifest, evaluate_comparison_integrity, sha256_text, source_snapshot_manifest_sha256, comparison_evidence_payload_sha256
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
@@ -4329,6 +4330,411 @@ async def review_comparison_post(
             "This decision records a human editorial review of the exact saved draft hash. It does not verify product facts, "
             "merchant identity, currentness, affiliate eligibility, legal compliance, provider authorization, or publication readiness."
         ),
+    }
+
+
+def _listicle_evidence_payload_sha256(metadata: dict[str, Any]) -> str:
+    payload = {
+        "asset_title": metadata.get("asset_title"),
+        "source_urls": metadata.get("source_urls") or [],
+        "products": metadata.get("products") or [],
+        "products_featured": metadata.get("products_featured") or [],
+        "evaluation_criteria": metadata.get("evaluation_criteria") or [],
+        "fact_evidence": metadata.get("fact_evidence") or [],
+        "evidence_summary": metadata.get("evidence_summary") or {},
+        "source_snapshot_manifest_sha256": metadata.get("source_snapshot_manifest_sha256"),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _listicle_integrity_flags(asset: ContentAsset, creation_audit: AuditLog | None) -> list[str]:
+    metadata = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
+    flags: list[str] = []
+    if metadata.get("asset_title") != asset.title:
+        flags.append("asset_title_mismatch")
+    if metadata.get("content_sha256") != sha256_text(str(asset.body or "")):
+        flags.append("content_sha256_mismatch")
+    if list(asset.source_urls or []) != list(metadata.get("source_urls") or []):
+        flags.append("source_urls_mismatch")
+    source_snapshots = metadata.get("source_snapshots") if isinstance(metadata.get("source_snapshots"), list) else []
+    for snapshot in source_snapshots:
+        if not isinstance(snapshot, dict) or snapshot.get("status") != "fetched":
+            continue
+        expected_excerpt_hash = hashlib.sha256(str(snapshot.get("excerpt") or "").encode("utf-8")).hexdigest()
+        if snapshot.get("excerpt_sha256") != expected_excerpt_hash:
+            flags.append("source_excerpt_hash_mismatch")
+            break
+    manifest = build_source_snapshot_manifest(source_snapshots[:10])
+    manifest_hash = source_snapshot_manifest_sha256(manifest)
+    if metadata.get("source_snapshot_manifest") != manifest:
+        flags.append("source_snapshot_manifest_mismatch")
+    if metadata.get("source_snapshot_manifest_sha256") != manifest_hash:
+        flags.append("source_snapshot_manifest_sha256_mismatch")
+    if metadata.get("evidence_payload_sha256") != _listicle_evidence_payload_sha256(metadata):
+        flags.append("evidence_payload_sha256_mismatch")
+    if creation_audit is None:
+        flags.append("creation_audit_missing")
+    else:
+        audit_details = creation_audit.details_json if isinstance(creation_audit.details_json, dict) else {}
+        if audit_details.get("content_sha256") != metadata.get("content_sha256"):
+            flags.append("creation_audit_content_hash_mismatch")
+        if audit_details.get("source_snapshot_manifest_sha256") != metadata.get("source_snapshot_manifest_sha256"):
+            flags.append("creation_audit_source_manifest_mismatch")
+        if audit_details.get("evidence_payload_sha256") != metadata.get("evidence_payload_sha256"):
+            flags.append("creation_audit_evidence_payload_mismatch")
+    return list(dict.fromkeys(flags))
+
+
+async def _audit_listicle_integrity_block(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    actor: str,
+    asset_id: str,
+    flags: list[str],
+) -> None:
+    db.add(AuditLog(
+        workspace_id=workspace_id,
+        actor=actor[:320],
+        action="content_listicle_post.integrity_blocked",
+        resource_type="content_asset",
+        resource_id=asset_id,
+        outcome="blocked",
+        details_json={"integrity_flags": flags[:12], "review_or_detail_blocked": True, "publishing_started": False},
+    ))
+    await db.commit()
+
+
+@api.post("/content/listicle", status_code=201)
+async def create_listicle_post(
+    payload: ListiclePostRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a workspace-persisted listicle draft with public snapshot and literal fact evidence."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating a listicle")
+    _validate_generation_payload_size(payload)
+    await workspace_generation_rate_limit(request, workspace_id)
+    try:
+        result = await listicle_writer_service(
+            topic=payload.topic,
+            audience=payload.audience,
+            target_keyword=payload.target_keyword,
+            products=[product.model_dump() for product in payload.products],
+            evaluation_criteria=payload.evaluation_criteria,
+            affiliate_disclosure=payload.affiliate_disclosure,
+            minimum_words=payload.minimum_words,
+            tone=payload.tone,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Listicle draft generation failed")
+        raise HTTPException(
+            502,
+            {"code": "LISTICLE_DRAFT_GENERATION_FAILED", "message": "Listicle draft generation failed; no draft was saved."},
+        ) from exc
+
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    html_body = str(result.get("html") or "")
+    content_digest = sha256_text(html_body)
+    snapshots = result.get("source_snapshots") if isinstance(result.get("source_snapshots"), list) else []
+    source_snapshots = snapshots[:10]
+    source_manifest = build_source_snapshot_manifest(source_snapshots)
+    source_manifest_digest = source_snapshot_manifest_sha256(source_manifest)
+    source_urls = result.get("source_urls") if isinstance(result.get("source_urls"), list) else []
+    metadata = {
+        "schema_version": 1,
+        "asset_title": str(result["title"])[:500],
+        "content_sha256": content_digest,
+        "source_urls": source_urls,
+        "source_snapshot_manifest": source_manifest,
+        "source_snapshot_manifest_sha256": source_manifest_digest,
+        "topic": payload.topic,
+        "audience": payload.audience,
+        "target_keyword": result.get("target_keyword"),
+        "slug": result.get("slug"),
+        "meta_description": result.get("meta_description"),
+        "format": result.get("format", "listicle"),
+        "word_count_warning": result.get("word_count_warning"),
+        "provider": str(result.get("provider") or "unreported")[:100],
+        "products": result.get("products", []),
+        "products_featured": result.get("products_featured", []),
+        "evaluation_criteria": result.get("evaluation_criteria", payload.evaluation_criteria),
+        "source_snapshots": source_snapshots,
+        "fact_evidence": result.get("fact_evidence", [])[:120],
+        "evidence_summary": result.get("evidence_summary", {}),
+        "evidence_status": result.get("evidence_status", "operator_supplied_unverified"),
+        "product_facts_independently_verified": False,
+        "external_product_sources_fetched": bool(result.get("external_product_sources_fetched", False)),
+        "word_count": result.get("word_count", 0),
+        "minimum_word_target": result.get("minimum_word_target", payload.minimum_words),
+        "minimum_word_target_met": result.get("minimum_word_target_met", False),
+        "model_provider": str(result.get("provider") or "unreported")[:100],
+        "review_status": "pending_review",
+        "review_history": [],
+        "reviewed_at": None,
+        "reviewed_by": None,
+        "reviewer_role": None,
+        "reviewer_notes": None,
+        "reviewed_content_sha256": None,
+        "requires_review": True,
+        "publishing_started": False,
+    }
+    metadata["evidence_payload_sha256"] = _listicle_evidence_payload_sha256(metadata)
+    with workspace_scope(workspace_id):
+        asset = ContentAsset(
+            workspace_id=workspace_id,
+            asset_type="listicle_post",
+            title=str(result["title"])[:500],
+            body=html_body,
+            status="draft",
+            source_urls=source_urls,
+            metadata_json=metadata,
+        )
+        db.add(asset)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="content_listicle_post.created",
+            resource_type="content_asset",
+            resource_id=asset.id,
+            outcome="draft",
+            details_json={
+                "product_count": result["product_count"],
+                "source_snapshots_fetched": (result.get("evidence_summary") or {}).get("source_snapshots_fetched", 0),
+                "exact_text_match_count": (result.get("evidence_summary") or {}).get("exact_text_match_count", 0),
+                "exact_text_not_found_count": (result.get("evidence_summary") or {}).get("exact_text_not_found_count", 0),
+                "content_sha256": content_digest,
+                "source_snapshot_manifest_sha256": source_manifest_digest,
+                "evidence_payload_sha256": metadata["evidence_payload_sha256"],
+                "publishing_started": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(asset)
+    result["asset_id"] = asset.id
+    result["asset_status"] = asset.status
+    result["content_sha256"] = content_digest
+    result["source_snapshot_manifest_sha256"] = source_manifest_digest
+    result["evidence_payload_sha256"] = metadata["evidence_payload_sha256"]
+    result["content_integrity_status"] = "verified"
+    result["review_status"] = "pending_review"
+    result["review_history"] = []
+    result["reviewed_by"] = None
+    result["reviewed_at"] = None
+    result["reviewer_role"] = None
+    result["reviewer_notes"] = None
+    result["can_review"] = str(user.get("workspace_role") or "").lower() in {"owner", "admin"}
+    return result
+
+
+@api.get("/content/listicles")
+async def list_listicle_posts(
+    response: Response,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before listing listicle drafts")
+    response.headers["Cache-Control"] = "no-store"
+    with workspace_scope(workspace_id):
+        condition = and_(
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "listicle_post",
+        )
+        total = int(await db.scalar(select(func.count()).select_from(ContentAsset).where(condition)) or 0)
+        rows = list((await db.scalars(
+            select(ContentAsset).where(condition)
+            .order_by(ContentAsset.created_at.desc(), ContentAsset.id.desc())
+            .limit(limit).offset(offset)
+        )).all())
+    items = []
+    for row in rows:
+        metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        body_hash_matches = metadata.get("content_sha256") == sha256_text(str(row.body or ""))
+        items.append({
+            "asset_id": row.id,
+            "title": row.title,
+            "asset_status": row.status,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "product_count": len(metadata.get("products_featured") or []),
+            "word_count": int(metadata.get("word_count") or 0),
+            "evidence_status": metadata.get("evidence_status", "unknown"),
+            "review_status": metadata.get("review_status", "pending_review"),
+            "content_sha256": metadata.get("content_sha256"),
+            "content_integrity_status": "verified" if body_hash_matches else "mismatch",
+            "publishing_started": False,
+        })
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@api.get("/content/listicles/{asset_id}")
+async def get_listicle_post(
+    asset_id: str,
+    response: Response,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before opening a listicle draft")
+    response.headers["Cache-Control"] = "no-store"
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        asset = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "listicle_post",
+        ))
+        if asset is None:
+            raise HTTPException(404, "Listicle draft was not found in this workspace")
+        creation_audit = await db.scalar(select(AuditLog).where(
+            AuditLog.workspace_id == workspace_id,
+            AuditLog.action == "content_listicle_post.created",
+            AuditLog.resource_type == "content_asset",
+            AuditLog.resource_id == asset.id,
+        ).limit(1))
+        flags = _listicle_integrity_flags(asset, creation_audit)
+        if flags:
+            await _audit_listicle_integrity_block(
+                db, workspace_id=workspace_id, actor=actor, asset_id=asset.id, flags=flags
+            )
+            raise HTTPException(409, {
+                "code": "LISTICLE_INTEGRITY_CHECK_FAILED",
+                "message": "Saved listicle content or evidence no longer matches its creation baseline; retrieval and editorial review are blocked.",
+                "integrity_flags": flags,
+            })
+        metadata = dict(asset.metadata_json)
+    return {
+        "asset_id": asset.id,
+        "asset_status": asset.status,
+        "title": asset.title,
+        "html": asset.body,
+        **{key: metadata.get(key) for key in (
+            "slug", "meta_description", "topic", "audience", "target_keyword", "products",
+            "products_featured", "evaluation_criteria", "source_urls", "source_snapshots",
+            "fact_evidence", "evidence_summary", "evidence_status", "word_count",
+            "minimum_word_target", "minimum_word_target_met", "word_count_warning", "provider",
+            "review_status", "review_history", "reviewed_at", "reviewed_by", "reviewer_role",
+            "reviewer_notes", "publishing_started", "requires_review", "content_sha256",
+            "source_snapshot_manifest_sha256", "evidence_payload_sha256",
+        )},
+        "content_integrity_status": "verified",
+        "can_review": str(user.get("workspace_role") or "").lower() in {"owner", "admin"},
+        "execution_boundary": "Draft only; source text is not truth verification and editorial approval does not authorize publishing.",
+    }
+
+
+@api.post("/content/listicles/{asset_id}/review")
+async def review_listicle_post(
+    asset_id: str,
+    payload: ComparisonPostReviewRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    role = str(user.get("workspace_role") or "").lower()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing a listicle")
+    if role not in {"owner", "admin"}:
+        raise HTTPException(403, "Only workspace owners and admins may review listicle drafts")
+    if payload.decision == "approve" and payload.confirm_editorial_reviewed is not True:
+        raise HTTPException(422, "Confirm that you reviewed the article and its source/fact evidence before approval")
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        asset = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "listicle_post",
+        ).with_for_update())
+        if asset is None:
+            raise HTTPException(404, "Listicle draft was not found in this workspace")
+        metadata = dict(asset.metadata_json) if isinstance(asset.metadata_json, dict) else {}
+        creation_audit = await db.scalar(select(AuditLog).where(
+            AuditLog.workspace_id == workspace_id,
+            AuditLog.action == "content_listicle_post.created",
+            AuditLog.resource_type == "content_asset",
+            AuditLog.resource_id == asset.id,
+        ).limit(1))
+        flags = _listicle_integrity_flags(asset, creation_audit)
+        if flags:
+            await _audit_listicle_integrity_block(
+                db, workspace_id=workspace_id, actor=actor, asset_id=asset.id, flags=flags
+            )
+            raise HTTPException(409, {
+                "code": "LISTICLE_INTEGRITY_CHECK_FAILED",
+                "message": "Saved listicle content or evidence no longer matches its creation baseline; editorial review is blocked.",
+                "integrity_flags": flags,
+            })
+        if sha256_text(str(asset.body or "")) != payload.expected_content_sha256:
+            raise HTTPException(409, "The reviewed listicle changed; reload it and review the current saved draft")
+        if metadata.get("review_status", "pending_review") != "pending_review":
+            raise HTTPException(409, "This immutable draft already has an editorial decision; create a new draft to make changes")
+        reviewed_at = utcnow()
+        review_status = {
+            "approve": "approved",
+            "request_changes": "changes_requested",
+            "reject": "rejected",
+        }[payload.decision]
+        history = list(metadata.get("review_history") or [])
+        history.append({
+            "decision": payload.decision,
+            "review_status": review_status,
+            "reviewed_by": actor,
+            "reviewer_role": role,
+            "reviewer_notes": payload.reviewer_notes or None,
+            "reviewed_at": reviewed_at.isoformat(),
+            "content_sha256": payload.expected_content_sha256,
+            "external_publication_started": False,
+        })
+        updated = {
+            **metadata,
+            "review_status": review_status,
+            "review_history": history[-20:],
+            "reviewed_at": reviewed_at.isoformat(),
+            "reviewed_by": actor,
+            "reviewer_role": role,
+            "reviewer_notes": payload.reviewer_notes or None,
+            "reviewed_content_sha256": payload.expected_content_sha256,
+            "publishing_started": False,
+        }
+        asset.metadata_json = updated
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="content_listicle_post.reviewed",
+            resource_type="content_asset",
+            resource_id=asset.id,
+            outcome=review_status,
+            details_json={
+                "decision": payload.decision,
+                "review_status": review_status,
+                "content_sha256": payload.expected_content_sha256,
+                "evidence_payload_sha256": metadata.get("evidence_payload_sha256"),
+                "reviewer_role": role,
+                "external_publication_started": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(asset)
+    return {
+        "asset_id": asset.id,
+        "asset_status": asset.status,
+        "review_status": review_status,
+        "reviewed_by": actor,
+        "reviewed_at": reviewed_at.isoformat(),
+        "content_sha256": payload.expected_content_sha256,
+        "publishing_started": False,
+        "execution_boundary": "Editorial approval only. No affiliate network, ad platform, CMS, or social provider action was executed.",
     }
 
 

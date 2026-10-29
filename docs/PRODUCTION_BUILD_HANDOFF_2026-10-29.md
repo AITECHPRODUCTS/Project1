@@ -51,6 +51,14 @@ The Library audit records 35 items at its 27 October checkpoint, representing 21
 - **Verified code checkpoint after the UI and browser-test additions:** `3d8115d18d628c1957d6c143a67b13f7f4fb3fde`. Push run [40816695151](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40816695151) and PR run [40816701388](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40816701388) both completed successfully across all configured jobs. Python: 738 passed, 7 skipped, 5 warnings. Chromium browser UAT: 11 passed, including the new content-decay review queue contract test. PostgreSQL integration, frontend typecheck/build/Docker smoke, repo guard, AI/RAG profile, security/dependency audit, secret scan and push lockfile sync passed; PR lockfile sync was skipped by the configured push-only condition.
 - The documentation commit that records these results will create a newer SHA, so rerun and inspect the exact-SHA workflows before marking that final documentation checkpoint green.
 
+## 2026-10-29 advertising performance report date filters
+
+- Added inclusive `from_date` / `to_date` query parameters to `GET /api/ads/observations` and `GET /api/ads/performance`. Filtering is applied to `observed_at` using UTC calendar-day boundaries; responses disclose the applied dates and timezone; reversed ranges return HTTP 422.
+- Added `tests/test_ad_performance.py` coverage for inclusive same-day filtering, exclusion of observations on adjacent dates, metadata, and reversed-range rejection. The source type in the fixture uses the schema's supported `manual_report` value.
+- Code checkpoint `7f56efc793a7d3a094cd3a693e859386dfd4d098` push workflow [40817721021](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40817721021) completed successfully across all jobs. Python suite: **741 passed, 7 skipped, 5 warnings**. PostgreSQL integration, frontend production build/Docker smoke, AI/RAG profile, security audit, repository guard, secret scan, browser UAT and lockfile-sync all passed.
+- Pull-request workflow [40817725978](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40817725978) was still pending at the last check; the prior stale PR run `40817668626` had remaining in-progress cleanup/audit jobs. Do not mark PR verification complete until the exact latest SHA's PR run completes.
+- The new reporting filters operate on stored observations only. Provider spend sync, provider attestation, reconciliation, and verified provider contract tests remain unimplemented; the parity status remains `partial`.
+
 ## Verification rules
 - Keep work on the existing branch; do not create a branch, reset, force-push, or overwrite unrelated code.
 - Add focused regression tests with every feature and preserve safety/approval boundaries.

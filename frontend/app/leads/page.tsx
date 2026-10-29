@@ -21,6 +21,8 @@ type Lead = {
   consented_at: string;
   email_consent_confirmed_at: string | null;
   consent_source: string;
+  email_suppressed_at: string | null;
+  email_suppression_reason: string | null;
   unsubscribed: boolean;
   purchased: boolean;
   attribution?: Attribution;
@@ -309,6 +311,16 @@ export default function LeadsPage() {
                         <span className={"rounded-full px-3 py-1.5 text-xs font-bold " + (lead.unsubscribed ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800")}>
                           {lead.unsubscribed ? "Unsubscribed · Suppressed" : "Consent recorded · Not unsubscribed"}
                         </span>
+                        {lead.email_suppressed_at && (
+                          <span
+                            role="status"
+                            aria-label={"Email delivery suppressed: " + (lead.email_suppression_reason || "provider suppression")}
+                            title={"Provider suppression recorded " + displayDate(lead.email_suppressed_at)}
+                            className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900"
+                          >
+                            Delivery blocked · {(lead.email_suppression_reason || "provider suppression").replaceAll("_", " ")}
+                          </span>
+                        )}
                         <span className={"rounded-full px-3 py-1.5 text-xs font-bold " + (lead.purchased ? "bg-indigo-50 text-indigo-800" : "bg-slate-100 text-slate-600")}>
                           {lead.purchased ? "Purchase recorded" : "No purchase recorded"}
                         </span>

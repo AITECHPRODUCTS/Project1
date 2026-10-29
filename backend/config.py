@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     mail_sender_allowlist: str = ""
     resend_api_key: str = ""
     resend_from_email: str = ""
+    # Svix signing secret (whsec_...) for inbound Resend delivery events.
+    resend_webhook_secret: str = ""
     word_press_site_url: str = ""
     word_press_username: str = ""
     word_press_application_password: str = ""

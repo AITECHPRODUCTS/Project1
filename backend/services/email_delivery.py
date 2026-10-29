@@ -56,6 +56,10 @@ async def _request_email_consent_confirmation(
  utm_attribution: dict[str, Any] | None,
 ) -> dict[str, Any]:
  settings = get_settings()
+ if lead is not None and lead.email_suppressed_at is not None:
+  raise ConsentConfirmationDeliveryUnavailable(
+   "The provider has suppressed this address; no confirmation email was sent."
+  )
  if email_automation_id:
   automation_id = str(email_automation_id).strip()
   asset = await session.scalar(select(ContentAsset).where(
@@ -312,6 +316,11 @@ async def capture_lead_and_schedule(
     Lead.email == address,
    )
   )
+  if lead is not None and lead.email_suppressed_at is not None:
+   reason = str(lead.email_suppression_reason or "provider_suppressed").replace("_", " ")
+   raise ValueError(
+    f"Email delivery is suppressed by the provider ({reason}); no marketing or confirmation email was queued."
+   )
   was_resubscribed = bool(lead and lead.unsubscribed_at)
   if was_resubscribed and resubscribe_confirmed is not True:
    raise ValueError("Address previously unsubscribed; explicit resubscribe confirmation required")
@@ -840,6 +849,10 @@ async def resend_email_consent_confirmation(
   ))
   if lead is None:
    raise ValueError("Lead not found in the active workspace")
+  if lead.email_suppressed_at is not None:
+   raise ConsentConfirmationDeliveryUnavailable(
+    "The provider has suppressed this address; no confirmation email was sent."
+   )
   if lead.email_consent_confirmed_at is not None and lead.unsubscribed_at is None:
    raise ValueError("This lead already has a confirmed active email consent")
   previous = await session.scalar(select(EmailConsentConfirmation).where(
@@ -971,10 +984,15 @@ async def send_due_emails(
       Lead.workspace_id == owner_workspace_id,
      )
     )
-    if not lead or lead.unsubscribed_at:
+    if not lead or lead.unsubscribed_at or lead.email_suppressed_at is not None:
      message.status = "suppressed"
      message.claimed_at = None
-     message.last_error = "Lead is missing or has unsubscribed"
+     reason = str(getattr(lead, "email_suppression_reason", None) or "").replace("_", " ")
+     message.last_error = (
+      f"Provider delivery suppression is active ({reason})"
+      if lead is not None and lead.email_suppressed_at is not None
+      else "Lead is missing or has unsubscribed"
+     )
      skipped += 1
      continue
     if getattr(settings, "email_double_opt_in_required", False) and lead.email_consent_confirmed_at is None:

@@ -29,9 +29,17 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
+from backend.services.resend_email_events import (
+    AmbiguousResendMessageError,
+    ConflictingResendEventError,
+    UnmatchedResendMessageError,
+    is_resend_webhook_secret_configured,
+    process_resend_email_event,
+    verify_resend_webhook_signature,
+)
 from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
@@ -4968,6 +4976,8 @@ async def leads(
              "consented_at": x.consent_at.isoformat(),
              "email_consent_confirmed_at": x.email_consent_confirmed_at.isoformat() if x.email_consent_confirmed_at else None,
              "consent_source": x.consent_source,
+             "email_suppressed_at": x.email_suppressed_at.isoformat() if x.email_suppressed_at else None,
+             "email_suppression_reason": x.email_suppression_reason,
              "unsubscribed": x.unsubscribed_at is not None,
              "purchased": x.purchased_at is not None,
              "attribution": lead_attribution_summary(x.metadata_json)}
@@ -8207,6 +8217,45 @@ def get_affiliate_webhook_secret(network: str) -> str | None:
         return selected if isinstance(selected, str) and len(selected) >= 32 else None
     legacy = settings.affiliate_webhook_secret
     return legacy if isinstance(legacy, str) and len(legacy) >= 32 else None
+
+
+@app.post("/api/webhooks/resend/email-events", status_code=200)
+async def receive_resend_email_delivery_event(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Verify and apply Resend outcomes using the exact raw request body."""
+    secret = str(getattr(settings, "resend_webhook_secret", "") or "").strip()
+    if not is_resend_webhook_secret_configured(secret):
+        raise HTTPException(503, "Resend webhook verification is not configured")
+
+    raw_body = await read_limited_webhook_body(request)
+    svix_id = request.headers.get("svix-id", "")
+    svix_timestamp = request.headers.get("svix-timestamp", "")
+    svix_signature = request.headers.get("svix-signature", "")
+    if not verify_resend_webhook_signature(
+        raw_body, secret=secret, svix_id=svix_id,
+        svix_timestamp=svix_timestamp, svix_signature=svix_signature,
+    ):
+        raise HTTPException(401, "Invalid Resend webhook signature")
+    try:
+        payload = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(400, "Signed Resend webhook body must be valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "Signed Resend webhook body must be a JSON object")
+    try:
+        return await process_resend_email_event(
+            db, provider_event_id=svix_id, payload=payload,
+            payload_sha256=hashlib.sha256(raw_body).hexdigest(),
+        )
+    except UnmatchedResendMessageError as exc:
+        # Ask Resend to retry if its callback races the sender's message-ID commit.
+        raise HTTPException(503, "Resend message is not yet correlated; retry delivery later") from exc
+    except (AmbiguousResendMessageError, ConflictingResendEventError) as exc:
+        raise HTTPException(409, "Resend event conflicts with an internal delivery record") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.post("/api/webhooks/conversions/{network}")

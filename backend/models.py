@@ -342,6 +342,8 @@ class Lead(TenantScopedMixin, Base):
     consent_source: Mapped[str] = mapped_column(String(180), default="website_form")
     lead_magnet: Mapped[str] = mapped_column(String(300), default="")
     unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_suppressed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_suppression_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
     purchased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     engaged: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
@@ -415,6 +417,30 @@ class ScheduledEmail(TenantScopedMixin, Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class EmailDeliveryEvent(TenantScopedMixin, Base):
+    """Deduplicated, PII-minimized record of a verified Resend delivery webhook."""
+
+    __tablename__ = "email_delivery_events"
+    __table_args__ = (
+        UniqueConstraint("provider_event_id", name="uq_email_delivery_events_provider_event_id"),
+        Index("ix_email_delivery_events_workspace_message", "workspace_id", "provider_message_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    provider: Mapped[str] = mapped_column(String(40), default="resend")
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    scheduled_email_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    consent_confirmation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lead_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    outcome: Mapped[str] = mapped_column(String(40), nullable=False)
+    event_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
 
 class MailCommission(TenantScopedMixin, Base):
     __tablename__ = "mail_commissions"

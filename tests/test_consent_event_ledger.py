@@ -256,6 +256,8 @@ def test_lead_list_exposes_double_opt_in_timestamp_and_consent_source():
         consent_at=observed,
         email_consent_confirmed_at=observed,
         consent_source="persisted_landing_page",
+        email_suppressed_at=None,
+        email_suppression_reason=None,
         unsubscribed_at=None,
         purchased_at=None,
         metadata_json={},

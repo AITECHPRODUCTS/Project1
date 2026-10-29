@@ -67,3 +67,8 @@ The immediately preceding baseline `c579fb5b9279d068f058eb00b42cd7d923f46343` ha
 - Latest tested code checkpoint: `9b27518bc25c63ce2a611fd97571f79a973e0b97`. The registered-user workspace create flow passed its exact push and draft-PR workflows. Push `40934573741`; PR `40934584582`.
 - Both workflows: Python 839 passed/9 skipped/5 warnings; browser UAT 33 passed; PostgreSQL integration 9 passed; frontend/Docker, AI profile/SBOM, security, secret scan and repo guard passed. Push lockfile sync passed; PR lockfile sync was skipped by the configured push-only condition.
 - A documentation-only commit updating this record still needs its own exact-SHA CI. Overall product readiness remains **NOT PRODUCTION READY**.
+## Workspace invitations — API candidate pending exact-SHA CI
+
+- Added persistent invitation model/migration and authenticated APIs for listing, creating, revoking and accepting workspace invitations. Tokens are random, single-use, expire at most seven days after creation, and only their SHA-256 digest is stored. The inviter may only manage the active workspace; only owners may invite administrators.
+- Acceptance requires an active registered account with matching email, creates/reactivates membership, switches the session into the workspace, rotates CSRF, and audits the action. API response explicitly states the invitation email is not sent; the one-time token is returned only during creation.
+- Added backend tests for tenant role authorization, secret handling, matching-email acceptance, replay and expiry. UI integration remains next; exact-SHA push/PR CI is pending.

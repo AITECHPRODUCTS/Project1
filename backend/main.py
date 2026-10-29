@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -702,6 +702,239 @@ async def switch_workspace(workspace_id: str, request: Request,
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     return {"active_workspace_id": workspace.id, "name": workspace.name, "role": membership.role,
             "csrf_token": request.session["csrf_token"]}
+
+
+def _workspace_invitation_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _workspace_invitation_status(invitation: WorkspaceInvitation, now: datetime) -> str:
+    if invitation.accepted_at is not None:
+        return "accepted"
+    if invitation.revoked_at is not None:
+        return "revoked"
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return "expired" if expires_at <= now else "pending"
+
+
+async def _workspace_invitation_manager_context(user: dict[str, Any], db: AsyncSession) -> Workspace:
+    # Platform-admin status alone does not grant authority over a customer workspace.
+    if not user.get("user_id") or user.get("user_id") == "local":
+        raise HTTPException(403, "A registered account is required for workspace invitations")
+    if user.get("workspace_role") not in {"owner", "admin"}:
+        raise HTTPException(403, "Workspace owner/admin permission required")
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "An active workspace is required")
+    workspace = await db.get(Workspace, workspace_id)
+    if workspace is None:
+        raise HTTPException(404, "Workspace not found")
+    if workspace.lifecycle_state != "active":
+        raise HTTPException(409, "Workspace is suspended and cannot manage invitations")
+    return workspace
+
+
+@api.get("/workspaces/invitations")
+async def list_workspace_invitations(
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace = await _workspace_invitation_manager_context(user, db)
+    now = datetime.now(timezone.utc)
+    rows = (await db.scalars(
+        select(WorkspaceInvitation)
+        .where(WorkspaceInvitation.workspace_id == workspace.id)
+        .order_by(WorkspaceInvitation.created_at.desc())
+        .limit(100)
+    )).all()
+    return {
+        "data": [{
+            "id": row.id, "email": row.email, "role": row.role,
+            "status": _workspace_invitation_status(row, now),
+            "created_at": _workspace_invitation_iso(row.created_at),
+            "expires_at": _workspace_invitation_iso(row.expires_at),
+            "accepted_at": _workspace_invitation_iso(row.accepted_at),
+            "revoked_at": _workspace_invitation_iso(row.revoked_at),
+        } for row in rows],
+        "delivery": "manual_link_only",
+        "note": "Invitation email is not sent by this endpoint; share a new invitation link securely.",
+    }
+
+
+@api.post("/workspaces/invitations", status_code=201)
+async def create_workspace_invitation(
+    payload: WorkspaceInvitationCreateRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace = await _workspace_invitation_manager_context(user, db)
+    role = str(user.get("workspace_role") or "")
+    if payload.role == "admin" and role != "owner":
+        raise HTTPException(403, "Only the workspace owner can invite an administrator")
+    now = datetime.now(timezone.utc)
+    account = await db.scalar(select(UserAccount).where(func.lower(UserAccount.email) == payload.email))
+    if account is not None:
+        member = await db.scalar(select(WorkspaceMembership).where(
+            WorkspaceMembership.workspace_id == workspace.id,
+            WorkspaceMembership.user_id == account.id,
+        ))
+        if member is not None and member.is_active:
+            raise HTTPException(409, "This account is already an active workspace member")
+    duplicate = await db.scalar(select(WorkspaceInvitation).where(
+        WorkspaceInvitation.workspace_id == workspace.id,
+        WorkspaceInvitation.email == payload.email,
+        WorkspaceInvitation.accepted_at.is_(None),
+        WorkspaceInvitation.revoked_at.is_(None),
+        WorkspaceInvitation.expires_at > now,
+    ))
+    if duplicate is not None:
+        raise HTTPException(409, "A pending invitation already exists for this email")
+    raw_token = secrets.token_urlsafe(32)
+    invitation = WorkspaceInvitation(
+        workspace_id=workspace.id,
+        email=payload.email,
+        role=payload.role,
+        token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+        invited_by_user_id=str(user["user_id"]),
+        expires_at=now + timedelta(hours=payload.expires_in_hours),
+    )
+    db.add(invitation)
+    await db.flush()
+    with workspace_scope(workspace.id):
+        db.add(AuditLog(
+            workspace_id=workspace.id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="workspace.invitation.created",
+            resource_type="workspace_invitation",
+            resource_id=invitation.id,
+            outcome="created",
+            details_json={"email": invitation.email, "role": invitation.role, "expires_at": _workspace_invitation_iso(invitation.expires_at)},
+        ))
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "Invitation could not be created; check for a duplicate invitation") from None
+    return {
+        "id": invitation.id, "email": invitation.email, "role": invitation.role,
+        "expires_at": _workspace_invitation_iso(invitation.expires_at), "token": raw_token,
+        "delivery": "manual_link_only",
+        "notice": "This is a one-time invitation token. Share the link only with the intended recipient; no email was sent.",
+    }
+
+
+@api.post("/workspaces/invitations/{invitation_id}/revoke")
+async def revoke_workspace_invitation(
+    invitation_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace = await _workspace_invitation_manager_context(user, db)
+    invitation = await db.scalar(select(WorkspaceInvitation).where(
+        WorkspaceInvitation.id == invitation_id,
+        WorkspaceInvitation.workspace_id == workspace.id,
+    ))
+    if invitation is None:
+        raise HTTPException(404, "Invitation not found in the active workspace")
+    status = _workspace_invitation_status(invitation, datetime.now(timezone.utc))
+    if status == "accepted":
+        raise HTTPException(409, "An accepted invitation cannot be revoked")
+    if status == "revoked":
+        raise HTTPException(409, "Invitation is already revoked")
+    invitation.revoked_at = datetime.now(timezone.utc)
+    with workspace_scope(workspace.id):
+        db.add(AuditLog(
+            workspace_id=workspace.id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="workspace.invitation.revoked",
+            resource_type="workspace_invitation",
+            resource_id=invitation.id,
+            outcome="revoked",
+            details_json={"email": invitation.email, "role": invitation.role},
+        ))
+        await db.commit()
+    return {"id": invitation.id, "status": "revoked"}
+
+
+@api.post("/workspaces/invitations/accept")
+async def accept_workspace_invitation(
+    payload: WorkspaceInvitationAcceptRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    user_id = user.get("user_id")
+    if not user_id or user_id == "local":
+        raise HTTPException(403, "Sign in with a registered account to accept this invitation")
+    account = await db.get(UserAccount, user_id)
+    if account is None or not account.is_active:
+        raise HTTPException(403, "Account is inactive or no longer available")
+    digest = hashlib.sha256(payload.token.encode("utf-8")).hexdigest()
+    invitation = await db.scalar(select(WorkspaceInvitation).where(
+        WorkspaceInvitation.token_hash == digest,
+    ).with_for_update())
+    if invitation is None:
+        raise HTTPException(404, "Invitation token is invalid")
+    status = _workspace_invitation_status(invitation, datetime.now(timezone.utc))
+    if status == "accepted":
+        raise HTTPException(409, "Invitation has already been accepted")
+    if status == "revoked":
+        raise HTTPException(410, "Invitation has been revoked")
+    if status == "expired":
+        raise HTTPException(410, "Invitation has expired")
+    if account.email.strip().casefold() != invitation.email:
+        raise HTTPException(403, "Sign in with the email address this invitation was issued to")
+    workspace = await db.get(Workspace, invitation.workspace_id)
+    if workspace is None or workspace.lifecycle_state != "active":
+        raise HTTPException(409, "Invited workspace is suspended or unavailable")
+    membership = await db.scalar(select(WorkspaceMembership).where(
+        WorkspaceMembership.workspace_id == workspace.id,
+        WorkspaceMembership.user_id == account.id,
+    ))
+    if membership is not None and membership.is_active:
+        raise HTTPException(409, "This account is already an active workspace member")
+    if membership is None:
+        membership = WorkspaceMembership(workspace_id=workspace.id, user_id=account.id, role=invitation.role, is_active=True)
+        db.add(membership)
+    else:
+        membership.role = invitation.role
+        membership.is_active = True
+    invitation.accepted_at = datetime.now(timezone.utc)
+    updated_user = dict(user)
+    updated_user.update({
+        "user_id": account.id, "email": account.email,
+        "workspace_id": workspace.id, "workspace_role": membership.role,
+        "is_admin": account.is_admin is True,
+    })
+    request.session["user"] = updated_user
+    request.session["csrf_token"] = secrets.token_urlsafe(32)
+    with workspace_scope(workspace.id):
+        db.add(AuditLog(
+            workspace_id=workspace.id,
+            actor=account.email[:320],
+            action="workspace.invitation.accepted",
+            resource_type="workspace_invitation",
+            resource_id=invitation.id,
+            outcome="accepted",
+            details_json={"email": account.email.casefold(), "role": membership.role},
+        ))
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            request.session.clear()
+            raise HTTPException(409, "Invitation was already accepted or membership already exists") from None
+    return {
+        "invitation_id": invitation.id, "active_workspace_id": workspace.id,
+        "workspace_name": workspace.name, "role": membership.role,
+        "csrf_token": request.session["csrf_token"],
+    }
 
 
 @api.get("/integrations")

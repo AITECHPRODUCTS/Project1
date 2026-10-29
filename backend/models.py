@@ -378,6 +378,27 @@ class WorkspaceMembership(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class WorkspaceInvitation(Base):
+    """Single-use, expiring workspace invitation; only its token digest is persisted."""
+    __tablename__ = "workspace_invitations"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_workspace_invitations_token_hash"),
+        CheckConstraint("role IN ('admin', 'member', 'viewer')", name="ck_workspace_invitations_allowed_role"),
+        Index("ix_workspace_invitations_workspace_created", "workspace_id", "created_at"),
+        Index("ix_workspace_invitations_workspace_email", "workspace_id", "email"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    invited_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("user_accounts.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Lead(TenantScopedMixin, Base):
     __tablename__ = "leads"
     __table_args__ = (Index("uq_leads_workspace_email", "workspace_id", "email", unique=True),)

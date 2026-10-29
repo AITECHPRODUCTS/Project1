@@ -31,6 +31,26 @@ class WorkspaceCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=160)
 
 
+class WorkspaceInvitationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=3, max_length=320)
+    role: Literal["admin", "member", "viewer"] = "member"
+    expires_in_hours: int = Field(default=168, ge=1, le=168)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+            raise ValueError("Enter a valid email address")
+        return normalized
+
+
+class WorkspaceInvitationAcceptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=32, max_length=200)
+
+
 class WorkspaceLifecycleActionRequest(BaseModel):
     """Human reason required for an audited workspace suspend/reinstate action."""
 

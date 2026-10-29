@@ -52,6 +52,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
     asset_id = "review-comparison-asset"
     content = "<!doctype html><html><body><article><h1>Saved version</h1><p>Review this exact body.</p></article></body></html>"
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    baseline_evidence_hash: dict[str, str] = {}
 
     async def override_session():
         async with sessions() as session:
@@ -120,6 +121,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
                 "publishing_started": False,
             }
             evidence_payload_hash = comparison_evidence_payload_sha256(review_metadata)
+            baseline_evidence_hash["value"] = evidence_payload_hash
             review_metadata["evidence_payload_sha256"] = evidence_payload_hash
             review_metadata["review_status"] = "pending_review"
             review_metadata["review_history"] = []
@@ -230,7 +232,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
         assert row.metadata_json["publishing_started"] is False
         assert audit is not None and audit.outcome == "editorial_approved"
         assert audit.details_json["content_sha256"] == content_hash
-        assert audit.details_json["evidence_payload_sha256"] == evidence_payload_hash
+        assert audit.details_json["evidence_payload_sha256"] == baseline_evidence_hash["value"]
         assert audit.details_json["publishing_started"] is False
         assert audit.details_json["product_facts_independently_verified"] is False
     finally:

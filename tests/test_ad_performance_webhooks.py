@@ -128,6 +128,18 @@ def test_signed_observation_is_verified_idempotent_and_triggers_guardrail(monkey
         assert duplicate.status_code == 200, duplicate.text
         assert duplicate.json()["status"] == "duplicate_ignored"
 
+        # A reused provider event ID is idempotent only when its business payload matches.
+        conflicting_payload = dict(payload)
+        conflicting_payload["spend_usd"] = "41.00"
+        conflicting_raw, conflicting_signature = signed_body(secret, conflicting_payload)
+        conflicting = client.post(
+            path,
+            content=conflicting_raw,
+            headers={"X-Ad-Performance-Signature": conflicting_signature},
+        )
+        assert conflicting.status_code == 409, conflicting.text
+        assert "different observation data" in conflicting.json()["detail"]
+
         evaluated = client.post(f"/api/ads/guardrails/{guardrail_id}/evaluate")
         assert evaluated.status_code == 200, evaluated.text
         result = evaluated.json()

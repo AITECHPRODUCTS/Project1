@@ -3,7 +3,7 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code SHA:** a3e578b2643ddab73833301d6cb20f43c2ad5e96  
+**Latest verified baseline SHA before the manual-mode correction:** c579fb5b9279d068f058eb00b42cd7d923f46343  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
 
@@ -99,3 +99,13 @@ The production runtime verifier and final Docker smoke enforce that sharp/@img/s
 ## Resume instructions
 
 Continue on build/omni-affiliate-os-production only. Do not create a branch, switch repositories, merge or deploy without required approvals and current gate evidence. Keep traceability/status docs aligned with actual source and exact-SHA CI. Overall product remains **NOT PRODUCTION READY**.
+
+
+## 2026-10-29 checkpoint recovery — three application surfaces and execution modes
+
+- Recovered live repository state instead of relying on older audit snapshots. The default `main` branch still contains only repository setup files; the substantial application is on the already-existing `build/omni-affiliate-os-production` branch under draft PR #1. No branch was created or switched.
+- The last verified baseline was `c579fb5b9279d068f058eb00b42cd7d923f46343`. Exact-head push run [40928166192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40928166192) and PR run [40928174147](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40928174147) completed successfully. The PR's push-only lockfile-sync job was skipped by its configured condition; other configured jobs reported success.
+- Role-surface audit: the commission-earner/publisher workspace is the root dashboard (`/`); merchant tools exist at `/merchant/offers` and `/merchant/applications`; the privileged operations surface exists at `/admin`. These are real implemented surfaces, but the complete three-application product is not accepted as finished: role-specific onboarding/navigation and end-to-end access-control coverage still need full acceptance.
+- Execution modes exist as `FULL_AUTONOMOUS`, `SEMI_AUTONOMOUS` and `MANUAL_OVERRIDE`. Full autonomy remains limited to authorized stages and fails closed when human verification is required. A UI defect was found: the manual selector submitted `full_flywheel`, which the backend rejects because manual override requires exactly one stage. The candidate correction adds a stage picker, submits only S1–S8 selected stage, and prevents polled status from overwriting the operator's next-run selection.
+- A Chromium regression test is included for the mode selection and one-stage request contract. CI for the resulting candidate SHA is pending until its exact-head push and PR workflows finish; no pass is claimed for this new change until then.
+- Overall status stays **NOT PRODUCTION READY**. Official provider OAuth/scopes/sandbox contracts, provider-confirmed ad data and remote campaign actions, selected real affiliate-network and publishing integrations, end-to-end acceptance for all 53 skills, production staging/backup/restore/monitoring/rollback, accessibility/visual regression, and unresolved build-environment license exceptions remain release gates.

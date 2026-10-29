@@ -1787,3 +1787,109 @@ def test_merchant_application_inbox_filters_paginates_and_keeps_review_notes_per
         finally:
             browser.close()
 
+
+
+def test_manual_override_submits_only_selected_stage_and_keeps_operator_selection():
+    submitted: list[dict] = []
+    stages = [
+        {"id": "S1", "label": "Research & intelligence", "status": "idle"},
+        {"id": "S2", "label": "Content & creative", "status": "idle"},
+        {"id": "S3", "label": "SEO & affiliate blog", "status": "idle"},
+        {"id": "S4", "label": "Offer & landing", "status": "idle"},
+        {"id": "S5", "label": "Distribution & nurture", "status": "idle"},
+        {"id": "S6", "label": "Attribution & testing", "status": "idle"},
+        {"id": "S7", "label": "Budget & operations", "status": "idle"},
+        {"id": "S8", "label": "Learning loop", "status": "idle"},
+    ]
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                request = route.request
+                path = urlparse(request.url).path.removeprefix("/api")
+                if path == "/auth/me":
+                    _fulfill_json(route, {
+                        "csrf_token": "manual-mode-browser-test-token",
+                        "user": {"email": "manual-mode@example.test", "is_admin": False, "workspace_role": "owner"},
+                    })
+                elif path == "/status":
+                    _fulfill_json(route, {
+                        "app_name": "OmniAffiliateOS", "environment": "test",
+                        "execution_mode": "SEMI_AUTONOMOUS", "stage_count": 8, "stages": stages,
+                        "knowledge_index_available": False, "api_model_configured": False,
+                        "email_delivery_configured": False, "video_rendering_available": False,
+                        "publishing_dry_run": True, "ad_automation_execute": False,
+                        "clicks": 0, "conversion_events": 0, "commission_recorded": 0,
+                        "recent_workflows": [],
+                    })
+                elif path == "/resource-budget":
+                    _fulfill_json(route, {
+                        "daily_budget_usd": 5.0, "daily_estimated_used_usd": 0.0,
+                        "daily_estimated_remaining_usd": 5.0, "niche_budget_usd": 1.5,
+                        "note": "Test budget; no provider spend is enabled.",
+                    })
+                elif path == "/integrations":
+                    _fulfill_json(route, {
+                        "total": 0, "counts": {"enabled": 0, "configured": 0},
+                        "items": [], "verification_policy": "Test fixtures are not provider verification.",
+                    })
+                elif path == "/capabilities":
+                    _fulfill_json(route, {
+                        "statuses": [], "counts": {}, "items": [], "provider_items": [],
+                        "global_policy": "External actions remain disabled in this browser test.",
+                    })
+                elif path == "/flywheel/status":
+                    # A polled backend snapshot must not overwrite the mode chosen for the next run.
+                    _fulfill_json(route, {
+                        "active_session": None, "workflow_name": None, "workflow_status": "idle",
+                        "cancel_requested": False, "current_step": 0,
+                        "execution_mode": "SEMI_AUTONOMOUS", "stages": stages,
+                    })
+                elif path == "/workflows/run" and request.method == "POST":
+                    payload = json.loads(request.post_data or "{}")
+                    submitted.append(payload)
+                    _fulfill_json(route, {
+                        "session_id": "manual-mode-browser-session", "status": "queued",
+                        "workflow_name": payload.get("workflow_name"),
+                        "execution_mode": payload.get("execution_mode"),
+                        "status_url": "/api/workflows/manual-mode-browser-session",
+                    }, status=202)
+                elif path.startswith("/workflows/"):
+                    _fulfill_json(route, {
+                        "session_id": "manual-mode-browser-session", "status": "queued",
+                        "workflow_name": "S5", "execution_mode": "MANUAL_OVERRIDE",
+                        "stages": stages,
+                    })
+                else:
+                    _fulfill_json(route, {})
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            mode_select = page.get_by_label("Execution mode")
+            mode_select.select_option("MANUAL_OVERRIDE")
+
+            # Let the component's 4-second poll run once; it must not reset the operator's selection.
+            page.wait_for_timeout(4200)
+            assert mode_select.input_value() == "MANUAL_OVERRIDE"
+
+            stage_select = page.get_by_label("Stage to execute")
+            assert stage_select.is_visible()
+            stage_select.select_option("S5")
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/workflows/run")
+                and response.request.method == "POST"
+            ) as response_info:
+                page.get_by_role("button", name="Run S5 stage only").click()
+            response = response_info.value
+            assert response.status == 202, response.text()
+
+            assert len(submitted) == 1
+            assert submitted[0]["workflow_name"] == "S5"
+            assert submitted[0]["execution_mode"] == "MANUAL_OVERRIDE"
+            assert submitted[0]["state"]["topic"]
+        finally:
+            browser.close()

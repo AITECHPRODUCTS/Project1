@@ -42,11 +42,16 @@ Regression coverage includes material changes, semantically equivalent term norm
 - **S7–S8 automation/learning:** persisted workflow checkpoints/leases/recovery/cancellation, human approval boundaries, resource budget controls and review-only learning primitives.
 - **Skill runtime:** seven deterministic, code-owned handlers plus a declarative-only option; includes extractive summary, keyword extraction, evidence-dependent offer metrics, commission projections, offer-term change review, review-only ad guardrails and ROAS review. User-authored Markdown/instructions are not executed. Runtime and parity work is still partial.
 
-## Last verified CI before this UI/API wiring increment
+## Verified CI for the current Skill Studio/API integration
 
-Exact-SHA push [40811838953](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40811838953) and PR [40811844496](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40811844496) completed successfully on `316c1c5d9ee41f6a64a4bae4e30d23f9cfa22a6c`. Those runs verify the commission calculator backend, schema-validator hardening, service tests and existing UI before the new Skill Studio/API integration below. The current UI/API wiring needs its own exact-head push and PR results.
+Exact-SHA push [40812412185](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40812412185) and PR [40812420246](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40812420246) both completed successfully on `06a5bbd86aa21ce2a85729c5438ee4991b45e421`. Python: **725 passed, 7 skipped, 5 warnings**. PostgreSQL integration, frontend TypeScript/production build/Docker, AI/RAG dependency and SBOM checks, security audit, secret scan and repository guard passed. Browser UAT reported **8 passed** on each run. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured PR-event condition.
 
-On the previous base SHA, the exact push run [40744627789](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40744627789) and PR run [40744637275](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40744637275) completed successfully. Python, PostgreSQL integration, frontend, AI/RAG, security audit, secret scan, repository guard and browser UAT passed. Push lockfile synchronization passed; PR lockfile synchronization was skipped by the workflow's configured event condition. These runs verify the previous SHA only; the new offer-term runtime change requires its own exact-head push and PR checks.
+These runs verify the deterministic handler and its Skill Studio/API wiring, not live provider authentication, account eligibility, provider-attested metrics, external ad actions, payouts or production deployment.
+
+## Previous CI checkpoint
+
+Exact-SHA push [40811838953](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40811838953) and PR [40811844496](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40811844496) passed on `316c1c5d9ee41f6a64a4bae4e30d23f9cfa22a6c`, covering the commission calculator backend and schema traversal hardening before the Skill Studio/API integration.
+
 
 ## Highest-priority remaining production work
 

@@ -1,9 +1,15 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 verified checkpoint — commission calculator wired through Skill Studio
+
+- Exact code SHA: [`06a5bbd86aa21ce2a85729c5438ee4991b45e421](https://github.com/AITECHPRODUCTS/Project1/commit/06a5bbd86aa21ce2a85729c5438ee4991b45e421) on the existing `build/omni-affiliate-os-production` branch. The commission calculator, measured offer-metrics handler and offer-term change review are now selectable in Skill Studio and allowed by `SkillPackageCreateRequest`.
+- Exact-SHA push [40812412185](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40812412185) and PR [40812420246](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40812420246) both completed successfully. Python: **725 passed, 7 skipped, 5 warnings**; PostgreSQL integration, frontend TypeScript/production build/Docker, AI/RAG dependency and SBOM checks, security audit, secret scan and repository guard passed. Chromium UAT: **8 passed** on both runs. Push lockfile reproducibility passed; PR lockfile sync was skipped by its configured event condition.
+- This verifies deterministic, caller-assumption-based logic and the UI/API flow only. It does not attest provider metrics, network approval, actual earnings, external ad actions, payouts or deployment. Product release remains **NOT RELEASE READY**.
+
 ## 2026-10-29 implementation checkpoint — commission projections and complete schema traversal
 
-- Follow-up integration audit found the new handler was not selectable through Skill Studio and its API request schema did not allow it. The current increment adds Skill Studio presets for measured offer metrics, commission calculation, and offer-term change review; expands the governed package API schema to the existing allowlisted handler set; and adds API create → approval gate → execute coverage plus a Chromium preset acceptance test. Hosted CI for this wiring change must pass on the exact new head before this UI/API slice is called verified.
+- Follow-up integration audit found the new handler was not initially selectable through Skill Studio and was missing from the API request schema. The verified change adds presets for measured offer metrics, commission calculation and offer-term change review; expands the governed package API schema to the existing allowlisted handler set; and tests package creation → approval gate → execution plus Chromium preset selection. See the exact-SHA verification above.
 
 - Post-edit code review tightened reward/commission type validation so non-string containers fail with a controlled `ValueError` rather than a server error. The fixed-commission test helper now omits average order value where appropriate and tests the conflicting-field rejection explicitly.
 

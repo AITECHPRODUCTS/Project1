@@ -1893,3 +1893,117 @@ def test_manual_override_submits_only_selected_stage_and_keeps_operator_selectio
             assert submitted[0]["state"]["topic"]
         finally:
             browser.close()
+
+
+
+def test_dashboard_switches_active_workspace_using_authorized_backend_membership():
+    active_workspace = {"id": "publisher-workspace", "name": "Publisher workspace", "slug": "publisher", "role": "owner"}
+    workspaces = [
+        {"id": "publisher-workspace", "name": "Publisher workspace", "slug": "publisher", "role": "owner", "is_active": True, "lifecycle_state": "active"},
+        {"id": "merchant-workspace", "name": "Merchant workspace", "slug": "merchant", "role": "admin", "is_active": True, "lifecycle_state": "active"},
+        {"id": "suspended-workspace", "name": "Suspended workspace", "slug": "suspended", "role": "owner", "is_active": True, "lifecycle_state": "suspended"},
+    ]
+    switch_calls: list[str] = []
+    workspace_list_calls: list[str] = []
+    auth_calls: list[str] = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                request = route.request
+                path = urlparse(request.url).path.removeprefix("/api")
+                if path == "/auth/me":
+                    auth_calls.append(active_workspace["id"])
+                    _fulfill_json(route, {
+                        "authenticated": True,
+                        "csrf_token": "workspace-switch-csrf",
+                        "user": {
+                            "email": "multi-role@example.test",
+                            "is_admin": False,
+                            "workspace_id": active_workspace["id"],
+                            "workspace_role": active_workspace["role"],
+                        },
+                    })
+                elif path == "/workspaces" and request.method == "GET":
+                    workspace_list_calls.append(active_workspace["id"])
+                    _fulfill_json(route, {
+                        "active_workspace_id": active_workspace["id"],
+                        "data": [{**item, "is_active": item["id"] == active_workspace["id"]} for item in workspaces],
+                    })
+                elif path.endswith("/switch") and path.startswith("/workspaces/") and request.method == "POST":
+                    workspace_id = path.split("/")[-2]
+                    switch_calls.append(workspace_id)
+                    selected = next((item for item in workspaces if item["id"] == workspace_id), None)
+                    if selected is None or selected["lifecycle_state"] != "active":
+                        _fulfill_json(route, {"detail": "Workspace not found or suspended"}, status=409)
+                    else:
+                        active_workspace.update({"id": selected["id"], "name": selected["name"], "slug": selected["slug"], "role": selected["role"]})
+                        _fulfill_json(route, {
+                            "active_workspace_id": selected["id"],
+                            "name": selected["name"],
+                            "role": selected["role"],
+                            "csrf_token": "workspace-switch-csrf-refreshed",
+                        })
+                elif path == "/status":
+                    _fulfill_json(route, {
+                        "app_name": "OmniAffiliateOS", "environment": "test",
+                        "execution_mode": "SEMI_AUTONOMOUS", "stage_count": 8, "stages": [],
+                        "knowledge_index_available": False, "api_model_configured": False,
+                        "email_delivery_configured": False, "video_rendering_available": False,
+                        "publishing_dry_run": True, "ad_automation_execute": False,
+                        "clicks": 0, "conversion_events": 0, "commission_recorded": 0,
+                        "recent_workflows": [],
+                    })
+                elif path == "/resource-budget":
+                    _fulfill_json(route, {
+                        "daily_budget_usd": 5.0, "daily_estimated_used_usd": 0.0,
+                        "daily_estimated_remaining_usd": 5.0, "niche_budget_usd": 1.5,
+                        "note": "Test budget; no external spend is enabled.",
+                    })
+                elif path == "/integrations":
+                    _fulfill_json(route, {
+                        "total": 0, "counts": {"enabled": 0, "configured": 0},
+                        "items": [], "verification_policy": "Mock data is not provider verification.",
+                    })
+                elif path == "/capabilities":
+                    _fulfill_json(route, {
+                        "statuses": [], "counts": {}, "items": [], "provider_items": [],
+                        "global_policy": "External actions remain disabled in this browser test.",
+                    })
+                elif path == "/flywheel/status":
+                    _fulfill_json(route, {
+                        "active_session": None, "workflow_name": None, "workflow_status": "idle",
+                        "cancel_requested": False, "current_step": 0,
+                        "execution_mode": "SEMI_AUTONOMOUS", "stages": [],
+                    })
+                else:
+                    _fulfill_json(route, {})
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            selector = page.get_by_label("Active workspace")
+            selector.wait_for(state="visible")
+            assert selector.input_value() == "publisher-workspace"
+            assert selector.locator("option").count() == 3
+            assert selector.locator('option[value="suspended-workspace"]').is_disabled()
+
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/workspaces/merchant-workspace/switch")
+                and response.request.method == "POST"
+            ) as switch_response_info:
+                selector.select_option("merchant-workspace")
+            switch_response = switch_response_info.value
+            assert switch_response.status == 200, switch_response.text()
+
+            page.get_by_test_id("active-workspace-role").get_by_text("admin", exact=True).wait_for(state="visible")
+            page.get_by_label("Active workspace").wait_for(state="visible")
+            assert switch_calls == ["merchant-workspace"]
+            assert "merchant-workspace" in workspace_list_calls
+            assert active_workspace["id"] == "merchant-workspace"
+            assert auth_calls.count("merchant-workspace") >= 1
+        finally:
+            browser.close()

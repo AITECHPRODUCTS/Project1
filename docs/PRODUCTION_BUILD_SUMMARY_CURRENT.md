@@ -3,7 +3,7 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified baseline SHA before the manual-mode correction:** c579fb5b9279d068f058eb00b42cd7d923f46343  
+**Latest verified code SHA:** a9447fbd53d309c6b3316412b42bd74ba6f6535a  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
 
@@ -109,3 +109,17 @@ Continue on build/omni-affiliate-os-production only. Do not create a branch, swi
 - Execution modes exist as `FULL_AUTONOMOUS`, `SEMI_AUTONOMOUS` and `MANUAL_OVERRIDE`. Full autonomy remains limited to authorized stages and fails closed when human verification is required. A UI defect was found: the manual selector submitted `full_flywheel`, which the backend rejects because manual override requires exactly one stage. The candidate correction adds a stage picker, submits only S1–S8 selected stage, and prevents polled status from overwriting the operator's next-run selection.
 - A Chromium regression test is included for the mode selection and one-stage request contract. CI for the resulting candidate SHA is pending until its exact-head push and PR workflows finish; no pass is claimed for this new change until then.
 - Overall status stays **NOT PRODUCTION READY**. Official provider OAuth/scopes/sandbox contracts, provider-confirmed ad data and remote campaign actions, selected real affiliate-network and publishing integrations, end-to-end acceptance for all 53 skills, production staging/backup/restore/monitoring/rollback, accessibility/visual regression, and unresolved build-environment license exceptions remain release gates.
+
+## 2026-10-29 verified execution-mode correction — exact SHA a9447fbd
+
+- Fixed the dashboard's Manual / Single stage mode. It now exposes an S1–S8 stage picker and submits only the selected stage when MANUAL_OVERRIDE is chosen; the multi-stage flywheel remains used for full and semi-autonomous mode.
+- Removed workflow-poll feedback that overwrote the user's selected mode before a new run. Full-auto remains fail-closed when a step requires human verification.
+- Exact-SHA push [40930882062](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40930882062) and draft-PR [40930892946](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40930892946) both succeeded for a9447fbd53d309c6b3316412b42bd74ba6f6535a. Python: 839 passed, 9 skipped, 5 warnings; Chromium browser UAT: 31 passed; PostgreSQL integration: 9 passed. Frontend typecheck/build/final Docker smoke, AI profile, security audit, secret scan, repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- This verifies the execution-mode UI correction only; it does not mean the whole product is complete or production-ready.
+
+## 2026-10-29 next slice — multi-workspace UI (verification pending)
+
+- The backend already provides authenticated, membership-checked GET /api/workspaces and POST /api/workspaces/{workspace_id}/switch; the primary dashboard previously did not expose this API.
+- Added an active-workspace selector, disables suspended workspaces as choices, switches only after API confirmation, reloads the dashboard so workspace-scoped data is fetched again, and adds direct links to merchant applications and the platform admin console for platform admins.
+- Added Chromium browser acceptance that switches between publisher and merchant workspace memberships and verifies suspended workspaces are disabled in the selector. This candidate needs exact-SHA push/PR CI before it can be marked verified.
+- Release remains NOT PRODUCTION READY.

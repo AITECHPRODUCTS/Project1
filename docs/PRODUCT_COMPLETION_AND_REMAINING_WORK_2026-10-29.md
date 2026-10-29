@@ -15,7 +15,8 @@
 - **Publisher / commission-earner workspace:** the root dashboard (`/`) includes S1–S8 workflow controls, offer/research and content tools, affiliate-program application packets, leads/funnels, ad planning, experiments, analytics and commission-evidence views.
 - **Merchant / product-owner surfaces:** `/merchant/offers` supports internal offer terms, source snapshots and evidence review; `/merchant/applications` supports workspace-scoped publisher application review. Internal merchant decisions are explicitly not represented as external affiliate-network approval.
 - **Platform administration:** `/admin` contains privileged tenant lifecycle controls and the audited global pause/resume for registry-gated provider writes. This is separate from workspace ownership and is not proof that every platform support/admin workflow is complete.
-- **Execution modes:** the backend allows `FULL_AUTONOMOUS`, `SEMI_AUTONOMOUS` and `MANUAL_OVERRIDE`. Full autonomy is still bounded by explicit permissions and stops at human-verification requirements. Semi-autonomous is the recommended default. Manual override must execute exactly one selected stage; the accompanying UI correction and browser regression are in this candidate and remain unverified until exact-SHA CI passes.
+- **Execution modes:** the backend allows `FULL_AUTONOMOUS`, `SEMI_AUTONOMOUS` and `MANUAL_OVERRIDE`. Full autonomy is bounded by explicit permissions and stops at human-verification requirements; semi-autonomous is the recommended default. The manual-stage UI correction is verified at exact SHA `a9447fbd53d309c6b3316412b42bd74ba6f6535a`: both push and PR CI passed, including 839 Python tests (9 skipped), 31 Chromium tests and 9 PostgreSQL integration tests.
+- **Multi-workspace access:** the API already supports member-authorized switching, but the primary dashboard did not expose it. A workspace selector, disabled suspended-workspace choices and direct merchant/admin shortcuts have been added as the next candidate; exact-SHA CI is pending for this new slice.
 - **Platform foundation:** FastAPI/SQLAlchemy, workspace/role checks, audit events, migrations, durable S1–S8 workflow state/recovery, evidence-conscious research/content, an RAG/model abstraction, 53 registered affiliate skills with mixed parity, consent/lead/email records, review-gated distribution, ad budget guardrails, conversion intake/reconciliation primitives, Docker and CI.
 
 ## Verification checkpoint
@@ -40,3 +41,9 @@ The immediately preceding baseline `c579fb5b9279d068f058eb00b42cd7d923f46343` ha
 - **Partial / unverified:** all three personas as complete applications, universal skill parity, real provider account linking, live provider metrics/actions, selected-network launch acceptance and operational readiness.
 - **Next checkpoint:** finish exact-SHA push and PR CI for the manual-stage fix, correct any failing job from its logs, then continue with the highest-priority incomplete role/provider acceptance slice.
 
+
+## Latest verified checkpoint and next candidate
+
+- Verified commit: [a9447fbd53d309c6b3316412b42bd74ba6f6535a](https://github.com/AITECHPRODUCTS/Project1/commit/a9447fbd53d309c6b3316412b42bd74ba6f6535a). Push [40930882062](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40930882062) and PR [40930892946](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40930892946) passed. Manual stage selection is covered by the new browser acceptance test.
+- Current next candidate adds visible workspace switching on the primary dashboard and navigation shortcuts for merchant applications and platform admin. Do not mark this new slice verified until its own exact-SHA push and PR workflows pass.
+- Overall release decision remains NOT PRODUCTION READY; external provider authorization, full 53-skill parity, all-role end-to-end acceptance, live provider actions/data and production operations remain open.

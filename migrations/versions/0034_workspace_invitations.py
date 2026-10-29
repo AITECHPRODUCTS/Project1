@@ -17,7 +17,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("workspace_id", sa.String(length=36), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
         sa.Column("email", sa.String(length=320), nullable=False),
-        sa.Column("role", sa.String(length=20), nullable=False, server_default="member"),
+        sa.Column("role", sa.String(length=20), nullable=False),
         sa.Column("token_hash", sa.String(length=64), nullable=False),
         sa.Column("invited_by_user_id", sa.String(length=36), sa.ForeignKey("user_accounts.id", ondelete="SET NULL"), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),

@@ -14,8 +14,8 @@ _TIMEFRAME_LABEL = {"30d": "30 days", "90d": "90 days", "6m": "six months", "1y"
 _METRIC_FIELDS = ("previous_clicks", "current_clicks", "previous_impressions", "current_impressions", "previous_avg_position", "current_avg_position")
 
 
-def _validate_page_inputs(page: dict[str, Any], index: int) -> None:
-    """Reject malformed direct-service inputs instead of silently ranking corrupted metrics."""
+def _validate_page_inputs(page: dict[str, Any], index: int, today: date) -> None:
+    """Reject malformed metrics and impossible freshness evidence before ranking a page."""
     for field in _METRIC_FIELDS + ("refresh_effort_hours",):
         value = page.get(field)
         if value is None:
@@ -24,6 +24,23 @@ def _validate_page_inputs(page: dict[str, Any], index: int) -> None:
             raise ValueError(f"pages[{index}].{field} must be a finite non-negative number")
         if not math.isfinite(float(value)) or value < 0:
             raise ValueError(f"pages[{index}].{field} must be a finite non-negative number")
+
+    freshness_dates: dict[str, date] = {}
+    for field in ("publish_date", "last_updated"):
+        value = page.get(field)
+        if value is None:
+            continue
+        parsed = _as_date(value)
+        if parsed is None:
+            raise ValueError(f"pages[{index}].{field} must be a valid ISO date")
+        if parsed > today:
+            raise ValueError(f"pages[{index}].{field} cannot be in the future")
+        freshness_dates[field] = parsed
+
+    published = freshness_dates.get("publish_date")
+    updated = freshness_dates.get("last_updated")
+    if published is not None and updated is not None and updated < published:
+        raise ValueError(f"pages[{index}].last_updated cannot be earlier than publish_date")
 
 
 def _paired_decline(previous: int | float | None, current: int | float | None) -> float | None:
@@ -106,7 +123,7 @@ def build_content_decay_report(
     needs_data: list[dict[str, Any]] = []
 
     for page_index, page in enumerate(pages):
-        _validate_page_inputs(page, page_index)
+        _validate_page_inputs(page, page_index, today)
         url = str(page.get("url") or "").strip()
         title = _title(page)
         clicks_decline = _paired_decline(page.get("previous_clicks"), page.get("current_clicks"))

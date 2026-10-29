@@ -1,11 +1,11 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 paid-ad guardrail conflict visibility in UI (CI pending)
+## 2026-10-29 paid-ad guardrail conflict visibility in UI (selector fix pending verification)
 
 - The ad-budget guardrail page now renders an accessible alert when its saved evaluation contains snapshot_conflicts, identifying the platform/creative, UTC day, conflicting fields and candidate count.
 - The alert explains that stop-loss evaluation is blocked pending source reconciliation and that no remote campaign action was executed. The existing raw evaluation JSON remains available for detailed diagnosis.
-- Added Chromium coverage for the rendered conflict state and its safety language. This improves operator visibility; it does not authorize ad spend or add a provider integration. Exact-SHA push and PR CI is pending.
+- Added Chromium coverage for the rendered conflict state and its safety language. First browser UAT failed because the test's generic alert locator also matched the Next.js route announcer; the test is corrected to scope assertions to the main page alert. No application behavior was changed by the test fix. Exact-SHA push and PR CI for the correction is pending.
 
 
 ## 2026-10-29 verified paid-ad guardrail snapshot-conflict safety

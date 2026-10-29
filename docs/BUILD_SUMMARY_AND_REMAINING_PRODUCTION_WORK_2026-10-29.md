@@ -115,3 +115,9 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - The /ads/guardrails page now renders a semantic alert for the blocked_ambiguous_provider_snapshots evaluation, showing the affected platform/creative, UTC day, conflicting metric fields and number of same-timestamp records.
 - The alert explicitly states that evaluation is blocked until reconciliation and that no remote campaign action was executed; the raw evaluation payload remains available for debugging.
 - Added Chromium browser acceptance coverage for the rendered warning. The UI change requires fresh exact-SHA push and PR workflows. Live provider authentication/action and production release remain unverified.
+
+
+### Browser-test correction for the operator-visible conflict alert
+
+- First UI candidate: `4d6f9e3fb71018b8ff3544e8218ed96b25d85c91`. Python (746 passed, 7 skipped), PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Browser UAT failed one new test because a generic alert selector matched both the conflict warning and the Next.js route announcer; 15 other browser tests passed.
+- Corrected the test to scope its content assertions to `main [role='alert']`, retaining all warning/safety assertions. No runtime code was changed for this test-only correction. The new exact-SHA push and PR workflows must pass before the UI increment is verified.

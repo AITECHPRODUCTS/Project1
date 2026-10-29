@@ -115,10 +115,11 @@ def test_ad_guardrails_browser_surfaces_ambiguous_provider_snapshot_block():
             page.get_by_role("alert").get_by_text(
                 "Conflicting provider snapshots — evaluation blocked"
             ).wait_for(state="visible")
-            assert "creative-1" in page.locator("[role='alert']").inner_text()
-            assert "commission_usd, spend_usd" in page.locator("[role='alert']").inner_text()
-            assert "no remote campaign action was executed" in page.locator("[role='alert']").inner_text().lower()
-            assert page.locator("main [role='alert']").count() == 1
+            alert = page.locator("main [role='alert']")
+            assert "creative-1" in alert.inner_text()
+            assert "commission_usd, spend_usd" in alert.inner_text()
+            assert "no remote campaign action was executed" in alert.inner_text().lower()
+            assert alert.count() == 1
         finally:
             browser.close()
 

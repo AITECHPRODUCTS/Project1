@@ -91,6 +91,10 @@ def test_lead_json_data_export_is_scoped_audited_bounded_and_content_minimized(t
                         attempts=1,
                     ),
                 ])
+                # Flush workspace-A rows while workspace A is active. Otherwise
+                # SQLAlchemy may defer these writes until workspace B is active,
+                # correctly triggering the cross-workspace write guard.
+                await db.flush()
             with workspace_scope(workspace_b.id):
                 lead_b = Lead(
                     workspace_id=workspace_b.id,

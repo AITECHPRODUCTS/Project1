@@ -3,11 +3,21 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code SHA:** 56edbec957d1667dea4e2a9dbc4efd19de422632  
+**Latest verified code SHA:** 7145e2f2189cbac940c9471139388f4a1d89750d  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
 
-## Latest verified P0 fix — account/session privilege revalidation (29 October 2026)
+
+## Latest verified P0 extension — pause enforcement for Resend email sends (29 October 2026)
+
+- Code SHA: 7145e2f2189cbac940c9471139388f4a1d89750d on the existing implementation branch.
+- The persisted global provider-write pause previously gated actions using ExternalAction but did not cover direct Resend sends from the scheduled email worker or double-opt-in confirmation flow.
+- The shared pause-control row lock now guards both paths before a new delivery claim. Scheduled email remains unclaimed when paused and records a minimized audit event; missing control returns 503 and fails closed. Double-opt-in is blocked before lead/confirmation/consent mutation or provider I/O. Stable Resend idempotency keys are unchanged and in-flight operations are not cancelled.
+- Added three regression cases covering scheduled email pause, missing-control denial and double-opt-in no-mutation behavior.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925318303 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925331019 both passed. Python 838 passed / 9 skipped / 5 warnings, Chromium UAT 30 passed, PostgreSQL integration 9 passed; frontend typecheck/production build/final Docker smoke, AI/RAG 10 imports, security/SBOM/license audits, secret scan, repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
+- Scope is now registry-backed social/CMS/bio-link/GitHub Pages/workflow writes plus scheduled marketing and double-opt-in Resend emails. Other direct provider mutation paths still require separate gates; in-flight operations cannot be undone. Resend account-level UAT and a staged emergency-pause drill are not established. Overall status remains NOT PRODUCTION READY.
+
+## Previously verified P0 fix — account/session privilege revalidation (29 October 2026)
 
 - Code SHA: b576807c9a6bea9a6f1d1ab1c6654d443f06641b on the existing build/omni-affiliate-os-production branch.
 - Authentication now reloads the authoritative UserAccount row for a session-backed workspace user on each request. Missing/inactive accounts invalidate the session, and the session's email and is_admin flag are refreshed from the database before workspace role checks. Revoking Platform Super Admin in the database therefore takes effect without waiting for the signed session cookie to expire.

@@ -159,3 +159,11 @@ The Library contains multiple recent requirement files, blueprint/audit Markdown
 - Exact-SHA push 40921800860 and PR 40921812153 passed: Python 835 passed/9 skipped/5 warnings, browser UAT 30 passed, PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped under its configured push-only condition.
 - The pause switch is not universal: it gates only writes that claim through the shared external-action registry. It does not undo remote requests already in flight and does not replace other actions' provider-specific kill switches. Further provider-write/worker authorization audit and external account UAT remain.
 - Branch remains build/omni-affiliate-os-production; PR #1 remains open, draft and unmerged. Overall product remains NOT PRODUCTION READY.
+
+## Latest verified code checkpoint — Resend pause enforcement, 29 October 2026
+
+- Code SHA 7145e2f2189cbac940c9471139388f4a1d89750d (https://github.com/AITECHPRODUCTS/Project1/commit/7145e2f2189cbac940c9471139388f4a1d89750d), on build/omni-affiliate-os-production. PR #1 remains open, draft and unmerged.
+- The shared global provider pause now guards scheduled Resend marketing-email claims and double-opt-in confirmation sends, in addition to actions using the ExternalAction registry. The check is serialized with the durable claim; paused/missing-control cases prevent provider I/O, preserve the queued message and record minimized audit evidence. In-flight operations are not cancelled.
+- Exact push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925318303 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925331019 passed all configured jobs: Python 838 passed/9 skipped/5 warnings; browser UAT 30 passed on each; PostgreSQL 9 passed; frontend/Docker, AI/RAG 10 imports, security/SBOM/license, secret scan, repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured condition.
+- Next: inspect remaining provider mutation and background worker paths for pause/authorization/idempotency coverage, then real provider sandbox/account UAT, full 53-skill acceptance, live staging proxy/egress verification, monitoring, backup/restore and rollback. Overall product status remains NOT PRODUCTION READY.
+- Current concise status: docs/PRODUCTION_BUILD_SUMMARY_CURRENT.md.

@@ -47,3 +47,8 @@ The immediately preceding baseline `c579fb5b9279d068f058eb00b42cd7d923f46343` ha
 - Verified commit: [a9447fbd53d309c6b3316412b42bd74ba6f6535a](https://github.com/AITECHPRODUCTS/Project1/commit/a9447fbd53d309c6b3316412b42bd74ba6f6535a). Push [40930882062](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40930882062) and PR [40930892946](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40930892946) passed. Manual stage selection is covered by the new browser acceptance test.
 - Current next candidate adds visible workspace switching on the primary dashboard and navigation shortcuts for merchant applications and platform admin. Do not mark this new slice verified until its own exact-SHA push and PR workflows pass.
 - Overall release decision remains NOT PRODUCTION READY; external provider authorization, full 53-skill parity, all-role end-to-end acceptance, live provider actions/data and production operations remain open.
+## Workspace-switch verification correction
+
+- Exact candidate [1266f571eb18dd6c9e8757b278f1469309e1d8c6](https://github.com/AITECHPRODUCTS/Project1/commit/1266f571eb18dd6c9e8757b278f1469309e1d8c6) failed one Chromium assertion: the browser did not observe a suspended workspace option as disabled. Other Python, frontend, PostgreSQL, AI-profile, secret scan, repository guard and security checks passed; that does not override the failed browser check.
+- Corrective candidate filters suspended workspaces out of the selector entirely and explicitly tells users that suspended workspaces are hidden. Re-run exact-SHA push and PR browser UAT before marking this slice complete.
+- Latest fully verified code remains `a9447fbd53d309c6b3316412b42bd74ba6f6535a` until the corrective candidate has a complete green run.

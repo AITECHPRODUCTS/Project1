@@ -1988,8 +1988,9 @@ def test_dashboard_switches_active_workspace_using_authorized_backend_membership
             selector = page.get_by_label("Active workspace")
             selector.wait_for(state="visible")
             assert selector.input_value() == "publisher-workspace"
-            assert selector.locator("option").count() == 3
-            assert selector.locator('option[value="suspended-workspace"]').is_disabled()
+            assert selector.locator("option").count() == 2
+            assert selector.locator('option[value="suspended-workspace"]').count() == 0
+            assert page.get_by_text("Suspended workspaces hidden", exact=True).is_visible()
 
             with page.expect_response(
                 lambda response: response.url.endswith("/api/workspaces/merchant-workspace/switch")
@@ -1999,8 +2000,9 @@ def test_dashboard_switches_active_workspace_using_authorized_backend_membership
             switch_response = switch_response_info.value
             assert switch_response.status == 200, switch_response.text()
 
-            page.get_by_test_id("active-workspace-role").get_by_text("admin", exact=True).wait_for(state="visible")
+            page.wait_for_function("document.querySelector('[data-testid=active-workspace-role]')?.textContent?.trim() === 'admin'", timeout=15000)
             page.get_by_label("Active workspace").wait_for(state="visible")
+            assert page.get_by_label("Active workspace").input_value() == "merchant-workspace"
             assert switch_calls == ["merchant-workspace"]
             assert "merchant-workspace" in workspace_list_calls
             assert active_workspace["id"] == "merchant-workspace"

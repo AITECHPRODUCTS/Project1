@@ -123,3 +123,8 @@ Continue on build/omni-affiliate-os-production only. Do not create a branch, swi
 - Added an active-workspace selector, disables suspended workspaces as choices, switches only after API confirmation, reloads the dashboard so workspace-scoped data is fetched again, and adds direct links to merchant applications and the platform admin console for platform admins.
 - Added Chromium browser acceptance that switches between publisher and merchant workspace memberships and verifies suspended workspaces are disabled in the selector. This candidate needs exact-SHA push/PR CI before it can be marked verified.
 - Release remains NOT PRODUCTION READY.
+## Workspace-switch regression correction — 29 October 2026
+
+- Candidate `1266f571eb18dd6c9e8757b278f1469309e1d8c6` passed Python (839 passed, 9 skipped), frontend build/typecheck, PostgreSQL integration, AI-profile, security audit, secret scan and repository guard, but failed Chromium browser UAT on the new assertion that a suspended `<option>` was disabled. Exact PR run: [40932145079](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932145079); exact push run: [40932137857](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932137857).
+- Correction: suspended workspaces are now removed from the selectable option list entirely, while an informational status tells the user that suspended workspaces are hidden. The browser test asserts that only active workspace options are present, performs a switch, and waits for the authenticated role to refresh after reload.
+- New candidate CI must pass both push and PR workflows before workspace switching is marked verified. Latest fully verified code remains `a9447fbd53d309c6b3316412b42bd74ba6f6535a` until then.

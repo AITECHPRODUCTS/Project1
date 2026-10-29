@@ -189,3 +189,8 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 
 - Root cause from both exact-SHA hosted workflows for `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7`: migration 0030 creates `email_delivery_events.provider` with server default `resend`, but SQLAlchemy's `EmailDeliveryEvent.provider` only had a Python-side default. Alembic therefore detected an unexpected `modify_default` during SQLite and PostgreSQL drift checks.
 - Corrected the model to declare both client and server defaults and added a model-metadata regression test. The new candidate needs fresh exact-SHA push/PR runs; do not count the failed predecessor as passing. External provider secret and real delivery-event verification are still not configured/verified.
+
+
+### Current verification correction (same existing branch; candidate pending)
+
+- The schema-default correction made Alembic drift checks pass in the PR run, including PostgreSQL migration verification. The Python suite then failed one API test: `test_lead_list_paginates_and_counts_only_the_active_workspace` constructed a `SimpleNamespace` without `email_suppressed_at` and `email_suppression_reason`, which the latest lead serializer now returns. The failure was isolated to stale test fixture data; 757 other tests passed, 7 skipped. Updated the fixture to include both model fields. Fresh exact-SHA push/PR runs are required before closing the checkpoint.

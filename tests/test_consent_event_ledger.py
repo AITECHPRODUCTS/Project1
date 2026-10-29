@@ -295,6 +295,8 @@ def test_lead_list_paginates_and_counts_only_the_active_workspace():
         consent_at=observed,
         email_consent_confirmed_at=None,
         consent_source="persisted_landing_page",
+        email_suppressed_at=None,
+        email_suppression_reason=None,
         unsubscribed_at=None,
         purchased_at=None,
         metadata_json={},

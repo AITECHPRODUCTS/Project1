@@ -1275,3 +1275,8 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Added Chromium acceptance for a 52-offer queue, next/previous navigation, filter preservation and error-free rendering. The qualification decision and evidence contracts are unchanged.
 - Candidate SHA: fe86be600d4c526fa9226cef1b424726fa9d27e0 (parent 03bdbb6f60a6e8b9f86472a86f17d0156214dadc). The immediately preceding code checkpoint 03bdbb6f60a6e8b9f86472a86f17d0156214dadc passed push 40824127725 and PR 40824132752, including 744 Python tests and 13 browser tests. Workflows for the pagination candidate were canceled while concurrent workflow attempts were in flight; do not treat those canceled runs as passing. Exact-head push and PR verification is pending for the current candidate.
 - Product status remains NOT RELEASE READY; pagination improves access to the queue but does not establish provider verification or production acceptance.
+
+
+### Current verification correction (same existing branch; candidate pending)
+
+- The schema-default correction made Alembic drift checks pass in the PR run, including PostgreSQL migration verification. The Python suite then failed one API test: `test_lead_list_paginates_and_counts_only_the_active_workspace` constructed a `SimpleNamespace` without `email_suppressed_at` and `email_suppression_reason`, which the latest lead serializer now returns. The failure was isolated to stale test fixture data; 757 other tests passed, 7 skipped. Updated the fixture to include both model fields. Fresh exact-SHA push/PR runs are required before closing the checkpoint.

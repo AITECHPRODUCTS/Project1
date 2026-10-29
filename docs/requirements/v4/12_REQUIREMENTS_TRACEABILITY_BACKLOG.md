@@ -413,3 +413,8 @@
 - Failed predecessor `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7`: push [40836353831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836353831) and PR [40836360147](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836360147) failed schema drift because migration 0030 declared server default `resend`, but the ORM model did not.
 - Candidate fix: define both ORM client and database server defaults for `EmailDeliveryEvent.provider`; add regression test asserting model server-default parity. Full exact-SHA push/PR verification is pending.
 - Keep production provider readiness unverified until valid owner-managed Resend webhook secret, configured endpoint, real signed delivery events and bounce/complaint/suppression UAT have been exercised. Never commit provider secrets.
+
+
+### Current verification correction (same existing branch; candidate pending)
+
+- The schema-default correction made Alembic drift checks pass in the PR run, including PostgreSQL migration verification. The Python suite then failed one API test: `test_lead_list_paginates_and_counts_only_the_active_workspace` constructed a `SimpleNamespace` without `email_suppressed_at` and `email_suppression_reason`, which the latest lead serializer now returns. The failure was isolated to stale test fixture data; 757 other tests passed, 7 skipped. Updated the fixture to include both model fields. Fresh exact-SHA push/PR runs are required before closing the checkpoint.

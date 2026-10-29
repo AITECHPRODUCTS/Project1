@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main
 from backend.database import Base, get_session
-from backend.models import AuditLog, ContentAsset, ExternalAction, Workspace
+from backend.models import AuditLog, ContentAsset, ExternalAction, PlatformExecutionControl, Workspace
 
 
 def _page_payload():
@@ -59,6 +59,7 @@ def _setup(monkeypatch):
             db.add_all([
                 Workspace(id="gh-pages-workspace-a", name="Pages workspace A", slug="gh-pages-workspace-a"),
                 Workspace(id="gh-pages-workspace-b", name="Pages workspace B", slug="gh-pages-workspace-b"),
+                PlatformExecutionControl(id=1, outbound_actions_paused=False),
             ])
             await db.commit()
 

@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main, workflows
 from backend.database import Base
-from backend.models import AuditLog, Conversion, ExternalAction, Workspace
+from backend.models import AuditLog, Conversion, ExternalAction, PlatformExecutionControl, Workspace
 from backend.tenancy import workspace_scope
 
 
@@ -221,7 +221,10 @@ async def test_live_workflow_distribution_replays_completed_external_action(monk
         monkeypatch.setattr(workflows, "find_current_assessment", allow_compliance)
         workspace_id = "workflow-idempotency-workspace"
         async with sessions() as db:
-            db.add(Workspace(id=workspace_id, name="Workflow idempotency", slug="workflow-idempotency"))
+            db.add_all([
+                Workspace(id=workspace_id, name="Workflow idempotency", slug="workflow-idempotency"),
+                PlatformExecutionControl(id=1, outbound_actions_paused=False),
+            ])
             await db.commit()
         calls = []
 
@@ -280,7 +283,10 @@ async def test_live_workflow_distribution_unknown_outcome_blocks_retry_and_alter
         monkeypatch.setattr(workflows, "find_current_assessment", allow_compliance)
         workspace_id = "workflow-unknown-workspace"
         async with sessions() as db:
-            db.add(Workspace(id=workspace_id, name="Workflow unknown", slug="workflow-unknown"))
+            db.add_all([
+                Workspace(id=workspace_id, name="Workflow unknown", slug="workflow-unknown"),
+                PlatformExecutionControl(id=1, outbound_actions_paused=False),
+            ])
             await db.commit()
         calls = 0
 

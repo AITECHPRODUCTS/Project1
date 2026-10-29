@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main
 from backend.database import Base, get_session
-from backend.models import AuditLog, Workspace
+from backend.models import AuditLog, PlatformExecutionControl, Workspace
 from backend.tenancy import get_workspace_id
 
 
@@ -40,6 +40,9 @@ async def _database(monkeypatch):
             yield session
 
     monkeypatch.setitem(main.app.dependency_overrides, get_session, override_session)
+    async with sessions() as db:
+        db.add(PlatformExecutionControl(id=1, outbound_actions_paused=False))
+        await db.commit()
 
     async def allow_compliance(*args, **kwargs):
         return object()

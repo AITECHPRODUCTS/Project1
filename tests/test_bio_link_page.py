@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main
 from backend.database import Base, get_session
-from backend.models import AuditLog, ContentAsset, ExternalAction, Workspace
+from backend.models import AuditLog, ContentAsset, ExternalAction, PlatformExecutionControl, Workspace
 from backend.services.bio_link_page import build_bio_link_page, validate_bio_link_url
 
 
@@ -127,6 +127,7 @@ def _setup(monkeypatch):
             db.add_all([
                 Workspace(id="bio-link-workspace-a", name="Bio workspace A", slug="bio-link-workspace-a"),
                 Workspace(id="bio-link-workspace-b", name="Bio workspace B", slug="bio-link-workspace-b"),
+                PlatformExecutionControl(id=1, outbound_actions_paused=False),
             ])
             await db.commit()
 

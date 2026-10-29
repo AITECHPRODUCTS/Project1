@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main
 from backend.database import Base, get_session
-from backend.models import ExternalAction, Workspace
+from backend.models import ExternalAction, PlatformExecutionControl, Workspace
 
 
 WORKSPACE_ID = "external-action-workspace"
@@ -32,6 +32,7 @@ async def _database(monkeypatch):
     monkeypatch.setitem(main.app.dependency_overrides, get_session, override_session)
     async with sessions() as db:
         db.add(Workspace(id=WORKSPACE_ID, name="External action workspace", slug="external-action-workspace"))
+        db.add(PlatformExecutionControl(id=1, outbound_actions_paused=False))
         await db.commit()
 
     async def platform_admin():
@@ -200,3 +201,49 @@ def test_unknown_live_publish_outcome_blocks_same_or_changed_key_replay(monkeypa
             await engine.dispose()
     import anyio
     anyio.run(run_test)
+
+
+def test_platform_pause_blocks_new_provider_actions_but_allows_completed_replay(monkeypatch):
+    async def run_test():
+        engine, sessions = await _database(monkeypatch)
+        calls = []
+
+        async def fake_publish(platform, post):
+            calls.append((platform, post))
+            return {"status": "published", "platform": platform, "remote_id": "pause-test-post"}
+
+        monkeypatch.setattr(main, "social_media_scheduler", fake_publish)
+        payload = _social_payload()
+        key = "platform-pause-replay-key-01"
+        try:
+            with TestClient(main.app) as client:
+                first = client.post("/api/social/publish", json=payload, headers={"Idempotency-Key": key})
+                assert first.status_code == 200, first.text
+
+                async with sessions() as db:
+                    control = await db.get(PlatformExecutionControl, 1)
+                    assert control is not None
+                    control.outbound_actions_paused = True
+                    control.reason = "Incident investigation in progress"
+                    await db.commit()
+
+                replay = client.post("/api/social/publish", json=payload, headers={"Idempotency-Key": key})
+                blocked = client.post(
+                    "/api/social/publish",
+                    json=payload,
+                    headers={"Idempotency-Key": "platform-pause-new-action-01"},
+                )
+
+            assert replay.status_code == 200, replay.text
+            assert replay.json() == first.json()
+            assert blocked.status_code == 423, blocked.text
+            assert blocked.json()["detail"]["code"] == "PLATFORM_OUTBOUND_ACTIONS_PAUSED"
+            assert len(calls) == 1
+            async with sessions() as db:
+                actions = list((await db.scalars(select(ExternalAction))).all())
+            assert len(actions) == 1
+        finally:
+            await engine.dispose()
+    import anyio
+    anyio.run(run_test)
+

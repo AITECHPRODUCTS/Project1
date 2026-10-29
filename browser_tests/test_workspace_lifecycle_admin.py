@@ -37,6 +37,15 @@ def test_platform_admin_tenant_lifecycle_suspends_and_reinstates_with_reason():
         },
     ]
     posts = []
+    control = {
+        "id": 1, "outbound_actions_paused": False, "reason": None,
+        "changed_by": None, "changed_at": "2026-10-29T12:00:00+00:00",
+        "enforcement_scope": "new provider writes using backend.services.external_action_registry",
+        "completed_idempotency_replays_allowed": True,
+        "in_flight_actions_cancelled": False,
+        "note": "Registry-gated provider writes only.",
+    }
+    control_posts = []
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -48,6 +57,20 @@ def test_platform_admin_tenant_lifecycle_suspends_and_reinstates_with_reason():
                 url = request.url
                 if url.endswith("/api/auth/me"):
                     _fulfill_json(route, {"authenticated": True, "csrf_token": "tenant-admin-csrf"})
+                    return
+                if url.endswith("/api/admin/execution-control") and request.method == "POST":
+                    body = json.loads(request.post_data or "{}")
+                    control_posts.append(body)
+                    control.update({
+                        "outbound_actions_paused": body["outbound_actions_paused"],
+                        "reason": body["reason"],
+                        "changed_by": "platform.operator@example.invalid",
+                        "changed_at": "2026-10-29T12:30:00+00:00",
+                    })
+                    _fulfill_json(route, control)
+                    return
+                if url.endswith("/api/admin/execution-control") and request.method == "GET":
+                    _fulfill_json(route, control)
                     return
                 if "/api/admin/tenants/" in url and request.method == "POST":
                     body = json.loads(request.post_data or "{}")
@@ -83,6 +106,19 @@ def test_platform_admin_tenant_lifecycle_suspends_and_reinstates_with_reason():
             page.goto(f"{BASE_URL}/admin", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Tenant lifecycle console").wait_for(state="visible")
             page.get_by_text("Current administrative workspace is protected from self-suspension.").wait_for(state="visible")
+            page.get_by_role("heading", name="Platform-wide provider-write pause").wait_for(state="visible")
+            page.get_by_label("Audit reason for platform-wide provider-write pause").fill("Security incident investigation is underway")
+            page.get_by_role("button", name="Pause registry-gated provider writes").click()
+            page.get_by_text("New registry-gated provider writes are paused.", exact=True).wait_for(state="visible")
+            assert len(control_posts) == 1
+            assert control_posts[0]["outbound_actions_paused"] is True
+            assert control_posts[0]["reason"] == "Security incident investigation is underway"
+            page.get_by_label("Audit reason for platform-wide provider-write pause").fill("Incident was reviewed and provider writes can resume")
+            page.get_by_role("button", name="Resume registry-gated provider writes").click()
+            page.get_by_text("Registry-gated provider writes are resumed.", exact=True).wait_for(state="visible")
+            assert len(control_posts) == 2
+            assert control_posts[1]["outbound_actions_paused"] is False
+
 
             page.get_by_label("Audit reason for Demo affiliate tenant").fill("Confirmed abuse after support investigation")
             page.get_by_role("button", name="Suspend Demo affiliate tenant").click()

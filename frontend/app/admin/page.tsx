@@ -3,6 +3,17 @@
 import {useCallback,useEffect,useState} from "react";
 import {apiFetch} from "@/lib/api";
 
+type PlatformExecutionControl = {
+  id:number;
+  outbound_actions_paused:boolean;
+  reason:string|null;
+  changed_by:string|null;
+  changed_at:string|null;
+  enforcement_scope:string;
+  completed_idempotency_replays_allowed:boolean;
+  in_flight_actions_cancelled:boolean;
+  note:string;
+};
 type WorkspaceTenant = {
   id:string;
   name:string;
@@ -29,6 +40,10 @@ const buttonClass="rounded-xl px-4 py-2.5 text-sm font-bold disabled:cursor-not-
 
 export default function TenantLifecyclePage(){
   const [tenantResponse,setTenantResponse]=useState<WorkspaceTenantResponse|null>(null);
+  const [executionControl,setExecutionControl]=useState<PlatformExecutionControl|null>(null);
+  const [controlReason,setControlReason]=useState("");
+  const [controlLoading,setControlLoading]=useState(false);
+  const [controlBusy,setControlBusy]=useState(false);
   const [reasons,setReasons]=useState<Record<string,string>>({});
   const [loading,setLoading]=useState(false);
   const [busyId,setBusyId]=useState("");
@@ -48,7 +63,49 @@ export default function TenantLifecyclePage(){
     }
   },[]);
 
+  const loadExecutionControl=useCallback(async()=>{
+    setControlLoading(true);
+    setError("");
+    try{
+      const response=await apiFetch<PlatformExecutionControl>("/api/admin/execution-control");
+      setExecutionControl(response);
+    }catch(err){
+      setError(err instanceof Error?err.message:"Could not load the platform provider-write control.");
+    }finally{
+      setControlLoading(false);
+    }
+  },[]);
+
+  const changeExecutionControl=async()=>{
+    const reason=controlReason.trim();
+    if(reason.length<10){
+      setError("Enter an audit reason with at least ten non-whitespace characters.");
+      return;
+    }
+    if(!executionControl)return;
+    const paused=!executionControl.outbound_actions_paused;
+    setControlBusy(true);
+    setError("");
+    setNotice("");
+    try{
+      const result=await apiFetch<PlatformExecutionControl>("/api/admin/execution-control",{
+        method:"POST",
+        body:JSON.stringify({outbound_actions_paused:paused,reason}),
+      });
+      setExecutionControl(result);
+      setControlReason("");
+      setNotice(result.outbound_actions_paused
+        ?"New registry-gated provider writes are paused."
+        :"Registry-gated provider writes are resumed.");
+    }catch(err){
+      setError(err instanceof Error?err.message:"Platform provider-write control update failed.");
+    }finally{
+      setControlBusy(false);
+    }
+  };
+
   useEffect(()=>{void loadTenants();},[loadTenants]);
+  useEffect(()=>{void loadExecutionControl();},[loadExecutionControl]);
 
   const transition=async(tenant:WorkspaceTenant)=>{
     const reason=(reasons[tenant.id]||"").trim();
@@ -104,6 +161,31 @@ export default function TenantLifecyclePage(){
       <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
         <strong>Safety boundary:</strong> a suspended workspace cannot start new authenticated API sessions, disappears from scheduled worker enumeration, and its workflow runner stops before another stage at a safe boundary. A provider request already in flight is not rolled back. Switch to a different active workspace before suspending the workspace used by this admin session.
       </div>
+
+      <section aria-label="Platform-wide provider-write pause" className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[.16em] text-indigo-600">Global emergency control</p>
+            <h2 className="mt-1 text-xl font-black">Platform-wide provider-write pause</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Pause or resume new actions routed through the shared external-action idempotency registry. This persistent platform control is separate from each provider's credentials and dry-run configuration.</p>
+          </div>
+          <span className={"rounded-full border px-3 py-2 text-xs font-bold "+(executionControl?.outbound_actions_paused?"border-rose-200 bg-rose-50 text-rose-800":"border-emerald-200 bg-emerald-50 text-emerald-800")}>
+            {controlLoading?"Loading control…":executionControl?.outbound_actions_paused?"Provider writes paused":executionControl?"Provider writes not paused":"Control unavailable"}
+          </span>
+        </div>
+        {executionControl?.changed_at&&<p className="mt-3 text-xs text-slate-500">Last changed by {executionControl.changed_by||"unknown operator"} · {new Date(executionControl.changed_at).toLocaleString()}{executionControl.reason?" · Reason: "+executionControl.reason:""}</p>}
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-5 text-amber-950">
+          <strong>Enforcement boundary:</strong> new social, CMS, bio-link and GitHub Pages writes using the shared registry are denied while paused. Completed idempotency replays can return their recorded result. Already-claimed/in-flight operations cannot be rolled back, and other side-effecting paths not using this registry still require separate guards.
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <label className="block text-sm font-semibold text-slate-700" htmlFor="platform-execution-control-reason">Audit reason for platform-wide provider-write pause
+            <textarea id="platform-execution-control-reason" rows={2} maxLength={2000} minLength={10} value={controlReason} onChange={event=>setControlReason(event.target.value)} className={inputClass} placeholder={executionControl?.outbound_actions_paused?"Why are provider writes safe to resume?":"Why should new provider writes be paused?"}/>
+          </label>
+          <button type="button" onClick={()=>void changeExecutionControl()} disabled={controlLoading||controlBusy||!executionControl||controlReason.trim().length<10} className={buttonClass+" "+(executionControl?.outbound_actions_paused?"bg-indigo-600 text-white":"bg-rose-600 text-white")}>
+            {controlBusy?"Saving global control…":executionControl?.outbound_actions_paused?"Resume registry-gated provider writes":"Pause registry-gated provider writes"}
+          </button>
+        </div>
+      </section>
 
       {error&&<div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
       {notice&&<div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}

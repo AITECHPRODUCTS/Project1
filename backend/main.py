@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceLifecycleActionRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -9393,6 +9393,91 @@ async def _apply_workspace_lifecycle(
         "suspension_reason": workspace.suspension_reason,
         "active_workspace_id": user.get("workspace_id"),
     }
+
+
+def _platform_execution_control_payload(control: PlatformExecutionControl) -> dict[str, Any]:
+    return {
+        "id": control.id,
+        "outbound_actions_paused": bool(control.outbound_actions_paused),
+        "reason": control.reason,
+        "changed_by": control.changed_by,
+        "changed_at": control.changed_at.isoformat() if control.changed_at else None,
+        "enforcement_scope": "new provider writes using backend.services.external_action_registry",
+        "completed_idempotency_replays_allowed": True,
+        "in_flight_actions_cancelled": False,
+        "note": (
+            "This pause blocks new actions that use the shared ExternalAction registry, including registered "
+            "social, CMS, bio-link and GitHub Pages writes. Completed idempotency replays may return prior results. "
+            "An action already claimed/in flight is not rolled back. Other side effects not using this registry "
+            "still require their own execution gates."
+        ),
+    }
+
+
+@api.get("/admin/execution-control")
+async def get_platform_execution_control(
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    with workspace_scope(None):
+        control = await db.get(PlatformExecutionControl, 1)
+    if control is None:
+        raise HTTPException(503, detail={
+            "code": "PLATFORM_EXECUTION_CONTROL_UNAVAILABLE",
+            "message": "Global provider-write control record is missing; provider writes fail closed.",
+        })
+    return _platform_execution_control_payload(control)
+
+
+@api.post("/admin/execution-control")
+async def update_platform_execution_control(
+    payload: PlatformExecutionControlChangeRequest,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    audit_workspace_id = str(user.get("workspace_id") or "").strip()
+    if not audit_workspace_id:
+        raise HTTPException(403, "Select an active workspace to anchor the platform-control audit record")
+    actor = str(user.get("email") or user.get("user_id") or "platform-admin")[:320]
+    with workspace_scope(None):
+        control = await db.scalar(
+            select(PlatformExecutionControl)
+            .where(PlatformExecutionControl.id == 1)
+            .with_for_update()
+        )
+        if control is None:
+            raise HTTPException(503, detail={
+                "code": "PLATFORM_EXECUTION_CONTROL_UNAVAILABLE",
+                "message": "Global provider-write control record is missing; provider writes fail closed.",
+            })
+        previous_paused = bool(control.outbound_actions_paused)
+        control.outbound_actions_paused = payload.outbound_actions_paused
+        control.reason = payload.reason
+        control.changed_by = actor
+        control.changed_at = utcnow()
+        await db.flush()
+
+    action = "platform.outbound_actions.paused" if payload.outbound_actions_paused else "platform.outbound_actions.resumed"
+    with workspace_scope(audit_workspace_id):
+        db.add(AuditLog(
+            workspace_id=audit_workspace_id,
+            actor=actor,
+            action=action,
+            resource_type="platform_execution_control",
+            resource_id="1",
+            outcome="changed" if previous_paused != payload.outbound_actions_paused else "no_op",
+            details_json={
+                "global_control": True,
+                "previous_paused": previous_paused,
+                "new_paused": payload.outbound_actions_paused,
+                "reason": payload.reason,
+                "enforcement_scope": "external_action_registry_new_claims",
+                "completed_idempotency_replays_allowed": True,
+                "in_flight_actions_cancelled": False,
+            },
+        ))
+        await db.commit()
+    return _platform_execution_control_payload(control)
 
 
 @api.get("/admin/tenants")

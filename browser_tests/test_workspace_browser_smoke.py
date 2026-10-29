@@ -990,7 +990,7 @@ def test_commission_calculator_shows_and_reloads_workspace_saved_projection_hist
             page.get_by_label("Program 1 name").fill("History Program")
             page.get_by_role("button", name="Estimate commissions").click()
             page.get_by_role("status").get_by_text("Projection saved as a workspace draft").wait_for(state="visible")
-            page.get_by_text("history-projection-001").wait_for(state="visible")
+            page.get_by_text("history-projection-001", exact=True).wait_for(state="visible")
             assert history_reads["count"] >= 2
             page.get_by_role("button", name="View saved results").click()
             assert page.get_by_text("Loaded saved projection. It remains a draft requiring review.").count() == 1

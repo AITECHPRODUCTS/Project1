@@ -3,6 +3,7 @@ Updated: 2026-10-29
 
 ## 2026-10-29 feature increment — workspace-scoped commission projection history
 
+- Follow-up PR browser UAT exposed a strict-locator ambiguity in the new test: the projection ID appears both in the current-result caption and saved-history row. The browser assertion now requires exact text, targeting the saved-history ID rather than loosening strict-mode behavior. Re-run exact-SHA push/PR UAT after this test correction.
 - Initial push CI exposed a test-only assumption that two adjacent POSTs must be ordered by insertion time. SQLite’s stored timestamp precision can yield a tie; the API explicitly orders by `created_at DESC, id DESC`. The regression now validates that deterministic order and checks that both records are returned exactly once across pages, without changing production ordering. The fixed test requires a fresh exact-SHA run.
 - Added `GET /api/research/commission-projections` with active-workspace enforcement, explicit workspace filtering, deterministic newest-first ordering, bounded `limit`/`offset`, total count, and draft-only result metadata. A malformed stored body is flagged as unparseable, not presented as valid projection output.
 - The calculator page loads saved history on entry, refreshes it after a calculation, supports refresh/manual review of an existing result, and displays the projection draft ID/timestamp. Existing generation and no-payout safeguards remain unchanged.

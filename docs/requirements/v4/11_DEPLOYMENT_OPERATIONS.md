@@ -3,6 +3,12 @@
 ## Runtime
 Docker/Compose gives a reproducible local topology with API, frontend, PostgreSQL, Redis/Valkey and durable worker. Production uses managed secrets, TLS, object storage for generated media, health/readiness, bounded jobs, external API timeouts, queue leases, dead letters, idempotent retries, structured logs/metrics and alerts.
 
+## Health and readiness endpoints
+
+- `GET /health` is a liveness check and intentionally does not depend on database availability.
+- `GET /health/ready` executes a trivial query through the normal database session dependency. It returns HTTP 200 only when that query succeeds; database-query failures return HTTP 503 with a generic `service_not_ready` detail, without returning driver errors or connection configuration.
+- This readiness probe covers database query reachability only. It does not attest migration freshness, worker/queue health, provider authorization, proxy behavior, or full application readiness. Keep staging smoke tests, migration checks, monitoring and backup/restore gates separate.
+
 ## Release controls
 Migrate before API start using Alembic; verify the target head and metadata drift. Back up the database and demonstrate restore before destructive schema changes. Store the exact deployed SHA, image digest, migration revision, last backup, health/readiness and rollback target.
 

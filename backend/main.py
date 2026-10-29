@@ -466,7 +466,25 @@ async def _record_external_publish_audit(
 
 
 @app.get("/health")
-async def health():return {"status":"ok","service":"affiliate-os-api","time":utcnow().isoformat()}
+async def health():
+    """Liveness probe; intentionally independent of downstream service health."""
+    return {"status": "ok", "service": "affiliate-os-api", "time": utcnow().isoformat()}
+
+
+@app.get("/health/ready")
+async def readiness(db: AsyncSession = Depends(get_session)):
+    """Return ready only when the API can execute a basic database query."""
+    try:
+        await db.execute(select(1))
+    except Exception as exc:
+        # Never expose driver messages, DSNs, usernames, or query details to callers.
+        logger.warning("Database readiness check failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="service_not_ready") from None
+    return {
+        "status": "ready",
+        "service": "affiliate-os-api",
+        "dependencies": {"database": "ok"},
+    }
 @app.post("/api/auth/register", status_code=201)
 async def register(payload: RegisterRequest, request: Request, db: AsyncSession = Depends(get_session)):
     await public_rate_limit(request)

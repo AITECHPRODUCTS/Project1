@@ -413,6 +413,17 @@ export default function LeadsPage() {
                     </div>
 
                     <div className="mt-3">
+                      <div className="mb-2">
+                        <a
+                          href={API_BASE + "/api/leads/" + encodeURIComponent(lead.id) + "/data-export.json"}
+                          aria-label={"Export lead data for " + lead.email + " as JSON"}
+                          title="Download the stored lead record, consent evidence and email activity as a no-store JSON file; email bodies and provider secrets are excluded."
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50"
+                        >
+                          <Download size={15} aria-hidden="true" />
+                          Export lead data (JSON)
+                        </a>
+                      </div>
                       <button
                         type="button"
                         onClick={() => void toggleDeliveryHistory(lead.id)}

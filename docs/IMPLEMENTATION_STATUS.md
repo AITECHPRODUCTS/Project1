@@ -1,6 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 individual lead JSON data export and Resend event integrity regressions (CI pending)
+
+- New authenticated `GET /api/leads/{lead_id}/data-export.json` returns one active-workspace lead record plus associated consent evidence, delivery-event metadata, send-status activity and confirmation lifecycle timestamps. It rejects missing/cross-workspace leads and fails closed if any related collection exceeds 1,000 rows; it never returns email bodies, raw webhook payloads, provider tokens or payload checksums.
+- Export attempts are audited using a one-way opaque resource reference and counts/format/outcome only; audit details do not copy the lead email, consent wording or exported values. Successful downloads use attachment and no-store/nosniff headers.
+- Added SQLite integration tests for export payload, cross-tenant denial, missing workspace, fail-closed bounds and privacy-minimized audit logs; added browser download coverage.
+- Added Resend webhook regressions for provider event-ID reuse with a changed signed payload and for a late delivery event being unable to undo hard-bounce suppression. Exact-SHA CI is pending.
+
+
 ## 2026-10-29 verified Resend delivery-event schema and test-fixture correction
 
 - The earlier candidate `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7` first failed Alembic drift because migration 0030 declared server default `resend` while the ORM lacked the server default. The correction added `server_default="resend"` to `EmailDeliveryEvent.provider` and a model metadata regression assertion.
@@ -8,11 +16,12 @@ Updated: 2026-10-29
 - Exact-SHA push [40837426005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837426005) and PR [40837433276](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837433276) passed on `273a88d0ea247df78a862de86effd43be9b3f9cd`: Python 758 passed, 7 skipped, 5 warnings; browser UAT 20 passed; PostgreSQL migration/integration, frontend production/typecheck, security audit, secret scan, AI profile and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured event condition.
 - The signed Resend webhook logic still requires owner-managed endpoint configuration and real provider delivery/bounce/complaint UAT; CI does not establish a connected provider or production delivery.
 
-## 2026-10-29 authenticated lead email-delivery history (CI pending)
+## 2026-10-29 verified authenticated lead email-delivery history
 
-- Added a read-only endpoint that checks active-workspace lead ownership, returns only that lead's persisted provider events, uses bounded latest-first results, and allowlists PII-minimized metadata. Provider event IDs, remote message IDs and payload hashes are not returned.
-- Added a SQLite-backed API regression for workspace denial, missing workspace, invalid limit and response-field privacy; added browser coverage for the provider-reported bounce timeline and the explicit absence-of-event caveat. Exact-SHA CI is pending.
-
+- Exact-SHA push [40838428880](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40838428880) and PR [40838434870](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40838434870) passed on `a69120ea99013fbe9a97648d9d228a67d6393f2f`.
+- The API checks active-workspace lead ownership, limits results to persisted events for that lead, uses bounded latest-first ordering, and returns only allowlisted bounce metadata. The frontend provides a lazy-loaded, read-only timeline with honest provider-reported semantics and loading/error/empty states.
+- Python 759 passed, 7 skipped; browser UAT 21 passed; PostgreSQL migration/integration, frontend production build/typecheck, security audit, secret scan, AI profile and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured event condition.
+- Live Resend endpoint/secret configuration and real account delivery, bounce, complaint and suppression UAT remain unverified.
 
 ## 2026-10-29 real SQLite lead export integration test (CI pending)
 

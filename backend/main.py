@@ -4997,6 +4997,219 @@ async def export_leads_csv(
     )
 
 
+MAX_LEAD_DATA_EXPORT_ITEMS = 1_000
+
+
+async def _audit_lead_data_export(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    lead_id: str,
+    user: dict[str, Any],
+    outcome: str,
+    collection_counts: dict[str, int],
+    rejected_collections: list[str] | None = None,
+) -> None:
+    """Record an export attempt without copying email, consent text or export values into the audit log."""
+    opaque_resource_id = hashlib.sha256(
+        f"{workspace_id}:{lead_id}".encode("utf-8")
+    ).hexdigest()[:32]
+    with workspace_scope(workspace_id):
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="leads.export_data_json",
+            resource_type="lead_data_export",
+            resource_id=opaque_resource_id,
+            outcome=outcome[:80],
+            details_json={
+                "format": "json",
+                "collection_limit": MAX_LEAD_DATA_EXPORT_ITEMS,
+                "collection_counts": collection_counts,
+                "rejected_collections": sorted(rejected_collections or []),
+                "lead_id_recorded": False,
+                "lead_email_recorded": False,
+                "export_values_recorded": False,
+            },
+        ))
+        await db.commit()
+
+
+@api.get("/leads/{lead_id}/data-export.json")
+async def export_lead_data_json(
+    lead_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Download a workspace-scoped copy of one lead record and its consent/email activity."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before exporting lead data")
+
+    with workspace_scope(workspace_id):
+        lead = await db.scalar(select(Lead).where(
+            Lead.id == lead_id,
+            Lead.workspace_id == workspace_id,
+        ))
+        if lead is None:
+            raise HTTPException(404, "Lead not found in the active workspace")
+
+        consent_events = list((await db.scalars(
+            select(LeadConsentEvent).where(
+                LeadConsentEvent.workspace_id == workspace_id,
+                LeadConsentEvent.lead_id == lead_id,
+            ).order_by(
+                LeadConsentEvent.observed_at.asc(),
+                LeadConsentEvent.created_at.asc(),
+            ).limit(MAX_LEAD_DATA_EXPORT_ITEMS + 1)
+        )).all())
+        delivery_events = list((await db.scalars(
+            select(EmailDeliveryEvent).where(
+                EmailDeliveryEvent.workspace_id == workspace_id,
+                EmailDeliveryEvent.lead_id == lead_id,
+            ).order_by(
+                EmailDeliveryEvent.received_at.asc(),
+                EmailDeliveryEvent.id.asc(),
+            ).limit(MAX_LEAD_DATA_EXPORT_ITEMS + 1)
+        )).all())
+        scheduled_emails = list((await db.scalars(
+            select(ScheduledEmail).where(
+                ScheduledEmail.workspace_id == workspace_id,
+                ScheduledEmail.lead_id == lead_id,
+            ).order_by(
+                ScheduledEmail.created_at.asc(),
+                ScheduledEmail.sequence_day.asc(),
+            ).limit(MAX_LEAD_DATA_EXPORT_ITEMS + 1)
+        )).all())
+        confirmations = list((await db.scalars(
+            select(EmailConsentConfirmation).where(
+                EmailConsentConfirmation.workspace_id == workspace_id,
+                EmailConsentConfirmation.lead_id == lead_id,
+            ).order_by(
+                EmailConsentConfirmation.created_at.asc(),
+            ).limit(MAX_LEAD_DATA_EXPORT_ITEMS + 1)
+        )).all())
+
+    related = {
+        "consent_events": consent_events,
+        "email_delivery_events": delivery_events,
+        "scheduled_email_activity": scheduled_emails,
+        "email_consent_confirmations": confirmations,
+    }
+    collection_counts = {name: len(rows) for name, rows in related.items()}
+    rejected = [
+        name for name, rows in related.items()
+        if len(rows) > MAX_LEAD_DATA_EXPORT_ITEMS
+    ]
+    if rejected:
+        await _audit_lead_data_export(
+            db,
+            workspace_id=workspace_id,
+            lead_id=lead_id,
+            user=user,
+            outcome="rejected_row_limit",
+            collection_counts=collection_counts,
+            rejected_collections=rejected,
+        )
+        raise HTTPException(
+            413,
+            "Lead data export exceeds the safety limit in one or more collections; no partial export was created.",
+        )
+
+    generated_at = datetime.now(timezone.utc)
+    package = {
+        "format": "omni-affiliate-lead-data",
+        "format_version": "1.0",
+        "generated_at": generated_at.isoformat(),
+        "scope_note": "This package contains the stored lead record and associated consent, delivery-event and email-scheduling metadata. It excludes email bodies, provider tokens, raw webhook payloads and payload checksums.",
+        "lead": {
+            "id": lead.id,
+            "email": lead.email,
+            "lead_magnet": lead.lead_magnet,
+            "consent_at": lead.consent_at.isoformat() if lead.consent_at else None,
+            "email_consent_confirmed_at": lead.email_consent_confirmed_at.isoformat() if lead.email_consent_confirmed_at else None,
+            "consent_source": lead.consent_source,
+            "unsubscribed_at": lead.unsubscribed_at.isoformat() if lead.unsubscribed_at else None,
+            "email_suppressed_at": lead.email_suppressed_at.isoformat() if lead.email_suppressed_at else None,
+            "email_suppression_reason": lead.email_suppression_reason,
+            "purchased_at": lead.purchased_at.isoformat() if lead.purchased_at else None,
+            "engaged": bool(lead.engaged),
+            "created_at": lead.created_at.isoformat() if lead.created_at else None,
+            "metadata": lead.metadata_json or {},
+        },
+        "consent_events": [
+            {
+                "id": row.id,
+                "event_type": row.event_type,
+                "purpose": row.purpose,
+                "consent_text": row.consent_text,
+                "policy_version": row.policy_version,
+                "source": row.source,
+                "channel": row.channel,
+                "metadata": row.metadata_json or {},
+                "observed_at": row.observed_at.isoformat() if row.observed_at else None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in consent_events
+        ],
+        "email_delivery_events": [
+            {
+                "id": row.id,
+                "provider": row.provider,
+                "provider_event_id": row.provider_event_id,
+                "provider_message_id": row.provider_message_id,
+                "event_type": row.event_type,
+                "outcome": row.outcome,
+                "event_created_at": row.event_created_at.isoformat() if row.event_created_at else None,
+                "received_at": row.received_at.isoformat() if row.received_at else None,
+                "metadata": row.metadata_json or {},
+            }
+            for row in delivery_events
+        ],
+        "scheduled_email_activity": [
+            {
+                "id": row.id,
+                "sequence_day": row.sequence_day,
+                "send_at": row.send_at.isoformat() if row.send_at else None,
+                "status": row.status,
+                "attempts": row.attempts,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in scheduled_emails
+        ],
+        "email_consent_confirmations": [
+            {
+                "id": row.id,
+                "status": row.status,
+                "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+                "sent_at": row.sent_at.isoformat() if row.sent_at else None,
+                "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+                "superseded_at": row.superseded_at.isoformat() if row.superseded_at else None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in confirmations
+        ],
+    }
+    await _audit_lead_data_export(
+        db,
+        workspace_id=workspace_id,
+        lead_id=lead_id,
+        user=user,
+        outcome="completed",
+        collection_counts=collection_counts,
+    )
+    return Response(
+        content=json.dumps(package, ensure_ascii=False, separators=(",", ":")),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="omni-affiliate-lead-data-{generated_at.date().isoformat()}.json"',
+            "Cache-Control": "no-store, private",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @api.get("/leads")
 async def leads(
     limit: int = Query(default=50, ge=1, le=200),

@@ -1630,3 +1630,64 @@ def test_leads_page_displays_read_only_provider_email_delivery_history():
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()
+
+
+def test_leads_page_downloads_individual_json_data_export():
+    lead = {
+        "id": "lead-data-export",
+        "email": "reader@example.test",
+        "lead_magnet": "Creator guide",
+        "consented_at": "2026-10-28T10:00:00+00:00",
+        "email_consent_confirmed_at": "2026-10-28T10:01:00+00:00",
+        "consent_source": "persisted_landing_page",
+        "email_suppressed_at": None,
+        "email_suppression_reason": None,
+        "unsubscribed": False,
+        "purchased": False,
+        "attribution": {"first_touch": {}, "last_touch": {}, "last_touch_at": None},
+    }
+    export_package = {
+        "format": "omni-affiliate-lead-data",
+        "format_version": "1.0",
+        "generated_at": "2026-10-29T10:00:00+00:00",
+        "lead": {"id": "lead-data-export", "email": "reader@example.test"},
+        "consent_events": [],
+        "email_delivery_events": [],
+        "scheduled_email_activity": [],
+        "email_consent_confirmations": [],
+    }
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_leads(route):
+                url = route.request.url
+                if "/api/leads/lead-data-export/data-export.json" in url:
+                    route.fulfill(
+                        status=200,
+                        content_type="application/json",
+                        headers={
+                            "Content-Disposition": 'attachment; filename="omni-affiliate-lead-data-2026-10-29.json"',
+                            "Cache-Control": "no-store, private",
+                            "X-Content-Type-Options": "nosniff",
+                        },
+                        body=json.dumps(export_package),
+                    )
+                elif url.split("?", 1)[0].rstrip("/").endswith("/api/leads"):
+                    _fulfill_json(route, {"count": 1, "total_count": 1, "limit": 50, "offset": 0, "data": [lead]})
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected lead export API request"}, status=404)
+
+            page.route("**/api/leads**", handle_leads)
+            page.goto(f"{BASE_URL}/leads", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Leads & attribution").wait_for(state="visible")
+            link = page.get_by_role("link", name="Export lead data for reader@example.test as JSON")
+            assert link.get_attribute("href") is not None
+            assert "/api/leads/lead-data-export/data-export.json" in (link.get_attribute("href") or "")
+            with page.expect_download() as download_info:
+                link.click()
+            download = download_info.value
+            assert download.suggested_filename == "omni-affiliate-lead-data-2026-10-29.json"
+        finally:
+            browser.close()

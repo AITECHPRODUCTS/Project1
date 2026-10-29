@@ -333,3 +333,67 @@ def test_lead_email_delivery_history_is_workspace_scoped_and_pii_minimized(tmp_p
         main.app.dependency_overrides.pop(get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)
         asyncio.run(engine.dispose())
+
+
+def test_resend_reused_event_id_with_different_signed_payload_is_conflict(tmp_path, monkeypatch):
+    engine, sessions, seeded = asyncio.run(_database(tmp_path))
+    client = _client(monkeypatch, sessions)
+    try:
+        event_id = "evt-reused-payload-0001"
+        delivered_body = _payload("email.delivered")
+        first = _post(client, delivered_body, event_id)
+        changed_body = _payload("email.delivery_delayed")
+        conflicting = _post(client, changed_body, event_id)
+
+        assert first.status_code == 200, first.text
+        assert first.json()["status"] == "processed"
+        assert conflicting.status_code == 409
+        assert "conflicts" in conflicting.json()["detail"].lower()
+
+        async def inspect():
+            async with sessions() as db:
+                with workspace_scope(seeded["workspace_id"]):
+                    sent = await db.get(ScheduledEmail, seeded["sent_id"])
+                    events = list((await db.scalars(select(EmailDeliveryEvent))).all())
+                return sent, events
+
+        sent, events = asyncio.run(inspect())
+        assert sent is not None and sent.status == "delivered"
+        assert len(events) == 1
+        assert events[0].payload_sha256 == hashlib.sha256(delivered_body).hexdigest()
+    finally:
+        client.close()
+        main.app.dependency_overrides.pop(get_session, None)
+        asyncio.run(engine.dispose())
+
+
+def test_late_delivery_event_does_not_clear_hard_bounce_or_requeue_mail(tmp_path, monkeypatch):
+    engine, sessions, seeded = asyncio.run(_database(tmp_path))
+    client = _client(monkeypatch, sessions)
+    try:
+        bounce_body = _payload("email.bounced", extra={"bounce": {"type": "Permanent", "subType": "MailboxUnavailable"}})
+        bounce = _post(client, bounce_body, "evt-terminal-bounce-0001")
+        late_delivery = _post(client, _payload("email.delivered"), "evt-late-delivery-0001")
+        assert bounce.status_code == 200, bounce.text
+        assert late_delivery.status_code == 200, late_delivery.text
+
+        async def inspect():
+            async with sessions() as db:
+                with workspace_scope(seeded["workspace_id"]):
+                    lead = await db.get(Lead, seeded["lead_id"])
+                    sent = await db.get(ScheduledEmail, seeded["sent_id"])
+                    pending = await db.get(ScheduledEmail, seeded["pending_id"])
+                    events = list((await db.scalars(select(EmailDeliveryEvent))).all())
+                return lead, sent, pending, events
+
+        lead, sent, pending, events = asyncio.run(inspect())
+        assert lead is not None and lead.email_suppression_reason == "hard_bounce"
+        assert lead.email_suppressed_at is not None
+        assert lead.unsubscribed_at is None
+        assert sent is not None and sent.status == "bounced"
+        assert pending is not None and pending.status == "suppressed"
+        assert len(events) == 2
+    finally:
+        client.close()
+        main.app.dependency_overrides.pop(get_session, None)
+        asyncio.run(engine.dispose())

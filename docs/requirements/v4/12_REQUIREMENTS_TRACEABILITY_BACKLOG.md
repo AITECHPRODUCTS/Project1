@@ -411,7 +411,7 @@
 
 ## P0 — Resend delivery schema drift correction (2026-10-29; candidate)
 - Failed predecessor `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7`: push [40836353831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836353831) and PR [40836360147](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836360147) failed schema drift because migration 0030 declared server default `resend`, but the ORM model did not.
-- Candidate fix: define both ORM client and database server defaults for `EmailDeliveryEvent.provider`; add regression test asserting model server-default parity. Full exact-SHA push/PR verification is pending.
+- Verified fix commit `273a88d0ea247df78a862de86effd43be9b3f9cd` declares both ORM client and DB server defaults for `EmailDeliveryEvent.provider` and adds model metadata regression coverage. Exact-SHA push [40837426005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837426005) and PR [40837433276](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837433276) passed: Python 758 passed, browser UAT 20 passed, and PostgreSQL migration/drift verification passed.
 - Keep production provider readiness unverified until valid owner-managed Resend webhook secret, configured endpoint, real signed delivery events and bounce/complaint/suppression UAT have been exercised. Never commit provider secrets.
 
 
@@ -427,3 +427,13 @@
 ## S4 — Workspace-scoped read-only email-delivery history (candidate, 2026-10-29)
 - Provide a lead-owned API to retrieve persisted signature-verified provider event history with bounded latest-first results and an allowlist for event type/outcome/provider/timestamps and sanitized bounce metadata.
 - Add a browser timeline with provider-reported semantics and explicit empty/error/loading states. Include workspace-denial, missing-workspace, invalid-limit and payload-privacy tests. Exact-SHA CI pending.
+
+
+## S4 — Authenticated individual-lead JSON data export (candidate, 2026-10-29)
+- Export one lead's stored record, consent events, delivery events, email-send state and confirmation lifecycle through a workspace-scoped authenticated endpoint. It is bounded per related collection; if a collection is over 1,000 records, no partial export is returned.
+- Audit outcome/format/counts with an opaque resource hash, not the email, consent wording or exported values. Responses are attachment downloads and no-store/nosniff; message bodies, provider tokens, raw payloads and payload checksums are excluded.
+- Add SQLite integration and browser download tests for tenant isolation, data shape, audit privacy, missing workspace, row cap and headers. Exact-SHA CI pending. This is not asserted to be a jurisdiction-specific legal-completeness certificate.
+
+## S5/S6 — Resend event ordering and replay integrity (candidate, 2026-10-29)
+- Reject a validly signed request that reuses an existing provider event ID with a different payload digest; keep the original event/status unchanged.
+- Ensure a late `email.delivered` callback does not clear a terminal hard-bounce status or provider suppression. Exact-SHA regression tests pending; live provider ordering/account UAT remains open.

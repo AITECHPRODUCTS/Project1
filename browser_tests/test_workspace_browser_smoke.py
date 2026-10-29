@@ -1147,3 +1147,54 @@ def test_offer_qualification_ui_records_review_only_decision_with_evidence():
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()
+
+
+
+def test_offer_qualification_queue_paginates_and_preserves_filter():
+    responses: list[dict[str, list[str]]] = []
+
+    def handle_queue(route):
+        query = parse_qs(urlparse(route.request.url).query)
+        responses.append(query)
+        offset = int(query.get("offset", ["0"])[0])
+        rows = []
+        for index in range(offset, min(offset + 50, 52)):
+            rows.append({
+                "offer": {"id": f"offer-{index}", "network": "openaffiliate", "external_id": f"external-{index}",
+                    "name": f"Offer {index}", "category": "software", "description": "Persisted catalog offer",
+                    "url": "https://merchant.example/offer", "cookie_days": None, "reward_type": None,
+                    "reward_value": None, "epc": None, "conversion_rate": None,
+                    "verification_basis": "provider_not_verified_or_unknown"},
+                "qualification": {"status": "not_reviewed", "account_eligibility": "unknown", "geography_fit": "unknown",
+                    "traffic_source_fit": "unknown", "terms_review": "unknown", "landing_page_review": "unknown",
+                    "disclosure_review": "unknown", "evidence_urls": [], "notes": "", "policy_version": "manual-review-v1",
+                    "reviewed_by": None, "reviewed_at": None, "evidence_basis": "operator_supplied_unverified",
+                    "affiliate_network_approval_implied": False},
+            })
+        _fulfill_json(route, {"count": len(rows), "total_count": 52, "offset": offset, "limit": 50,
+            "status_filter": query.get("status", ["needs_review"])[0], "data": rows,
+            "note": "Operator review does not imply provider approval."})
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/api/auth/me", lambda route: _fulfill_json(route, {
+                "authenticated": True, "user": {"email": "reviewer@example.invalid", "is_admin": False,
+                    "workspace_id": "browser-workspace", "workspace_role": "owner"}, "csrf_token": "browser-csrf-token"}))
+            page.route("**/api/offers/qualification-queue**", handle_queue)
+            page.goto(f"{BASE_URL}/offers/qualification", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Offer qualification review").wait_for(state="visible")
+            page.get_by_text("Showing 1–50 of 52 offers").wait_for(state="visible")
+            assert page.get_by_role("button", name="Previous page").is_disabled()
+            page.get_by_role("button", name="Next page").click()
+            page.get_by_text("Showing 51–52 of 52 offers").wait_for(state="visible")
+            assert responses[-1]["offset"] == ["50"]
+            assert responses[-1]["status"] == ["needs_review"]
+            assert page.get_by_role("button", name="Next page").is_disabled()
+            page.get_by_role("button", name="Previous page").click()
+            page.get_by_text("Showing 1–50 of 52 offers").wait_for(state="visible")
+            assert responses[-1]["offset"] == ["0"]
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()

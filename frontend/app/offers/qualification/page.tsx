@@ -94,14 +94,20 @@ export default function OfferQualificationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const load = useCallback(async (nextFilter: string) => {
+  const load = useCallback(async (nextFilter: string, nextOffset = 0) => {
     setLoading(true); setError("");
-    try { setQueue(await apiFetch<QueueResponse>("/api/offers/qualification-queue?status=" + encodeURIComponent(nextFilter) + "&limit=50")); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Qualification queue could not be loaded."); }
+    try {
+      const result = await apiFetch<QueueResponse>("/api/offers/qualification-queue?status=" + encodeURIComponent(nextFilter) + "&limit=50&offset=" + String(nextOffset));
+      setQueue(result);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Qualification queue could not be loaded."); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { void load(filter); }, [filter, load]);
-  const onSaved = async (text: string) => { setMessage(text); await load(filter); };
+  useEffect(() => { void load(filter, 0); }, [filter, load]);
+  const onSaved = async (text: string) => { setMessage(text); await load(filter, queue?.offset ?? 0); };
+  const pageStart = queue && queue.total_count > 0 ? queue.offset + 1 : 0;
+  const pageEnd = queue ? queue.offset + queue.count : 0;
+  const canGoPrevious = !!queue && queue.offset > 0 && !loading;
+  const canGoNext = !!queue && queue.offset + queue.count < queue.total_count && queue.count > 0 && !loading;
   return <main className="min-h-screen bg-[var(--canvas)] px-4 py-6 text-slate-800 sm:px-8 sm:py-10"><div className="mx-auto max-w-7xl">
     <a href="/offers" className="text-sm font-bold text-indigo-700">← Affiliate offer catalog</a>
     <p className="mt-6 text-xs font-black uppercase tracking-[.2em] text-indigo-600">S1 · Evidence and eligibility</p>
@@ -120,6 +126,13 @@ export default function OfferQualificationPage() {
     {loading && <p role="status" className="mt-5 text-sm text-slate-500">Loading qualification records…</p>}
     {!loading && queue && queue.data.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">No offers match this filter. Try “All catalog offers” to review the current shared catalog.</p>}
     {!loading && queue && queue.data.length > 0 && <div className="mt-5 space-y-4">{queue.data.map(item => <QualificationCard key={item.offer.id} item={item} onSaved={onSaved}/>)}</div>}
+    {queue && queue.total_count > queue.limit && <nav aria-label="Qualification queue pagination" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-sm text-slate-600" aria-live="polite">Showing {pageStart}–{pageEnd} of {queue.total_count} offers</p>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => void load(filter, Math.max(0, queue.offset - queue.limit))} disabled={!canGoPrevious} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold disabled:opacity-40">Previous page</button>
+        <button type="button" onClick={() => void load(filter, queue.offset + queue.limit)} disabled={!canGoNext} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold disabled:opacity-40">Next page</button>
+      </div>
+    </nav>}
     <p className="mt-6 text-xs leading-5 text-slate-500">{queue?.note || "Stored decisions are operator-supplied and workspace-specific. They are not independent provider evidence."}</p>
   </div></main>;
 }

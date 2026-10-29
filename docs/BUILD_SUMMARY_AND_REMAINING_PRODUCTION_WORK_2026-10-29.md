@@ -83,3 +83,11 @@ Exact-SHA push [40811838953](https://github.com/AITECHPRODUCTS/Project1/actions/
 ## Production status
 
 Do not assert a completion percentage until feature-level acceptance criteria and denominator are reconciled. Product release status remains **NOT RELEASE READY**. No external provider/account, campaign, publishing action, payout or production deployment is claimed as verified by this document. The separate newer ZIP described as an already-live app was not in the inspected Library inventory; do not claim that its code was reviewed or ported.
+
+
+## 2026-10-29 additive fix — qualification queue pagination (verification pending)
+
+- Found a real user-facing limitation in the new offer qualification workflow: the API supported bounded offset pagination, but the page always requested the first 50 rows and exposed no way to reach later offers.
+- Updated the qualification page to request explicit offsets, retain the active filter across navigation, display the current range/total, and disable Previous/Next at the correct boundaries. Refresh and post-save reload retain the current offset; filter changes reset to the first page.
+- Added Chromium browser acceptance coverage for a 52-offer queue, next/previous navigation, filter preservation and absence of UI errors. This is an additive UI/test change; API contracts and qualification decisions are unchanged.
+- Candidate parent before this change: [`03bdbb6f60a6e8b9f86472a86f17d0156214dadc`](https://github.com/AITECHPRODUCTS/Project1/commit/03bdbb6f60a6e8b9f86472a86f17d0156214dadc). Exact-SHA push/PR CI is required before marking the fix verified. Release remains **NOT RELEASE READY**.

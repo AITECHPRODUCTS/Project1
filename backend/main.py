@@ -6114,7 +6114,7 @@ async def receive_signed_ad_performance(
             else:
                 stored_observed_at = stored_observed_at.astimezone(timezone.utc)
             same_event = (
-                existing_row.campaign_plan_id == plan.id
+                existing_row.campaign_plan_id == payload.campaign_plan_id
                 and existing_row.creative_id == payload.creative_id
                 and existing_row.source_reference_url == payload.source_reference_url
                 and int(existing_row.impressions or 0) == payload.impressions

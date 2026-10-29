@@ -15,6 +15,7 @@ from backend.database import Base
 from backend.models import AuditLog, ContentAsset, Workspace
 from backend.schemas import ComparisonPostReviewRequest
 from backend.tenancy import workspace_scope
+from backend.services.comparison_integrity import build_source_snapshot_manifest, sha256_text, source_snapshot_manifest_sha256
 
 
 def review_payload(content_sha256: str, **overrides):
@@ -72,6 +73,23 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
             session.add(Workspace(id="review-workspace", name="Review Workspace", slug="review-workspace"))
             session.add(Workspace(id="other-review-workspace", name="Other Review Workspace", slug="other-review-workspace"))
             await session.flush()
+            snapshot_excerpt = "Official product page supplied for the review test."
+            snapshots = [{
+                "source_id": "S01",
+                "url": "https://vendor.example/product",
+                "product_names": ["Reviewable comparison"],
+                "title": "Product page",
+                "status": "fetched",
+                "http_status": 200,
+                "content_type": "text/html",
+                "fetched_at": "2026-10-29T10:00:00+00:00",
+                "excerpt": snapshot_excerpt,
+                "excerpt_sha256": sha256_text(snapshot_excerpt),
+                "error_type": None,
+                "detail": None,
+            }]
+            snapshot_manifest = build_source_snapshot_manifest(snapshots)
+            snapshot_manifest_hash = source_snapshot_manifest_sha256(snapshot_manifest)
             with workspace_scope("review-workspace"):
                 session.add(ContentAsset(
                     id=asset_id,
@@ -86,11 +104,28 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
                         "topic": "Reviewable comparison",
                         "revision_number": 2,
                         "revision_root_asset_id": asset_id,
+                        "content_sha256": content_hash,
+                        "source_snapshots": snapshots,
+                        "source_snapshot_manifest": snapshot_manifest,
+                        "source_snapshot_manifest_sha256": snapshot_manifest_hash,
                         "review_status": "pending_review",
                         "review_history": [],
                         "requires_review": True,
                         "publishing_started": False,
                         "product_facts_independently_verified": False,
+                    },
+                ))
+                await session.flush()
+                session.add(AuditLog(
+                    workspace_id="review-workspace",
+                    actor="fixture",
+                    action="content_comparison_post.created",
+                    resource_type="content_asset",
+                    resource_id=asset_id,
+                    outcome="draft",
+                    details_json={
+                        "content_sha256": content_hash,
+                        "source_snapshot_manifest_sha256": snapshot_manifest_hash,
                     },
                 ))
             await session.commit()

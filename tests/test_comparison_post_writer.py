@@ -249,6 +249,11 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
                 name="Comparison Workspace",
                 slug="comparison-workspace",
             ))
+            session.add(Workspace(
+                id="other-workspace",
+                name="Other Workspace",
+                slug="other-workspace",
+            ))
             await session.commit()
 
     async def fake_writer(**kwargs):
@@ -289,8 +294,27 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
     try:
         with TestClient(main.app) as client:
             response = client.post("/api/content/comparison-post", json=valid_payload())
-        assert response.status_code == 201, response.text
-        result = response.json()
+            assert response.status_code == 201, response.text
+            result = response.json()
+            listed = client.get("/api/content/comparison-posts?limit=10")
+            assert listed.status_code == 200, listed.text
+            listed_body = listed.json()
+            assert listed_body["total"] == 1
+            assert listed_body["items"][0]["asset_id"] == result["asset_id"]
+            assert listed_body["items"][0]["product_count"] == 2
+            detail = client.get("/api/content/comparison-posts/" + result["asset_id"])
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["html"].startswith("<!doctype html>")
+            assert detail.json()["source_snapshots"][0]["excerpt_sha256"] == "a" * 64
+            assert detail.json()["evidence_summary"]["source_snapshots_fetched"] == 1
+            assert detail.headers["cache-control"] == "no-store"
+            active["workspace_id"] = "other-workspace"
+            other_list = client.get("/api/content/comparison-posts?limit=10")
+            assert other_list.status_code == 200, other_list.text
+            assert other_list.json()["total"] == 0
+            cross_workspace_detail = client.get("/api/content/comparison-posts/" + result["asset_id"])
+            assert cross_workspace_detail.status_code == 404
+            active["workspace_id"] = "comparison-workspace"
         assert result["asset_id"]
         assert result["asset_status"] == "draft"
         assert result["publishing_started"] is False

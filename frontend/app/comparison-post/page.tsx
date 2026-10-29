@@ -1,6 +1,6 @@
 "use client";
 
-import {useState,type FormEvent} from "react";
+import {useCallback,useEffect,useState,type FormEvent} from "react";
 import {apiFetch} from "@/lib/api";
 
 type Product={name:string;facts:Record<string,string>;source_urls:string[]};
@@ -8,6 +8,8 @@ type Row={criterion:string;values:Array<{product:string;value:string}>};
 type SourceSnapshot={source_id:string;url:string;product_names:string[];title:string;status:string;http_status:number|null;content_type:string;fetched_at:string;excerpt:string;excerpt_sha256:string|null;error_type:string|null;detail:string|null};
 type FactEvidence={product:string;fact_name:string;supplied_value:string;source_id:string|null;source_url:string|null;excerpt_sha256:string|null;exact_text_match:boolean;evidence_status:string;evidence_note?:string;editorial_review_required:boolean};
 type EvidenceSummary={source_count:number;source_snapshots_fetched:number;source_snapshots_failed:number;fact_count:number;exact_text_match_count:number;exact_text_not_found_count:number;facts_not_compared:number;interpretation:string};
+type DraftSummary={asset_id:string;title:string;asset_status:string;created_at:string|null;word_count:number;product_count:number;unknown_fact_count:number;evidence_status:string;source_snapshots_fetched:number;requires_review:boolean;publishing_started:boolean};
+type DraftList={items:DraftSummary[];total:number;limit:number;offset:number};
 type Result={
  asset_id:string;asset_status:string;title:string;html:string;word_count:number;
  minimum_word_target:number;minimum_word_target_met:boolean;word_count_warning:string|null;
@@ -33,6 +35,28 @@ export default function ComparisonPostPage(){
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
  const [result,setResult]=useState<Result|null>(null);
+ const [drafts,setDrafts]=useState<DraftSummary[]>([]);
+ const [draftsTotal,setDraftsTotal]=useState(0);
+ const [draftsLoading,setDraftsLoading]=useState(true);
+ const [draftsError,setDraftsError]=useState("");
+ const [openingId,setOpeningId]=useState("");
+ const loadDrafts=useCallback(async()=>{
+  setDraftsLoading(true);setDraftsError("");
+  try{
+   const response=await apiFetch<DraftList>("/api/content/comparison-posts?limit=20&offset=0");
+   setDrafts(response.items);setDraftsTotal(response.total);
+  }catch(err){setDraftsError(errorMessage(err));}
+  finally{setDraftsLoading(false);}
+ },[]);
+ useEffect(()=>{void loadDrafts();},[loadDrafts]);
+ const openDraft=async(assetId:string)=>{
+  setOpeningId(assetId);setError("");setNotice("");
+  try{
+   const response=await apiFetch<Result>("/api/content/comparison-posts/"+encodeURIComponent(assetId));
+   setResult(response);setNotice("Opened saved comparison draft. Verify every source and claim before using it.");
+  }catch(err){setDraftsError(errorMessage(err));}
+  finally{setOpeningId("");}
+ };
  const submit=async(event:FormEvent)=>{
   event.preventDefault();setBusy(true);setError("");setNotice("");setResult(null);
   let products:unknown;
@@ -45,6 +69,7 @@ export default function ComparisonPostPage(){
   try{
    const response=await apiFetch<Result>("/api/content/comparison-post",{method:"POST",body:JSON.stringify({topic:topic.trim(),audience:audience.trim(),products,decision_criteria,affiliate_disclosure:disclosure,minimum_words:minimum})});
    setResult(response);setNotice("Comparison draft saved to this workspace. Verify every supplied fact before using it.");
+   await loadDrafts();
   }catch(err){setError(errorMessage(err));}finally{setBusy(false);}
  };
  return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10"><div className="mx-auto max-w-7xl">
@@ -56,6 +81,18 @@ export default function ComparisonPostPage(){
   <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Evidence boundary:</strong> supplied HTTPS links are fetched through a bounded, DNS-pinned public transport and saved as timestamped excerpt snapshots with SHA-256 hashes. Facts remain operator supplied: exact wording found in a snapshot is not independent verification of truth, freshness, completeness, merchant identity, program eligibility or compliance. No affiliate account is authenticated and nothing is published. Missing values are shown as “Not supplied — verify”.</div>
   {error&&<div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
   {notice&&<div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
+  <section aria-label="Saved comparison drafts" className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+   <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Saved comparison drafts</h2><p className="mt-1 text-xs text-slate-500">Workspace-only history · {draftsTotal} saved · drafts never auto-publish</p></div><button type="button" onClick={()=>void loadDrafts()} disabled={draftsLoading} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold disabled:opacity-50">{draftsLoading?"Refreshing…":"Refresh list"}</button></div>
+   {draftsError&&<p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{draftsError}</p>}
+   {draftsLoading&&!drafts.length&&<p className="mt-3 text-sm text-slate-500">Loading saved drafts…</p>}
+   {!draftsLoading&&!drafts.length&&!draftsError&&<p className="mt-3 text-sm text-slate-500">No comparison drafts saved in this workspace yet.</p>}
+   {drafts.length>0&&<div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{drafts.map(draft=><article key={draft.asset_id} className="rounded-xl border border-slate-200 p-3">
+    <h3 className="font-semibold">{draft.title}</h3><p className="mt-1 break-all font-mono text-[10px] text-slate-500">{draft.asset_id}</p>
+    <p className="mt-2 text-xs text-slate-600">{draft.product_count} products · {draft.word_count} words · {draft.unknown_fact_count} unknown cells</p>
+    <p className="mt-1 text-xs text-amber-800">{draft.evidence_status.replaceAll("_"," ")} · Draft only</p>
+    <button type="button" onClick={()=>void openDraft(draft.asset_id)} disabled={Boolean(openingId)} className="mt-3 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{openingId===draft.asset_id?"Opening…":"Open draft"}</button>
+   </article>)}</div>}
+  </section>
   <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(320px,.85fr)_minmax(0,1.15fr)]">
    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-xl font-bold">Comparison brief</h2><form onSubmit={submit} className="mt-4 space-y-4">
     <label className={label}>Topic<input aria-label="Topic" className={field} minLength={3} maxLength={400} required value={topic} onChange={e=>setTopic(e.target.value)}/></label>

@@ -3870,6 +3870,119 @@ async def create_comparison_post(
     return result
 
 
+@api.get("/content/comparison-posts")
+async def list_comparison_posts(
+    response: Response,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10_000),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """List only the active workspace's saved comparison drafts."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace to view comparison drafts")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    with workspace_scope(workspace_id):
+        predicate = (
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "comparison_post",
+        )
+        total = int(await db.scalar(select(func.count(ContentAsset.id)).where(*predicate)) or 0)
+        rows = list((await db.scalars(
+            select(ContentAsset)
+            .where(*predicate)
+            .order_by(ContentAsset.created_at.desc(), ContentAsset.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )).all())
+    items = []
+    for row in rows:
+        metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        products = metadata.get("products") if isinstance(metadata.get("products"), list) else []
+        evidence_summary = metadata.get("evidence_summary") if isinstance(metadata.get("evidence_summary"), dict) else {}
+        items.append({
+            "asset_id": row.id,
+            "title": row.title,
+            "asset_status": row.status,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "word_count": metadata.get("word_count", 0),
+            "product_count": len(products),
+            "unknown_fact_count": metadata.get("unknown_fact_count", 0),
+            "evidence_status": metadata.get("evidence_status", "unknown"),
+            "source_snapshots_fetched": evidence_summary.get("source_snapshots_fetched", 0),
+            "requires_review": True,
+            "publishing_started": False,
+        })
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@api.get("/content/comparison-posts/{asset_id}")
+async def get_comparison_post(
+    asset_id: str,
+    response: Response,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return a saved comparison only when it belongs to the active workspace."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace to open comparison drafts")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "comparison_post",
+        ))
+    if row is None:
+        raise HTTPException(404, "Comparison draft was not found in this workspace")
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    products = metadata.get("products") if isinstance(metadata.get("products"), list) else []
+    decision_criteria = metadata.get("decision_criteria") if isinstance(metadata.get("decision_criteria"), list) else []
+    comparison_table = metadata.get("comparison_table") if isinstance(metadata.get("comparison_table"), list) else []
+    source_snapshots = metadata.get("source_snapshots") if isinstance(metadata.get("source_snapshots"), list) else []
+    fact_evidence = metadata.get("fact_evidence") if isinstance(metadata.get("fact_evidence"), list) else []
+    evidence_summary = metadata.get("evidence_summary") if isinstance(metadata.get("evidence_summary"), dict) else {}
+    minimum_word_target = int(metadata.get("minimum_word_target") or 0)
+    minimum_word_target_met = bool(metadata.get("minimum_word_target_met", False))
+    word_count = int(metadata.get("word_count") or 0)
+    return {
+        "asset_id": row.id,
+        "asset_status": row.status,
+        "title": row.title,
+        "html": row.body,
+        "word_count": word_count,
+        "minimum_word_target": minimum_word_target,
+        "minimum_word_target_met": minimum_word_target_met,
+        "word_count_warning": None if minimum_word_target_met else (
+            f"Saved draft has {word_count} words, below {minimum_word_target}; expand and review before publishing."
+        ),
+        "product_count": len(products),
+        "products": products,
+        "decision_criteria": decision_criteria,
+        "comparison_table": comparison_table,
+        "unknown_fact_count": metadata.get("unknown_fact_count", 0),
+        "source_urls": row.source_urls if isinstance(row.source_urls, list) else [],
+        "source_snapshots": source_snapshots[:10],
+        "fact_evidence": fact_evidence[:60],
+        "evidence_summary": evidence_summary,
+        "evidence_status": metadata.get("evidence_status", "unknown"),
+        "product_facts_independently_verified": False,
+        "external_product_sources_fetched": bool(metadata.get("external_product_sources_fetched", False)),
+        "requires_review": True,
+        "publishing_started": False,
+        "provider_write_access_verified": False,
+        "provider": str(metadata.get("model_provider") or "unreported")[:100],
+        "execution_boundary": (
+            "Workspace-owned review draft. Public-source snapshots preserve captured wording only; they do not establish "
+            "factual truth, currentness, eligibility, compliance approval or publication readiness. No publishing was started."
+        ),
+    }
+
+
 @api.post("/content/video")
 async def video(
     payload: VideoRequest,

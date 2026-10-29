@@ -1093,3 +1093,57 @@ def test_offer_shortlist_ui_creates_saves_compares_and_removes_persisted_catalog
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()
+
+
+def test_offer_qualification_ui_records_review_only_decision_with_evidence():
+    posted: list[dict] = []
+    offer = {"id": "qualify-ui-1", "network": "openaffiliate", "external_id": "qualify-ui-1",
+        "name": "Qualification UI candidate", "category": "software", "description": "Review terms before use.",
+        "url": "https://merchant.example/terms", "cookie_days": None, "reward_type": None, "reward_value": None,
+        "epc": None, "conversion_rate": None, "verification_basis": "provider_not_verified_or_unknown"}
+    review = {"status": "not_reviewed", "account_eligibility": "unknown", "geography_fit": "unknown",
+        "traffic_source_fit": "unknown", "terms_review": "unknown", "landing_page_review": "unknown",
+        "disclosure_review": "unknown", "evidence_urls": [], "notes": "", "policy_version": "manual-review-v1",
+        "reviewed_by": None, "reviewed_at": None, "evidence_basis": "operator_supplied_unverified",
+        "affiliate_network_approval_implied": False}
+    def handle_api(route):
+        path = urlparse(route.request.url).path
+        if path == "/api/auth/me":
+            _fulfill_json(route, {"authenticated": True, "user": {"email": "reviewer@example.invalid", "is_admin": False,
+                "workspace_id": "browser-workspace", "workspace_role": "owner"}, "csrf_token": "browser-csrf-token"})
+        elif path == "/api/offers/qualification-queue":
+            data = [] if review["status"] == "qualified" else [{"offer": offer, "qualification": review}]
+            _fulfill_json(route, {"count": len(data), "total_count": len(data), "offset": 0, "limit": 50,
+                "status_filter": "needs_review", "data": data, "note": "Operator-supplied unverified evidence."})
+        elif path == "/api/offers/qualify-ui-1/qualification" and route.request.method == "POST":
+            payload = json.loads(route.request.post_data or "{}"); posted.append(payload)
+            if payload.get("status") == "qualified" and (not payload.get("evidence_urls") or any(payload.get(key) != "pass" for key in [
+                "account_eligibility", "geography_fit", "traffic_source_fit", "terms_review", "landing_page_review", "disclosure_review"
+            ])):
+                _fulfill_json(route, {"detail": "qualified status requires complete evidence"}, status=422); return
+            review.update(payload); review.update({"reviewed_by": "reviewer@example.invalid", "reviewed_at": "2026-10-29T00:00:00+00:00",
+                "evidence_basis": "operator_supplied_unverified", "affiliate_network_approval_implied": False})
+            _fulfill_json(route, {"offer_id": offer["id"], "status": review["status"], "activation_allowed": False,
+                "evidence_basis": review["evidence_basis"], "affiliate_network_approval_implied": False})
+        else:
+            _fulfill_json(route, {"detail": "unexpected request"}, status=404)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(); page.route("**/api/**", handle_api)
+            page.goto(f"{BASE_URL}/offers/qualification", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Offer qualification review").wait_for(state="visible")
+            page.get_by_label("Decision").select_option("qualified")
+            for label in ["Publisher account eligibility", "Target geography allowed", "Traffic sources allowed",
+                          "Program terms reviewed", "Destination / landing page reviewed", "Affiliate disclosure ready"]:
+                page.get_by_label(label).select_option("pass")
+            page.get_by_label("Evidence URLs (one HTTPS URL per line)").fill("https://merchant.example/affiliate-terms")
+            page.get_by_label("Reviewer notes").fill("Terms and traffic policy reviewed; provider approval remains unknown.")
+            page.get_by_role("button", name="Save qualification review").click()
+            page.get_by_test_id("qualification-message").wait_for(state="visible")
+            assert "not network approval" in page.get_by_test_id("qualification-message").inner_text().lower()
+            assert len(posted) == 1 and posted[0]["status"] == "qualified"
+            assert posted[0]["evidence_urls"] == ["https://merchant.example/affiliate-terms"]
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()

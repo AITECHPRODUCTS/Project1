@@ -39,6 +39,61 @@ class WorkflowStartRequest(BaseModel):
 
 
 
+
+class OfferQualificationReviewRequest(BaseModel):
+    status: Literal["pending_review", "qualified", "rejected", "needs_evidence", "deferred"] = "pending_review"
+    account_eligibility: Literal["pass", "fail", "unknown", "pending"] = "unknown"
+    geography_fit: Literal["pass", "fail", "unknown", "pending"] = "unknown"
+    traffic_source_fit: Literal["pass", "fail", "unknown", "pending"] = "unknown"
+    terms_review: Literal["pass", "fail", "unknown", "pending"] = "unknown"
+    landing_page_review: Literal["pass", "fail", "unknown", "pending"] = "unknown"
+    disclosure_review: Literal["pass", "fail", "unknown", "pending"] = "unknown"
+    evidence_urls: list[str] = Field(default_factory=list, max_length=20)
+    notes: str = Field(default="", max_length=2000)
+    policy_version: str = Field(default="manual-review-v1", min_length=1, max_length=80)
+
+    @field_validator("evidence_urls")
+    @classmethod
+    def validate_evidence_urls(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for raw in values:
+            value = raw.strip()
+            parsed = urlparse(value)
+            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError("evidence URLs must be absolute HTTPS URLs without credentials")
+            try:
+                address = ipaddress.ip_address(parsed.hostname)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("evidence URLs must not use private or non-public IP addresses")
+            if value not in normalized:
+                normalized.append(value)
+        return normalized
+
+    @field_validator("notes")
+    @classmethod
+    def normalize_review_notes(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("policy_version")
+    @classmethod
+    def normalize_policy_version(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("policy_version cannot be blank")
+        return value
+
+    @model_validator(mode="after")
+    def qualified_requires_complete_checklist(self):
+        checks = (self.account_eligibility, self.geography_fit, self.traffic_source_fit,
+                  self.terms_review, self.landing_page_review, self.disclosure_review)
+        if self.status == "qualified" and (any(check != "pass" for check in checks) or not self.evidence_urls):
+            raise ValueError("qualified status requires all six checks to pass and at least one HTTPS evidence URL")
+        if self.status in {"rejected", "deferred", "needs_evidence"} and not self.notes:
+            raise ValueError("rejected, deferred and needs_evidence decisions require reviewer notes")
+        return self
+
 class OfferShortlistCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     description: str = Field(default="", max_length=1000)

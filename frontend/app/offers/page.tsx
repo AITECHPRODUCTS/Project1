@@ -358,6 +358,7 @@ export default function OfferCatalogPage() {
           <div className="flex flex-wrap gap-2">
             <a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher marketplace</a>
             <a href="/merchant/offers" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant offers</a>
+            <a href="/offers/qualification" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Qualification review</a>
             {syncAccess === "admin" && (
               <button
                 type="button"

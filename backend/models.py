@@ -60,6 +60,28 @@ class OfferShortlistItem(TenantScopedMixin, Base):
     note: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+
+class OfferQualificationReview(TenantScopedMixin, Base):
+    """Workspace-owned manual qualification decision for a shared catalog offer."""
+    __tablename__ = "offer_qualification_reviews"
+    __table_args__ = (UniqueConstraint("workspace_id", "offer_id", name="uq_offer_qualification_workspace_offer"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    offer_id: Mapped[str] = mapped_column(String(36), ForeignKey("offers.id", ondelete="RESTRICT"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending_review", nullable=False)
+    account_eligibility: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    geography_fit: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    traffic_source_fit: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    terms_review: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    landing_page_review: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    disclosure_review: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    evidence_urls: Mapped[list[str]] = mapped_column(JSON_VALUE, default=list, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(80), default="manual-review-v1", nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
 class Campaign(TenantScopedMixin, Base):
     __tablename__ = "campaigns"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

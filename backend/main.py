@@ -16,7 +16,7 @@ from fastapi import APIRouter,Depends,FastAPI,HTTPException,Query,Request,WebSoc
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse,JSONResponse,RedirectResponse
 from pwdlib import PasswordHash
-from sqlalchemy import func,or_,select
+from sqlalchemy import and_,func,or_,select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
@@ -27,10 +27,10 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -1259,6 +1259,106 @@ async def offers(
             for offer in rows
         ],
     }
+
+@api.get("/offers/qualification-queue")
+async def offer_qualification_queue(
+    status: Literal["needs_review", "not_reviewed", "pending_review", "needs_evidence", "qualified", "rejected", "deferred", "all"] = "needs_review",
+    offset: int = Query(default=0, ge=0, le=100_000),
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show shared catalog offers with this workspace's independent manual review state."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing offer qualification")
+    join_clause = and_(OfferQualificationReview.offer_id == Offer.id,
+                       OfferQualificationReview.workspace_id == str(workspace_id))
+    stmt = select(Offer, OfferQualificationReview).outerjoin(OfferQualificationReview, join_clause)
+    if status == "needs_review":
+        stmt = stmt.where(or_(OfferQualificationReview.id.is_(None),
+            OfferQualificationReview.status.in_(["pending_review", "needs_evidence", "deferred"])))
+    elif status == "not_reviewed":
+        stmt = stmt.where(OfferQualificationReview.id.is_(None))
+    elif status != "all":
+        stmt = stmt.where(OfferQualificationReview.status == status)
+    total_count = int(await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    pairs = (await db.execute(stmt.order_by(Offer.name.asc(), Offer.id.asc()).offset(offset).limit(limit))).all()
+    data = []
+    for offer, review in pairs:
+        data.append({
+            "offer": {"id": offer.id, "network": offer.network, "external_id": offer.external_id, "name": offer.name,
+                "category": offer.category, "description": offer.description, "url": offer.url, "cookie_days": offer.cookie_days,
+                "reward_type": offer.reward_type, "reward_value": offer.reward_value, "epc": offer.epc,
+                "conversion_rate": offer.conversion_rate,
+                "verification_basis": "provider_claimed_unattested" if offer.verified else "provider_not_verified_or_unknown"},
+            "qualification": {"status": review.status if review else "not_reviewed",
+                "account_eligibility": review.account_eligibility if review else "unknown",
+                "geography_fit": review.geography_fit if review else "unknown",
+                "traffic_source_fit": review.traffic_source_fit if review else "unknown",
+                "terms_review": review.terms_review if review else "unknown",
+                "landing_page_review": review.landing_page_review if review else "unknown",
+                "disclosure_review": review.disclosure_review if review else "unknown",
+                "evidence_urls": review.evidence_urls if review and isinstance(review.evidence_urls, list) else [],
+                "notes": review.notes if review else "", "policy_version": review.policy_version if review else "manual-review-v1",
+                "reviewed_by": review.reviewed_by if review else None,
+                "reviewed_at": review.reviewed_at.isoformat() if review and review.reviewed_at else None,
+                "evidence_basis": "operator_supplied_unverified", "affiliate_network_approval_implied": False},
+        })
+    return {"count": len(data), "total_count": total_count, "offset": offset, "limit": limit,
+        "status_filter": status, "data": data,
+        "note": "Qualification decisions are workspace-specific operator reviews, not provider verification or affiliate-network approval."}
+
+
+@api.post("/offers/{offer_id}/qualification")
+async def save_offer_qualification(
+    offer_id: str,
+    payload: OfferQualificationReviewRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Persist a workspace operator's qualification checklist and review decision."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before saving offer qualification")
+    if str(user.get("workspace_role") or "").lower() not in {"owner", "admin"}:
+        raise HTTPException(403, "Only workspace owners and admins may record offer qualification decisions")
+    offer = await db.scalar(select(Offer).where(Offer.id == offer_id))
+    if offer is None:
+        raise HTTPException(404, "Catalog offer not found")
+    review = await db.scalar(select(OfferQualificationReview).where(
+        OfferQualificationReview.workspace_id == str(workspace_id), OfferQualificationReview.offer_id == offer.id))
+    if review is None:
+        review = OfferQualificationReview(workspace_id=str(workspace_id), offer_id=offer.id)
+        db.add(review)
+    review.status = payload.status
+    review.account_eligibility = payload.account_eligibility
+    review.geography_fit = payload.geography_fit
+    review.traffic_source_fit = payload.traffic_source_fit
+    review.terms_review = payload.terms_review
+    review.landing_page_review = payload.landing_page_review
+    review.disclosure_review = payload.disclosure_review
+    review.evidence_urls = payload.evidence_urls
+    review.notes = payload.notes
+    review.policy_version = payload.policy_version
+    review.reviewed_by = str(user.get("email") or user.get("user_id") or "workspace-operator")[:320]
+    review.reviewed_at = datetime.now(timezone.utc)
+    try:
+        await db.commit()
+        await db.refresh(review)
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(409, "A concurrent qualification review changed this offer; reload and retry") from exc
+    return {"offer_id": offer.id, "status": review.status, "account_eligibility": review.account_eligibility,
+        "geography_fit": review.geography_fit, "traffic_source_fit": review.traffic_source_fit,
+        "terms_review": review.terms_review, "landing_page_review": review.landing_page_review,
+        "disclosure_review": review.disclosure_review, "evidence_urls": review.evidence_urls, "notes": review.notes,
+        "policy_version": review.policy_version, "reviewed_by": review.reviewed_by,
+        "reviewed_at": review.reviewed_at.isoformat() if review.reviewed_at else None,
+        "evidence_basis": "operator_supplied_unverified", "affiliate_network_approval_implied": False,
+        "activation_allowed": False}
+
+
 @api.get("/offers/shortlists")
 async def list_offer_shortlists(user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
     """List only the active workspace's saved offer shortlists."""

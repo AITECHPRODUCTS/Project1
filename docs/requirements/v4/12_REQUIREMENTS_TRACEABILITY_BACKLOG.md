@@ -382,3 +382,5 @@
 
 
 | R-21 | Persisted offer shortlists and compare workflow | OfferShortlist, OfferShortlistItem, migration 0028_offer_shortlists, GET/POST /api/offers/shortlists, detail/add/remove/delete routes, frontend/app/offers/page.tsx, tests/test_offer_shortlists_api.py, browser UAT | Implemented and hosted-CI verified on base SHA 3badf73a5c6eb25d8cdd06fd8e1d49ae7734e324; optional note-entry UI verified on latest SHA 267dd5c489b92c0d6b02c1229e4162d9736a7cd4 (push 40822952573, PR 40822958502) | Official provider facts, eligibility, terms, source attestation and broad S1 provider acceptance remain partial; staging/production readiness remains open |
+
+| R-22 | S1 offer qualification and decision workflow | OfferQualificationReview model, migration 0029_offer_qualification_reviews, workspace-scoped queue, owner/admin decision API, qualification UI, API and browser acceptance tests | Implemented and hosted-CI verified on exact SHA 03bdbb6f60a6e8b9f86472a86f17d0156214dadc (push 40824127725, PR 40824132752) | Provider-backed eligibility/terms/authenticity, live marketplace contracts and external approval remain unverified; production readiness remains open |

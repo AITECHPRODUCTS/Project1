@@ -40,6 +40,13 @@ The governed skill runtime now includes `research.offer_term_change_review`, reu
 
 Regression coverage includes material changes, semantically equivalent term normalization, first-snapshot behavior, negative payloads and execution as a governed skill-package fixture. This does **not** fetch an affiliate network, authenticate a merchant, determine account eligibility or approve/activate offers.
 
+## Additive advertising performance reporting increment (CI pending)
+
+- Added inclusive `from_date` and `to_date` filters to `GET /api/ads/observations` and `GET /api/ads/performance`. Both use UTC calendar dates, expose the applied date bounds and timezone, and reject reversed ranges with HTTP 422.
+- Filters are applied to the persisted `observed_at` timestamp before summaries are calculated; the existing query limit and evidence-status semantics remain intact. Unverified operator-entered observations are still clearly labelled and cannot become optimization-eligible through date filtering.
+- Added API regression coverage for same-day inclusion, prior/next-day exclusion, response date metadata, and invalid reversed ranges in `tests/test_ad_performance.py`.
+- This improves reporting on data already stored; it does **not** connect advertising accounts, fetch provider spend, or verify imported evidence. Exact-SHA push and pull-request workflows must complete before this increment is marked verified.
+
 ## What is already implemented in the branch
 
 - **Application foundation:** FastAPI backend, SQLAlchemy persistence, Alembic schema migrations, workspace-scoped authorization/audit patterns, Next.js/TypeScript dashboard, Docker/Compose and CI workflows.

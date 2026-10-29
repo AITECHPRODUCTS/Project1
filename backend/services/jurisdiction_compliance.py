@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import ipaddress
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy import select
 
@@ -52,6 +54,56 @@ def _as_datetime(value: Any) -> datetime | None:
     return candidate.astimezone(timezone.utc)
 
 
+def _require_aware_utc(value: datetime | None) -> datetime:
+    candidate = value or datetime.now(timezone.utc)
+    if candidate.tzinfo is None or candidate.utcoffset() is None:
+        raise ValueError("Compliance evaluation time must include an explicit timezone offset")
+    return candidate.astimezone(timezone.utc)
+
+
+def _as_evidence_datetime(value: Any) -> datetime | None:
+    """Persisted JSON evidence timestamps must carry an explicit timezone."""
+    if isinstance(value, datetime):
+        candidate = value
+    elif isinstance(value, str):
+        try:
+            candidate = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except (ValueError, TypeError, OverflowError):
+            return None
+    else:
+        return None
+    if candidate.tzinfo is None or candidate.utcoffset() is None:
+        return None
+    return candidate.astimezone(timezone.utc)
+
+
+def _is_public_https_source(value: Any) -> bool:
+    """Revalidate stored evidence URLs at decision time, not only on request parsing."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        parsed = urlparse(value.strip())
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        # Access port to ensure malformed port syntax is rejected.
+        _ = parsed.port
+    except (ValueError, TypeError):
+        return False
+    if (
+        parsed.scheme.lower() != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or hostname in {"localhost", "localhost.localdomain"}
+        or hostname.endswith((".local", ".internal", ".test"))
+    ):
+        return False
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    return address is None or address.is_global
+
+
 def evidence_coverage(
     activity: str,
     jurisdictions: list[str],
@@ -59,7 +111,7 @@ def evidence_coverage(
     *,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    current = _require_aware_utc(now)
     required = required_categories(activity)
     max_age = FAST_EVIDENCE_MAX_AGE_DAYS if activity in FAST_CHANGING_ACTIVITIES else DEFAULT_EVIDENCE_MAX_AGE_DAYS
     cutoff = current - timedelta(days=max_age)
@@ -75,14 +127,14 @@ def evidence_coverage(
                 if str(item.get("jurisdiction_code") or "").strip().upper() == jurisdiction
                 and str(item.get("category") or "").strip() == category
                 and item.get("reviewer_attestation") is True
-                and str(item.get("source_url") or "").strip().startswith("https://")
+                and _is_public_https_source(item.get("source_url"))
                 and len(str(item.get("rule_summary") or "").strip()) >= 20
                 and len(str(item.get("source_title") or "").strip()) >= 3
             ]
             valid = False
             saw_stale = False
             for item in matching:
-                reviewed_at = _as_datetime(item.get("reviewed_at"))
+                reviewed_at = _as_evidence_datetime(item.get("reviewed_at"))
                 if reviewed_at is None or reviewed_at > current:
                     continue
                 if reviewed_at < cutoff:
@@ -119,7 +171,7 @@ def assessment_is_current(
     channel: str,
     now: datetime | None = None,
 ) -> tuple[bool, dict[str, Any]]:
-    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    current = _require_aware_utc(now)
     scope_jurisdictions = set(str(item).upper() for item in (assessment.jurisdictions_json or []))
     scope_channels = set(str(item).lower() for item in (assessment.channels_json or []))
     valid_until = _as_datetime(assessment.valid_until)

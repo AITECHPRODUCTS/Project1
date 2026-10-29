@@ -311,3 +311,48 @@ def test_workflow_live_distribution_blocks_without_scope_and_proceeds_with_curre
         finally:
             await engine.dispose()
     asyncio.run(run_test())
+
+
+
+def test_evidence_coverage_fails_closed_on_naive_and_future_evidence_timestamps():
+    current = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
+    naive_evidence = _evidence("content_publish", ["US"], reviewed_at=current)
+    for item in naive_evidence:
+        item["reviewed_at"] = "2026-10-29T12:00:00"
+    naive_result = evidence_coverage("content_publish", ["US"], naive_evidence, now=current)
+    assert naive_result["coverage_complete"] is False
+    assert naive_result["covered_evidence_items"] == 0
+
+    future_evidence = _evidence("content_publish", ["US"], reviewed_at=current + timedelta(days=1))
+    future_result = evidence_coverage("content_publish", ["US"], future_evidence, now=current)
+    assert future_result["coverage_complete"] is False
+    assert future_result["covered_evidence_items"] == 0
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "https://127.0.0.1/private",
+        "https://localhost/legal",
+        "https://user:password@authority.example/legal",
+        "http://authority.example/legal",
+        "https://authority.example:bad-port/legal",
+    ],
+)
+def test_evidence_coverage_rejects_non_public_or_malformed_source_urls(source_url):
+    evidence = _evidence("content_publish", ["US"])
+    for item in evidence:
+        item["source_url"] = source_url
+    result = evidence_coverage("content_publish", ["US"], evidence)
+    assert result["coverage_complete"] is False
+    assert result["covered_evidence_items"] == 0
+
+
+def test_compliance_evaluation_rejects_naive_reference_time():
+    with pytest.raises(ValueError, match="explicit timezone"):
+        evidence_coverage(
+            "content_publish",
+            ["US"],
+            _evidence("content_publish", ["US"]),
+            now=datetime(2026, 10, 29, 12, 0),
+        )

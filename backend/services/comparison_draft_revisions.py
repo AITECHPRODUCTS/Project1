@@ -12,29 +12,33 @@ from backend.tenancy import workspace_scope
 MAX_REVISION_NUMBER = 100_000
 
 
-async def reserve_comparison_revision_number(
+async def reserve_content_revision_number(
     db: AsyncSession,
     *,
     workspace_id: str,
     root_asset_id: str,
+    asset_type: str,
 ) -> int:
-    """Atomically reserve the next unique revision number for one workspace root.
+    """Atomically reserve a revision number for a workspace-owned content root.
 
-    The sequence row update is committed by the caller together with its audit event
-    before any LLM/network work. A failed generation can leave a gap, but concurrent
-    requests cannot reuse a number or mutate the original draft body.
+    The existing sequence table name remains for migration compatibility; this
+    allocator supports immutable comparison_post and listicle_post drafts. The caller
+    commits reservation/audit before LLM I/O, so failure leaves a gap, not a reused ID.
     """
     workspace_id = str(workspace_id or "").strip()
     root_asset_id = str(root_asset_id or "").strip()
     if not workspace_id or not root_asset_id:
         raise ValueError("A workspace and revision root are required")
 
+    if asset_type not in {"comparison_post", "listicle_post"}:
+        raise ValueError("Only comparison and listicle drafts support immutable revisions")
+
     with workspace_scope(workspace_id):
         root = await db.scalar(
             select(ContentAsset.id).where(
                 ContentAsset.id == root_asset_id,
                 ContentAsset.workspace_id == workspace_id,
-                ContentAsset.asset_type == "comparison_post",
+                ContentAsset.asset_type == asset_type,
             )
         )
         if root is None:
@@ -43,7 +47,7 @@ async def reserve_comparison_revision_number(
         history = await db.scalars(
             select(ContentAsset.metadata_json).where(
                 ContentAsset.workspace_id == workspace_id,
-                ContentAsset.asset_type == "comparison_post",
+                ContentAsset.asset_type == asset_type,
                 or_(
                     ContentAsset.id == root_asset_id,
                     ContentAsset.metadata_json["revision_root_asset_id"].as_string() == root_asset_id,
@@ -61,7 +65,7 @@ async def reserve_comparison_revision_number(
             if 1 <= number <= MAX_REVISION_NUMBER:
                 max_existing_revision = max(max_existing_revision, number)
         if max_existing_revision >= MAX_REVISION_NUMBER:
-            raise ValueError("This comparison draft has reached the supported revision limit")
+            raise ValueError("This content draft has reached the supported revision limit")
         initial_next = max_existing_revision + 1
 
         dialect = db.get_bind().dialect.name
@@ -76,7 +80,7 @@ async def reserve_comparison_revision_number(
         elif dialect == "sqlite":
             statement = sqlite_insert(ComparisonDraftRevisionSequence).values(**values)
         else:
-            raise RuntimeError("Comparison revision allocation supports PostgreSQL and SQLite only")
+            raise RuntimeError("Content revision allocation supports PostgreSQL and SQLite only")
         statement = statement.on_conflict_do_nothing(
             index_elements=["workspace_id", "root_asset_id"]
         )
@@ -106,8 +110,22 @@ async def reserve_comparison_revision_number(
         )
         stored_next = result.scalar_one_or_none()
         if stored_next is None:
-            raise ValueError("This comparison draft has reached the supported revision limit")
+            raise ValueError("This content draft has reached the supported revision limit")
         allocated = int(stored_next) - 1
         if not 2 <= allocated <= MAX_REVISION_NUMBER:
             raise ValueError("The comparison draft revision sequence is outside supported bounds")
         return allocated
+
+async def reserve_comparison_revision_number(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    root_asset_id: str,
+) -> int:
+    """Backwards-compatible comparison-specific wrapper."""
+    return await reserve_content_revision_number(
+        db,
+        workspace_id=workspace_id,
+        root_asset_id=root_asset_id,
+        asset_type="comparison_post",
+    )

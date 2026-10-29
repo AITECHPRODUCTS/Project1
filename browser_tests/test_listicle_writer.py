@@ -35,6 +35,11 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
     result = {
         "asset_id": "listicle-asset-1",
         "asset_status": "draft",
+        "revision_number": 1,
+        "revision_of_asset_id": None,
+        "revision_root_asset_id": "listicle-asset-1",
+        "affiliate_disclosure": "Disclosure: I may earn a commission from qualifying purchases.",
+        "tone": "professional",
         "title": "5 Best Email Marketing Tools in 2026 (Evidence-Aware Roundup)",
         "slug": "best-email-marketing-tools-2026",
         "meta_description": "Evidence-aware roundup draft",
@@ -88,6 +93,7 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
         "can_review": True,
     }
     saved = []
+    results_by_id = {"listicle-asset-1": result}
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -101,17 +107,35 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
                 _fulfill_json(route, {"items": saved, "total": len(saved), "limit": 20, "offset": 0})
 
             def create_draft(route):
-                posted.append(json.loads(route.request.post_data or "{}"))
+                payload = json.loads(route.request.post_data or "{}")
+                posted.append(payload)
+                parent_id = payload.get("revision_of_asset_id")
+                asset_id = "listicle-asset-2" if parent_id else "listicle-asset-1"
+                number = 2 if parent_id else 1
+                saved_result = {
+                    **result,
+                    "asset_id": asset_id,
+                    "title": payload.get("topic", result["topic"]) + " (Evidence-Aware Roundup)",
+                    "topic": payload.get("topic", result["topic"]),
+                    "revision_number": number,
+                    "revision_of_asset_id": parent_id,
+                    "revision_root_asset_id": parent_id or asset_id,
+                    "content_sha256": ("d" if parent_id else "a") * 64,
+                }
+                results_by_id[asset_id] = saved_result
                 saved.insert(0, {
-                    "asset_id": result["asset_id"], "title": result["title"], "asset_status": "draft",
+                    "asset_id": asset_id, "title": saved_result["title"], "asset_status": "draft",
                     "created_at": "2026-10-29T00:00:00+00:00", "product_count": 5, "word_count": 1300,
                     "evidence_status": "operator_supplied_unverified", "review_status": "pending_review",
                     "content_integrity_status": "verified", "publishing_started": False,
+                    "revision_number": number, "revision_of_asset_id": parent_id,
+                    "revision_root_asset_id": parent_id or asset_id,
                 })
-                _fulfill_json(route, result, 201)
+                _fulfill_json(route, saved_result, 201)
 
             def detail(route):
-                _fulfill_json(route, result)
+                asset_id = route.request.url.rstrip("/").split("/")[-1]
+                _fulfill_json(route, results_by_id.get(asset_id, result))
 
             page.route("**/api/auth/me", auth)
             page.route("**/api/content/listicle", create_draft)
@@ -131,6 +155,17 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
             assert posted[0]["products"][0]["name"] == "Tool 1"
             assert "Published: No" in page.locator("main").inner_text()
             page.get_by_role("button", name="Open draft").wait_for(state="visible")
+            page.get_by_role("button", name="Open draft").click()
+            page.get_by_role("button", name="Revise saved draft").wait_for(state="visible")
+            page.get_by_role("button", name="Revise saved draft").click()
+            page.get_by_role("textbox", name="Topic or category").fill("Email marketing tools — revision")
+            page.get_by_role("button", name="Generate listicle revision").click()
+            page.get_by_text("Revision #2", exact=False).wait_for(state="visible")
+            assert len(posted) == 2
+            assert posted[1]["revision_of_asset_id"] == "listicle-asset-1"
+            assert posted[1]["topic"] == "Email marketing tools — revision"
+            assert posted[1]["products"][0]["name"] == "Tool 1"
+            assert "Original draft remains unchanged" in page.locator("main").inner_text()
         finally:
             browser.close()
 

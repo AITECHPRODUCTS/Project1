@@ -9,7 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.models import ComparisonDraftRevisionSequence, ContentAsset, Workspace
-from backend.services.comparison_draft_revisions import reserve_comparison_revision_number
+from backend.services.comparison_draft_revisions import reserve_content_revision_number
 from backend.tenancy import workspace_scope
 
 
@@ -18,7 +18,8 @@ from backend.tenancy import workspace_scope
     os.environ.get("POSTGRES_WEBHOOK_INTEGRATION") != "1",
     reason="requires the dedicated PostgreSQL integration job",
 )
-async def test_concurrent_postgres_revision_reservations_are_unique_and_monotonic():
+@pytest.mark.parametrize("asset_type", ["comparison_post", "listicle_post"])
+async def test_concurrent_postgres_revision_reservations_are_unique_and_monotonic(asset_type: str):
     database_url = os.environ.get("DATABASE_URL", "")
     if not database_url.startswith("postgresql+asyncpg://"):
         pytest.fail("the revision concurrency acceptance test requires PostgreSQL")
@@ -29,13 +30,13 @@ async def test_concurrent_postgres_revision_reservations_are_unique_and_monotoni
 
     async def prepare():
         async with sessions() as session:
-            session.add(Workspace(id=workspace_id, name="Concurrent revisions", slug=f"revision-{workspace_id[:12]}"))
+            session.add(Workspace(id=workspace_id, name="Concurrent revisions", slug=f"rev-{asset_type[:4]}-{workspace_id[:12]}"))
             await session.flush()
             with workspace_scope(workspace_id):
                 session.add(ContentAsset(
                     id=root_id,
                     workspace_id=workspace_id,
-                    asset_type="comparison_post",
+                    asset_type=asset_type,
                     title="Original",
                     body="<article>Original</article>",
                     status="draft",
@@ -47,10 +48,11 @@ async def test_concurrent_postgres_revision_reservations_are_unique_and_monotoni
     async def allocate():
         async with sessions() as session:
             with workspace_scope(workspace_id):
-                number = await reserve_comparison_revision_number(
+                number = await reserve_content_revision_number(
                     session,
                     workspace_id=workspace_id,
                     root_asset_id=root_id,
+                    asset_type=asset_type,
                 )
                 await session.commit()
                 return number

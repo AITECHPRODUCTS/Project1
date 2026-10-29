@@ -78,7 +78,7 @@ from backend.services.s1_research import competitor_spy,monopoly_niche_finder,tr
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
 from backend.services.comparison_post_writer import build_comparison_post as comparison_post_writer_service
 from backend.services.listicle_writer import build_listicle_post as listicle_writer_service
-from backend.services.comparison_draft_revisions import reserve_comparison_revision_number
+from backend.services.comparison_draft_revisions import reserve_comparison_revision_number, reserve_content_revision_number
 from backend.services.comparison_integrity import build_source_snapshot_manifest, evaluate_comparison_integrity, sha256_text, source_snapshot_manifest_sha256, comparison_evidence_payload_sha256
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
@@ -4419,6 +4419,75 @@ async def create_listicle_post(
         raise HTTPException(403, "Select an authorized workspace before generating a listicle")
     _validate_generation_payload_size(payload)
     await workspace_generation_rate_limit(request, workspace_id)
+
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    revision_parent_id: str | None = None
+    revision_number = 1
+    revision_root_asset_id: str | None = None
+    if payload.revision_of_asset_id:
+        with workspace_scope(workspace_id):
+            revision_parent = await db.scalar(select(ContentAsset).where(
+                ContentAsset.id == payload.revision_of_asset_id,
+                ContentAsset.workspace_id == workspace_id,
+                ContentAsset.asset_type == "listicle_post",
+            ).with_for_update())
+            if revision_parent is None:
+                raise HTTPException(404, "Revision source was not found in this workspace")
+            if revision_parent.status != "draft":
+                raise HTTPException(409, "Only a saved draft can be revised; the original asset was not changed")
+            parent_metadata = revision_parent.metadata_json if isinstance(revision_parent.metadata_json, dict) else {}
+            parent_audit = await db.scalar(select(AuditLog).where(
+                AuditLog.workspace_id == workspace_id,
+                AuditLog.action.in_(("content_listicle_post.created", "content_listicle_post.revised")),
+                AuditLog.resource_type == "content_asset",
+                AuditLog.resource_id == revision_parent.id,
+            ).limit(1))
+            integrity_flags = _listicle_integrity_flags(revision_parent, parent_audit)
+            if integrity_flags:
+                await _audit_listicle_integrity_block(
+                    db,
+                    workspace_id=workspace_id,
+                    actor=actor,
+                    asset_id=revision_parent.id,
+                    flags=integrity_flags,
+                )
+                raise HTTPException(409, {
+                    "code": "LISTICLE_INTEGRITY_CHECK_FAILED",
+                    "message": "The saved listicle failed its integrity check; revise only after recovering an intact draft.",
+                    "integrity_flags": integrity_flags,
+                })
+            revision_parent_id = revision_parent.id
+            revision_root_asset_id = str(parent_metadata.get("revision_root_asset_id") or revision_parent.id)
+
+        # Release the parent row lock before reserving the root-scoped revision number.
+        await db.commit()
+        try:
+            revision_number = await reserve_content_revision_number(
+                db,
+                workspace_id=workspace_id,
+                root_asset_id=revision_root_asset_id,
+                asset_type="listicle_post",
+            )
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        with workspace_scope(workspace_id):
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=actor,
+                action="content_listicle_post.revision_reserved",
+                resource_type="content_asset",
+                resource_id=revision_root_asset_id,
+                outcome="reserved",
+                details_json={
+                    "revision_number": revision_number,
+                    "revision_of_asset_id": revision_parent_id,
+                    "revision_root_asset_id": revision_root_asset_id,
+                    "generation_completed": False,
+                    "publishing_started": False,
+                },
+            ))
+            # Commit reservation before model/network I/O; failures leave an auditable gap.
+            await db.commit()
     try:
         result = await listicle_writer_service(
             topic=payload.topic,
@@ -4439,7 +4508,6 @@ async def create_listicle_post(
             {"code": "LISTICLE_DRAFT_GENERATION_FAILED", "message": "Listicle draft generation failed; no draft was saved."},
         ) from exc
 
-    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
     html_body = str(result.get("html") or "")
     content_digest = sha256_text(html_body)
     snapshots = result.get("source_snapshots") if isinstance(result.get("source_snapshots"), list) else []
@@ -4456,6 +4524,11 @@ async def create_listicle_post(
         "source_snapshot_manifest_sha256": source_manifest_digest,
         "topic": payload.topic,
         "audience": payload.audience,
+        "affiliate_disclosure": payload.affiliate_disclosure,
+        "tone": payload.tone,
+        "revision_number": revision_number,
+        "revision_of_asset_id": revision_parent_id,
+        "revision_root_asset_id": revision_root_asset_id,
         "target_keyword": result.get("target_keyword"),
         "slug": result.get("slug"),
         "meta_description": result.get("meta_description"),
@@ -4498,10 +4571,15 @@ async def create_listicle_post(
         )
         db.add(asset)
         await db.flush()
+        root_asset_id = revision_root_asset_id or asset.id
+        if metadata["revision_root_asset_id"] is None:
+            # Reassign a fresh JSON object so SQLAlchemy persists the root ID.
+            metadata = {**metadata, "revision_root_asset_id": root_asset_id}
+            asset.metadata_json = metadata
         db.add(AuditLog(
             workspace_id=workspace_id,
             actor=actor,
-            action="content_listicle_post.created",
+            action="content_listicle_post.revised" if revision_parent_id else "content_listicle_post.created",
             resource_type="content_asset",
             resource_id=asset.id,
             outcome="draft",
@@ -4513,6 +4591,9 @@ async def create_listicle_post(
                 "content_sha256": content_digest,
                 "source_snapshot_manifest_sha256": source_manifest_digest,
                 "evidence_payload_sha256": metadata["evidence_payload_sha256"],
+                "revision_number": revision_number,
+                "revision_of_asset_id": revision_parent_id,
+                "revision_root_asset_id": root_asset_id,
                 "publishing_started": False,
             },
         ))
@@ -4520,6 +4601,13 @@ async def create_listicle_post(
         await db.refresh(asset)
     result["asset_id"] = asset.id
     result["asset_status"] = asset.status
+    result["topic"] = payload.topic
+    result["audience"] = payload.audience
+    result["affiliate_disclosure"] = payload.affiliate_disclosure
+    result["tone"] = payload.tone
+    result["revision_number"] = revision_number
+    result["revision_of_asset_id"] = revision_parent_id
+    result["revision_root_asset_id"] = root_asset_id
     result["content_sha256"] = content_digest
     result["source_snapshot_manifest_sha256"] = source_manifest_digest
     result["evidence_payload_sha256"] = metadata["evidence_payload_sha256"]
@@ -4572,6 +4660,9 @@ async def list_listicle_posts(
             "review_status": metadata.get("review_status", "pending_review"),
             "content_sha256": metadata.get("content_sha256"),
             "content_integrity_status": "verified" if body_hash_matches else "mismatch",
+            "revision_number": metadata.get("revision_number", 1),
+            "revision_of_asset_id": metadata.get("revision_of_asset_id"),
+            "revision_root_asset_id": metadata.get("revision_root_asset_id") or row.id,
             "publishing_started": False,
         })
     return {"items": items, "total": total, "limit": limit, "offset": offset}
@@ -4599,7 +4690,7 @@ async def get_listicle_post(
             raise HTTPException(404, "Listicle draft was not found in this workspace")
         creation_audit = await db.scalar(select(AuditLog).where(
             AuditLog.workspace_id == workspace_id,
-            AuditLog.action == "content_listicle_post.created",
+            AuditLog.action.in_(("content_listicle_post.created", "content_listicle_post.revised")),
             AuditLog.resource_type == "content_asset",
             AuditLog.resource_id == asset.id,
         ).limit(1))
@@ -4620,12 +4711,13 @@ async def get_listicle_post(
         "title": asset.title,
         "html": asset.body,
         **{key: metadata.get(key) for key in (
-            "slug", "meta_description", "topic", "audience", "target_keyword", "products",
+            "slug", "meta_description", "topic", "audience", "affiliate_disclosure", "tone", "target_keyword", "products",
             "products_featured", "evaluation_criteria", "source_urls", "source_snapshots",
             "fact_evidence", "evidence_summary", "evidence_status", "word_count",
             "minimum_word_target", "minimum_word_target_met", "word_count_warning", "provider",
             "review_status", "review_history", "reviewed_at", "reviewed_by", "reviewer_role",
             "reviewer_notes", "publishing_started", "requires_review", "content_sha256",
+            "revision_number", "revision_of_asset_id", "revision_root_asset_id",
             "source_snapshot_manifest_sha256", "evidence_payload_sha256",
         )},
         "content_integrity_status": "verified",
@@ -4661,7 +4753,7 @@ async def review_listicle_post(
         metadata = dict(asset.metadata_json) if isinstance(asset.metadata_json, dict) else {}
         creation_audit = await db.scalar(select(AuditLog).where(
             AuditLog.workspace_id == workspace_id,
-            AuditLog.action == "content_listicle_post.created",
+            AuditLog.action.in_(("content_listicle_post.created", "content_listicle_post.revised")),
             AuditLog.resource_type == "content_asset",
             AuditLog.resource_id == asset.id,
         ).limit(1))
@@ -4730,6 +4822,9 @@ async def review_listicle_post(
         "asset_id": asset.id,
         "asset_status": asset.status,
         "review_status": review_status,
+        "revision_number": (asset.metadata_json or {}).get("revision_number", 1) if isinstance(asset.metadata_json, dict) else 1,
+        "revision_of_asset_id": (asset.metadata_json or {}).get("revision_of_asset_id") if isinstance(asset.metadata_json, dict) else None,
+        "revision_root_asset_id": ((asset.metadata_json or {}).get("revision_root_asset_id") or asset.id) if isinstance(asset.metadata_json, dict) else asset.id,
         "reviewed_by": actor,
         "reviewed_at": reviewed_at.isoformat(),
         "content_sha256": payload.expected_content_sha256,

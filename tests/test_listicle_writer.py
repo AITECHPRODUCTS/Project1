@@ -210,16 +210,19 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             session.add(Workspace(id="other-workspace", name="Other Workspace", slug="other-workspace"))
             await session.commit()
 
+    writer_topics = []
+
     async def fake_result(**kwargs):
+        writer_topics.append(kwargs["topic"])
         products = kwargs["products"]
         body = (
             "<!doctype html><html><head><meta charset=\"utf-8\"></head><body><article>"
             "<p><strong>Affiliate disclosure:</strong> " + kwargs["affiliate_disclosure"] + "</p>"
-            "<h1>Five tools roundup</h1><h2>At a glance</h2><p>Not supplied — verify</p>"
+            "<h1>" + kwargs["topic"] + "</h1><h2>At a glance</h2><p>Not supplied — verify</p>"
             "</article></body></html>"
         )
         return {
-            "title": "5 Best Email Marketing Tools in 2026 (Evidence-Aware Roundup)",
+            "title": kwargs["topic"] + " (Evidence-Aware Roundup)",
             "slug": "best-email-marketing-tools-2026",
             "meta_description": "Evidence-aware roundup draft; verify all product facts.",
             "topic": kwargs["topic"],
@@ -293,6 +296,39 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             assert opened["title"] == created["title"]
             assert opened["publishing_started"] is False
             assert detail.headers["cache-control"] == "no-store"
+            original_html = opened["html"]
+
+            revision_response = client.post(
+                "/api/content/listicle",
+                json=valid_payload(topic="Email marketing tools refreshed", revision_of_asset_id=asset_id),
+            )
+            assert revision_response.status_code == 201, revision_response.text
+            revision = revision_response.json()
+            revision_id = revision["asset_id"]
+            assert revision_id != asset_id
+            assert revision["revision_number"] == 2
+            assert revision["revision_of_asset_id"] == asset_id
+            assert revision["revision_root_asset_id"] == asset_id
+            assert revision["review_status"] == "pending_review"
+            assert revision["publishing_started"] is False
+            assert revision["content_integrity_status"] == "verified"
+            revised_detail = client.get("/api/content/listicles/" + revision_id)
+            assert revised_detail.status_code == 200, revised_detail.text
+            assert revised_detail.json()["revision_number"] == 2
+            assert revised_detail.json()["topic"] == "Email marketing tools refreshed"
+            assert revised_detail.json()["affiliate_disclosure"] == valid_payload()["affiliate_disclosure"]
+            assert revised_detail.headers["cache-control"] == "no-store"
+            original_after_revision = client.get("/api/content/listicles/" + asset_id)
+            assert original_after_revision.status_code == 200
+            assert original_after_revision.json()["html"] == original_html
+            assert original_after_revision.json()["revision_number"] == 1
+            assert original_after_revision.json()["revision_root_asset_id"] == asset_id
+            listing_after_revision = client.get("/api/content/listicles?limit=20&offset=0")
+            assert listing_after_revision.status_code == 200
+            assert listing_after_revision.json()["total"] == 2
+            listed_by_id = {row["asset_id"]: row for row in listing_after_revision.json()["items"]}
+            assert listed_by_id[asset_id]["revision_number"] == 1
+            assert listed_by_id[revision_id]["revision_number"] == 2
 
             review = client.post(
                 "/api/content/listicles/" + asset_id + "/review",
@@ -315,6 +351,24 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             )
             assert duplicate_review.status_code == 409
 
+            # Editorial decision applies to one immutable version, not its new revision.
+            third_response = client.post(
+                "/api/content/listicle",
+                json=valid_payload(topic="Email marketing tools follow-up", revision_of_asset_id=asset_id),
+            )
+            assert third_response.status_code == 201, third_response.text
+            third = third_response.json()
+            third_id = third["asset_id"]
+            assert third_id not in {asset_id, revision_id}
+            assert third["revision_number"] == 3
+            assert third["revision_of_asset_id"] == asset_id
+            assert third["revision_root_asset_id"] == asset_id
+            assert third["review_status"] == "pending_review"
+            unchanged_approved_root = client.get("/api/content/listicles/" + asset_id)
+            assert unchanged_approved_root.status_code == 200
+            assert unchanged_approved_root.json()["review_status"] == "approved"
+            assert unchanged_approved_root.json()["html"] == original_html
+
             async def persisted_records():
                 async with sessions() as session:
                     row = await session.get(ContentAsset, asset_id)
@@ -326,14 +380,28 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
                         AuditLog.action == "content_listicle_post.reviewed",
                         AuditLog.resource_id == asset_id,
                     ))
-                return row, created_audit, review_audit
+                    revision_audit = await session.scalar(select(AuditLog).where(
+                        AuditLog.action == "content_listicle_post.revised",
+                        AuditLog.resource_id == revision_id,
+                    ))
+                    revision_row = await session.get(ContentAsset, revision_id)
+                    third_row = await session.get(ContentAsset, third_id)
+                return row, created_audit, review_audit, revision_audit, revision_row, third_row
 
-            asset, created_audit, review_audit = asyncio.run(persisted_records())
+            asset, created_audit, review_audit, revision_audit, revision_row, third_row = asyncio.run(persisted_records())
             assert asset is not None and asset.workspace_id == active["workspace_id"]
             assert asset.asset_type == "listicle_post" and asset.status == "draft"
             assert created_audit is not None and created_audit.outcome == "draft"
             assert review_audit is not None and review_audit.outcome == "approved"
             assert review_audit.details_json["external_publication_started"] is False
+            assert revision_audit is not None and revision_audit.outcome == "draft"
+            assert revision_audit.details_json["revision_number"] == 2
+            assert revision_audit.details_json["revision_of_asset_id"] == asset_id
+            assert revision_audit.details_json["revision_root_asset_id"] == asset_id
+            assert revision_row is not None and revision_row.metadata_json["revision_number"] == 2
+            assert revision_row.metadata_json["revision_root_asset_id"] == asset_id
+            assert third_row is not None and third_row.metadata_json["revision_number"] == 3
+            assert len(writer_topics) == 3
 
             async def corrupt_saved_asset():
                 async with sessions() as session:
@@ -352,6 +420,13 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             assert other_listing.json()["total"] == 0
             other_detail = client.get("/api/content/listicles/" + asset_id)
             assert other_detail.status_code == 404
+            calls_before_denied_revision = list(writer_topics)
+            denied_revision = client.post(
+                "/api/content/listicle",
+                json=valid_payload(topic="must not run for foreign workspace", revision_of_asset_id=asset_id),
+            )
+            assert denied_revision.status_code == 404
+            assert writer_topics == calls_before_denied_revision
     finally:
         main.app.dependency_overrides.pop(main.get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)

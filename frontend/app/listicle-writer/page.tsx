@@ -4,12 +4,13 @@ import {useCallback,useEffect,useState,type FormEvent} from "react";
 import {apiFetch} from "@/lib/api";
 
 type ProductInput={name:string;facts:Record<string,string>;source_urls:string[];affiliate_url?:string|null;affiliate_relationship:"editorial"|"affiliate_primary"|"affiliate_secondary"};
-type DraftSummary={asset_id:string;title:string;asset_status:string;created_at:string|null;product_count:number;word_count:number;evidence_status:string;review_status:string;content_integrity_status:string;publishing_started:boolean};
+type DraftSummary={asset_id:string;title:string;asset_status:string;created_at:string|null;product_count:number;word_count:number;evidence_status:string;review_status:string;content_integrity_status:string;publishing_started:boolean;revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string|null};
 type DraftList={items:DraftSummary[];total:number;limit:number;offset:number};
 type EvidenceItem={product:string;fact_name:string;supplied_value:string;source_id:string|null;source_url:string|null;excerpt_sha256:string|null;exact_text_match:boolean;evidence_status:string;evidence_note?:string;editorial_review_required:boolean};
 type Snapshot={source_id:string;url:string;product_names:string[];title:string;status:string;http_status:number|null;content_type:string;fetched_at:string;excerpt:string;excerpt_sha256:string|null;error_type:string|null;detail:string|null};
 type ListicleResult={
- asset_id:string;asset_status:string;title:string;slug:string;meta_description:string;topic:string;audience:string;target_keyword:string;format:string;html:string;
+ asset_id:string;asset_status:string;title:string;slug:string;meta_description:string;topic:string;audience:string;affiliate_disclosure:string;tone:"professional"|"conversational";target_keyword:string;format:string;html:string;
+ revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string|null;
  word_count:number;minimum_word_target:number;minimum_word_target_met:boolean;word_count_warning:string|null;product_count:number;products:ProductInput[];
  products_featured:Array<{rank:number;name:string;affiliate_relationship:string;affiliate_url:string|null}>;evaluation_criteria:string[];source_urls:string[];
  source_snapshots:Snapshot[];fact_evidence:EvidenceItem[];
@@ -43,6 +44,7 @@ export default function ListicleWriterPage(){
  const [items,setItems]=useState<DraftSummary[]>([]);
  const [total,setTotal]=useState(0);
  const [result,setResult]=useState<ListicleResult|null>(null);
+ const [revisionOfAssetId,setRevisionOfAssetId]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
@@ -62,6 +64,31 @@ export default function ListicleWriterPage(){
   finally{setBusy(false);}
  };
 
+ const beginRevision=()=>{
+  if(!result)return;
+  const source=result;
+  setTopic(source.topic||"");
+  setAudience(source.audience||"");
+  setKeyword(source.target_keyword||"");
+  setCriteriaText((source.evaluation_criteria||[]).join("\n"));
+  setProductsJson(JSON.stringify((source.products||[]).map(product=>({
+   name:product.name,
+   facts:product.facts||{},
+   source_urls:product.source_urls||[],
+   affiliate_url:product.affiliate_url??null,
+   affiliate_relationship:product.affiliate_relationship||"editorial"
+  })),null,2));
+  setDisclosure(source.affiliate_disclosure||"Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.");
+  setMinimumWords(String(source.minimum_word_target||1500));
+  setTone(source.tone==="conversational"?"conversational":"professional");
+  setRevisionOfAssetId(source.asset_id);
+  setResult(null);
+  setReviewNotes("");
+  setConfirmReviewed(false);
+  setError("");
+  setNotice("Editing a new immutable revision of "+source.asset_id+". Original draft remains unchanged.");
+ };
+
  const submit=async(event:FormEvent)=>{
   event.preventDefault();setBusy(true);setError("");setNotice("");setResult(null);
   let products:unknown;
@@ -74,9 +101,9 @@ export default function ListicleWriterPage(){
   try{
    const response=await apiFetch<ListicleResult>("/api/content/listicle",{method:"POST",body:JSON.stringify({
     topic:topic.trim(),audience:audience.trim(),target_keyword:keyword.trim()||null,products,evaluation_criteria,
-    affiliate_disclosure:disclosure,minimum_words:minimum,tone
+    affiliate_disclosure:disclosure,minimum_words:minimum,tone,revision_of_asset_id:revisionOfAssetId||undefined
    })});
-   setResult(response);setNotice("Listicle draft saved. Verify each product fact, source and affiliate destination before relying on it.");
+   setResult(response);setRevisionOfAssetId(null);setNotice(response.revision_number>1?"Immutable listicle revision saved. The original draft is unchanged.":"Listicle draft saved. Verify each product fact, source and affiliate destination before relying on it.");
    await refreshList();
   }catch(e){setError(errorMessage(e));}
   finally{setBusy(false);}
@@ -120,13 +147,14 @@ export default function ListicleWriterPage(){
     <p className="text-xs leading-5 text-slate-500">Per product: name, facts object, optional source_urls; optional affiliate_url must be HTTPS and use affiliate_relationship editorial, affiliate_primary or affiliate_secondary. The primary affiliate may appear only once and within the first three supplied products. Up to 10 unique source URLs across the article.</p>
     <div className="grid gap-3 sm:grid-cols-2"><label className={label}>Minimum word target<input aria-label="Minimum word target" className={field} type="number" min="800" max="4500" step="1" required value={minimumWords} onChange={e=>setMinimumWords(e.target.value)}/></label><label className={label}>Writing tone<select aria-label="Writing tone" className={field} value={tone} onChange={e=>setTone(e.target.value as "professional"|"conversational")}><option value="professional">Professional</option><option value="conversational">Conversational</option></select></label></div>
     <label className={label}>Affiliate disclosure<input aria-label="Affiliate disclosure" className={field} minLength={20} maxLength={1200} required value={disclosure} onChange={e=>setDisclosure(e.target.value)}/></label>
-    <button type="submit" disabled={busy} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?"Generating snapshots and saving…":"Generate listicle draft"}</button>
+    {revisionOfAssetId&&<div role="status" className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">Creating a new revision of {revisionOfAssetId}. Original draft remains unchanged.<button type="button" className="ml-2 font-bold underline" onClick={()=>setRevisionOfAssetId(null)}>Cancel revision and save independently</button></div>}
+    <button type="submit" disabled={busy} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?"Generating snapshots and saving…":revisionOfAssetId?"Generate listicle revision":"Generate listicle draft"}</button>
    </form></section>
 
    <section className="space-y-5">
     {!result&&<div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><h2 className="text-lg font-bold">Your article will appear here</h2><p className="mt-2 text-sm leading-6 text-slate-500">The generator preserves the supplied product order. It does not invent rankings, prices, ratings, features, earnings or reviews. A saved draft can be reopened and reviewed later.</p></div>}
     {result&&<div className="space-y-5"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-black">{result.title}</h2><p className="mt-1 break-all font-mono text-xs text-slate-500">Saved draft · {result.asset_id}</p></div><a href={"data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(exportResult,null,2))} download="omni-affiliate-listicle-draft.json" className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Export evidence JSON</a></div>
+     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-black">{result.title}</h2><p className="mt-1 break-all font-mono text-xs text-slate-500">Saved draft · {result.asset_id}</p><p className="mt-1 text-xs text-slate-500">Revision #{result.revision_number||1} · root {result.revision_root_asset_id||result.asset_id}</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={beginRevision} disabled={busy} className="rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 disabled:opacity-40">Revise saved draft</button><a href={"data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(exportResult,null,2))} download="omni-affiliate-listicle-draft.json" className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Export evidence JSON</a></div></div>
      <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Products</p><p className="mt-1 text-xl font-black">{result.product_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Source snapshots</p><p className="mt-1 text-xl font-black">{result.evidence_summary.source_snapshots_fetched} / {result.evidence_summary.source_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Draft words</p><p className="mt-1 text-xl font-black">{result.word_count}</p></div></div>
      <p className="mt-3 text-sm font-semibold text-amber-800">Evidence: {result.evidence_status.replaceAll("_"," ")} · Independent fact verification: No · Published: No · Editorial status: {result.review_status.replaceAll("_"," ")}</p>
      {result.word_count_warning&&<p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{result.word_count_warning}</p>}
@@ -148,7 +176,7 @@ export default function ListicleWriterPage(){
 
   <section className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-black">Saved listicle drafts</h2><p className="mt-1 text-sm text-slate-500">{total} workspace draft(s) · latest 20 shown</p></div><button type="button" onClick={()=>void refreshList()} disabled={busy} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-40">Refresh drafts</button></div>
-   {items.length===0?<p className="mt-4 rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">No saved listicle drafts are available in this workspace yet.</p>:<div className="mt-4 space-y-2">{items.map(item=><div key={item.asset_id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{item.title}</p><p className="mt-1 break-all font-mono text-[11px] text-slate-500">{item.asset_id}</p><p className="mt-1 text-xs text-slate-500">{item.product_count} products · {item.word_count} words · {item.review_status.replaceAll("_"," ")} · {item.evidence_status.replaceAll("_"," ")}</p></div><button type="button" disabled={busy} onClick={()=>void openDraft(item.asset_id)} className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold disabled:opacity-40">Open draft</button></div>)}</div>}
+   {items.length===0?<p className="mt-4 rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">No saved listicle drafts are available in this workspace yet.</p>:<div className="mt-4 space-y-2">{items.map(item=><div key={item.asset_id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{item.title}</p><p className="mt-1 break-all font-mono text-[11px] text-slate-500">{item.asset_id}</p><p className="mt-1 text-xs text-slate-500">{item.product_count} products · revision #{item.revision_number||1} · {item.word_count} words · {item.review_status.replaceAll("_"," ")} · {item.evidence_status.replaceAll("_"," ")}</p></div><button type="button" disabled={busy} onClick={()=>void openDraft(item.asset_id)} className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold disabled:opacity-40">Open draft</button></div>)}</div>}
   </section>
  </div></main>;
 }

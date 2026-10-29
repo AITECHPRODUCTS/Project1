@@ -31,3 +31,8 @@ scripts/verify_skill_registry.py checks:
 - the 52-vs-53 README discrepancy as an explicit note, not a false failure.
 
 The workflow’s repo-guard job runs this verifier alongside the existing repository source/syntax verifier. Exact-SHA Actions results for the code adding this gate are recorded separately after the workflow completes.
+
+
+## 2026-10-29 — executable commission calculator increment
+
+`research/commission-calculator` now has an allowlisted deterministic runtime handler. It estimates earnings only from explicitly provided traffic and conversion assumptions plus payout terms; same-currency comparisons use bounded Decimal calculations. Recurring estimates state the supplied paid duration and assume no churn/refunds. No provider data, guaranteed earnings, or payouts are claimed. Exact-SHA acceptance remains pending until the current push/PR jobs complete.

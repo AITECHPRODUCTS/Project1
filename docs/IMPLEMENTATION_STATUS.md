@@ -1,6 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 implementation checkpoint — commission projections and complete schema traversal
+
+- Added allowlisted `research.commission_calculator`: it projects expected clicks/conversions and commission estimates from explicitly supplied monthly visitors, CTR/CVR assumptions, payout type/value, average order value and recurring duration. Results use bounded Decimal arithmetic and fixed-point strings, require comparable same-currency programs, rank only those same-currency estimates, and explicitly state that inputs are assumptions, no provider metrics were verified, no earnings are guaranteed, and no money was transferred.
+- Recurring 12-month totals use explicit duration-bounded monthly cohorts and are marked as pre-churn projections; they do not infer traffic benchmarks, churn, refunds, or actual conversion outcomes.
+- Hardened governed-skill schema validation to check every array item and object property rather than silently stopping after the first 100. Added regressions for invalid input at position 101, non-finite/bool numerics, invalid commission assumptions and a real commission runtime-fixture contract.
+- This code increment requires its own exact-SHA push and PR CI result. It does not connect a provider or close the remaining 53-skill end-to-end parity work.
+
+
 ## 2026-10-29 implementation checkpoint — governed offer-term change review
 
 - Added the allowlisted `research.offer_term_change_review` handler in `backend/services/skill_runtime.py`. It reuses the shared `compare_offer_terms` normalizer and SHA-256 fingerprinting service, detects field-level material changes, rejects malformed/unexpected term fields, and reports first-snapshot baselines without inventing prior terms.

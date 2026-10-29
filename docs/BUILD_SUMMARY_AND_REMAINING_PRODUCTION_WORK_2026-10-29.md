@@ -8,7 +8,16 @@
 
 This document is a practical handoff for continuing the implementation. It distinguishes existing code and automated verification from provider-connected, staging-verified and production-live behavior.
 
-## This checkpoint's additive feature
+## New code in this continuation checkpoint
+
+Added the executable allowlisted handler `research.commission_calculator` for S1 affiliate earnings projections. It calculates expected clicks/conversions, commission per conversion and 12-month payout projections from explicitly provided visitor counts, click-through and conversion-rate assumptions, payout rules, currency, average order value and recurring duration. All money calculations use bounded Decimal arithmetic and fixed-point strings. Comparisons reject mixed currencies and results are sorted only within one shared currency. Recurring cohorts use the submitted payment duration and are labelled as pre-churn estimates.
+
+The handler does not assume market benchmark CTR/CVR or visitor counts, fetch provider metrics, promise earnings, or transfer money. Outputs explicitly mark the estimates as caller-supplied assumptions and require human review.
+
+Also hardened the skill-package schema validator: it now validates every value in an array/object, not just the first 100 entries/properties. Regression tests cover malformed values beyond that former cutoff and explicit boolean/NaN/infinity rejection.
+
+## Previous checkpoint's additive feature
+
 
 The governed skill runtime now includes `research.offer_term_change_review`, reusing the existing offer-term normalizer, field-level comparator and SHA-256 fingerprint:
 
@@ -31,7 +40,7 @@ Regression coverage includes material changes, semantically equivalent term norm
 - **Mandatory advertising:** ad planning and creative/audience variants, budget guardrails, verified-evidence requirements for performance recommendations, signed collector ingestion and no automatic remote campaign action without an authorized provider contract.
 - **S6 finance/analytics:** signed conversion intake, idempotency, append-only commission observations, reversal handling, currency separation and review-oriented reconciliation.
 - **S7–S8 automation/learning:** persisted workflow checkpoints/leases/recovery/cancellation, human approval boundaries, resource budget controls and review-only learning primitives.
-- **Skill runtime:** six deterministic, code-owned handlers plus a declarative-only option; user-authored Markdown/instructions are not executed. Runtime and parity work is still partial.
+- **Skill runtime:** seven deterministic, code-owned handlers plus a declarative-only option; includes extractive summary, keyword extraction, evidence-dependent offer metrics, commission projections, offer-term change review, review-only ad guardrails and ROAS review. User-authored Markdown/instructions are not executed. Runtime and parity work is still partial.
 
 ## Last verified CI before this change
 

@@ -176,7 +176,7 @@ def _value_errors(value: Any, schema: dict[str, Any], *, path: str, depth: int =
             errors.append(f"{path}: array has more items than maxItems")
         item_schema = schema.get("items")
         if isinstance(item_schema, dict):
-            for index, item in enumerate(value[:100]):
+            for index, item in enumerate(value):
                 errors.extend(_value_errors(item, item_schema, path=f"{path}[{index}]", depth=depth + 1))
                 if len(errors) >= 30:
                     break
@@ -187,7 +187,7 @@ def _value_errors(value: Any, schema: dict[str, Any], *, path: str, depth: int =
         for name in required if isinstance(required, list) else []:
             if name not in value:
                 errors.append(f"{path}.{name}: required property is missing")
-        for name, item in list(value.items())[:100]:
+        for name, item in value.items():
             child_schema = properties.get(name)
             if child_schema is None:
                 if schema.get("additionalProperties", True) is False:

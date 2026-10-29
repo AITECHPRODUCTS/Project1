@@ -151,15 +151,44 @@ def test_runtime_fixture_that_only_matches_schema_but_not_handler_output_fails()
 
 def test_runtime_schema_validation_rejects_boolean_as_number_and_non_finite_values():
     schema = {"type": "number", "minimum": 0}
-    assert validate_skill_value(True, schema)
-    assert validate_skill_value(float("nan"), schema)
-    assert validate_skill_value(float("inf"), schema)
+    assert validate_skill_value(0, schema) == []
+    assert validate_skill_value(True, schema) == ["input: expected number, received bool"]
+    assert validate_skill_value(float("nan"), schema) == ["input: number must be finite"]
+    assert validate_skill_value(float("inf"), schema) == ["input: number must be finite"]
+    assert validate_skill_value(float("-inf"), schema) == ["input: number must be finite"]
+
+
+def test_runtime_schema_validation_checks_array_items_after_the_legacy_scan_limit():
+    schema = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"ok": {"type": "boolean"}},
+            "required": ["ok"],
+            "additionalProperties": False,
+        },
+        "minItems": 1,
+        "maxItems": 150,
+    }
+    value = [{"ok": True} for _ in range(100)]
+    value.append({"ok": True, "unexpected": "must be rejected"})
+    errors = validate_skill_value(value, schema)
+    assert "input[100].unexpected: additional property is not allowed" in errors
+
+
+def test_runtime_schema_validation_checks_object_properties_after_the_legacy_scan_limit():
+    declared = {f"field_{index:03d}": {"type": "integer"} for index in range(100)}
+    schema = {"type": "object", "properties": declared, "additionalProperties": False}
+    value = {key: index for index, key in enumerate(declared)}
+    value["unexpected_after_100"] = "must be rejected"
+    errors = validate_skill_value(value, schema)
+    assert "input.unexpected_after_100: additional property is not allowed" in errors
 
 
 def test_runtime_catalog_is_explicit_and_contains_no_user_supplied_code_execution():
     assert set(SUPPORTED_RUNTIME_HANDLERS) == {
         "none", "content.extractive_summary", "research.keyword_extract", "research.offer_metrics",
-        "research.offer_term_change_review", "ads.guardrail_review", "analytics.roas_calculator"
+        "research.commission_calculator", "research.offer_term_change_review", "ads.guardrail_review", "analytics.roas_calculator"
     }
 
 
@@ -597,6 +626,168 @@ def test_offer_term_change_review_executes_as_a_governed_skill_package_fixture()
             "input": input_value,
             "expected_output": expected,
         }],
+    })
+    report = package["validation_report"]
+    assert report["all_fixtures_passed"] is True
+    assert report["runtime_handler_allowlisted"] is True
+    assert report["runtime_execution_tested"] is True
+    assert report["cases"][0]["runtime_output_matches_expected"] is True
+
+
+
+def _commission_program(name, **overrides):
+    value = {
+        "name": name,
+        "reward_type": "cps_one_time",
+        "commission_type": "percentage",
+        "commission_value": "20",
+        "currency": "USD",
+        "average_order_value": "50",
+    }
+    value.update(overrides)
+    return value
+
+
+def _commission_payload(**overrides):
+    value = {
+        "monthly_visitors": 100,
+        "click_through_rate_pct": "10",
+        "affiliate_conversion_rate_pct": "10",
+        "programs": [
+            _commission_program("One-time Example"),
+            _commission_program(
+                "Recurring Example",
+                reward_type="cps_recurring",
+                commission_type="fixed",
+                commission_value="15",
+                currency="usd",
+                recurring_paid_months=3,
+            ),
+        ],
+    }
+    value.update(overrides)
+    return value
+
+
+def test_commission_calculator_uses_explicit_assumptions_and_ranks_same_currency_programs():
+    result = execute_skill_handler("research.commission_calculator", _commission_payload())
+    assert [row["name"] for row in result["programs"]] == ["Recurring Example", "One-time Example"]
+    recurring, one_time = result["programs"]
+    assert recurring == {
+        "name": "Recurring Example",
+        "reward_type": "cps_recurring",
+        "currency": "USD",
+        "commission_per_conversion_amount": "15.000000",
+        "expected_monthly_clicks": "10.000000",
+        "expected_monthly_conversions": "1.000000",
+        "estimated_first_month_commission": "15.000000",
+        "estimated_12_month_commission": "495.000000",
+        "recurring_paid_months": 3,
+        "projection_basis": "recurring cohort projection capped at supplied duration; assumes no churn or refunds",
+    }
+    assert one_time["commission_per_conversion_amount"] == "10.000000"
+    assert one_time["expected_monthly_clicks"] == "10.000000"
+    assert one_time["expected_monthly_conversions"] == "1.000000"
+    assert one_time["estimated_first_month_commission"] == "10.000000"
+    assert one_time["estimated_12_month_commission"] == "120.000000"
+    assert result["measurement_basis"] == {
+        "monthly_visitors": 100,
+        "click_through_rate_pct_assumption": "10.000000",
+        "affiliate_conversion_rate_pct_assumption": "10.000000",
+    }
+    assert result["input_provenance"] == "caller_supplied_assumptions"
+    assert result["provider_metrics_verified"] is False
+    assert result["earnings_guaranteed"] is False
+    assert result["external_provider_calls_made"] is False
+    assert result["money_transferred"] is False
+    assert result["requires_human_review"] is True
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _commission_payload(monthly_visitors=True),
+        _commission_payload(monthly_visitors=-1),
+        _commission_payload(click_through_rate_pct=float("nan")),
+        _commission_payload(affiliate_conversion_rate_pct=101),
+        _commission_payload(programs=[]),
+        _commission_payload(programs=[_commission_program("USD"), _commission_program("GBP", currency="GBP")]),
+        _commission_payload(programs=[_commission_program("Lead", reward_type="cpl")]),
+        _commission_payload(programs=[_commission_program("No price", average_order_value=None)]),
+        _commission_payload(programs=[_commission_program("Too much", commission_value=101)]),
+        _commission_payload(programs=[_commission_program("Recurring without duration", reward_type="cps_recurring")]),
+        _commission_payload(programs=[_commission_program("One-time with duration", recurring_paid_months=3)]),
+        _commission_payload(programs=[_commission_program("Fixed with price", commission_type="fixed")]),
+        _commission_payload(extra_field="untrusted"),
+    ],
+)
+def test_commission_calculator_rejects_ambiguous_or_invalid_assumptions(payload):
+    with pytest.raises(ValueError):
+        execute_skill_handler("research.commission_calculator", payload)
+
+
+def test_commission_calculator_is_executable_through_a_governed_skill_fixture():
+    input_value = {
+        "monthly_visitors": 100,
+        "click_through_rate_pct": 10,
+        "affiliate_conversion_rate_pct": 10,
+        "programs": [_commission_program("One-time Example")],
+    }
+    expected = {
+        "programs": [{
+            "name": "One-time Example",
+            "reward_type": "cps_one_time",
+            "currency": "USD",
+            "commission_per_conversion_amount": "10.000000",
+            "expected_monthly_clicks": "10.000000",
+            "expected_monthly_conversions": "1.000000",
+            "estimated_first_month_commission": "10.000000",
+            "estimated_12_month_commission": "120.000000",
+            "recurring_paid_months": None,
+            "projection_basis": "one-time commission for each monthly conversion cohort",
+        }],
+        "measurement_basis": {
+            "monthly_visitors": 100,
+            "click_through_rate_pct_assumption": "10.000000",
+            "affiliate_conversion_rate_pct_assumption": "10.000000",
+        },
+        "currency_comparison": "USD",
+        "input_provenance": "caller_supplied_assumptions",
+        "provider_metrics_verified": False,
+        "earnings_guaranteed": False,
+        "external_provider_calls_made": False,
+        "money_transferred": False,
+        "requires_human_review": True,
+        "notes": [
+            "Clicks, conversions and commissions are expected-value estimates, not observed counts or earnings.",
+            "The projection assumes constant monthly visitors and rates, with no refunds, cancellations, fraud or attribution loss.",
+            "Recurring projections assume each cohort continues paying for the supplied duration; churn is not modeled.",
+            "No market benchmarks or provider metrics were fetched or inferred.",
+        ],
+    }
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "monthly_visitors": {"type": "integer", "minimum": 0, "maximum": 1000000000},
+            "click_through_rate_pct": {"type": "number", "minimum": 0, "maximum": 100},
+            "affiliate_conversion_rate_pct": {"type": "number", "minimum": 0, "maximum": 100},
+            "programs": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "object", "additionalProperties": True}},
+        },
+        "required": ["monthly_visitors", "click_through_rate_pct", "affiliate_conversion_rate_pct", "programs"],
+        "additionalProperties": False,
+    }
+    package = build_skill_package({
+        "skill_id": "research/commission-calculator",
+        "display_name": "Commission calculator",
+        "version": "1.0.0",
+        "description": "Estimate affiliate earnings using explicit traffic, conversion and payout assumptions.",
+        "stage": "S1",
+        "runtime_handler": "research.commission_calculator",
+        "capabilities": ["research.read"],
+        "input_schema": input_schema,
+        "output_schema": {"type": "object", "additionalProperties": True},
+        "instructions_markdown": "# Declarative guidance\nTreat projections as assumptions, not actual earnings or guarantees.",
+        "test_cases": [{"name": "explicit single-program estimate", "input": input_value, "expected_output": expected}],
     })
     report = package["validation_report"]
     assert report["all_fixtures_passed"] is True

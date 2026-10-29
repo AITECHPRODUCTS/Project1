@@ -18,6 +18,7 @@ SUPPORTED_RUNTIME_HANDLERS = (
     "content.extractive_summary",
     "research.keyword_extract",
     "research.offer_metrics",
+    "research.commission_calculator",
     "research.offer_term_change_review",
     "ads.guardrail_review",
     "analytics.roas_calculator",
@@ -28,6 +29,7 @@ _HANDLER_DESCRIPTIONS = {
     "content.extractive_summary": "Deterministic local extractive summary from supplied text; no model or network call.",
     "research.keyword_extract": "Deterministic frequency-based keyword extraction from supplied text; no search-volume claim.",
     "research.offer_metrics": "Evidence-dependent EPC, conversion rate and gravity calculations from supplied offer and measured data; no provider claims.",
+    "research.commission_calculator": "Estimate affiliate commission from explicitly supplied traffic, click/conversion-rate assumptions, payout terms and recurring duration; no live metrics or earnings guarantee.",
     "research.offer_term_change_review": "Normalize and compare supplied affiliate offer terms; flags material changes for human revalidation and never authenticates a provider or activates an offer.",
     "ads.guardrail_review": "Evaluate supplied provider-verified ad observations, freshness and spend caps; review-only, no provider action.",
     "analytics.roas_calculator": "Decimal-based ROAS calculation and review-only stop-loss signal; no campaign action.",
@@ -118,6 +120,194 @@ def _offer_metrics(payload: dict[str, Any]) -> dict[str, Any]:
         gravity_weight=payload.get("gravity_weight", 1.0),
     )
 
+
+
+def _commission_decimal(
+    value: Any,
+    field: str,
+    *,
+    minimum: Decimal = Decimal("0"),
+    maximum: Decimal = Decimal("1000000000"),
+    allow_zero: bool = False,
+) -> Decimal:
+    """Parse an explicit monetary/rate assumption with bounded precision and range."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError(f"{field} must be a finite decimal amount")
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"{field} must be a finite decimal amount") from exc
+    if not parsed.is_finite():
+        raise ValueError(f"{field} must be a finite decimal amount")
+    if parsed < minimum or (not allow_zero and parsed == 0) or parsed > maximum:
+        qualifier = "non-negative" if allow_zero else "positive"
+        raise ValueError(f"{field} must be a {qualifier} amount within the supported range")
+    try:
+        normalized = parsed.quantize(Decimal("0.000001"))
+    except InvalidOperation as exc:
+        raise ValueError(f"{field} exceeds the supported numeric precision or range") from exc
+    if normalized != parsed:
+        raise ValueError(f"{field} supports at most six meaningful decimal places")
+    return normalized
+
+
+def _commission_amount_string(value: Decimal) -> str:
+    """Use fixed-point decimal strings for financial outputs instead of binary floats."""
+    return format(value.quantize(Decimal("0.000001")), "f")
+
+
+def _commission_calculator(payload: dict[str, Any]) -> dict[str, Any]:
+    """Project commission from explicit operator assumptions; never fetch or attest metrics."""
+    allowed_top = {
+        "monthly_visitors",
+        "click_through_rate_pct",
+        "affiliate_conversion_rate_pct",
+        "programs",
+    }
+    unexpected = sorted(set(payload) - allowed_top)
+    if unexpected:
+        raise ValueError("unsupported commission-calculator input fields: " + ", ".join(unexpected[:8]))
+    missing = sorted(allowed_top - set(payload))
+    if missing:
+        raise ValueError("commission calculator is missing fields: " + ", ".join(missing))
+
+    visitors = payload["monthly_visitors"]
+    if isinstance(visitors, bool) or not isinstance(visitors, int) or not 0 <= visitors <= 1_000_000_000:
+        raise ValueError("monthly_visitors must be an integer from 0 to 1000000000")
+    ctr = _commission_decimal(
+        payload["click_through_rate_pct"], "click_through_rate_pct",
+        maximum=Decimal("100"), allow_zero=True,
+    )
+    conversion_rate = _commission_decimal(
+        payload["affiliate_conversion_rate_pct"], "affiliate_conversion_rate_pct",
+        maximum=Decimal("100"), allow_zero=True,
+    )
+    programs = payload["programs"]
+    if not isinstance(programs, list) or not 1 <= len(programs) <= 10:
+        raise ValueError("programs must contain between 1 and 10 items")
+
+    visitor_count = Decimal(visitors)
+    expected_clicks = visitor_count * ctr / Decimal("100")
+    expected_conversions = expected_clicks * conversion_rate / Decimal("100")
+    currency_seen: str | None = None
+    results: list[dict[str, Any]] = []
+    reward_types = {"cps_one_time", "cps_recurring", "cpl", "cpa"}
+
+    for index, item in enumerate(programs):
+        prefix = f"programs[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{prefix} must be a JSON object")
+        allowed_program = {
+            "name", "reward_type", "commission_type", "commission_value",
+            "currency", "average_order_value", "recurring_paid_months",
+        }
+        extra = sorted(set(item) - allowed_program)
+        if extra:
+            raise ValueError(f"{prefix} contains unsupported fields: " + ", ".join(extra[:8]))
+        required = {"name", "reward_type", "commission_type", "commission_value", "currency"}
+        missing_program = sorted(required - set(item))
+        if missing_program:
+            raise ValueError(f"{prefix} is missing fields: " + ", ".join(missing_program))
+
+        name = item["name"]
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 120:
+            raise ValueError(f"{prefix}.name must be a non-empty string of at most 120 characters")
+        reward_type = item["reward_type"]
+        if reward_type not in reward_types:
+            raise ValueError(f"{prefix}.reward_type is unsupported")
+        commission_type = item["commission_type"]
+        if commission_type not in {"percentage", "fixed"}:
+            raise ValueError(f"{prefix}.commission_type must be percentage or fixed")
+        if commission_type == "percentage" and reward_type not in {"cps_one_time", "cps_recurring"}:
+            raise ValueError(f"{prefix} percentage commissions are only valid for CPS programs")
+
+        currency = item["currency"]
+        if not isinstance(currency, str) or not re.fullmatch(r"[A-Za-z]{3}", currency.strip()):
+            raise ValueError(f"{prefix}.currency must be a three-letter currency code")
+        currency = currency.strip().upper()
+        if currency_seen is None:
+            currency_seen = currency
+        elif currency != currency_seen:
+            raise ValueError("programs must use the same currency; mixed-currency comparisons are not ranked")
+
+        commission_value = _commission_decimal(
+            item["commission_value"], f"{prefix}.commission_value",
+            maximum=Decimal("1000000000"),
+        )
+        if commission_type == "percentage":
+            if "average_order_value" not in item:
+                raise ValueError(f"{prefix}.average_order_value is required for percentage commissions")
+            average_order_value = _commission_decimal(
+                item["average_order_value"], f"{prefix}.average_order_value",
+                maximum=Decimal("1000000000"),
+            )
+            if commission_value > Decimal("100"):
+                raise ValueError(f"{prefix}.commission_value percentage cannot exceed 100")
+            commission_per_conversion = average_order_value * commission_value / Decimal("100")
+        else:
+            if "average_order_value" in item:
+                raise ValueError(f"{prefix}.average_order_value must be omitted for fixed commissions")
+            average_order_value = None
+            commission_per_conversion = commission_value
+
+        recurring_months: int | None = None
+        if reward_type == "cps_recurring":
+            recurring_months = item.get("recurring_paid_months")
+            if (
+                isinstance(recurring_months, bool)
+                or not isinstance(recurring_months, int)
+                or not 1 <= recurring_months <= 120
+            ):
+                raise ValueError(f"{prefix}.recurring_paid_months must be an integer from 1 to 120")
+        elif "recurring_paid_months" in item:
+            raise ValueError(f"{prefix}.recurring_paid_months is only valid for recurring CPS programs")
+
+        first_month = expected_conversions * commission_per_conversion
+        if recurring_months is None:
+            twelve_month_cohort_factor = 12
+            basis = "one-time commission for each monthly conversion cohort"
+        else:
+            # Every monthly cohort is assumed to keep paying for the supplied duration;
+            # churn/refunds are not inferred, so this is explicitly a pre-churn projection.
+            twelve_month_cohort_factor = sum(min(recurring_months, 12 - month_index) for month_index in range(12))
+            basis = "recurring cohort projection capped at supplied duration; assumes no churn or refunds"
+        twelve_month_total = expected_conversions * commission_per_conversion * Decimal(twelve_month_cohort_factor)
+
+        results.append({
+            "name": name.strip(),
+            "reward_type": reward_type,
+            "currency": currency,
+            "commission_per_conversion_amount": _commission_amount_string(commission_per_conversion),
+            "expected_monthly_clicks": _commission_amount_string(expected_clicks),
+            "expected_monthly_conversions": _commission_amount_string(expected_conversions),
+            "estimated_first_month_commission": _commission_amount_string(first_month),
+            "estimated_12_month_commission": _commission_amount_string(twelve_month_total),
+            "recurring_paid_months": recurring_months,
+            "projection_basis": basis,
+        })
+
+    results.sort(key=lambda result: (-Decimal(result["estimated_12_month_commission"]), result["name"].casefold()))
+    return {
+        "programs": results,
+        "measurement_basis": {
+            "monthly_visitors": visitors,
+            "click_through_rate_pct_assumption": _commission_amount_string(ctr),
+            "affiliate_conversion_rate_pct_assumption": _commission_amount_string(conversion_rate),
+        },
+        "currency_comparison": currency_seen,
+        "input_provenance": "caller_supplied_assumptions",
+        "provider_metrics_verified": False,
+        "earnings_guaranteed": False,
+        "external_provider_calls_made": False,
+        "money_transferred": False,
+        "requires_human_review": True,
+        "notes": [
+            "Clicks, conversions and commissions are expected-value estimates, not observed counts or earnings.",
+            "The projection assumes constant monthly visitors and rates, with no refunds, cancellations, fraud or attribution loss.",
+            "Recurring projections assume each cohort continues paying for the supplied duration; churn is not modeled.",
+            "No market benchmarks or provider metrics were fetched or inferred.",
+        ],
+    }
 
 
 def _validated_offer_term_record(value: Any, field: str) -> dict[str, Any]:
@@ -433,6 +623,8 @@ def execute_skill_handler(handler_key: str, input_value: Any) -> dict[str, Any]:
         return _keyword_extract(payload)
     if handler_key == "research.offer_metrics":
         return _offer_metrics(payload)
+    if handler_key == "research.commission_calculator":
+        return _commission_calculator(payload)
     if handler_key == "research.offer_term_change_review":
         return _offer_term_change_review(payload)
     if handler_key == "ads.guardrail_review":

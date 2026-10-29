@@ -1,11 +1,18 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 workspace-scoped lead pagination (CI pending)
+## 2026-10-29 global lead search (CI pending)
+
+- The lead API now accepts a bounded search term and applies it to email/resource name inside the same workspace filter used for count and page results. Search is parameterized by SQLAlchemy; results remain bounded and paginated.
+- The UI separates global email/resource search from a current-page UTM-value filter, resets pagination when global search changes, and labels each scope explicitly.
+- API query assertions and browser acceptance cover server-side result narrowing and the separate UTM filter. Exact-SHA push and PR verification is pending.
+
+
+## 2026-10-29 verified workspace-scoped lead pagination
 
 - The leads API now accepts bounded limit/offset parameters (default 50, maximum 200), applies the same active-workspace predicate to both rows and total count, and uses a stable created-at/id ordering.
 - The UI shows total workspace lead count, current-page metrics, previous/next navigation and explicit current-page search scope. If records are removed while the user is on a now-invalid page, it falls back to the last valid page rather than displaying a misleading empty workspace.
-- Added API coverage for scoped count and requested limit/offset, plus browser acceptance for pagination and stale-page recovery. The first candidate also revealed a browser-fixture matcher that assumed /api/leads had no query string; it is corrected to match the URL path independently of limit/offset. Exact-SHA push and PR verification is pending.
+- Added API coverage for scoped count and requested limit/offset, plus browser acceptance for pagination and stale-page recovery. The first candidate revealed a browser-fixture matcher that assumed /api/leads had no query string; the corrected fixture matches the URL path independently of query parameters. Exact-SHA push [40831057432](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831057432) and PR [40831064003](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831064003) passed: Python 748 passed, 7 skipped, 5 warnings; browser UAT 18 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
 
 
 ## 2026-10-29 verified lead consent evidence visibility

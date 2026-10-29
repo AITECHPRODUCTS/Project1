@@ -135,12 +135,18 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - Corrected the state declaration to real source lines and added the `Lead`, `ConsentEvent` and `ConsentHistory` TypeScript fields that the earlier escaped-newline replacement had not applied. Fresh exact-SHA push and PR verification is required; the feature remains unverified until all jobs pass.
 
 
-## 2026-10-29 workspace-scoped lead pagination (verification pending)
+## 2026-10-29 verified workspace-scoped lead pagination
 
 - The leads API now supports bounded limit/offset pagination and returns a workspace-scoped total count. Ordering is stable for equal timestamps; the frontend shows total count and page navigation, clarifies that search applies to the current page, and recovers to the last valid page when records are deleted while viewing a later page.
-- Added API regression coverage and browser acceptance that navigates to page two and simulates the only record being deleted before refresh. Exact-SHA push and PR CI remains pending.
+- Added API regression coverage and browser acceptance that navigates to page two and simulates the only record being deleted before refresh. Exact-SHA push [40831057432](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831057432) and PR [40831064003](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831064003) passed: Python 748 passed, 7 skipped, 5 warnings; browser UAT 18 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
 
 
 ### Pagination browser-fixture correction
 
 - The first pagination candidate included a consent-history browser fixture that matched `/api/leads` only when the URL had no query string. Since the new UI requests `/api/leads?limit=50&offset=0`, the mock must match the URL path before `?`. Corrected the fixture; this does not change production code. The corrected candidate needs exact-SHA push/PR UAT.
+
+
+## 2026-10-29 cross-page lead search (verification pending)
+
+- Added bounded server-side email/resource search to the workspace-scoped lead API and separate client-side UTM filtering for the current page. The UI makes those scopes explicit and resets pagination when global search changes.
+- Added API query assertions and browser acceptance for global search plus current-page UTM filtering. Exact-SHA push and PR CI remains pending.

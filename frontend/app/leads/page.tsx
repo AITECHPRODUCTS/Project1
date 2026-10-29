@@ -91,6 +91,8 @@ export default function LeadsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [utmQuery, setUtmQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [consentHistory, setConsentHistory] = useState<Record<string, ConsentEvent[]>>({});
@@ -102,7 +104,7 @@ export default function LeadsPage() {
     setLoading(true);
     setError("");
     try {
-      const result = await apiFetch<LeadList>("/api/leads?limit=" + PAGE_LIMIT + "&offset=" + offset);
+      const result = await apiFetch<LeadList>("/api/leads?limit=" + PAGE_LIMIT + "&offset=" + offset + "&search=" + encodeURIComponent(appliedSearch));
       const total = Number.isFinite(result.total_count)
         ? Math.max(0, result.total_count)
         : Math.max(0, Number(result.count) || 0);
@@ -122,7 +124,7 @@ export default function LeadsPage() {
       setLoading(false);
       setBusy(false);
     }
-  }, [offset]);
+  }, [offset, appliedSearch]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -148,18 +150,16 @@ export default function LeadsPage() {
   };
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = utmQuery.trim().toLowerCase();
     if (!needle) return leads;
     return leads.filter((lead) => {
       const values = [
-        lead.email,
-        lead.lead_magnet,
         ...utmPairs(lead.attribution?.first_touch).map(([, value]) => value),
         ...utmPairs(lead.attribution?.last_touch).map(([, value]) => value),
       ];
       return values.some((value) => value.toLowerCase().includes(needle));
     });
-  }, [leads, query]);
+  }, [leads, utmQuery]);
 
   const attributedCount = leads.filter((lead) =>
     utmPairs(lead.attribution?.first_touch).length > 0
@@ -214,7 +214,7 @@ export default function LeadsPage() {
         )}
 
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <SummaryCard title="Workspace leads" value={String(totalCount)} note="Total records in the active workspace" icon={Users} />
+          <SummaryCard title="Workspace leads" value={String(totalCount)} note={appliedSearch ? "Matches for email/resource search" : "Total records in the active workspace"} icon={Users} />
           <SummaryCard title="With UTM attribution" value={String(attributedCount)} note="On the current page" icon={Activity} />
           <SummaryCard title="Unsubscribed" value={String(suppressedCount)} note="On the current page; suppressed from future delivery" icon={ShieldCheck} />
         </section>
@@ -225,15 +225,34 @@ export default function LeadsPage() {
               <h2 className="text-xl font-black text-slate-950">Lead records</h2>
               <p className="mt-1 text-sm text-slate-500">Shows 50 workspace-scoped records per page. Search filters the current page; the total count covers the active workspace.</p>
             </div>
-            <div className="w-full sm:max-w-sm">
-              <label htmlFor="lead-search" className="block text-sm font-bold text-slate-700">Search this page: email, resource or UTM values</label>
+            <form
+              className="w-full sm:max-w-sm"
+              onSubmit={(event) => { event.preventDefault(); setAppliedSearch(query.trim()); setOffset(0); }}
+            >
+              <label htmlFor="lead-search" className="block text-sm font-bold text-slate-700">Search all leads by email or resource</label>
+              <div className="mt-2 flex gap-2">
+                <input
+                  id="lead-search"
+                  className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  type="search"
+                  maxLength={120}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Email or resource name"
+                />
+                <button type="submit" disabled={loading} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Search</button>
+              </div>
+              {appliedSearch && <button type="button" onClick={() => { setQuery(""); setAppliedSearch(""); setOffset(0); }} className="mt-2 text-xs font-bold text-indigo-700">Clear global search</button>}
+            </form>
+            <div className="w-full sm:max-w-xs">
+              <label htmlFor="utm-search" className="block text-sm font-bold text-slate-700">Filter UTM values on this page</label>
               <input
-                id="lead-search"
+                id="utm-search"
                 className={inputClass}
                 type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search this workspace"
+                value={utmQuery}
+                onChange={(event) => setUtmQuery(event.target.value)}
+                placeholder="Source, campaign or content"
               />
             </div>
           </div>

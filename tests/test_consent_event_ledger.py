@@ -309,7 +309,7 @@ def test_lead_list_paginates_and_counts_only_the_active_workspace():
     }
     try:
         with TestClient(main.app) as client:
-            response = client.get("/api/leads?limit=1&offset=50")
+            response = client.get("/api/leads?limit=1&offset=50&search=Creator")
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["count"] == 1
@@ -325,6 +325,8 @@ def test_lead_list_paginates_and_counts_only_the_active_workspace():
             assert "workspace-1" in statement.compile().params.values()
         assert page_query._limit_clause.value == 1
         assert page_query._offset_clause.value == 50
+        assert "%Creator%" in count_query.compile().params.values()
+        assert "%Creator%" in page_query.compile().params.values()
     finally:
         main.app.dependency_overrides.pop(get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)

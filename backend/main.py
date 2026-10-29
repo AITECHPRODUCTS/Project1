@@ -4794,18 +4794,26 @@ async def public_webinar_register(public_id: str, request: Request, db: AsyncSes
 async def leads(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=100000),
+    search: str | None = Query(default=None, max_length=120),
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = user.get("workspace_id")
     if not workspace_id:
         raise HTTPException(403, "Select an authorized workspace before viewing leads")
-    workspace_filter = Lead.workspace_id == str(workspace_id)
+    filters = [Lead.workspace_id == str(workspace_id)]
+    search_term = (search or "").strip()
+    if search_term:
+        filters.append(or_(
+            Lead.email.ilike(f"%{search_term}%"),
+            Lead.lead_magnet.ilike(f"%{search_term}%"),
+        ))
+    lead_filter = and_(*filters)
     total_count = int(await db.scalar(
-        select(func.count(Lead.id)).where(workspace_filter)
+        select(func.count(Lead.id)).where(lead_filter)
     ) or 0)
     rows = list((await db.scalars(
-        select(Lead).where(workspace_filter)
+        select(Lead).where(lead_filter)
         .order_by(Lead.created_at.desc(), Lead.id.asc())
         .limit(limit)
         .offset(offset)

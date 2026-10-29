@@ -1,11 +1,18 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 paid-ad guardrail conflict visibility in UI (selector fix pending verification)
+## 2026-10-29 lead consent evidence visibility (CI pending)
+
+- The workspace lead-list API now returns the persisted email-confirmation timestamp and consent source, in addition to the existing consent time, unsubscribe/purchase state and attribution. A missing confirmation timestamp remains explicitly unrecorded; the UI does not infer a pending/confirmed state from unrelated data.
+- The leads page adds a lazy-loaded, read-only view of the existing workspace-scoped append-only consent-event endpoint. It displays event type/time, purpose, source/channel, policy version and the captured consent text (or an explicit note for withdrawal events without consent wording). API errors and empty history have visible states.
+- Added an API regression for the new fields and browser coverage for confirmed timestamp/source and consent-event rendering. This is a review surface only; it does not change consent, resubscribe, or send email. Exact-SHA push and PR CI is pending.
+
+
+## 2026-10-29 verified paid-ad guardrail conflict visibility in UI
 
 - The ad-budget guardrail page now renders an accessible alert when its saved evaluation contains snapshot_conflicts, identifying the platform/creative, UTC day, conflicting fields and candidate count.
 - The alert explains that stop-loss evaluation is blocked pending source reconciliation and that no remote campaign action was executed. The existing raw evaluation JSON remains available for detailed diagnosis.
-- Added Chromium coverage for the rendered conflict state and its safety language. First browser UAT failed because the test's generic alert locator also matched the Next.js route announcer; the test is corrected to scope assertions to the main page alert. No application behavior was changed by the test fix. Exact-SHA push and PR CI for the correction is pending.
+- Added Chromium coverage for the rendered conflict state and its safety language. First browser UAT failed because the test's generic alert locator also matched the Next.js route announcer; the test was corrected to scope assertions to the main page alert. Exact-SHA push [40829287184](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40829287184) and PR [40829292836](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40829292836) then passed: Python 746 passed, 7 skipped, 5 warnings; PostgreSQL, frontend, AI profile, security, secret scan, repository guard and browser UAT (16 passed) succeeded. Push lockfile-sync passed; PR lockfile-sync was skipped by configured event condition.
 
 
 ## 2026-10-29 verified paid-ad guardrail snapshot-conflict safety

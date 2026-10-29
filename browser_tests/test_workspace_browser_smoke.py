@@ -1336,3 +1336,61 @@ def test_offer_qualification_returns_to_valid_page_when_last_filtered_item_is_re
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()
+
+
+def test_leads_page_displays_email_confirmation_and_read_only_consent_history():
+    lead = {
+        "id": "lead-confirmed",
+        "email": "reader@example.test",
+        "lead_magnet": "Creator guide",
+        "consented_at": "2026-10-28T10:00:00+00:00",
+        "email_consent_confirmed_at": "2026-10-28T10:01:00+00:00",
+        "consent_source": "persisted_landing_page",
+        "unsubscribed": False,
+        "purchased": False,
+        "attribution": {"first_touch": {"utm_source": "newsletter"}, "last_touch": {}, "last_touch_at": None},
+    }
+    history = {
+        "lead_id": "lead-confirmed",
+        "count": 1,
+        "read_only": True,
+        "data": [{
+            "id": "consent-event-1",
+            "event_type": "consent_granted",
+            "purpose": "email_marketing",
+            "consent_text": "I agree to receive email updates about relevant offers and can unsubscribe at any time.",
+            "policy_version": "email-marketing-v1",
+            "source": "persisted_landing_page",
+            "channel": "email",
+            "metadata": {"explicit_checkbox_consent": True},
+            "observed_at": "2026-10-28T10:00:00+00:00",
+            "created_at": "2026-10-28T10:00:00+00:00",
+        }],
+    }
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_leads(route):
+                if "/api/leads/lead-confirmed/consent-events" in route.request.url:
+                    _fulfill_json(route, history)
+                elif route.request.url.rstrip("/").endswith("/api/leads"):
+                    _fulfill_json(route, {"count": 1, "data": [lead]})
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected leads API request"}, status=404)
+
+            page.route("**/api/leads**", handle_leads)
+            page.goto(f"{BASE_URL}/leads", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Leads & attribution").wait_for(state="visible")
+            page.get_by_text("Email confirmation: Confirmed", exact=False).wait_for(state="visible")
+            page.get_by_text("Consent source: persisted_landing_page").wait_for(state="visible")
+            page.get_by_role("button", name="View consent history").click()
+            history_panel = page.get_by_role("region", name="Consent history for reader@example.test")
+            history_panel.get_by_text("consent granted", exact=False).wait_for(state="visible")
+            history_panel.get_by_text("email-marketing-v1").wait_for(state="visible")
+            history_panel.get_by_text("I agree to receive email updates about relevant offers and can unsubscribe at any time.").wait_for(state="visible")
+            assert history_panel.get_by_text("Read-only consent event ledger", exact=False).is_visible()
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()

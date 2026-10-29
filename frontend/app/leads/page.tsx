@@ -75,7 +75,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState("");\n  const [consentHistory, setConsentHistory] = useState<Record<string, ConsentEvent[]>>({});\n  const [consentHistoryOpen, setConsentHistoryOpen] = useState<Record<string, boolean>>({});\n  const [consentHistoryLoading, setConsentHistoryLoading] = useState<Record<string, boolean>>({});\n  const [consentHistoryErrors, setConsentHistoryErrors] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +92,27 @@ export default function LeadsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const toggleConsentHistory = async (leadId: string) => {
+    const willOpen = !consentHistoryOpen[leadId];
+    setConsentHistoryOpen((current) => ({ ...current, [leadId]: willOpen }));
+    if (!willOpen || Object.prototype.hasOwnProperty.call(consentHistory, leadId)) return;
+    setConsentHistoryLoading((current) => ({ ...current, [leadId]: true }));
+    setConsentHistoryErrors((current) => ({ ...current, [leadId]: "" }));
+    try {
+      const result = await apiFetch<ConsentHistory>(
+        "/api/leads/" + encodeURIComponent(leadId) + "/consent-events",
+      );
+      setConsentHistory((current) => ({ ...current, [leadId]: Array.isArray(result.data) ? result.data : [] }));
+    } catch (caught) {
+      setConsentHistoryErrors((current) => ({
+        ...current,
+        [leadId]: message(caught),
+      }));
+    } finally {
+      setConsentHistoryLoading((current) => ({ ...current, [leadId]: false }));
+    }
+  };
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -213,6 +234,12 @@ export default function LeadsPage() {
                         <h3 className="break-all text-base font-black text-slate-950">{lead.email}</h3>
                         <p className="mt-1 text-sm text-slate-600">Resource: {lead.lead_magnet || "Not recorded"}</p>
                         <p className="mt-1 text-xs text-slate-500">Consent recorded: {displayDate(lead.consented_at)}</p>
+                        <p className="mt-1 text-xs text-slate-500">Consent source: {lead.consent_source || "Not recorded"}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Email confirmation: {lead.email_consent_confirmed_at
+                            ? "Confirmed " + displayDate(lead.email_consent_confirmed_at)
+                            : "No confirmation timestamp recorded"}
+                        </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <span className={"rounded-full px-3 py-1.5 text-xs font-bold " + (lead.unsubscribed ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800")}>
@@ -222,6 +249,52 @@ export default function LeadsPage() {
                           {lead.purchased ? "Purchase recorded" : "No purchase recorded"}
                         </span>
                       </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => void toggleConsentHistory(lead.id)}
+                        disabled={Boolean(consentHistoryLoading[lead.id])}
+                        aria-expanded={Boolean(consentHistoryOpen[lead.id])}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-indigo-700 disabled:opacity-50"
+                      >
+                        {consentHistoryLoading[lead.id]
+                          ? "Loading consent history…"
+                          : consentHistoryOpen[lead.id] ? "Hide consent history" : "View consent history"}
+                      </button>
+                      {consentHistoryOpen[lead.id] && (
+                        <section aria-label={"Consent history for " + lead.email} className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold text-slate-500">Read-only consent event ledger. Events are shown in recorded order; this page cannot edit or delete them.</p>
+                          {consentHistoryErrors[lead.id] && (
+                            <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                              Could not load consent history: {consentHistoryErrors[lead.id]}
+                            </p>
+                          )}
+                          {consentHistoryLoading[lead.id] && <p role="status" className="mt-3 text-sm text-slate-600">Loading consent events…</p>}
+                          {!consentHistoryLoading[lead.id] && !consentHistoryErrors[lead.id] && (consentHistory[lead.id] || []).length === 0 && (
+                            <p className="mt-3 text-sm text-slate-600">No consent events are recorded for this lead.</p>
+                          )}
+                          <ol className="mt-3 space-y-3">
+                            {(consentHistory[lead.id] || []).map((event) => (
+                              <li key={event.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <p className="text-sm font-black text-slate-900">{event.event_type.replaceAll("_", " ")}</p>
+                                  <p className="text-xs text-slate-500">{displayDate(event.observed_at || event.created_at)}</p>
+                                </div>
+                                <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                                  <dt className="text-slate-500">Purpose</dt><dd className="break-words text-slate-800">{event.purpose || "Not recorded"}</dd>
+                                  <dt className="text-slate-500">Source / channel</dt><dd className="break-words text-slate-800">{event.source || "Not recorded"} / {event.channel || "Not recorded"}</dd>
+                                  <dt className="text-slate-500">Policy version</dt><dd className="break-words text-slate-800">{event.policy_version || "Not recorded"}</dd>
+                                </dl>
+                                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700">
+                                  {event.consent_text || "No consent wording is attached to this event (for example, a withdrawal event)."}
+                                </p>
+                              </li>
+                            ))}
+                          </ol>
+                        </section>
+                      )}
                     </div>
 
                     <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">

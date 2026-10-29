@@ -110,14 +110,20 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - Current candidate before this slice: `06a47498fc6cba7186884cf4ccbc4962042f7f39`. The new candidate must be verified with exact-SHA push and PR Actions, including Python, PostgreSQL, frontend, security, repository guard and browser UAT. Release remains **NOT RELEASE READY**.
 
 
-## 2026-10-29 operator-visible ad snapshot conflict alert (verification pending)
+## 2026-10-29 verified operator-visible ad snapshot conflict alert
 
 - The /ads/guardrails page now renders a semantic alert for the blocked_ambiguous_provider_snapshots evaluation, showing the affected platform/creative, UTC day, conflicting metric fields and number of same-timestamp records.
 - The alert explicitly states that evaluation is blocked until reconciliation and that no remote campaign action was executed; the raw evaluation payload remains available for debugging.
-- Added Chromium browser acceptance coverage for the rendered warning. The UI change requires fresh exact-SHA push and PR workflows. Live provider authentication/action and production release remain unverified.
+- Added Chromium browser acceptance coverage for the rendered warning. Exact-SHA push [40829287184](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40829287184) and PR [40829292836](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40829292836) passed; browser UAT was 16 passed, and all configured jobs passed. Live provider authentication/action and production release remain unverified.
 
 
 ### Browser-test correction for the operator-visible conflict alert
 
 - First UI candidate: `4d6f9e3fb71018b8ff3544e8218ed96b25d85c91`. Python (746 passed, 7 skipped), PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Browser UAT failed one new test because a generic alert selector matched both the conflict warning and the Next.js route announcer; 15 other browser tests passed.
 - Corrected the test to scope its content assertions to `main [role='alert']`, retaining all warning/safety assertions. No runtime code was changed for this test-only correction. The new exact-SHA push and PR workflows must pass before the UI increment is verified.
+
+
+## 2026-10-29 lead consent evidence UI (verification pending)
+
+- The lead list now exposes the stored email confirmation timestamp and consent source. Each lead can lazily load its workspace-scoped consent event history; the view shows the exact captured consent text, purpose, policy version, source/channel and event time, and labels the history read-only.
+- Added an API regression and Chromium acceptance for the display. This does not mutate consent or send email. The current candidate needs exact-SHA CI and browser UAT; production email provider delivery and jurisdictional policy acceptance remain separate gates.

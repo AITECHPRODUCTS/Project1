@@ -245,3 +245,40 @@ def test_consent_history_api_is_workspace_scoped_read_only():
     finally:
         main.app.dependency_overrides.pop(get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)
+
+
+def test_lead_list_exposes_double_opt_in_timestamp_and_consent_source():
+    observed = datetime(2026, 10, 28, 10, 0, tzinfo=timezone.utc)
+    row = SimpleNamespace(
+        id="lead-confirmed",
+        email="reader@example.invalid",
+        lead_magnet="Creator guide",
+        consent_at=observed,
+        email_consent_confirmed_at=observed,
+        consent_source="persisted_landing_page",
+        unsubscribed_at=None,
+        purchased_at=None,
+        metadata_json={},
+        workspace_id="workspace-1",
+    )
+    scalars_result = SimpleNamespace(all=Mock(return_value=[row]))
+    session = SimpleNamespace(scalars=AsyncMock(return_value=scalars_result))
+    main.app.dependency_overrides[get_session] = _override_session(session)
+    main.app.dependency_overrides[main.require_auth] = lambda: {
+        "user_id": "user-1", "workspace_id": "workspace-1", "email": "reader@example.invalid"
+    }
+    try:
+        with TestClient(main.app) as client:
+            response = client.get("/api/leads")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["count"] == 1
+        lead = body["data"][0]
+        assert lead["email_consent_confirmed_at"] == observed.isoformat()
+        assert lead["consent_source"] == "persisted_landing_page"
+        statement = session.scalars.await_args.args[0]
+        assert "workspace_id" in str(statement)
+        assert "workspace-1" in statement.compile().params.values()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+        main.app.dependency_overrides.pop(main.require_auth, None)

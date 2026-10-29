@@ -4804,7 +4804,10 @@ async def leads(
     )).all())
     return {"count": len(rows), "data": [
         {"id": x.id, "email": x.email, "lead_magnet": x.lead_magnet,
-         "consented_at": x.consent_at.isoformat(), "unsubscribed": x.unsubscribed_at is not None,
+         "consented_at": x.consent_at.isoformat(),
+         "email_consent_confirmed_at": x.email_consent_confirmed_at.isoformat() if x.email_consent_confirmed_at else None,
+         "consent_source": x.consent_source,
+         "unsubscribed": x.unsubscribed_at is not None,
          "purchased": x.purchased_at is not None,
          "attribution": lead_attribution_summary(x.metadata_json)}
         for x in rows

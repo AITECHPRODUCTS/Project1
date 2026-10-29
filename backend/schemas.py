@@ -280,6 +280,28 @@ class ComparisonPostRequest(BaseModel):
         return self
 
 
+class ComparisonPostReviewRequest(BaseModel):
+    """Human editorial decision bound to the exact content hash of one saved draft revision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["approve", "request_changes", "reject"]
+    expected_content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reviewer_notes: str = Field(default="", max_length=2000)
+    confirm_editorial_reviewed: bool = False
+
+    @field_validator("reviewer_notes")
+    @classmethod
+    def normalize_reviewer_notes(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def require_context_for_nonapproval(self) -> "ComparisonPostReviewRequest":
+        if self.decision in {"request_changes", "reject"} and not self.reviewer_notes:
+            raise ValueError("request_changes and reject decisions require reviewer notes")
+        return self
+
+
 class SocialPostRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=400)
     hooks: list[dict[str, Any]] = Field(min_length=1, max_length=20)

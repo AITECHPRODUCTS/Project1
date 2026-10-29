@@ -8,15 +8,17 @@ type Row={criterion:string;values:Array<{product:string;value:string}>};
 type SourceSnapshot={source_id:string;url:string;product_names:string[];title:string;status:string;http_status:number|null;content_type:string;fetched_at:string;excerpt:string;excerpt_sha256:string|null;error_type:string|null;detail:string|null};
 type FactEvidence={product:string;fact_name:string;supplied_value:string;source_id:string|null;source_url:string|null;excerpt_sha256:string|null;exact_text_match:boolean;evidence_status:string;evidence_note?:string;editorial_review_required:boolean};
 type EvidenceSummary={source_count:number;source_snapshots_fetched:number;source_snapshots_failed:number;fact_count:number;exact_text_match_count:number;exact_text_not_found_count:number;facts_not_compared:number;interpretation:string};
-type DraftSummary={asset_id:string;title:string;asset_status:string;created_at:string|null;revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string|null;word_count:number;product_count:number;unknown_fact_count:number;evidence_status:string;source_snapshots_fetched:number;requires_review:boolean;publishing_started:boolean};
+type ReviewEntry={decision:string;review_status:string;reviewed_by:string;reviewer_role:string;reviewer_notes:string|null;reviewed_at:string;content_sha256:string;revision_number:number;external_publication_started:boolean};
+type DraftSummary={asset_id:string;title:string;asset_status:string;created_at:string|null;revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string|null;word_count:number;product_count:number;unknown_fact_count:number;evidence_status:string;source_snapshots_fetched:number;review_status:string;reviewed_by:string|null;can_review:boolean;requires_review:boolean;publishing_started:boolean};
 type DraftList={items:DraftSummary[];total:number;limit:number;offset:number};
 type Result={
  asset_id:string;asset_status:string;title:string;topic:string;audience:string;affiliate_disclosure:string;
- revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string;html:string;word_count:number;
+ revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string;content_sha256:string;html:string;word_count:number;
  minimum_word_target:number;minimum_word_target_met:boolean;word_count_warning:string|null;
  product_count:number;products:Product[];decision_criteria:string[];comparison_table:Row[];
  unknown_fact_count:number;source_urls:string[];source_snapshots:SourceSnapshot[];fact_evidence:FactEvidence[];evidence_summary:EvidenceSummary;evidence_status:string;
  product_facts_independently_verified:boolean;external_product_sources_fetched:boolean;
+ review_status:string;review_history:ReviewEntry[];reviewed_at:string|null;reviewed_by:string|null;reviewer_role:string|null;reviewer_notes:string|null;can_review:boolean;
  requires_review:boolean;publishing_started:boolean;provider_write_access_verified:boolean;
  provider:string;execution_boundary:string;
 };
@@ -42,6 +44,9 @@ export default function ComparisonPostPage(){
  const [draftsLoading,setDraftsLoading]=useState(true);
  const [draftsError,setDraftsError]=useState("");
  const [openingId,setOpeningId]=useState("");
+ const [reviewNote,setReviewNote]=useState("");
+ const [confirmEditorialReview,setConfirmEditorialReview]=useState(false);
+ const [reviewBusy,setReviewBusy]=useState(false);
  const loadDrafts=useCallback(async()=>{
   setDraftsLoading(true);setDraftsError("");
   try{
@@ -62,6 +67,7 @@ export default function ComparisonPostPage(){
    setMinimumWords(String(response.minimum_word_target||900));
    setDisclosure(response.affiliate_disclosure||"Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.");
    setRevisionOfAssetId(response.asset_id);
+   setReviewNote("");setConfirmEditorialReview(false);
    setResult(response);setNotice("Opened saved comparison draft. Loaded as a revision starting point; the original remains unchanged.");
   }catch(err){setDraftsError(errorMessage(err));}
   finally{setOpeningId("");}
@@ -83,6 +89,40 @@ export default function ComparisonPostPage(){
    await loadDrafts();
   }catch(err){setError(errorMessage(err));}finally{setBusy(false);}
  };
+ const submitReview=async(decision:"approve"|"request_changes"|"reject")=>{
+  if(!result)return;
+  if(decision==="approve"&&!confirmEditorialReview){setError("Confirm that you reviewed this exact saved article before approving it.");return;}
+  if(decision!=="approve"&&!reviewNote.trim()){setError("Reviewer notes are required when requesting changes or rejecting a draft.");return;}
+  setReviewBusy(true);setError("");setNotice("");
+  try{
+   const response=await apiFetch<{
+    asset_id:string;asset_status:string;review_status:string;review_history:ReviewEntry[];
+    reviewed_at:string;reviewed_by:string;reviewer_role:string;reviewer_notes:string|null;
+    content_sha256:string;requires_review:boolean;publishing_started:boolean;
+    external_publication_started:boolean;product_facts_independently_verified:boolean;
+    affiliate_eligibility_verified:boolean;provider_write_access_verified:boolean;
+    publication_authorized:boolean;editorial_review_only:boolean;execution_boundary:string;
+   }>("/api/content/comparison-posts/"+encodeURIComponent(result.asset_id)+"/review",{
+    method:"POST",
+    body:JSON.stringify({
+     decision,
+     reviewer_notes:reviewNote.trim(),
+     expected_content_sha256:result.content_sha256,
+     confirm_editorial_reviewed:decision==="approve"?confirmEditorialReview:false
+    })
+   });
+   setResult(current=>current?({...current,...response}):current);
+   setReviewNote("");setConfirmEditorialReview(false);
+   setNotice(decision==="approve"
+    ?"Editorial approval recorded for this exact revision. This draft was not published and product/provider claims were not verified."
+    :decision==="request_changes"
+     ?"Changes requested. The reviewed revision remains immutable; edit by creating a new revision."
+     :"Draft rejected for editorial use. The reviewed revision remains immutable.");
+   await loadDrafts();
+  }catch(err){setError(errorMessage(err));}
+  finally{setReviewBusy(false);}
+ };
+
  return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10"><div className="mx-auto max-w-7xl">
   <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
    <div><div className="flex flex-wrap gap-4 text-sm font-semibold"><a href="/" className="text-indigo-600 hover:underline">← Growth command</a><a href="/research-brief" className="text-indigo-600 hover:underline">Source-backed research brief →</a></div>
@@ -100,7 +140,7 @@ export default function ComparisonPostPage(){
    {drafts.length>0&&<div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{drafts.map(draft=><article key={draft.asset_id} className="rounded-xl border border-slate-200 p-3">
     <h3 className="font-semibold">{draft.title}</h3><p className="mt-1 break-all font-mono text-[10px] text-slate-500">{draft.asset_id}</p>
     <p className="mt-2 text-xs text-slate-600">{draft.product_count} products · {draft.word_count} words · {draft.unknown_fact_count} unknown cells</p><p className="mt-1 text-xs text-slate-500">{draft.revision_number>1?`Revision ${draft.revision_number} · Parent ${draft.revision_of_asset_id||"unknown"}`:"Original draft"}</p>
-    <p className="mt-1 text-xs text-amber-800">{draft.evidence_status.replaceAll("_"," ")} · Draft only</p>
+    <p className="mt-1 text-xs text-amber-800">{draft.evidence_status.replaceAll("_"," ")} · {(draft.review_status||"pending_review").replaceAll("_"," ")} · Draft only</p>
     <button type="button" onClick={()=>void openDraft(draft.asset_id)} disabled={Boolean(openingId)} className="mt-3 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{openingId===draft.asset_id?"Opening…":"Open draft"}</button>
    </article>)}</div>}
   </section>
@@ -121,6 +161,7 @@ export default function ComparisonPostPage(){
      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-black">{result.title}</h2><p className="mt-1 break-all font-mono text-xs text-slate-500">Saved draft · {result.asset_id}</p></div><a href={"data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(result,null,2))} download="omni-affiliate-comparison-draft.json" className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Export JSON</a></div>
      <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Products</p><p className="mt-1 text-xl font-black">{result.product_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Unknown table cells</p><p className="mt-1 text-xl font-black">{result.unknown_fact_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Draft words</p><p className="mt-1 text-xl font-black">{result.word_count}</p></div></div>
      <p className="mt-3 text-sm font-semibold text-amber-800">Evidence: {result.evidence_status.replaceAll("_"," ")} · Product facts independently verified: No · Source fetch: {result.external_product_sources_fetched?"bounded public snapshots fetched":"no successful snapshot"} · Published: No</p>
+     <p className="mt-2 text-sm font-semibold text-slate-700">Review status: {(result.review_status||"pending_review").replaceAll("_"," ")} · Revision {result.revision_number} · Content SHA-256: <span className="break-all font-mono text-xs">{result.content_sha256}</span></p>
      {result.word_count_warning&&<p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{result.word_count_warning}</p>}
      <div className="mt-5 grid gap-3 sm:grid-cols-3">
       <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Fetched snapshots</p><p className="mt-1 text-xl font-black">{result.evidence_summary.source_snapshots_fetched}</p></div>
@@ -132,6 +173,22 @@ export default function ComparisonPostPage(){
      <div className="mt-2 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-slate-200"><th className="p-2">Product</th><th className="p-2">Fact</th><th className="p-2">Supplied value</th><th className="p-2">Snapshot check</th><th className="p-2">Source</th></tr></thead><tbody>{result.fact_evidence.map((item,index)=><tr className="border-b border-slate-100" key={item.product + "-" + item.fact_name + "-" + index}><td className="p-2">{item.product}</td><td className="p-2">{item.fact_name}</td><td className="p-2">{item.supplied_value}</td><td className="p-2">{item.evidence_status.replaceAll("_"," ")}</td><td className="p-2">{item.source_url?<a className="text-indigo-600 underline" href={item.source_url} target="_blank" rel="noreferrer">Open source</a>:"—"}</td></tr>)}</tbody></table></div>
      <h3 className="mt-5 font-bold">Source snapshots and hashes</h3>
      <div className="mt-2 space-y-2">{result.source_snapshots.map(source=><details key={source.source_id} className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-semibold">{source.source_id} · {source.title||source.url} · {source.status.replaceAll("_"," ")}</summary><div className="mt-3 space-y-2 text-xs leading-5"><p>URL: <a className="break-all text-indigo-600 underline" href={source.url} target="_blank" rel="noreferrer">{source.url}</a></p><p>Captured at: {source.fetched_at}</p><p className="break-all">Excerpt SHA-256: {source.excerpt_sha256||"Unavailable"}</p>{source.detail&&<p>Fetch detail: {source.detail}</p>}<blockquote className="whitespace-normal rounded-lg bg-slate-50 p-3">{source.excerpt||"No readable snapshot text was saved."}</blockquote></div></details>)}</div>
+     <section aria-label="Human editorial review" className="mt-5 rounded-xl border border-slate-200 p-4">
+      <h3 className="font-bold">Human editorial review</h3>
+      <p className="mt-1 text-xs leading-5 text-slate-600">The decision is bound to the content hash shown above and applies only to this immutable revision. Editorial approval does not verify product facts, affiliate eligibility, legal compliance, provider authorization, or publishing readiness.</p>
+      {result.can_review&&result.review_status==="pending_review"&&result.requires_review&&<div className="mt-3 space-y-3">
+       <label className={label}>Reviewer notes<textarea aria-label="Reviewer notes" className={field} rows={3} maxLength={2000} value={reviewNote} onChange={e=>setReviewNote(e.target.value)} placeholder="Optional for approval; required for changes or rejection."/></label>
+       <label className="flex items-start gap-2 text-sm text-slate-700"><input aria-label="Confirm editorial review" type="checkbox" className="mt-1" checked={confirmEditorialReview} onChange={e=>setConfirmEditorialReview(e.target.checked)}/><span>I reviewed the exact saved article and its evidence warnings. This is editorial approval only, not provider/compliance approval or authorization to publish.</span></label>
+       <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={()=>void submitReview("approve")} disabled={reviewBusy||!confirmEditorialReview} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{reviewBusy?"Saving review…":"Approve editorial draft"}</button>
+        <button type="button" onClick={()=>void submitReview("request_changes")} disabled={reviewBusy||!reviewNote.trim()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">Request changes</button>
+        <button type="button" onClick={()=>void submitReview("reject")} disabled={reviewBusy||!reviewNote.trim()} className="rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-50">Reject draft</button>
+       </div>
+      </div>}
+      {result.can_review&&result.review_status!=="pending_review"&&<div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm"><p className="font-semibold">Decision: {(result.review_status||"unknown").replaceAll("_"," ")}</p><p className="mt-1 text-xs text-slate-600">Reviewed by {result.reviewed_by||"unknown"} on {result.reviewed_at||"unknown"}; this revision is immutable. Create a new revision for further editorial changes.</p>{result.reviewer_notes&&<p className="mt-2 whitespace-pre-wrap text-sm">{result.reviewer_notes}</p>}</div>}
+      {!result.can_review&&<p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">A workspace owner or admin must record the editorial decision. This draft remains unpublished.</p>}
+      {(result.review_history||[]).length>0&&<details className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-semibold">Review audit history ({result.review_history.length})</summary><ul className="mt-2 space-y-2">{result.review_history.map((entry,index)=><li key={entry.reviewed_at+"-"+index} className="border-t border-slate-100 pt-2 text-xs"><p className="font-semibold">{entry.review_status.replaceAll("_"," ")} · {entry.reviewed_by} · {entry.reviewed_at}</p><p className="mt-1 break-all font-mono text-[10px]">SHA-256 {entry.content_sha256}</p>{entry.reviewer_notes&&<p className="mt-1 whitespace-pre-wrap">{entry.reviewer_notes}</p>}</li>)}</ul></details>}
+     </section>
      <h3 className="mt-5 font-bold">Structured comparison table</h3>
      <div className="mt-2 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-slate-200"><th className="p-2">Criterion</th>{result.products.map(product=><th className="p-2" key={product.name}>{product.name}</th>)}</tr></thead><tbody>{result.comparison_table.map(row=><tr className="border-b border-slate-100" key={row.criterion}><th className="p-2">{row.criterion}</th>{row.values.map(value=><td className="p-2" key={value.product}>{value.value}</td>)}</tr>)}</tbody></table></div>
     </section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-bold">Isolated HTML preview</h3><p className="mt-1 text-xs text-slate-500">The article is displayed in a sandboxed frame without script permission.</p><iframe title="Comparison article preview" sandbox="" srcDoc={result.html} className="mt-3 h-[640px] w-full rounded-xl border border-slate-200 bg-white"/></section>

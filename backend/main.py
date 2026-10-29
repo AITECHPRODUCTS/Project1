@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -3880,6 +3880,13 @@ async def create_comparison_post(
         "source_snapshots": result.get("source_snapshots", [])[:10],
         "fact_evidence": result.get("fact_evidence", [])[:60],
         "evidence_summary": result.get("evidence_summary", {}),
+        "review_status": "pending_review",
+        "review_history": [],
+        "reviewed_at": None,
+        "reviewed_by": None,
+        "reviewer_role": None,
+        "reviewer_notes": None,
+        "reviewed_content_sha256": None,
         "requires_review": True,
         "publishing_started": False,
         "model_provider": result["provider"],
@@ -3933,6 +3940,15 @@ async def create_comparison_post(
     result["revision_number"] = revision_number
     result["revision_of_asset_id"] = revision_parent_id
     result["revision_root_asset_id"] = root_id
+    result["content_sha256"] = hashlib.sha256((asset.body or "").encode("utf-8")).hexdigest()
+    result["review_status"] = "pending_review"
+    result["review_history"] = []
+    result["reviewed_by"] = None
+    result["reviewed_at"] = None
+    result["reviewer_role"] = None
+    result["reviewer_notes"] = None
+    result["requires_review"] = True
+    result["can_review"] = str(user.get("workspace_role") or "").lower() in {"owner", "admin"}
     result["execution_boundary"] = (
         "Workspace-owned review draft. Revisions create a new asset and preserve the prior draft. Public sources are fetched "
         "through the pinned transport into bounded snapshots. Exact text matches establish text presence only, not factual truth, "
@@ -3986,7 +4002,11 @@ async def list_comparison_posts(
             "unknown_fact_count": metadata.get("unknown_fact_count", 0),
             "evidence_status": metadata.get("evidence_status", "unknown"),
             "source_snapshots_fetched": evidence_summary.get("source_snapshots_fetched", 0),
-            "requires_review": True,
+            "review_status": str(metadata.get("review_status") or "pending_review"),
+            "reviewed_at": metadata.get("reviewed_at"),
+            "reviewed_by": metadata.get("reviewed_by"),
+            "can_review": str(user.get("workspace_role") or "").lower() in {"owner", "admin"},
+            "requires_review": bool(metadata.get("requires_review", True)),
             "publishing_started": False,
         })
     return {"items": items, "total": total, "limit": limit, "offset": offset}
@@ -4059,13 +4079,153 @@ async def get_comparison_post(
         "evidence_status": metadata.get("evidence_status", "unknown"),
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": bool(metadata.get("external_product_sources_fetched", False)),
-        "requires_review": True,
+        "content_sha256": hashlib.sha256((row.body or "").encode("utf-8")).hexdigest(),
+        "review_status": str(metadata.get("review_status") or "pending_review"),
+        "review_history": (metadata.get("review_history") if isinstance(metadata.get("review_history"), list) else [])[-25:],
+        "reviewed_at": metadata.get("reviewed_at"),
+        "reviewed_by": metadata.get("reviewed_by"),
+        "reviewer_role": metadata.get("reviewer_role"),
+        "reviewer_notes": metadata.get("reviewer_notes"),
+        "can_review": str(user.get("workspace_role") or "").lower() in {"owner", "admin"},
+        "requires_review": bool(metadata.get("requires_review", True)),
         "publishing_started": False,
         "provider_write_access_verified": False,
         "provider": str(metadata.get("model_provider") or "unreported")[:100],
         "execution_boundary": (
             "Workspace-owned review draft. Public-source snapshots preserve captured wording only; they do not establish "
             "factual truth, currentness, eligibility, compliance approval or publication readiness. No publishing was started."
+        ),
+    }
+
+
+@api.post("/content/comparison-posts/{asset_id}/review")
+async def review_comparison_post(
+    asset_id: str,
+    payload: ComparisonPostReviewRequest,
+    response: Response,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Record one owner/admin editorial decision for this exact saved draft revision.
+
+    This is an editorial review record only. It never publishes content or approves
+    merchant claims, affiliate eligibility, legal compliance, or provider access.
+    """
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing a comparison draft")
+    reviewer_role = str(user.get("workspace_role") or "").lower()
+    if reviewer_role not in {"owner", "admin"}:
+        raise HTTPException(403, "Only workspace owners and admins may review comparison drafts")
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ContentAsset).where(
+            ContentAsset.id == asset_id,
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "comparison_post",
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Comparison draft was not found in this workspace")
+        if row.status != "draft":
+            raise HTTPException(409, "Only a saved draft revision can receive an editorial review")
+        metadata = dict(row.metadata_json) if isinstance(row.metadata_json, dict) else {}
+        review_status = str(metadata.get("review_status") or "pending_review")
+        if review_status != "pending_review":
+            raise HTTPException(
+                409,
+                "This immutable draft revision already has a review decision; create a new revision before reviewing again.",
+            )
+        content_sha256 = hashlib.sha256((row.body or "").encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(content_sha256, payload.expected_content_sha256):
+            raise HTTPException(409, "The saved draft content changed; reload it and review the current content hash")
+        if payload.decision == "approve" and payload.confirm_editorial_reviewed is not True:
+            raise HTTPException(409, "Approval requires confirm_editorial_reviewed=true after reviewing the saved article")
+
+        next_status = {
+            "approve": "approved",
+            "request_changes": "changes_requested",
+            "reject": "rejected",
+        }[payload.decision]
+        reviewed_at = datetime.now(timezone.utc).isoformat()
+        try:
+            revision_number = max(1, min(100000, int(metadata.get("revision_number") or 1)))
+        except (TypeError, ValueError):
+            revision_number = 1
+        prior_history = metadata.get("review_history")
+        history = list(prior_history) if isinstance(prior_history, list) else []
+        history.append({
+            "decision": payload.decision,
+            "review_status": next_status,
+            "reviewed_by": actor,
+            "reviewer_role": reviewer_role,
+            "reviewer_notes": payload.reviewer_notes or None,
+            "reviewed_at": reviewed_at,
+            "content_sha256": content_sha256,
+            "revision_number": revision_number,
+            "external_publication_started": False,
+        })
+        metadata.update({
+            "review_status": next_status,
+            "review_history": history[-25:],
+            "reviewed_at": reviewed_at,
+            "reviewed_by": actor,
+            "reviewer_role": reviewer_role,
+            "reviewer_notes": payload.reviewer_notes or None,
+            "reviewed_content_sha256": content_sha256,
+            "requires_review": False,
+            "publishing_started": False,
+        })
+        row.metadata_json = metadata
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="content_comparison_post.reviewed",
+            resource_type="content_asset",
+            resource_id=row.id,
+            outcome="editorial_" + next_status,
+            details_json={
+                "decision": payload.decision,
+                "review_status": next_status,
+                "reviewer_role": reviewer_role,
+                "revision_number": revision_number,
+                "content_sha256": content_sha256,
+                "product_facts_independently_verified": False,
+                "affiliate_eligibility_verified": False,
+                "external_publication_started": False,
+                "publishing_started": False,
+            },
+        ))
+        try:
+            await db.commit()
+            await db.refresh(row)
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(409, "A concurrent review changed this draft; reload and inspect its review status") from exc
+
+    return {
+        "asset_id": row.id,
+        "asset_status": row.status,
+        "review_status": next_status,
+        "review_history": metadata["review_history"],
+        "reviewed_at": reviewed_at,
+        "reviewed_by": actor,
+        "reviewer_role": reviewer_role,
+        "reviewer_notes": payload.reviewer_notes or None,
+        "content_sha256": content_sha256,
+        "requires_review": False,
+        "publishing_started": False,
+        "external_publication_started": False,
+        "product_facts_independently_verified": False,
+        "affiliate_eligibility_verified": False,
+        "provider_write_access_verified": False,
+        "publication_authorized": False,
+        "editorial_review_only": True,
+        "execution_boundary": (
+            "This decision records a human editorial review of the exact saved draft hash. It does not verify product facts, "
+            "merchant identity, currentness, affiliate eligibility, legal compliance, provider authorization, or publication readiness."
         ),
     }
 

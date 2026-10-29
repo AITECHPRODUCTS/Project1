@@ -265,3 +265,154 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
         finally:
             browser.close()
 
+
+
+def test_owner_can_approve_exact_comparison_revision_without_publishing():
+    post_body = []
+    review_body = []
+    review_state = {"done": False}
+    content_hash = "b" * 64
+    result = {
+        "asset_id": "reviewed-comparison-asset",
+        "asset_status": "draft",
+        "title": "Analytics tools — Product Comparison",
+        "topic": "Analytics tools",
+        "audience": "Affiliate publishers",
+        "affiliate_disclosure": "Disclosure: I may earn a commission from qualifying purchases.",
+        "revision_number": 1,
+        "revision_of_asset_id": None,
+        "revision_root_asset_id": "reviewed-comparison-asset",
+        "content_sha256": content_hash,
+        "html": "<!doctype html><html><body><article><h1>Analytics tools</h1><p>Draft for editorial review.</p></article></body></html>",
+        "word_count": 500,
+        "minimum_word_target": 500,
+        "minimum_word_target_met": True,
+        "word_count_warning": None,
+        "product_count": 2,
+        "products": [
+            {"name": "Alpha", "facts": {"Price": "$20"}, "source_urls": []},
+            {"name": "Beta", "facts": {"Price": "$35"}, "source_urls": []},
+        ],
+        "decision_criteria": ["Price"],
+        "comparison_table": [{
+            "criterion": "Price",
+            "values": [{"product": "Alpha", "value": "$20"}, {"product": "Beta", "value": "$35"}],
+        }],
+        "unknown_fact_count": 0,
+        "source_urls": [],
+        "source_snapshots": [],
+        "fact_evidence": [],
+        "evidence_summary": {"source_count": 0, "source_snapshots_fetched": 0, "source_snapshots_failed": 0, "fact_count": 2, "exact_text_match_count": 0, "exact_text_not_found_count": 0, "facts_not_compared": 0, "interpretation": "Text presence is not verification."},
+        "evidence_status": "public_snapshot_captured_not_fact_verified",
+        "product_facts_independently_verified": False,
+        "external_product_sources_fetched": False,
+        "review_status": "pending_review",
+        "review_history": [],
+        "reviewed_at": None,
+        "reviewed_by": None,
+        "reviewer_role": None,
+        "reviewer_notes": None,
+        "can_review": True,
+        "requires_review": True,
+        "publishing_started": False,
+        "provider_write_access_verified": False,
+        "provider": "test-model",
+        "execution_boundary": "This is a review-only draft; no publishing.",
+    }
+    decision = {
+        "asset_id": result["asset_id"],
+        "asset_status": "draft",
+        "review_status": "approved",
+        "review_history": [{
+            "decision": "approve",
+            "review_status": "approved",
+            "reviewed_by": "owner@example.invalid",
+            "reviewer_role": "owner",
+            "reviewer_notes": None,
+            "reviewed_at": "2026-10-29T00:00:00+00:00",
+            "content_sha256": content_hash,
+            "revision_number": 1,
+            "external_publication_started": False,
+        }],
+        "reviewed_at": "2026-10-29T00:00:00+00:00",
+        "reviewed_by": "owner@example.invalid",
+        "reviewer_role": "owner",
+        "reviewer_notes": None,
+        "content_sha256": content_hash,
+        "requires_review": False,
+        "publishing_started": False,
+        "external_publication_started": False,
+        "product_facts_independently_verified": False,
+        "affiliate_eligibility_verified": False,
+        "provider_write_access_verified": False,
+        "publication_authorized": False,
+        "editorial_review_only": True,
+        "execution_boundary": "Editorial approval only; this draft remains unpublished.",
+    }
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_auth(route):
+                _fulfill_json(route, {"csrf_token": "browser-test-csrf"})
+
+            def handle_create(route):
+                post_body.append(json.loads(route.request.post_data or "{}"))
+                _fulfill_json(route, result, status=201)
+
+            def handle_saved(route):
+                path = urlsplit(route.request.url).path.rstrip("/")
+                if path.endswith("/review"):
+                    review_body.append(json.loads(route.request.post_data or "{}"))
+                    review_state["done"] = True
+                    _fulfill_json(route, decision, status=200)
+                elif path.endswith("/api/content/comparison-posts"):
+                    saved_status = decision["review_status"] if review_state["done"] else result["review_status"]
+                    _fulfill_json(route, {"items": [{
+                        "asset_id": result["asset_id"],
+                        "title": result["title"],
+                        "asset_status": "draft",
+                        "created_at": "2026-10-29T00:00:00+00:00",
+                        "revision_number": 1,
+                        "revision_of_asset_id": None,
+                        "revision_root_asset_id": result["asset_id"],
+                        "word_count": 500,
+                        "product_count": 2,
+                        "unknown_fact_count": 0,
+                        "evidence_status": result["evidence_status"],
+                        "source_snapshots_fetched": 0,
+                        "review_status": saved_status,
+                        "reviewed_by": decision["reviewed_by"] if review_state["done"] else None,
+                        "can_review": True,
+                        "requires_review": not review_state["done"],
+                        "publishing_started": False,
+                    }], "total": 1, "limit": 20, "offset": 0})
+                else:
+                    _fulfill_json(route, result)
+
+            page.route("**/api/auth/me", handle_auth)
+            page.route("**/api/content/comparison-post", handle_create)
+            page.route("**/api/content/comparison-posts**", handle_saved)
+            page.goto(f"{BASE_URL}/comparison-post", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Product comparison writer").wait_for(state="visible")
+            page.get_by_role("button", name="Generate comparison draft").click()
+            page.get_by_text("Human editorial review", exact=True).wait_for(state="visible")
+            approve = page.get_by_role("button", name="Approve editorial draft")
+            assert approve.is_disabled()
+            page.get_by_label("Confirm editorial review").check()
+            assert not approve.is_disabled()
+            approve.click()
+            page.get_by_text("Decision: approved", exact=True).wait_for(state="visible")
+            page.get_by_text("Editorial approval recorded for this exact revision.", exact=False).wait_for(state="visible")
+            assert len(post_body) == 1 and len(review_body) == 1
+            assert review_body[0]["decision"] == "approve"
+            assert review_body[0]["expected_content_sha256"] == content_hash
+            assert review_body[0]["confirm_editorial_reviewed"] is True
+            assert decision["publishing_started"] is False
+            assert decision["publication_authorized"] is False
+            assert "Published: No" in page.locator("main").inner_text()
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()

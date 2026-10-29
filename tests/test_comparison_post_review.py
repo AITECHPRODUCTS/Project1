@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+from backend import main
+from backend.database import Base
+from backend.models import AuditLog, ContentAsset, Workspace
+from backend.schemas import ComparisonPostReviewRequest
+from backend.tenancy import workspace_scope
+
+
+def review_payload(content_sha256: str, **overrides):
+    result = {
+        "decision": "approve",
+        "expected_content_sha256": content_sha256,
+        "reviewer_notes": "",
+        "confirm_editorial_reviewed": True,
+    }
+    result.update(overrides)
+    return result
+
+
+def test_comparison_review_request_requires_hash_and_notes_for_nonapproval():
+    valid_hash = "a" * 64
+    payload = ComparisonPostReviewRequest(**review_payload(valid_hash))
+    assert payload.expected_content_sha256 == valid_hash
+    with pytest.raises(ValidationError):
+        ComparisonPostReviewRequest(**review_payload("not-a-sha256"))
+    with pytest.raises(ValidationError, match="require reviewer notes"):
+        ComparisonPostReviewRequest(**review_payload(valid_hash, decision="request_changes", confirm_editorial_reviewed=False))
+    with pytest.raises(ValidationError, match="require reviewer notes"):
+        ComparisonPostReviewRequest(**review_payload(valid_hash, decision="reject"))
+
+
+def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publishes(monkeypatch):
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    active = {"workspace_id": "review-workspace", "workspace_role": "owner"}
+    asset_id = "review-comparison-asset"
+    content = "<!doctype html><html><body><article><h1>Saved version</h1><p>Review this exact body.</p></article></body></html>"
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    async def override_session():
+        async with sessions() as session:
+            yield session
+
+    async def auth_user():
+        return {
+            "email": "editor@example.invalid",
+            "user_id": "editor-1",
+            "workspace_id": active["workspace_id"],
+            "workspace_role": active["workspace_role"],
+            "is_admin": False,
+        }
+
+    async def prepare_database():
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with sessions() as session:
+            session.add(Workspace(id="review-workspace", name="Review Workspace", slug="review-workspace"))
+            session.add(Workspace(id="other-review-workspace", name="Other Review Workspace", slug="other-review-workspace"))
+            await session.flush()
+            with workspace_scope("review-workspace"):
+                session.add(ContentAsset(
+                    id=asset_id,
+                    workspace_id="review-workspace",
+                    asset_type="comparison_post",
+                    title="Reviewable comparison",
+                    body=content,
+                    status="draft",
+                    source_urls=["https://vendor.example/product"],
+                    metadata_json={
+                        "schema_version": 1,
+                        "topic": "Reviewable comparison",
+                        "revision_number": 2,
+                        "revision_root_asset_id": asset_id,
+                        "review_status": "pending_review",
+                        "review_history": [],
+                        "requires_review": True,
+                        "publishing_started": False,
+                        "product_facts_independently_verified": False,
+                    },
+                ))
+            await session.commit()
+
+    asyncio.run(prepare_database())
+    monkeypatch.setitem(main.app.dependency_overrides, main.get_session, override_session)
+    monkeypatch.setitem(main.app.dependency_overrides, main.require_auth, auth_user)
+    try:
+        with TestClient(main.app) as client:
+            active["workspace_role"] = "member"
+            denied = client.post(
+                f"/api/content/comparison-posts/{asset_id}/review",
+                json=review_payload(content_hash),
+            )
+            assert denied.status_code == 403
+
+            active["workspace_role"] = "owner"
+            wrong_hash = client.post(
+                f"/api/content/comparison-posts/{asset_id}/review",
+                json=review_payload("0" * 64),
+            )
+            assert wrong_hash.status_code == 409
+            unconfirmed = client.post(
+                f"/api/content/comparison-posts/{asset_id}/review",
+                json=review_payload(content_hash, confirm_editorial_reviewed=False),
+            )
+            assert unconfirmed.status_code == 409
+
+            active["workspace_id"] = "other-review-workspace"
+            foreign = client.post(
+                f"/api/content/comparison-posts/{asset_id}/review",
+                json=review_payload(content_hash),
+            )
+            assert foreign.status_code == 404
+
+            active["workspace_id"] = "review-workspace"
+            approved = client.post(
+                f"/api/content/comparison-posts/{asset_id}/review",
+                json=review_payload(content_hash, reviewer_notes="Reviewed wording and disclosure."),
+            )
+            assert approved.status_code == 200, approved.text
+            result = approved.json()
+            assert result["review_status"] == "approved"
+            assert result["asset_status"] == "draft"
+            assert result["content_sha256"] == content_hash
+            assert result["requires_review"] is False
+            assert result["publishing_started"] is False
+            assert result["external_publication_started"] is False
+            assert result["product_facts_independently_verified"] is False
+            assert result["affiliate_eligibility_verified"] is False
+            assert result["publication_authorized"] is False
+            assert result["editorial_review_only"] is True
+
+            duplicate = client.post(
+                f"/api/content/comparison-posts/{asset_id}/review",
+                json=review_payload(content_hash),
+            )
+            assert duplicate.status_code == 409
+            detail = client.get(f"/api/content/comparison-posts/{asset_id}")
+            assert detail.status_code == 200
+            assert detail.headers["cache-control"] == "no-store"
+            assert detail.json()["review_status"] == "approved"
+            assert detail.json()["content_sha256"] == content_hash
+            assert detail.json()["review_history"][-1]["content_sha256"] == content_hash
+
+        async def read_records():
+            async with sessions() as session:
+                row = await session.get(ContentAsset, asset_id)
+                audit = await session.scalar(select(AuditLog).where(
+                    AuditLog.action == "content_comparison_post.reviewed",
+                    AuditLog.resource_id == asset_id,
+                ))
+            return row, audit
+
+        row, audit = asyncio.run(read_records())
+        assert row is not None and row.workspace_id == "review-workspace"
+        assert row.status == "draft" and row.body == content
+        assert row.metadata_json["review_status"] == "approved"
+        assert row.metadata_json["reviewed_content_sha256"] == content_hash
+        assert row.metadata_json["publishing_started"] is False
+        assert audit is not None and audit.outcome == "editorial_approved"
+        assert audit.details_json["content_sha256"] == content_hash
+        assert audit.details_json["publishing_started"] is False
+        assert audit.details_json["product_facts_independently_verified"] is False
+    finally:
+        main.app.dependency_overrides.pop(main.get_session, None)
+        main.app.dependency_overrides.pop(main.require_auth, None)
+        asyncio.run(engine.dispose())

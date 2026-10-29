@@ -247,3 +247,89 @@ def test_resend_webhook_fails_closed_without_secret_or_with_bad_signature(tmp_pa
         client.close()
         main.app.dependency_overrides.pop(get_session, None)
         asyncio.run(engine.dispose())
+
+
+def test_lead_email_delivery_history_is_workspace_scoped_and_pii_minimized(tmp_path, monkeypatch):
+    engine, sessions, seeded = asyncio.run(_database(tmp_path))
+    client = _client(monkeypatch, sessions)
+    monkeypatch.setitem(main.app.dependency_overrides, main.require_auth, lambda: {
+        "user_id": "owner-a", "workspace_id": seeded["workspace_id"], "email": "owner@example.test",
+    })
+    try:
+        async def seed_history():
+            async with sessions() as db:
+                with workspace_scope(seeded["workspace_id"]):
+                    db.add(EmailDeliveryEvent(
+                        workspace_id=seeded["workspace_id"],
+                        lead_id=seeded["lead_id"],
+                        provider="resend",
+                        provider_event_id="evt-history-bounce-0001",
+                        provider_message_id="re_msg_scheduled_123",
+                        scheduled_email_id=seeded["sent_id"],
+                        event_type="email.bounced",
+                        outcome="bounced",
+                        event_created_at=OBSERVED_AT,
+                        payload_sha256="a" * 64,
+                        metadata_json={
+                            "recipient_count": 1,
+                            "bounce_type": "permanent",
+                            "bounce_subtype": "mailbox_unavailable",
+                            "unsafe_payload_field": "must-not-leak",
+                        },
+                        received_at=OBSERVED_AT,
+                    ))
+                other_workspace = Workspace(
+                    name="Other delivery-history workspace",
+                    slug="other-delivery-history-workspace",
+                )
+                db.add(other_workspace)
+                await db.flush()
+                with workspace_scope(other_workspace.id):
+                    other_lead = Lead(
+                        workspace_id=other_workspace.id,
+                        email="other-reader@example.test",
+                        consent_at=OBSERVED_AT,
+                        consent_source="persisted_landing_page",
+                        lead_magnet="Other guide",
+                    )
+                    db.add(other_lead)
+                    await db.flush()
+                    other_lead_id = other_lead.id
+                await db.commit()
+                return other_lead_id
+
+        other_lead_id = asyncio.run(seed_history())
+        response = client.get(f"/api/leads/{seeded['lead_id']}/email-delivery-events")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["read_only"] is True
+        assert body["count"] == 1
+        event = body["data"][0]
+        assert event["provider"] == "resend"
+        assert event["event_type"] == "email.bounced"
+        assert event["outcome"] == "bounced"
+        assert event["metadata"] == {
+            "recipient_count": 1,
+            "bounce_type": "permanent",
+            "bounce_subtype": "mailbox_unavailable",
+        }
+        assert "provider_event_id" not in event
+        assert "provider_message_id" not in event
+        assert "payload_sha256" not in event
+        assert "unsafe_payload_field" not in response.text
+        assert "reader@example.test" not in response.text
+
+        cross_workspace = client.get(f"/api/leads/{other_lead_id}/email-delivery-events")
+        assert cross_workspace.status_code == 404
+        invalid_limit = client.get(f"/api/leads/{seeded['lead_id']}/email-delivery-events?limit=0")
+        assert invalid_limit.status_code == 422
+        monkeypatch.setitem(main.app.dependency_overrides, main.require_auth, lambda: {
+            "user_id": "owner-a", "workspace_id": None, "email": "owner@example.test",
+        })
+        no_workspace = client.get(f"/api/leads/{seeded['lead_id']}/email-delivery-events")
+        assert no_workspace.status_code == 403
+    finally:
+        client.close()
+        main.app.dependency_overrides.pop(get_session, None)
+        main.app.dependency_overrides.pop(main.require_auth, None)
+        asyncio.run(engine.dispose())

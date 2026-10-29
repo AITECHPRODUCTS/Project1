@@ -39,6 +39,17 @@ type ConsentEvent = {
   created_at: string | null;
 };
 type ConsentHistory = { lead_id: string; count: number; read_only: boolean; data: ConsentEvent[] };
+type DeliveryMetadata = { recipient_count?: number; bounce_type?: string; bounce_subtype?: string };
+type DeliveryEvent = {
+  id: string;
+  provider: string;
+  event_type: string;
+  outcome: string;
+  event_created_at: string | null;
+  received_at: string | null;
+  metadata: DeliveryMetadata;
+};
+type DeliveryHistory = { lead_id: string; count: number; limit: number; read_only: boolean; data: DeliveryEvent[] };
 type LeadList = { count: number; total_count: number; limit: number; offset: number; data: Lead[] };
 
 const PAGE_LIMIT = 50;
@@ -101,6 +112,10 @@ export default function LeadsPage() {
   const [consentHistoryOpen, setConsentHistoryOpen] = useState<Record<string, boolean>>({});
   const [consentHistoryLoading, setConsentHistoryLoading] = useState<Record<string, boolean>>({});
   const [consentHistoryErrors, setConsentHistoryErrors] = useState<Record<string, string>>({});
+  const [deliveryHistory, setDeliveryHistory] = useState<Record<string, DeliveryEvent[]>>({});
+  const [deliveryHistoryOpen, setDeliveryHistoryOpen] = useState<Record<string, boolean>>({});
+  const [deliveryHistoryLoading, setDeliveryHistoryLoading] = useState<Record<string, boolean>>({});
+  const [deliveryHistoryErrors, setDeliveryHistoryErrors] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,6 +163,30 @@ export default function LeadsPage() {
       }));
     } finally {
       setConsentHistoryLoading((current) => ({ ...current, [leadId]: false }));
+    }
+  };
+
+  const toggleDeliveryHistory = async (leadId: string) => {
+    const willOpen = !deliveryHistoryOpen[leadId];
+    setDeliveryHistoryOpen((current) => ({ ...current, [leadId]: willOpen }));
+    if (!willOpen || Object.prototype.hasOwnProperty.call(deliveryHistory, leadId)) return;
+    setDeliveryHistoryLoading((current) => ({ ...current, [leadId]: true }));
+    setDeliveryHistoryErrors((current) => ({ ...current, [leadId]: "" }));
+    try {
+      const result = await apiFetch<DeliveryHistory>(
+        "/api/leads/" + encodeURIComponent(leadId) + "/email-delivery-events",
+      );
+      setDeliveryHistory((current) => ({
+        ...current,
+        [leadId]: Array.isArray(result.data) ? result.data : [],
+      }));
+    } catch (caught) {
+      setDeliveryHistoryErrors((current) => ({
+        ...current,
+        [leadId]: message(caught),
+      }));
+    } finally {
+      setDeliveryHistoryLoading((current) => ({ ...current, [leadId]: false }));
     }
   };
 
@@ -366,6 +405,55 @@ export default function LeadsPage() {
                                 <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700">
                                   {event.consent_text || "No consent wording is attached to this event (for example, a withdrawal event)."}
                                 </p>
+                              </li>
+                            ))}
+                          </ol>
+                        </section>
+                      )}
+                    </div>
+
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => void toggleDeliveryHistory(lead.id)}
+                        disabled={Boolean(deliveryHistoryLoading[lead.id])}
+                        aria-expanded={Boolean(deliveryHistoryOpen[lead.id])}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-indigo-700 disabled:opacity-50"
+                      >
+                        {deliveryHistoryLoading[lead.id]
+                          ? "Loading delivery history…"
+                          : deliveryHistoryOpen[lead.id] ? "Hide email delivery history" : "View email delivery history"}
+                      </button>
+                      {deliveryHistoryOpen[lead.id] && (
+                        <section aria-label={"Email delivery history for " + lead.email} className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold text-slate-500">
+                            Read-only, signature-verified provider events correlated to this lead. A missing event does not prove that a message was sent or delivered.
+                          </p>
+                          {deliveryHistoryErrors[lead.id] && (
+                            <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                              Could not load email delivery history: {deliveryHistoryErrors[lead.id]}
+                            </p>
+                          )}
+                          {deliveryHistoryLoading[lead.id] && (
+                            <p role="status" className="mt-3 text-sm text-slate-600">Loading provider events…</p>
+                          )}
+                          {!deliveryHistoryLoading[lead.id] && !deliveryHistoryErrors[lead.id] && (deliveryHistory[lead.id] || []).length === 0 && (
+                            <p className="mt-3 text-sm text-slate-600">No verified provider delivery events are recorded for this lead.</p>
+                          )}
+                          <ol className="mt-3 space-y-3">
+                            {(deliveryHistory[lead.id] || []).map((event) => (
+                              <li key={event.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <p className="break-all text-sm font-black text-slate-900">{event.event_type.replaceAll("_", " ")}</p>
+                                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{event.outcome.replaceAll("_", " ")}</span>
+                                </div>
+                                <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                                  <dt className="text-slate-500">Provider</dt><dd className="text-slate-800">{event.provider}</dd>
+                                  <dt className="text-slate-500">Event time</dt><dd className="text-slate-800">{displayDate(event.event_created_at)}</dd>
+                                  <dt className="text-slate-500">Received</dt><dd className="text-slate-800">{displayDate(event.received_at)}</dd>
+                                  {event.metadata.bounce_type && <><dt className="text-slate-500">Bounce type</dt><dd className="text-slate-800">{event.metadata.bounce_type.replaceAll("_", " ")}</dd></>}
+                                  {event.metadata.bounce_subtype && <><dt className="text-slate-500">Bounce detail</dt><dd className="break-words text-slate-800">{event.metadata.bounce_subtype.replaceAll("_", " ")}</dd></>}
+                                </dl>
                               </li>
                             ))}
                           </ol>

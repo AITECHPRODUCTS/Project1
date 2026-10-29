@@ -1564,3 +1564,69 @@ def test_leads_page_exposes_csv_export_scoped_to_global_search():
             assert page.get_by_text("CSV export: global search only, up to 10,000 leads").is_visible()
         finally:
             browser.close()
+
+
+def test_leads_page_displays_read_only_provider_email_delivery_history():
+    lead = {
+        "id": "lead-delivery-history",
+        "email": "reader@example.test",
+        "lead_magnet": "Creator guide",
+        "consented_at": "2026-10-28T10:00:00+00:00",
+        "email_consent_confirmed_at": "2026-10-28T10:01:00+00:00",
+        "consent_source": "persisted_landing_page",
+        "email_suppressed_at": "2026-10-29T07:00:00+00:00",
+        "email_suppression_reason": "hard_bounce",
+        "unsubscribed": False,
+        "purchased": False,
+        "attribution": {"first_touch": {}, "last_touch": {}, "last_touch_at": None},
+    }
+    history = {
+        "lead_id": "lead-delivery-history",
+        "count": 1,
+        "limit": 100,
+        "read_only": True,
+        "data": [{
+            "id": "delivery-event-1",
+            "provider": "resend",
+            "event_type": "email.bounced",
+            "outcome": "bounced",
+            "event_created_at": "2026-10-29T07:00:00+00:00",
+            "received_at": "2026-10-29T07:00:01+00:00",
+            "metadata": {
+                "recipient_count": 1,
+                "bounce_type": "permanent",
+                "bounce_subtype": "mailbox_unavailable",
+            },
+        }],
+    }
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_leads(route):
+                url = route.request.url
+                if "/api/leads/lead-delivery-history/email-delivery-events" in url:
+                    _fulfill_json(route, history)
+                elif "/api/leads/lead-delivery-history/consent-events" in url:
+                    _fulfill_json(route, {"lead_id": lead["id"], "count": 0, "read_only": True, "data": []})
+                elif url.split("?", 1)[0].rstrip("/").endswith("/api/leads"):
+                    _fulfill_json(route, {"count": 1, "total_count": 1, "limit": 50, "offset": 0, "data": [lead]})
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected leads API request"}, status=404)
+
+            page.route("**/api/leads**", handle_leads)
+            page.goto(f"{BASE_URL}/leads", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Leads & attribution").wait_for(state="visible")
+            page.get_by_role("button", name="View email delivery history").click()
+            panel = page.get_by_role("region", name="Email delivery history for reader@example.test")
+            panel.get_by_text("email.bounced", exact=True).wait_for(state="visible")
+            panel.get_by_text("bounced", exact=True).wait_for(state="visible")
+            panel.get_by_text("resend", exact=True).wait_for(state="visible")
+            panel.get_by_text("permanent", exact=True).wait_for(state="visible")
+            panel.get_by_text("mailbox unavailable", exact=True).wait_for(state="visible")
+            assert panel.get_by_text("signature-verified provider events", exact=False).is_visible()
+            assert panel.get_by_text("A missing event does not prove that a message was sent or delivered.", exact=False).is_visible()
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()

@@ -194,3 +194,10 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 ### Current verification correction (same existing branch; candidate pending)
 
 - The schema-default correction made Alembic drift checks pass in the PR run, including PostgreSQL migration verification. The Python suite then failed one API test: `test_lead_list_paginates_and_counts_only_the_active_workspace` constructed a `SimpleNamespace` without `email_suppressed_at` and `email_suppression_reason`, which the latest lead serializer now returns. The failure was isolated to stale test fixture data; 757 other tests passed, 7 skipped. Updated the fixture to include both model fields. Fresh exact-SHA push/PR runs are required before closing the checkpoint.
+
+
+## 2026-10-29 verified Resend schema/fixture repair and email-delivery history candidate
+
+- Exact-SHA push [40837426005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837426005) and PR [40837433276](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837433276) passed for `273a88d0ea247df78a862de86effd43be9b3f9cd`: Python 758 passed, 7 skipped, 5 warnings; browser UAT 20 passed; PostgreSQL migration/integration, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured condition.
+- The schema fix aligns the ORM server default for Resend delivery events with migration 0030; the lead-list test fixture now includes suppression fields. This is not proof of live Resend connectivity.
+- New candidate adds `GET /api/leads/{lead_id}/email-delivery-events` and a lazy-loaded read-only lead timeline. The API scopes lead ownership and events to the active workspace, bounds results, and returns only allowlisted event fields/metadata. API/browser UAT requires exact-SHA CI before marking this slice verified.

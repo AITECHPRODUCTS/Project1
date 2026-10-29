@@ -4628,6 +4628,58 @@ async def lead_consent_events(
     }
 
 
+
+@api.get("/leads/{lead_id}/email-delivery-events")
+async def lead_email_delivery_events(
+    lead_id: str,
+    limit: int = Query(default=100, ge=1, le=250),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return bounded, PII-minimized Resend event history for an owned lead."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing email delivery history")
+    with workspace_scope(workspace_id):
+        lead = await db.scalar(select(Lead.id).where(
+            Lead.id == lead_id,
+            Lead.workspace_id == workspace_id,
+        ))
+        if lead is None:
+            raise HTTPException(404, "Lead not found in the active workspace")
+        rows = list((await db.scalars(
+            select(EmailDeliveryEvent)
+            .where(
+                EmailDeliveryEvent.workspace_id == workspace_id,
+                EmailDeliveryEvent.lead_id == lead_id,
+            )
+            .order_by(EmailDeliveryEvent.received_at.desc(), EmailDeliveryEvent.id.desc())
+            .limit(limit)
+        )).all())
+    safe_metadata_fields = {"recipient_count", "bounce_type", "bounce_subtype"}
+    return {
+        "lead_id": lead_id,
+        "count": len(rows),
+        "limit": limit,
+        "read_only": True,
+        "data": [
+            {
+                "id": row.id,
+                "provider": row.provider,
+                "event_type": row.event_type,
+                "outcome": row.outcome,
+                "event_created_at": row.event_created_at.isoformat() if row.event_created_at else None,
+                "received_at": row.received_at.isoformat() if row.received_at else None,
+                "metadata": {
+                    key: value
+                    for key, value in (row.metadata_json or {}).items()
+                    if key in safe_metadata_fields
+                },
+            }
+            for row in rows
+        ],
+    }
+
 @app.post("/api/public/leads/capture", status_code=201)
 async def public_lead_capture(request: Request, db: AsyncSession = Depends(get_session)):
     await public_rate_limit(request)

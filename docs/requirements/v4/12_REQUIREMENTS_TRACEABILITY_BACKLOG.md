@@ -418,3 +418,12 @@
 ### Current verification correction (same existing branch; candidate pending)
 
 - The schema-default correction made Alembic drift checks pass in the PR run, including PostgreSQL migration verification. The Python suite then failed one API test: `test_lead_list_paginates_and_counts_only_the_active_workspace` constructed a `SimpleNamespace` without `email_suppressed_at` and `email_suppression_reason`, which the latest lead serializer now returns. The failure was isolated to stale test fixture data; 757 other tests passed, 7 skipped. Updated the fixture to include both model fields. Fresh exact-SHA push/PR runs are required before closing the checkpoint.
+
+
+## P0 — Resend delivery-event schema/fixture repair verified (2026-10-29)
+- Exact-SHA push [40837426005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837426005) and PR [40837433276](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837433276) passed on `273a88d0ea247df78a862de86effd43be9b3f9cd`: 758 Python passed, 7 skipped; browser UAT 20 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by its configured event condition.
+- The ORM server default matches migration 0030; lead-list test data matches the expanded lead serialization contract. External Resend account delivery remains unverified.
+
+## S4 — Workspace-scoped read-only email-delivery history (candidate, 2026-10-29)
+- Provide a lead-owned API to retrieve persisted signature-verified provider event history with bounded latest-first results and an allowlist for event type/outcome/provider/timestamps and sanitized bounce metadata.
+- Add a browser timeline with provider-reported semantics and explicit empty/error/loading states. Include workspace-denial, missing-workspace, invalid-limit and payload-privacy tests. Exact-SHA CI pending.

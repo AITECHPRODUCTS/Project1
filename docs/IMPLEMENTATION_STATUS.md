@@ -1,11 +1,17 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 Resend delivery-event schema drift correction (CI pending)
+## 2026-10-29 verified Resend delivery-event schema and test-fixture correction
 
-- The latest candidate `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7` added signed Resend delivery-event handling, PII-minimized immutable event records, deduplication/suppression handling, migration 0030, and API/browser tests. Hosted push [40836353831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836353831) and PR [40836360147](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836360147) failed only at the migration drift gate: model metadata lacked the database server default that migration 0030 declares for `email_delivery_events.provider`. Other configured jobs, including frontend, security, secret scan, repository guard, AI profile and browser UAT, passed.
-- Corrected the SQLAlchemy model to declare `server_default="resend"` alongside the client default, preserving behavior for ORM inserts while matching the DB-level contract. Added a regression assertion that the model exposes the server default. Exact-SHA push/PR migration and full-suite verification is pending.
-- This fix does not alter event signature verification, recipient matching, suppression precedence, or raw-payload storage policy. Live Resend credentials/webhook delivery remain unverified until owner-controlled provider setup and external event UAT.
+- The earlier candidate `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7` first failed Alembic drift because migration 0030 declared server default `resend` while the ORM lacked the server default. The correction added `server_default="resend"` to `EmailDeliveryEvent.provider` and a model metadata regression assertion.
+- That exposed one stale `SimpleNamespace` in `test_lead_list_paginates_and_counts_only_the_active_workspace`; it was updated to include `email_suppressed_at` and `email_suppression_reason`.
+- Exact-SHA push [40837426005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837426005) and PR [40837433276](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837433276) passed on `273a88d0ea247df78a862de86effd43be9b3f9cd`: Python 758 passed, 7 skipped, 5 warnings; browser UAT 20 passed; PostgreSQL migration/integration, frontend production/typecheck, security audit, secret scan, AI profile and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured event condition.
+- The signed Resend webhook logic still requires owner-managed endpoint configuration and real provider delivery/bounce/complaint UAT; CI does not establish a connected provider or production delivery.
+
+## 2026-10-29 authenticated lead email-delivery history (CI pending)
+
+- Added a read-only endpoint that checks active-workspace lead ownership, returns only that lead's persisted provider events, uses bounded latest-first results, and allowlists PII-minimized metadata. Provider event IDs, remote message IDs and payload hashes are not returned.
+- Added a SQLite-backed API regression for workspace denial, missing workspace, invalid limit and response-field privacy; added browser coverage for the provider-reported bounce timeline and the explicit absence-of-event caveat. Exact-SHA CI is pending.
 
 
 ## 2026-10-29 real SQLite lead export integration test (CI pending)

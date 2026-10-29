@@ -5,7 +5,7 @@ Updated: 2026-10-29
 
 - The leads API now accepts bounded limit/offset parameters (default 50, maximum 200), applies the same active-workspace predicate to both rows and total count, and uses a stable created-at/id ordering.
 - The UI shows total workspace lead count, current-page metrics, previous/next navigation and explicit current-page search scope. If records are removed while the user is on a now-invalid page, it falls back to the last valid page rather than displaying a misleading empty workspace.
-- Added API coverage for scoped count and requested limit/offset, plus browser acceptance for pagination and stale-page recovery. Exact-SHA push and PR verification is pending.
+- Added API coverage for scoped count and requested limit/offset, plus browser acceptance for pagination and stale-page recovery. The first candidate also revealed a browser-fixture matcher that assumed /api/leads had no query string; it is corrected to match the URL path independently of limit/offset. Exact-SHA push and PR verification is pending.
 
 
 ## 2026-10-29 verified lead consent evidence visibility

@@ -139,3 +139,8 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 
 - The leads API now supports bounded limit/offset pagination and returns a workspace-scoped total count. Ordering is stable for equal timestamps; the frontend shows total count and page navigation, clarifies that search applies to the current page, and recovers to the last valid page when records are deleted while viewing a later page.
 - Added API regression coverage and browser acceptance that navigates to page two and simulates the only record being deleted before refresh. Exact-SHA push and PR CI remains pending.
+
+
+### Pagination browser-fixture correction
+
+- The first pagination candidate included a consent-history browser fixture that matched `/api/leads` only when the URL had no query string. Since the new UI requests `/api/leads?limit=50&offset=0`, the mock must match the URL path before `?`. Corrected the fixture; this does not change production code. The corrected candidate needs exact-SHA push/PR UAT.

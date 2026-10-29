@@ -1375,7 +1375,7 @@ def test_leads_page_displays_email_confirmation_and_read_only_consent_history():
             def handle_leads(route):
                 if "/api/leads/lead-confirmed/consent-events" in route.request.url:
                     _fulfill_json(route, history)
-                elif route.request.url.rstrip("/").endswith("/api/leads"):
+                elif route.request.url.split("?", 1)[0].rstrip("/").endswith("/api/leads"):
                     _fulfill_json(route, {"count": 1, "total_count": 1, "limit": 50, "offset": 0, "data": [lead]})
                 else:
                     _fulfill_json(route, {"detail": "Unexpected leads API request"}, status=404)

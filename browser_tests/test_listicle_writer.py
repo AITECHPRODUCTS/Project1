@@ -122,8 +122,8 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
             page.locator("#listicle-products").fill(json.dumps(PRODUCTS))
             page.get_by_role("button", name="Generate listicle draft").click()
             page.get_by_text("Source snapshots", exact=True).wait_for(state="visible")
-            page.get_by_text("operator supplied unverified", exact=False).wait_for(state="visible")
-            page.get_by_text("Not supplied — verify", exact=False).wait_for(state="visible")
+            page.get_by_text("operator supplied unverified", exact=False).first.wait_for(state="visible")
+            page.get_by_text("Not supplied — verify", exact=False).first.wait_for(state="visible")
             page.get_by_title("Listicle article preview").wait_for(state="visible")
             assert len(posted) == 1
             assert posted[0]["topic"] == "Email marketing tools for small publishers"

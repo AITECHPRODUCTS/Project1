@@ -103,7 +103,7 @@ export default function ListicleWriterPage(){
     topic:topic.trim(),audience:audience.trim(),target_keyword:keyword.trim()||null,products,evaluation_criteria,
     affiliate_disclosure:disclosure,minimum_words:minimum,tone,revision_of_asset_id:revisionOfAssetId||undefined
    })});
-   setResult(response);setRevisionOfAssetId(null);setNotice(response.revision_number>1?"Immutable listicle revision saved. The original draft is unchanged.":"Listicle draft saved. Verify each product fact, source and affiliate destination before relying on it.");
+   setResult(response);setRevisionOfAssetId(null);setNotice(response.revision_number>1?"Immutable listicle revision saved. Original draft remains unchanged.":"Listicle draft saved. Verify each product fact, source and affiliate destination before relying on it.");
    await refreshList();
   }catch(e){setError(errorMessage(e));}
   finally{setBusy(false);}

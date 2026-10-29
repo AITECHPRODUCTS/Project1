@@ -160,7 +160,7 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
             page.get_by_role("button", name="Revise saved draft").click()
             page.get_by_role("textbox", name="Topic or category").fill("Email marketing tools — revision")
             page.get_by_role("button", name="Generate listicle revision").click()
-            page.get_by_text("Revision #2", exact=False).wait_for(state="visible")
+            page.get_by_text("Revision #2", exact=False).first.wait_for(state="visible")
             assert len(posted) == 2
             assert posted[1]["revision_of_asset_id"] == "listicle-asset-1"
             assert posted[1]["topic"] == "Email marketing tools — revision"

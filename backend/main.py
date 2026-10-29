@@ -3877,8 +3877,9 @@ async def create_comparison_post(
         await db.flush()
         root_id = revision_root_asset_id or asset.id
         if asset_metadata["revision_root_asset_id"] is None:
-            asset_metadata["revision_root_asset_id"] = root_id
-            asset.metadata_json = dict(asset_metadata)
+            # Assign a new dict rather than mutating the same JSON object already
+            # attached to the ORM instance; SQLAlchemy then persists the root ID.
+            asset.metadata_json = {**asset_metadata, "revision_root_asset_id": root_id}
         db.add(AuditLog(
             workspace_id=workspace_id,
             actor=actor,

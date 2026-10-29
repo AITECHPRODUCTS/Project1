@@ -253,3 +253,54 @@ def test_service_rejects_non_finite_negative_or_malformed_numeric_inputs(field, 
             timeframe="90d",
             pages=[page],
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("publish_date", "not-a-date", "valid ISO date"),
+        ("last_updated", "not-a-date", "valid ISO date"),
+        ("publish_date", date(2026, 10, 26), "cannot be in the future"),
+        ("last_updated", date(2026, 10, 26), "cannot be in the future"),
+    ],
+)
+def test_service_rejects_invalid_or_future_content_freshness_dates(field, value, message):
+    page = {"url": "https://example.com/article", field: value}
+    with pytest.raises(ValueError, match=message):
+        build_content_decay_report(
+            site_url="https://example.com",
+            timeframe="90d",
+            pages=[page],
+            today=date(2026, 10, 25),
+        )
+
+
+def test_service_rejects_last_updated_before_publish_date():
+    with pytest.raises(ValueError, match="last_updated cannot be earlier than publish_date"):
+        build_content_decay_report(
+            site_url="https://example.com",
+            timeframe="90d",
+            pages=[{
+                "url": "https://example.com/article",
+                "publish_date": date(2026, 5, 1),
+                "last_updated": date(2026, 4, 30),
+            }],
+            today=date(2026, 10, 25),
+        )
+
+
+def test_valid_freshness_dates_remain_eligible_for_age_review():
+    report = build_content_decay_report(
+        site_url="https://example.com",
+        timeframe="1y",
+        pages=[{
+            "url": "https://example.com/old-guide",
+            "publish_date": date(2024, 1, 1),
+            "last_updated": date(2024, 2, 1),
+        }],
+        today=date(2026, 10, 25),
+    )
+    assert report["decaying_pages"] == []
+    assert report["pages_needing_more_data"][0]["preliminary_signals"] == [
+        "content_not_updated_for_365_days_or_more"
+    ]

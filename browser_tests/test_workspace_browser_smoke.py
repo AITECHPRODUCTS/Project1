@@ -1198,3 +1198,72 @@ def test_offer_qualification_queue_paginates_and_preserves_filter():
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()
+
+
+
+def test_offer_qualification_returns_to_valid_page_when_last_filtered_item_is_removed():
+    qualified_ids: set[str] = set()
+    queue_offsets: list[int] = []
+    offers = [
+        {"id": "alpha", "network": "openaffiliate", "external_id": "alpha", "name": "Alpha offer",
+         "category": "software", "description": "First reviewable offer", "url": "https://merchant.example/alpha",
+         "cookie_days": None, "reward_type": None, "reward_value": None, "epc": None, "conversion_rate": None,
+         "verification_basis": "provider_not_verified_or_unknown"},
+        {"id": "beta", "network": "openaffiliate", "external_id": "beta", "name": "Beta offer",
+         "category": "software", "description": "Second reviewable offer", "url": "https://merchant.example/beta",
+         "cookie_days": None, "reward_type": None, "reward_value": None, "epc": None, "conversion_rate": None,
+         "verification_basis": "provider_not_verified_or_unknown"},
+    ]
+
+    def handle_api(route):
+        path = urlparse(route.request.url).path
+        if path == "/api/auth/me":
+            _fulfill_json(route, {"authenticated": True, "user": {"email": "reviewer@example.invalid", "is_admin": False,
+                "workspace_id": "browser-workspace", "workspace_role": "owner"}, "csrf_token": "browser-csrf-token"})
+        elif path == "/api/offers/qualification-queue":
+            query = parse_qs(urlparse(route.request.url).query)
+            offset = int(query.get("offset", ["0"])[0])
+            queue_offsets.append(offset)
+            remaining = [offer for offer in offers if offer["id"] not in qualified_ids]
+            rows = [{"offer": offer, "qualification": {
+                "status": "not_reviewed", "account_eligibility": "unknown", "geography_fit": "unknown",
+                "traffic_source_fit": "unknown", "terms_review": "unknown", "landing_page_review": "unknown",
+                "disclosure_review": "unknown", "evidence_urls": [], "notes": "", "policy_version": "manual-review-v1",
+                "reviewed_by": None, "reviewed_at": None, "evidence_basis": "operator_supplied_unverified",
+                "affiliate_network_approval_implied": False}} for offer in remaining]
+            _fulfill_json(route, {"count": len(rows[offset:offset + 1]), "total_count": len(rows), "offset": offset,
+                "limit": 1, "status_filter": query.get("status", ["needs_review"])[0], "data": rows[offset:offset + 1],
+                "note": "Operator review does not imply provider approval."})
+        elif path.startswith("/api/offers/") and path.endswith("/qualification") and route.request.method == "POST":
+            offer_id = path.split("/")[-2]
+            payload = json.loads(route.request.post_data or "{}")
+            if payload.get("status") == "qualified":
+                qualified_ids.add(offer_id)
+            _fulfill_json(route, {"offer_id": offer_id, "status": payload.get("status"), "activation_allowed": False,
+                "evidence_basis": "operator_supplied_unverified", "affiliate_network_approval_implied": False})
+        else:
+            _fulfill_json(route, {"detail": "unexpected request"}, status=404)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/api/**", handle_api)
+            page.goto(f"{BASE_URL}/offers/qualification", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Offer qualification review").wait_for(state="visible")
+            page.get_by_role("button", name="Next page").click()
+            page.get_by_text("Showing 2–2 of 2 offers").wait_for(state="visible")
+            card = page.get_by_test_id("qualification-card")
+            card.get_by_role("combobox", name="Decision").select_option("qualified")
+            for label in ["Publisher account eligibility", "Target geography allowed", "Traffic sources allowed",
+                          "Program terms reviewed", "Destination / landing page reviewed", "Affiliate disclosure ready"]:
+                card.get_by_label(label).select_option("pass")
+            card.get_by_label("Evidence URLs (one HTTPS URL per line)").fill("https://merchant.example/affiliate-terms")
+            card.get_by_role("button", name="Save qualification review").click()
+            page.get_by_text("Showing 1–1 of 1 offers").wait_for(state="visible")
+            page.get_by_role("heading", name="Alpha offer").wait_for(state="visible")
+            assert page.get_by_role("heading", name="Beta offer").count() == 0
+            assert queue_offsets[-2:] == [1, 0]
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()

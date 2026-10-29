@@ -3,7 +3,7 @@
 **Snapshot:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Current verified code SHA:** 585c30cf91d8d8baf64796ddbd565c90550412eb  
+**Current verified code SHA:** 378f890da1063b8e98eaea9f979bd6d2ff9e9112  
 **Release decision:** NOT PRODUCTION READY. Draft PR #1 is open and unmerged.
 
 ## Built in the current branch
@@ -38,7 +38,7 @@ The product comparison writer is now more than a draft-only fact table: it safel
 
 **Earlier comparison-writer verification:** push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed on cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad. Python: **785 passed, 7 skipped, 5 warnings**. Browser UAT: **24 passed** on both runs. PostgreSQL integration, frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped under its configured push-only condition.
 
-The source-evidence feature is verified for snapshot collection and literal text matching only. Merchant facts, current pricing, eligibility, legal compliance, affiliate network authorization and live provider behavior remain independently unverified.
+The source-evidence feature is verified for snapshot collection and literal text matching only; the later hash-bound review lifecycle is documented above. Merchant facts, current pricing, eligibility, legal compliance, affiliate network authorization and live provider behavior remain independently unverified.
 
 ## Previous feature: saved comparison draft retrieval — verified on 29 October 2026
 
@@ -63,6 +63,23 @@ This feature makes saved comparison drafts retrievable; it does not change the o
 - Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858629542 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858638120 passed on code SHA 62dfa336dfa4c617359f01588037611ec93be899. Python: 787 passed, 7 skipped, 5 warnings. Chromium UAT: 25 passed on both runs. PostgreSQL migration/integration, frontend typecheck/build/Docker smoke, AI/RAG profile, security/SBOM audit, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by the configured push-only condition.
 - Revision history establishes lineage/auditability, not claim truth or provider approval. Product-source snapshots record literal text presence only; legal review, official affiliate eligibility, provider credentials/UAT, live publishing, staging deployment, observability and backup/restore remain production blockers.
 
+
+## Latest verified lifecycle increment — 29 October 2026
+
+The latest verified implementation is code SHA 378f890da1063b8e98eaea9f979bd6d2ff9e9112. It extends the comparison-writer vertical slice into a controlled editorial lifecycle:
+
+- Bounded source capture and per-product literal fact evidence; source snapshots keep excerpt hashes and explicit fetch failures.
+- Workspace-only saved draft listing/detail, immutable revisions and atomic workspace/root revision numbering.
+- Integrity verification across stored HTML, canonical source-snapshot manifest/excerpt bytes, structured evidence payload and creation/revision audit bindings.
+- Owner/admin review decisions are hash-bound, auditable and immutable per revision. Missing or changed integrity baselines block review; editorial approval is not provider approval and does not publish.
+
+Exact-SHA evidence:
+- Push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40886156627 — passed.
+- PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40886166294 — passed.
+- Python: **798 passed, 8 skipped, 5 warnings**; Chromium browser UAT **26 passed** on both; PostgreSQL migration/integration **8 passed**. Frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+
+The current fix only corrects test-fixture variable scope and does not weaken the integrity checks. Hashes are not signatures, and literal source text is not proof of truth/currentness. Overall production readiness remains blocked by official provider/account UAT, legal/compliance sign-off, complete 53-skill acceptance, staging deployment, monitoring, backup/restore and rollback evidence.
+
 ## Remaining before a production launch
 
 1. **Close P0 authorization and safety findings:** continue reviewing remaining workspace/tenant ownership checks, globally configured provider surfaces, public-route abuse/rate limits, outbound HTTP/SSRF boundaries, workflow retry/idempotency and externally impactful provider paths. Add negative tests for each finding.
@@ -76,7 +93,7 @@ This feature makes saved comparison drafts retrievable; it does not change the o
 
 | Verification measure | Exact current result |
 |---|---|
-| Python CI suite | 796 passed · 8 skipped · 5 warnings |
+| Python CI suite | 798 passed · 8 skipped · 5 warnings |
 | Chromium browser UAT | 26 passed |
 | Push CI | Passed |
 | Draft-PR CI | Passed |

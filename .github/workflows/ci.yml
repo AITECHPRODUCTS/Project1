@@ -96,7 +96,7 @@ jobs:
           APP_ENV: test
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/omni_affiliate_test
           POSTGRES_WEBHOOK_INTEGRATION: "1"
-        run: pytest -q tests/test_conversion_webhook_postgres.py tests/test_workflow_durable_recovery_postgres.py tests/test_resource_budget_postgres.py
+        run: pytest -q tests/test_conversion_webhook_postgres.py tests/test_workflow_durable_recovery_postgres.py tests/test_resource_budget_postgres.py tests/test_comparison_revision_sequence_postgres.py
 
   ai-profile:
     runs-on: ubuntu-latest

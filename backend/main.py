@@ -77,6 +77,7 @@ from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
 from backend.services.comparison_post_writer import build_comparison_post as comparison_post_writer_service
+from backend.services.comparison_draft_revisions import reserve_comparison_revision_number
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
@@ -3791,6 +3792,7 @@ async def create_comparison_post(
     _validate_generation_payload_size(payload)
     await workspace_generation_rate_limit(request, workspace_id)
 
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
     revision_parent: ContentAsset | None = None
     revision_parent_id: str | None = None
     revision_number = 1
@@ -3808,16 +3810,36 @@ async def create_comparison_post(
             raise HTTPException(409, "Only a saved draft can be revised; the original asset was not changed")
         revision_parent_id = revision_parent.id
         parent_metadata = revision_parent.metadata_json if isinstance(revision_parent.metadata_json, dict) else {}
-        try:
-            parent_revision_number = int(parent_metadata.get("revision_number") or 1)
-        except (TypeError, ValueError):
-            raise HTTPException(409, "Saved draft revision metadata is invalid")
-        if not 1 <= parent_revision_number < 100000:
-            raise HTTPException(409, "Saved draft revision metadata is outside supported bounds")
-        revision_number = parent_revision_number + 1
         revision_root_asset_id = str(parent_metadata.get("revision_root_asset_id") or revision_parent.id)
-        # Release the read transaction before the model/network work.
+        # Release the parent read lock before the atomic sequence allocation. The
+        # sequence row, rather than this content row, serializes concurrent revisions.
         await db.commit()
+        try:
+            revision_number = await reserve_comparison_revision_number(
+                db,
+                workspace_id=workspace_id,
+                root_asset_id=revision_root_asset_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        with workspace_scope(workspace_id):
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=actor,
+                action="content_comparison_post.revision_reserved",
+                resource_type="content_asset",
+                resource_id=revision_root_asset_id,
+                outcome="reserved",
+                details_json={
+                    "revision_number": revision_number,
+                    "revision_of_asset_id": revision_parent_id,
+                    "revision_root_asset_id": revision_root_asset_id,
+                    "generation_completed": False,
+                },
+            ))
+            # Commit the reservation before model/network I/O. Failed generations
+            # leave an auditable gap rather than reusing a revision number.
+            await db.commit()
 
     try:
         result = await comparison_post_writer_service(
@@ -3837,7 +3859,6 @@ async def create_comparison_post(
             {"code": "COMPARISON_DRAFT_GENERATION_FAILED", "message": "Comparison draft generation failed; no draft was saved."},
         ) from exc
 
-    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
     asset_metadata = {
         "schema_version": 1,
         "topic": payload.topic,

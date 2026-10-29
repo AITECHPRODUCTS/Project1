@@ -293,6 +293,29 @@ class ContentAsset(TenantScopedMixin, Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+
+class ComparisonDraftRevisionSequence(TenantScopedMixin, Base):
+    """Atomic per-workspace, per-root sequence for immutable comparison draft revisions."""
+
+    __tablename__ = "comparison_draft_revision_sequences"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "root_asset_id",
+            name="uq_comparison_draft_revision_sequence_workspace_root",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    root_asset_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("content_assets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    next_revision_number: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
 class UserAccount(Base):
     __tablename__ = "user_accounts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

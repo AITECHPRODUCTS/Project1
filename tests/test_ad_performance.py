@@ -160,3 +160,57 @@ def test_creative_fatigue_and_optimization_stay_blocked_for_unverified_reports()
     assert result["creative_fatigue"]["status"] == "blocked_unverified_or_mixed_evidence"
     assert result["creative_fatigue"]["review_recommended"] is False
 
+
+
+def test_ad_reports_filter_inclusive_utc_observation_dates():
+    with TestClient(app) as client:
+        for day, suffix in ((1, "before"), (2, "inside"), (3, "after")):
+            response = client.post("/api/ads/observations", json={
+                "platform": "meta",
+                "creative_id": f"date-filter-{suffix}",
+                "source_type": "manual",
+                "impressions": 100,
+                "clicks": 5,
+                "conversions": 1,
+                "spend_usd": "4.00",
+                "commission_usd": "6.00",
+                "observed_at": f"2026-10-0{day}T23:59:59Z",
+                "note": "UTC date filter regression fixture",
+            })
+            assert response.status_code == 201, response.text
+
+        performance = client.get(
+            "/api/ads/performance?from_date=2026-10-02&to_date=2026-10-02&limit=1000"
+        )
+        assert performance.status_code == 200, performance.text
+        report = performance.json()
+        assert report["from_date"] == "2026-10-02"
+        assert report["to_date"] == "2026-10-02"
+        assert report["date_timezone"] == "UTC"
+        ids = {item["creative_id"] for item in report["items"]}
+        assert "date-filter-inside" in ids
+        assert "date-filter-before" not in ids
+        assert "date-filter-after" not in ids
+
+        observations = client.get(
+            "/api/ads/observations?from_date=2026-10-02&to_date=2026-10-02&limit=500"
+        )
+        assert observations.status_code == 200, observations.text
+        assert observations.json()["date_timezone"] == "UTC"
+        observed_ids = {item["creative_id"] for item in observations.json()["data"]}
+        assert "date-filter-inside" in observed_ids
+        assert "date-filter-before" not in observed_ids
+        assert "date-filter-after" not in observed_ids
+
+
+@pytest.mark.parametrize("endpoint", [
+    "/api/ads/performance",
+    "/api/ads/observations",
+])
+def test_ad_reports_reject_reversed_date_ranges(endpoint):
+    with TestClient(app) as client:
+        response = client.get(
+            f"{endpoint}?from_date=2026-10-03&to_date=2026-10-02"
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "from_date must be on or before to_date"

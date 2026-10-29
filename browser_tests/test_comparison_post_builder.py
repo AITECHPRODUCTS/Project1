@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright
 
@@ -81,7 +82,7 @@ def test_comparison_writer_saves_review_draft_and_displays_unknown_facts():
                 _fulfill_json(route, result, status=201)
 
             def handle_saved(route):
-                path = route.request.url.split("?", 1)[0].rstrip("/")
+                path = urlsplit(route.request.url).path.rstrip("/")
                 if path.endswith("/api/content/comparison-posts"):
                     _fulfill_json(route, {"items": list(saved_items), "total": len(saved_items), "limit": 20, "offset": 0})
                 else:
@@ -101,7 +102,7 @@ def test_comparison_writer_saves_review_draft_and_displays_unknown_facts():
             page.get_by_text("Fetched snapshots", exact=True).wait_for(state="visible")
             page.get_by_text("S01 · Alpha evidence · fetched", exact=True).wait_for(state="visible")
             page.get_by_text("Not supplied — verify", exact=True).first.wait_for(state="visible")
-            page.get_by_text("public snapshot captured not fact verified", exact=False).wait_for(state="visible")
+            page.get_by_text("public snapshot captured not fact verified", exact=False).first.wait_for(state="visible")
             page.get_by_title("Comparison article preview").wait_for(state="visible")
             assert len(posted) == 1
             assert posted[0]["topic"] == "Affiliate analytics tools compared"

@@ -28,7 +28,7 @@ export default function MerchantApplicationsPage(){
     if(filter!=="all")query.set("status",filter);
     return await apiFetch<ApplicationQueue>("/api/merchant/applications?"+query.toString());
   };
-  const load=useCallback(async(nextStatus:StatusFilter=statusFilter,nextOffset=0)=>{
+  const load=useCallback(async(nextStatus:StatusFilter="all",nextOffset=0)=>{
     setLoading(true);setError("");
     try{
       let result=await fetchPage(nextStatus,nextOffset);
@@ -41,7 +41,7 @@ export default function MerchantApplicationsPage(){
       setQueue(result);
     }catch(e){setError(e instanceof Error?e.message:"Could not load incoming applications. Sign in as an owner/admin of the offer's merchant workspace.");}
     finally{setLoading(false);}
-  },[statusFilter]);
+  },[]);
   useEffect(()=>{void load("all",0)},[load]);
 
   const review=async(application:Application,decision:"approve"|"reject")=>{

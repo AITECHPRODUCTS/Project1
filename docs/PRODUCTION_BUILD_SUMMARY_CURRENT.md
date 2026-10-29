@@ -3,7 +3,7 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code SHA:** a9447fbd53d309c6b3316412b42bd74ba6f6535a  
+**Latest verified code SHA:** b6029444da8115bb6bfa8e8377278502aae3d1b9  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
 
@@ -128,3 +128,11 @@ Continue on build/omni-affiliate-os-production only. Do not create a branch, swi
 - Candidate `1266f571eb18dd6c9e8757b278f1469309e1d8c6` passed Python (839 passed, 9 skipped), frontend build/typecheck, PostgreSQL integration, AI-profile, security audit, secret scan and repository guard, but failed Chromium browser UAT on the new assertion that a suspended `<option>` was disabled. Exact PR run: [40932145079](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932145079); exact push run: [40932137857](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932137857).
 - Correction: suspended workspaces are now removed from the selectable option list entirely, while an informational status tells the user that suspended workspaces are hidden. The browser test asserts that only active workspace options are present, performs a switch, and waits for the authenticated role to refresh after reload.
 - New candidate CI must pass both push and PR workflows before workspace switching is marked verified. Latest fully verified code remains `a9447fbd53d309c6b3316412b42bd74ba6f6535a` until then.
+## 2026-10-29 verified multi-workspace selector — exact SHA b6029444
+
+- Added a visible active-workspace selector using existing membership-checked `GET /api/workspaces` and `POST /api/workspaces/{workspace_id}/switch`. The page switches only after API confirmation and reloads so all workspace-scoped data is read again under the new session.
+- Suspended workspaces are now omitted from selectable options altogether; the dashboard explicitly displays `Suspended workspaces hidden` when applicable. Direct shortcuts for merchant applications and the platform admin console are available; the admin shortcut is gated by the platform-admin flag.
+- Added Chromium acceptance covering multi-workspace membership, active publisher-to-merchant switch, suspended-workspace exclusion, and role refresh after reload.
+- Exact-SHA push [40932887080](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932887080) and PR [40932895264](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932895264) both passed for `b6029444da8115bb6bfa8e8377278502aae3d1b9`. Python: 839 passed, 9 skipped, 5 warnings; Chromium browser UAT: 32 passed on push and PR; PostgreSQL integration: 9 passed on each. Frontend typecheck/build/Docker smoke, AI profile/SBOM, security audit, secret scan, repo guard and push lockfile-sync passed. PR lockfile-sync was skipped by the configured push-only condition.
+- The initial candidate `1266f571eb18dd6c9e8757b278f1469309e1d8c6` failed one new browser assertion; that evidence is retained above, the selector behavior/test were corrected, and the subsequent exact-SHA push/PR runs passed.
+- This verifies the manual-mode and workspace-switch increments, not full commercial acceptance. Release remains **NOT PRODUCTION READY**.

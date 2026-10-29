@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend import main, workflows
 from backend.database import Base, get_session
-from backend.models import AuditLog, JurisdictionComplianceAssessment, Workspace
+from backend.models import AuditLog, JurisdictionComplianceAssessment, PlatformExecutionControl, Workspace
 from backend.services.jurisdiction_compliance import REQUIRED_RULE_CATEGORIES, assessment_is_current, evidence_coverage, find_current_assessment
 from backend.tenancy import workspace_scope
 
@@ -48,7 +48,10 @@ async def _setup(monkeypatch):
     monkeypatch.setattr(main.settings, "publishing_dry_run", False)
     monkeypatch.setattr(main.settings, "cms_publish_execute", True)
     async with sessions() as db:
-        db.add(Workspace(id=WORKSPACE_ID, name="Compliance workspace", slug="jurisdiction-compliance-workspace"))
+        db.add_all([
+            Workspace(id=WORKSPACE_ID, name="Compliance workspace", slug="jurisdiction-compliance-workspace"),
+            PlatformExecutionControl(id=1, outbound_actions_paused=False),
+        ])
         await db.commit()
     return engine, sessions
 
@@ -270,7 +273,10 @@ def test_workflow_live_distribution_blocks_without_scope_and_proceeds_with_curre
         monkeypatch.setattr(workflows, "SessionLocal", sessions)
         monkeypatch.setattr(workflows, "get_settings", lambda: type("Settings", (), {"publishing_dry_run": False})())
         async with sessions() as db:
-            db.add(Workspace(id=WORKSPACE_ID, name="Compliance workflow", slug="compliance-workflow"))
+            db.add_all([
+                Workspace(id=WORKSPACE_ID, name="Compliance workflow", slug="compliance-workflow"),
+                PlatformExecutionControl(id=1, outbound_actions_paused=False),
+            ])
             await db.commit()
         calls = []
 

@@ -1479,6 +1479,7 @@ def test_leads_page_searches_email_and_resource_across_workspace_results():
         "id": "lead-beta",
         "email": "beta@example.test",
         "lead_magnet": "Beta handbook",
+        "attribution": {"first_touch": {"utm_source": "partner-newsletter"}, "last_touch": {}, "last_touch_at": None},
     }
     requested_searches = []
     with sync_playwright() as playwright:
@@ -1495,7 +1496,7 @@ def test_leads_page_searches_email_and_resource_across_workspace_results():
                 if "search=" in url:
                     search_value = url.split("search=", 1)[1].split("&", 1)[0]
                 requested_searches.append(search_value)
-                if search_value.lower() == "beta":
+                if search_value.lower() == "partner-newsletter":
                     _fulfill_json(route, {"count": 1, "total_count": 1, "limit": 50, "offset": 0, "data": [beta]})
                 else:
                     _fulfill_json(route, {"count": 2, "total_count": 2, "limit": 50, "offset": 0, "data": [alpha, beta]})
@@ -1504,11 +1505,11 @@ def test_leads_page_searches_email_and_resource_across_workspace_results():
             page.goto(f"{BASE_URL}/leads", wait_until="domcontentloaded")
             page.get_by_text("alpha@example.test").wait_for(state="visible")
             page.get_by_text("beta@example.test").wait_for(state="visible")
-            page.get_by_label("Search all leads by email or resource").fill("beta")
+            page.get_by_label("Search all leads by email, resource or UTM").fill("partner-newsletter")
             page.get_by_role("button", name="Search", exact=True).click()
             page.get_by_text("beta@example.test").wait_for(state="visible")
             page.get_by_text("alpha@example.test").wait_for(state="hidden")
-            assert requested_searches[-1] == "beta"
+            assert requested_searches[-1] == "partner-newsletter"
             page.get_by_label("Filter UTM values on this page").fill("missing-utm")
             page.get_by_text("No matching leads").wait_for(state="visible")
             assert page.get_by_text("beta@example.test").count() == 0

@@ -1,11 +1,17 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 global lead search (CI pending)
+## 2026-10-29 global UTM attribution search (CI pending)
+
+- Global lead search now includes the allowlisted first-touch and last-touch UTM fields alongside email and lead-resource name, using the same workspace-scoped, bounded, parameterized filter for both count and page results.
+- Browser acceptance now searches for a UTM source value that belongs to a lead beyond the current page filter. The UTM-only input remains a quick filter for the currently loaded page. Exact-SHA push and PR verification is pending.
+
+
+## 2026-10-29 verified global lead search
 
 - The lead API now accepts a bounded search term and applies it to email/resource name inside the same workspace filter used for count and page results. Search is parameterized by SQLAlchemy; results remain bounded and paginated.
 - The UI separates global email/resource search from a current-page UTM-value filter, resets pagination when global search changes, and labels each scope explicitly.
-- API query assertions and browser acceptance cover server-side result narrowing and the separate UTM filter. Exact-SHA push and PR verification is pending.
+- API query assertions and browser acceptance cover server-side result narrowing and the separate UTM filter. Exact-SHA push [40831713023](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831713023) and PR [40831720664](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831720664) passed: Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
 
 
 ## 2026-10-29 verified workspace-scoped lead pagination

@@ -229,7 +229,7 @@ export default function LeadsPage() {
               className="w-full sm:max-w-sm"
               onSubmit={(event) => { event.preventDefault(); setAppliedSearch(query.trim()); setOffset(0); }}
             >
-              <label htmlFor="lead-search" className="block text-sm font-bold text-slate-700">Search all leads by email or resource</label>
+              <label htmlFor="lead-search" className="block text-sm font-bold text-slate-700">Search all leads by email, resource or UTM</label>
               <div className="mt-2 flex gap-2">
                 <input
                   id="lead-search"

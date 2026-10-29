@@ -146,7 +146,13 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - The first pagination candidate included a consent-history browser fixture that matched `/api/leads` only when the URL had no query string. Since the new UI requests `/api/leads?limit=50&offset=0`, the mock must match the URL path before `?`. Corrected the fixture; this does not change production code. The corrected candidate needs exact-SHA push/PR UAT.
 
 
-## 2026-10-29 cross-page lead search (verification pending)
+## 2026-10-29 verified cross-page lead search
 
 - Added bounded server-side email/resource search to the workspace-scoped lead API and separate client-side UTM filtering for the current page. The UI makes those scopes explicit and resets pagination when global search changes.
-- Added API query assertions and browser acceptance for global search plus current-page UTM filtering. Exact-SHA push and PR CI remains pending.
+- Added API query assertions and browser acceptance for global search plus current-page UTM filtering. Exact-SHA push [40831713023](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831713023) and PR [40831720664](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831720664) passed: Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
+
+
+## 2026-10-29 global UTM attribution search (verification pending)
+
+- Global lead search now includes allowlisted first-touch and last-touch UTM dimensions, so campaign/source values can locate leads across pages without relying on the current-page-only quick filter. Workspace scope and bounded pagination remain applied to both count and row queries.
+- Updated browser acceptance to search by UTM source; exact-SHA push and PR CI is pending.

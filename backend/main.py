@@ -4804,9 +4804,16 @@ async def leads(
     filters = [Lead.workspace_id == str(workspace_id)]
     search_term = (search or "").strip()
     if search_term:
+        search_pattern = f"%{search_term}%"
+        attribution_search = [
+            Lead.metadata_json["attribution"][touch][field].as_string().ilike(search_pattern)
+            for touch in ("first_touch", "last_touch")
+            for field in UTM_FIELD_LIMITS
+        ]
         filters.append(or_(
-            Lead.email.ilike(f"%{search_term}%"),
-            Lead.lead_magnet.ilike(f"%{search_term}%"),
+            Lead.email.ilike(search_pattern),
+            Lead.lead_magnet.ilike(search_pattern),
+            *attribution_search,
         ))
     lead_filter = and_(*filters)
     total_count = int(await db.scalar(

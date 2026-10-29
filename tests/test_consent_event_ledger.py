@@ -327,6 +327,7 @@ def test_lead_list_paginates_and_counts_only_the_active_workspace():
         assert page_query._offset_clause.value == 50
         assert "%Creator%" in count_query.compile().params.values()
         assert "%Creator%" in page_query.compile().params.values()
+        assert "metadata_json" in str(page_query)
     finally:
         main.app.dependency_overrides.pop(get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)

@@ -3,7 +3,7 @@
 **Snapshot:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Current verified code SHA:** 7cfd4125b1be096239992b559e6b5ba935331d62  
+**Current verified code SHA:** cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad  
 **Release decision:** NOT PRODUCTION READY. Draft PR #1 is open and unmerged.
 
 ## Built in the current branch
@@ -25,15 +25,18 @@ This means code paths are present, not that every feature or provider is product
 
 ## Latest feature verified
 
-The product comparison writer adds:
+The product comparison writer is now more than a draft-only fact table: it safely captures bounded public source snapshots and records which supplied fact wording was, or was not, present in the corresponding product's snapshot.
 
-- POST /api/content/comparison-post, bounded request validation for 2–5 distinct products, up to 12 facts each and HTTPS-only source references.
-- LLM-assisted article narrative, allowlist HTML sanitization, affiliate disclosure and deterministic comparison table built from exactly the submitted fact values.
-- Explicit “Not supplied — verify” cells, source/evidence flags, minimum-word warning, no source fetching and no publishing.
-- Authenticated active-workspace draft persistence in ContentAsset, audit-log evidence, frontend form, isolated preview and JSON export.
-- Service/schema/API tests and two Chromium browser acceptance tests.
+- POST /api/content/comparison-post validates 2–5 distinct products, up to 12 fact fields per product and at most 10 unique HTTPS source URLs across the comparison.
+- It fetches through the repository's pinned public transport, with a 1 MB response cap per URL, 12-second timeout, concurrency capped at four, no silent redirect following, readable-content allowlisting and source text extraction that removes scripts/navigation and other irrelevant elements.
+- Captured snapshots include a UTC capture time, source/product association, bounded excerpt and SHA-256 hash. Failed fetches are visible as failed and do not become evidence.
+- Deterministic per-fact matching checks only the snapshots assigned to that product. Results distinguish literal text observed from text not found, missing sources, failed fetches and facts not supplied. A text match is explicitly not independent verification of truth, freshness, completeness, pricing, eligibility or compliance.
+- Evidence ledgers/summaries persist with the active workspace's ContentAsset draft and audit row. The frontend displays snapshot and evidence counts, per-fact status and expandable source excerpts/hashes. Publishing remains off.
+- Service/schema/API/persistence/security regression tests and Chromium journeys cover bounded fetching, sanitization, source failure, product-scoped evidence matching, persistence/audit, evidence display and invalid input.
 
-**Exact-SHA evidence:** push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40847820733 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40847830590 both passed all required jobs. Python: **784 passed, 7 skipped, 5 warnings**. Browser UAT: **24 passed**. PostgreSQL integration, frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped under its configured push-only condition.
+**Exact-SHA evidence:** push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed on cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad. Python: **785 passed, 7 skipped, 5 warnings**. Browser UAT: **24 passed** on both runs. PostgreSQL integration, frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped under its configured push-only condition.
+
+The source-evidence feature is verified for snapshot collection and literal text matching only. Merchant facts, current pricing, eligibility, legal compliance, affiliate network authorization and live provider behavior remain independently unverified.
 
 ## Remaining before a production launch
 

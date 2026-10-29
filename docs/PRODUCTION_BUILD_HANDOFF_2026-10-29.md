@@ -115,3 +115,10 @@ Verify the actual remote branch head and exact-SHA workflow state first. Then ch
 - Exact-head push 40847820733 and draft-PR 40847830590 both passed all required jobs. Python 784 passed, 7 skipped, 5 warnings; browser UAT 24 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret-scan and repo-guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by design.
 - Scope boundary: operator facts and source URLs remain unverified; no merchant fetch, live affiliate/provider action, compliance approval or external publication is performed. The broader product remains NOT PRODUCTION READY.
 - The one-page progress artifact is docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md. Continue with the next unblocked P0 tenancy/authorization/idempotency audit on the same existing branch.
+
+## Latest verified source-evidence implementation — 29 October 2026
+
+- Code SHA cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad; exact push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 both passed all configured required jobs.
+- Python suite 785 passed / 7 skipped / 5 warnings; Chromium browser UAT 24 passed on push and PR. PostgreSQL integration, frontend typecheck/build/container smoke, AI/RAG, security/SBOM, secret scan, repo guard passed; push lockfile sync passed. PR lockfile sync skipped by event condition.
+- Comparison drafts now capture bounded public source snapshots, record excerpt SHA-256 and UTC timestamps, and perform product-scoped exact-text matching for supplied facts. This proves text presence only, not the correctness or freshness of the underlying claim. Failed-source outcomes remain visible; publishing stays disabled.
+- Status artifact: docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md. Product remains NOT PRODUCTION READY; continue on the same branch with the next highest-priority unblocked requirement.

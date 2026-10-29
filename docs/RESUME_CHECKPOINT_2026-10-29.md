@@ -73,3 +73,11 @@ The Library contains multiple recent requirement files, blueprint/audit Markdown
 - This remains draft-content functionality. Merchant evidence is not fetched or independently verified, account eligibility is not checked, legal review is incomplete, and publishing remains disabled.
 - Next engineering priority: continue closing P0 authorization/tenant-isolation and idempotency gaps identified in the traceability backlog, alongside provider sandbox UAT and deployment/restore gates.
 - Release status remains NOT PRODUCTION READY. See docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md for the concise built-vs-pending list.
+
+## Latest verified source-evidence checkpoint — 29 October 2026
+
+- Latest implementation SHA: cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad (https://github.com/AITECHPRODUCTS/Project1/commit/cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad) on the existing build/omni-affiliate-os-production branch. PR #1 remains draft/open/unmerged.
+- New behavior: comparison source URLs are fetched using the existing pinned public transport with bounds (up to 10 URLs, 1 MB response, 12-second timeout, concurrency max four). Bounded excerpts, UTC capture times, source/product association and SHA-256 are persisted with the draft/audit. Failed sources remain explicitly failed.
+- Each supplied product fact is checked only against that product's snapshot. Literal match/not-found and missing/failed-source states are recorded and shown in the UI. A literal match does not establish truth, currentness, pricing, program eligibility or compliance. No publishing/provider write is performed.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed. Python 785 passed, 7 skipped, 5 warnings; browser UAT 24 passed on both runs; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
+- Continue next with a concrete unblocked P0/P1 gap from the source register/backlog on the same branch. Overall release remains NOT PRODUCTION READY because provider UAT, remaining skill parity, license/legal sign-off, deployment/staging, trusted-proxy, monitoring, backup/restore and rollback gates are not fully established.

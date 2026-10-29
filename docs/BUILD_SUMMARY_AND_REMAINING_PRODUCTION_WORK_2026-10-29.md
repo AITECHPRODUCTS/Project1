@@ -183,3 +183,9 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 ### CSV export integration-test import correction
 
 - The first SQLite-backed test candidate `03566fa20a80b8005987ca3d61c831decc1ccdac` had an incomplete import block for SQLAlchemy's async engine/session factory, `NullPool`, `Base`, `Lead`, `Workspace`, and `workspace_scope`. I caught this by fetching the actual committed file before accepting test evidence and corrected the import block on the same branch. No runtime/export behavior changed. The first candidate's exact-SHA push [40834172282](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834172282) and PR [40834178239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834178239) were still in progress at that point; the corrected SHA must be green before the additional integration test is verified.
+
+
+## 2026-10-29 Resend delivery-event schema drift fix (verification pending)
+
+- Root cause from both exact-SHA hosted workflows for `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7`: migration 0030 creates `email_delivery_events.provider` with server default `resend`, but SQLAlchemy's `EmailDeliveryEvent.provider` only had a Python-side default. Alembic therefore detected an unexpected `modify_default` during SQLite and PostgreSQL drift checks.
+- Corrected the model to declare both client and server defaults and added a model-metadata regression test. The new candidate needs fresh exact-SHA push/PR runs; do not count the failed predecessor as passing. External provider secret and real delivery-event verification are still not configured/verified.

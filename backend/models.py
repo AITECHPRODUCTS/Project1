@@ -428,7 +428,7 @@ class EmailDeliveryEvent(TenantScopedMixin, Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    provider: Mapped[str] = mapped_column(String(40), default="resend")
+    provider: Mapped[str] = mapped_column(String(40), default="resend", server_default="resend")
     provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
     provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
     scheduled_email_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

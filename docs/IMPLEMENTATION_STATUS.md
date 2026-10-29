@@ -1,6 +1,13 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 Resend delivery-event schema drift correction (CI pending)
+
+- The latest candidate `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7` added signed Resend delivery-event handling, PII-minimized immutable event records, deduplication/suppression handling, migration 0030, and API/browser tests. Hosted push [40836353831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836353831) and PR [40836360147](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836360147) failed only at the migration drift gate: model metadata lacked the database server default that migration 0030 declares for `email_delivery_events.provider`. Other configured jobs, including frontend, security, secret scan, repository guard, AI profile and browser UAT, passed.
+- Corrected the SQLAlchemy model to declare `server_default="resend"` alongside the client default, preserving behavior for ORM inserts while matching the DB-level contract. Added a regression assertion that the model exposes the server default. Exact-SHA push/PR migration and full-suite verification is pending.
+- This fix does not alter event signature verification, recipient matching, suppression precedence, or raw-payload storage policy. Live Resend credentials/webhook delivery remain unverified until owner-controlled provider setup and external event UAT.
+
+
 ## 2026-10-29 real SQLite lead export integration test (CI pending)
 
 - Added a database-backed API integration test with two workspaces and three persisted leads. It searches by first-touch UTM, verifies the export contains only the matching lead in the active workspace, and checks that the successful export audit row persisted only for that workspace with no search/lead values in details.

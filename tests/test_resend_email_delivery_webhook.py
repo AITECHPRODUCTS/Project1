@@ -32,6 +32,12 @@ def _signed_headers(body: bytes, *, event_id: str = "evt-test-0001", timestamp: 
     return {"svix-id": event_id, "svix-timestamp": ts, "svix-signature": "v1," + signature}
 
 
+def test_resend_provider_model_default_matches_persisted_migration_default():
+    provider_column = EmailDeliveryEvent.__table__.c.provider
+    assert provider_column.server_default is not None
+    assert "resend" in str(provider_column.server_default.arg)
+
+
 def test_resend_signature_verification_uses_raw_body_and_rejects_stale_signatures():
     body = b'{"type":"email.delivered","data":{"email_id":"re_msg_123","to":["reader@example.test"]}}'
     headers = _signed_headers(body)

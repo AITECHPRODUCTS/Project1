@@ -407,3 +407,9 @@
 
 - Initial export feature passed exact-SHA push [40833516478](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833516478) and PR [40833522299](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833522299), with Python 751 passed / 7 skipped and browser UAT 20 passed. It has a workspace-scoped query, explicit global search scope, audit metadata without search or lead values, formula escaping and a 10,000-row rejection cap.
 - Added a persisted SQLite integration test across two workspaces to prove the search/export result and audit persistence at the database boundary. Exact-SHA CI is pending.
+
+
+## P0 — Resend delivery schema drift correction (2026-10-29; candidate)
+- Failed predecessor `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7`: push [40836353831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836353831) and PR [40836360147](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836360147) failed schema drift because migration 0030 declared server default `resend`, but the ORM model did not.
+- Candidate fix: define both ORM client and database server defaults for `EmailDeliveryEvent.provider`; add regression test asserting model server-default parity. Full exact-SHA push/PR verification is pending.
+- Keep production provider readiness unverified until valid owner-managed Resend webhook secret, configured endpoint, real signed delivery events and bounce/complaint/suppression UAT have been exercised. Never commit provider secrets.

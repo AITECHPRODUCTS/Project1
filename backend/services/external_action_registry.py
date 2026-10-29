@@ -68,8 +68,13 @@ async def _require_platform_outbound_actions_unpaused(db: AsyncSession) -> None:
     if control.outbound_actions_paused:
         raise HTTPException(423, detail={
             "code": "PLATFORM_OUTBOUND_ACTIONS_PAUSED",
-            "message": "Platform Super Admin has paused new registry-gated provider writes.",
+            "message": "Platform Super Admin has paused new outbound provider actions.",
         })
+
+
+async def require_platform_outbound_actions_unpaused(db: AsyncSession) -> None:
+    """Serialize new provider-send claims with the singleton pause-control row."""
+    await _require_platform_outbound_actions_unpaused(db)
 
 
 async def claim_external_action(

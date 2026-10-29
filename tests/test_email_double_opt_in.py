@@ -5,12 +5,13 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from backend.database import Base
-from backend.models import EmailConsentConfirmation, Lead, LeadConsentEvent, ScheduledEmail, Workspace
+from backend.models import AuditLog, EmailConsentConfirmation, Lead, LeadConsentEvent, PlatformExecutionControl, ScheduledEmail, Workspace
 from backend.services import email_delivery
 from backend.services.consent_ledger import (
     EMAIL_MARKETING_CONSENT_PURPOSE,
@@ -29,6 +30,7 @@ async def _db():
         await connection.run_sync(Base.metadata.create_all)
     async with sessions() as session:
         session.add(Workspace(id=WORKSPACE_ID, name="Double opt-in", slug="double-opt-in"))
+        session.add(PlatformExecutionControl(id=1, outbound_actions_paused=False))
         await session.commit()
     return engine, sessions
 
@@ -180,5 +182,60 @@ async def test_double_opt_in_requires_provider_before_mutating_a_lead(monkeypatc
             async with sessions() as session:
                 lead = await session.scalar(select(Lead).where(Lead.email == "not-mutated@example.invalid"))
                 assert lead is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_global_pause_blocks_confirmation_before_lead_mutation_or_provider_send(monkeypatch):
+    engine, sessions = await _db()
+    settings = email_delivery.get_settings()
+    calls = []
+
+    async def fake_send(url, **kwargs):
+        calls.append((url, kwargs))
+        return {"id": "should-not-send"}
+
+    monkeypatch.setattr(settings, "email_double_opt_in_required", True)
+    monkeypatch.setattr(settings, "resend_api_key", "test-resend-api-key")
+    monkeypatch.setattr(settings, "resend_from_email", "mailer@example.invalid")
+    monkeypatch.setattr(email_delivery, "request_public_json", fake_send)
+    try:
+        async with sessions() as session:
+            control = await session.get(PlatformExecutionControl, 1)
+            assert control is not None
+            control.outbound_actions_paused = True
+            control.reason = "Double-opt-in pause regression"
+            await session.commit()
+
+        with workspace_scope(WORKSPACE_ID):
+            async with sessions() as session:
+                with pytest.raises(HTTPException) as error:
+                    await email_delivery.capture_lead_and_schedule(
+                        session,
+                        email_address="paused-reader@example.invalid",
+                        consent=True,
+                        lead_magnet="A helpful guide",
+                        audience="independent creators",
+                        offer={},
+                        workspace_id=WORKSPACE_ID,
+                    )
+
+        assert error.value.status_code == 423
+        assert error.value.detail["code"] == "PLATFORM_OUTBOUND_ACTIONS_PAUSED"
+        assert calls == []
+        async with sessions() as session:
+            lead = await session.scalar(select(Lead).where(Lead.email == "paused-reader@example.invalid"))
+            confirmations = list((await session.scalars(select(EmailConsentConfirmation))).all())
+            events = list((await session.scalars(select(LeadConsentEvent))).all())
+            audits = list((await session.scalars(select(AuditLog).where(
+                AuditLog.action == "email.consent.confirmation_delivery_blocked",
+                AuditLog.workspace_id == WORKSPACE_ID,
+            ))).all())
+        assert lead is None
+        assert confirmations == [] and events == []
+        assert len(audits) == 1
+        assert audits[0].details_json["provider_called"] is False
+        assert audits[0].details_json["blocking_code"] == "PLATFORM_OUTBOUND_ACTIONS_PAUSED"
     finally:
         await engine.dispose()

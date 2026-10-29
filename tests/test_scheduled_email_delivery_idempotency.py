@@ -5,11 +5,12 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.database import Base
-from backend.models import AuditLog, Lead, ScheduledEmail, Workspace
+from backend.models import AuditLog, Lead, PlatformExecutionControl, ScheduledEmail, Workspace
 from backend.services import email_delivery
 from backend.tenancy import workspace_scope
 
@@ -33,6 +34,9 @@ async def _database(tmp_path, monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
+    async with sessions() as db:
+        db.add(PlatformExecutionControl(id=1, outbound_actions_paused=False))
+        await db.commit()
     monkeypatch.setattr(email_delivery, "SessionLocal", sessions)
     monkeypatch.setattr(email_delivery, "get_settings", _settings)
     return engine, sessions
@@ -239,5 +243,80 @@ async def test_unsubscribe_suppresses_retry_items_as_well_as_scheduled_items(tmp
             message = await db.get(ScheduledEmail, message_id)
         assert message is not None and message.status == "suppressed"
         assert message.claimed_at is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_global_pause_blocks_scheduled_email_before_claim_and_audits(tmp_path, monkeypatch):
+    engine, sessions = await _database(tmp_path, monkeypatch)
+    _FakeClient.calls = []
+    monkeypatch.setattr(email_delivery, "request_public_json", _fake_request)
+    try:
+        workspace_id, _lead_id, message_id = await _seed_email(sessions)
+        async with sessions() as db:
+            control = await db.get(PlatformExecutionControl, 1)
+            assert control is not None
+            control.outbound_actions_paused = True
+            control.reason = "Scheduled email pause regression"
+            await db.commit()
+
+        with workspace_scope(workspace_id):
+            async with sessions() as db:
+                result = await email_delivery.send_due_emails(db, workspace_id=workspace_id)
+
+        assert result["outbound_actions_blocked"] is True
+        assert result["blocked_code"] == "PLATFORM_OUTBOUND_ACTIONS_PAUSED"
+        assert result["provider_called"] is False
+        assert result["sent"] == 0 and result["attempted"] == 0
+        assert _FakeClient.calls == []
+        async with sessions() as db:
+            row = await db.get(ScheduledEmail, message_id)
+            audits = list((await db.scalars(select(AuditLog).where(
+                AuditLog.workspace_id == workspace_id,
+                AuditLog.action == "email_marketing.outbound_write_blocked",
+                AuditLog.resource_id == message_id,
+            ))).all())
+        assert row is not None and row.status == "scheduled"
+        assert row.attempts == 0 and row.claimed_at is None
+        assert len(audits) == 1
+        assert audits[0].details_json["provider_called"] is False
+        assert audits[0].details_json["blocking_code"] == "PLATFORM_OUTBOUND_ACTIONS_PAUSED"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_missing_global_control_fails_closed_for_scheduled_email(tmp_path, monkeypatch):
+    engine, sessions = await _database(tmp_path, monkeypatch)
+    _FakeClient.calls = []
+    monkeypatch.setattr(email_delivery, "request_public_json", _fake_request)
+    try:
+        workspace_id, _lead_id, message_id = await _seed_email(sessions)
+        async with sessions() as db:
+            control = await db.get(PlatformExecutionControl, 1)
+            assert control is not None
+            await db.delete(control)
+            await db.commit()
+
+        with workspace_scope(workspace_id):
+            async with sessions() as db:
+                with pytest.raises(HTTPException) as error:
+                    await email_delivery.send_due_emails(db, workspace_id=workspace_id)
+
+        assert error.value.status_code == 503
+        assert error.value.detail["code"] == "PLATFORM_EXECUTION_CONTROL_UNAVAILABLE"
+        assert _FakeClient.calls == []
+        async with sessions() as db:
+            row = await db.get(ScheduledEmail, message_id)
+            audits = list((await db.scalars(select(AuditLog).where(
+                AuditLog.workspace_id == workspace_id,
+                AuditLog.action == "email_marketing.outbound_write_blocked",
+                AuditLog.resource_id == message_id,
+            ))).all())
+        assert row is not None and row.status == "scheduled"
+        assert row.attempts == 0 and row.claimed_at is None
+        assert len(audits) == 1
+        assert audits[0].details_json["blocking_code"] == "PLATFORM_EXECUTION_CONTROL_UNAVAILABLE"
     finally:
         await engine.dispose()

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from backend.database import Base
-from backend.models import AuditLog, ContentAsset, Lead, ScheduledEmail, Workspace
+from backend.models import AuditLog, ContentAsset, Lead, PlatformExecutionControl, ScheduledEmail, Workspace
 from backend.services import email_delivery
 from backend.services.email_automation_builder import build_email_automation
 from backend.tenancy import workspace_scope
@@ -42,6 +42,7 @@ async def _db():
         await connection.run_sync(Base.metadata.create_all)
     async with sessions() as session:
         session.add(Workspace(id="email-runtime-workspace", name="Email runtime", slug="email-runtime-workspace"))
+        session.add(PlatformExecutionControl(id=1, outbound_actions_paused=False))
         await session.commit()
     return engine, sessions
 

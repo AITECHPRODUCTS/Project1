@@ -353,7 +353,7 @@ class Workspace(Base):
 
 
 class PlatformExecutionControl(Base):
-    """Singleton global emergency pause for new provider writes using ExternalAction."""
+    """Singleton global emergency pause shared by registry and email-delivery claims."""
 
     __tablename__ = "platform_execution_controls"
     __table_args__ = (CheckConstraint("id = 1", name="ck_platform_execution_controls_singleton"),)

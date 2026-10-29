@@ -3,6 +3,8 @@ import asyncio,hashlib,hmac,html,json,re,secrets,time
 from urllib.parse import quote
 from datetime import datetime,timedelta,timezone
 from typing import Any
+from fastapi import HTTPException
+from backend.services.external_action_registry import require_platform_outbound_actions_unpaused
 from backend.services.url_safety import request_public_json
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,6 +135,33 @@ async def _request_email_consent_confirmation(
   raise ConsentConfirmationDeliveryUnavailable(
    "Email double opt-in is enabled but RESEND_API_KEY and RESEND_FROM_EMAIL are not configured."
   )
+ # Lock the singleton control until the durable pending-delivery claim commits.
+ # A pause committed by the operator prevents both lead mutation and provider I/O;
+ # a request claimed first is treated as in-flight, just like registry writes.
+ try:
+  await require_platform_outbound_actions_unpaused(session)
+ except HTTPException as exc:
+  if exc.status_code in {423, 503}:
+   detail = exc.detail if isinstance(exc.detail, dict) else {}
+   block_code = str(detail.get("code") or f"HTTP_{exc.status_code}")[:100]
+   await session.rollback()
+   with workspace_scope(workspace_id):
+    session.add(AuditLog(
+     workspace_id=workspace_id,
+     actor="recipient",
+     action="email.consent.confirmation_delivery_blocked",
+     resource_type="workspace",
+     resource_id=workspace_id,
+     outcome=block_code,
+     details_json={
+      "provider": "resend",
+      "operation": "double_opt_in_confirmation",
+      "provider_called": False,
+      "blocking_code": block_code,
+     },
+    ))
+    await session.commit()
+  raise
  if lead is None:
   lead = Lead(
    workspace_id=workspace_id, email=email_address, consent_at=now,
@@ -955,6 +984,47 @@ async def send_due_emails(
    await session.commit()
 
    for message in messages:
+    # The control-row lock and status claim commit together, so a concurrent
+    # pause is ordered before or after this email's durable delivery claim.
+    try:
+     await require_platform_outbound_actions_unpaused(session)
+    except HTTPException as gate_error:
+     if gate_error.status_code not in {423, 503}:
+      raise
+     detail = gate_error.detail if isinstance(gate_error.detail, dict) else {}
+     block_code = str(detail.get("code") or f"HTTP_{gate_error.status_code}")[:100]
+     session.add(AuditLog(
+      workspace_id=owner_workspace_id,
+      actor="system",
+      action="email_marketing.outbound_write_blocked",
+      resource_type="scheduled_email",
+      resource_id=message.id,
+      outcome=block_code,
+      details_json={
+       "provider": "resend",
+       "operation": "scheduled_marketing_email",
+       "provider_called": False,
+       "blocking_code": block_code,
+       "sent_before_block": sent,
+       "attempted_before_block": attempted,
+      },
+     ))
+     # Commit previous loop outcomes and the block audit without claiming this
+     # message. A paused worker returns a clear blocked status; a missing control
+     # is a service-unavailable error and remains fail-closed.
+     await session.commit()
+     if gate_error.status_code == 423:
+      return {
+       "sent": sent,
+       "skipped": skipped,
+       "attempted": attempted,
+       "provider_configured": True,
+       "workspace_id": owner_workspace_id,
+       "outbound_actions_blocked": True,
+       "blocked_code": block_code,
+       "provider_called": False,
+      }
+     raise
     claim = await session.execute(
      update(ScheduledEmail)
      .where(

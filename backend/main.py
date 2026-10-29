@@ -268,8 +268,13 @@ async def email_job():
     async with SessionLocal() as db:
      result=await send_due_emails(db,workspace_id=workspace_id)
      logger.info(
-      "Email worker workspace %s: sent=%s attempted=%s skipped=%s",
-      str(workspace_id)[:8],result.get("sent",0),result.get("attempted",0),result.get("skipped",0),
+      "Email worker workspace %s: sent=%s attempted=%s skipped=%s outbound_blocked=%s block_code=%s",
+      str(workspace_id)[:8],
+      result.get("sent", 0),
+      result.get("attempted", 0),
+      result.get("skipped", 0),
+      result.get("outbound_actions_blocked", False),
+      result.get("blocked_code"),
      )
   except Exception:
    logger.exception("Email sender worker failed for workspace %s",str(workspace_id)[:8])
@@ -9402,14 +9407,18 @@ def _platform_execution_control_payload(control: PlatformExecutionControl) -> di
         "reason": control.reason,
         "changed_by": control.changed_by,
         "changed_at": control.changed_at.isoformat() if control.changed_at else None,
-        "enforcement_scope": "new provider writes using backend.services.external_action_registry",
+        "enforcement_scope": (
+            "ExternalAction registry claims for social/CMS/bio-link/GitHub Pages writes, plus direct Resend "
+            "claims for scheduled marketing email and double-opt-in confirmation email"
+        ),
         "completed_idempotency_replays_allowed": True,
         "in_flight_actions_cancelled": False,
         "note": (
-            "This pause blocks new actions that use the shared ExternalAction registry, including registered "
-            "social, CMS, bio-link and GitHub Pages writes. Completed idempotency replays may return prior results. "
-            "An action already claimed/in flight is not rolled back. Other side effects not using this registry "
-            "still require their own execution gates."
+            "This pause blocks new social, CMS, bio-link and GitHub Pages actions using the shared ExternalAction "
+            "registry, and new scheduled-marketing or double-opt-in confirmation email sends using the same "
+            "transactional control-row gate. Completed registry idempotency replays may return prior results. "
+            "Actions already durably claimed/in flight are not cancelled or rolled back. Provider mutation paths "
+            "not integrated with either gate remain outside this pause and require their own execution controls."
         ),
     }
 

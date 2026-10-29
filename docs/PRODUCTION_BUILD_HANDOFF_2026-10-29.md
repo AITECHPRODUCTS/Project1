@@ -158,3 +158,10 @@ Verify the actual remote branch head and exact-SHA workflow state first. Then ch
 - Hosted verification: Python 798 passed/8 skipped/5 warnings; browser UAT 26 passed on each; PostgreSQL integration 8 passed; frontend production/Docker, AI/RAG, security/SBOM, secret scan, repo guard and push lockfile-sync passed. PR lockfile-sync was skipped by its push-only condition.
 - Do not infer truth from literal text matches; do not infer production status from CI. Official provider account/scope UAT, disclosure/jurisdiction legal approval, remaining skill parity, real staging, monitoring and restore/rollback remain open. Product remains NOT PRODUCTION READY.
 - See docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md for the concise built/pending list.
+
+## S3 listicle writer verified checkpoint — 29 October 2026
+
+- Code SHA `58f3235925d50522fa8db6f56de1cac7b61f7861` implements an evidence-aware listicle article draft, a deterministic at-a-glance table, per-product fact ledger, bounded pinned source snapshots, and saved content/source/evidence integrity checks.
+- Workspace owner/admin editorial approve/request-changes/reject decisions are one-time and bound to the expected content SHA. Approval does not change draft lifecycle or authorize external publishing.
+- Exact-SHA push [40897990313](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40897990313) and PR [40898005395](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40898005395) passed: Python 802 passed/8 skipped/5 warnings; Chromium UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by design.
+- Remaining: revisions, independent fact/currentness verification, official affiliate/network eligibility, legal/jurisdiction approval, production provider UAT, staging/deploy/monitoring/backup/restore/rollback. Product remains NOT PRODUCTION READY. See `docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md`.

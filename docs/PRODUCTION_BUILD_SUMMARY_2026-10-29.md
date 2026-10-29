@@ -3,7 +3,7 @@
 **Snapshot:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Current verified code SHA:** 378f890da1063b8e98eaea9f979bd6d2ff9e9112  
+**Current verified code SHA:** 58f3235925d50522fa8db6f56de1cac7b61f7861  
 **Release decision:** NOT PRODUCTION READY. Draft PR #1 is open and unmerged.
 
 ## Built in the current branch
@@ -13,7 +13,7 @@ The codebase contains a FastAPI/SQLAlchemy backend and Next.js/TypeScript worksp
 Major vertical slices already present include:
 
 - **S1 — Research and offers:** offer intelligence and metrics, shortlist management, offer-term evidence snapshots, qualification reviews and affiliate-program application packets. Provider approval and live offer terms are not inferred.
-- **S2 — Content:** source-backed research briefs with source snapshots/hashes and claim-to-quote matching, blog generation, content atomization, platform-specific text/script drafts, infographic/video generation and the new product comparison writer.
+- **S2 — Content:** source-backed research briefs with source snapshots/hashes and claim-to-quote matching, blog generation, content atomization, platform-specific text/script drafts, infographic/video generation, the product comparison writer and the evidence-aware listicle writer.
 - **S3 — SEO and trust:** on-page checks, keyword clustering, internal-link recommendations, content moat and content-decay review queues. Some inputs remain operator supplied; live Search Console/competitor data is not universally connected.
 - **S4 — Funnels and leads:** landing-page/form paths, consent evidence, lead lifecycle functions, attribution fields and email automation foundations.
 - **S5 — Distribution and advertising:** distribution queue/approval patterns, draft ad campaign plans, creative variants, budget guardrails and review-only performance evaluation. External publishing and paid spend are not authorized by generated drafts.
@@ -89,12 +89,22 @@ The current fix only corrects test-fixture variable scope and does not weaken th
 5. **Prove deployment operations:** target-environment migrations, TLS/session/CORS/trusted-proxy configuration, key/secret rotation, worker/queue health and retries, monitoring/alerts, load/cost tests, backup/restore and disaster-recovery drills.
 6. **Finish governance and release approval:** product/legal review of disclosures and geography/program restrictions; model/provider configuration and artifact provenance/license review; final vulnerability/SBOM/secret scans; staged end-to-end UAT, rollback plan and signed production acceptance.
 
+## Latest verified feature: evidence-aware listicle writer — 29 October 2026
+
+- Added `POST /api/content/listicle` to generate a review-required roundup from five to twelve operator-supplied product entries, plus optional bounded public-page snapshots. It uses the existing pinned, size-limited public-fetch transport and the comparison writer’s product-scoped literal-text evidence helpers.
+- The narrative is sanitized with the existing HTML allowlist. Product order and the deterministic “at a glance” table are based on the supplied order and values. The fact ledger labels exact text observed, exact text not found, failed fetches or missing sources; these statuses are not claims of truth or currentness. Affiliate destinations are bounded HTTPS URLs, disclosed in the article, and never called by the service.
+- Added workspace-scoped create/list/detail APIs, saved `ContentAsset` drafts and `AuditLog` events; body SHA-256, fetched excerpt hashes, canonical source-manifest hash and evidence-payload hash are bound to creation-audit data. Detail/review calls fail closed with HTTP 409 when stored content/evidence no longer matches the saved baseline.
+- Added one-time owner/admin editorial approve/request-changes/reject decisions bound to the current content hash. A review decision never changes the asset out of draft status and never triggers CMS/social publication, affiliate-network submission, ad spend or other provider writes.
+- Added `frontend/app/listicle-writer/page.tsx`, dashboard and comparison-page links, Python schema/service/API regressions and two Chromium browser tests. Latest code SHA: `58f3235925d50522fa8db6f56de1cac7b61f7861`.
+- Exact-SHA push [40897990313](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40897990313) and PR [40898005395](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40898005395) both passed all required jobs: Python **802 passed, 8 skipped, 5 warnings**; Chromium browser UAT **29 passed**; PostgreSQL migration/concurrency, frontend typecheck/build/Docker smoke, AI/RAG imports/SBOM, security/SBOM audit, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- Remaining for this skill: content revisions, authoritative fact verification and source freshness checks, seller/program terms and eligibility validation, jurisdiction-specific disclosure approval, editor usability/accessibility review and end-to-end production provider/publishing UAT. Product remains **NOT PRODUCTION READY**.
+
 ## Current count and limitations
 
 | Verification measure | Exact current result |
 |---|---|
-| Python CI suite | 798 passed · 8 skipped · 5 warnings |
-| Chromium browser UAT | 26 passed |
+| Python CI suite | 802 passed · 8 skipped · 5 warnings |
+| Chromium browser UAT | 29 passed |
 | Push CI | Passed |
 | Draft-PR CI | Passed |
 | Push lockfile sync | Passed |

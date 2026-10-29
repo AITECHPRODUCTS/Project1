@@ -210,7 +210,7 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             session.add(Workspace(id="other-workspace", name="Other Workspace", slug="other-workspace"))
             await session.commit()
 
-    def fake_result(**kwargs):
+    async def fake_result(**kwargs):
         products = kwargs["products"]
         body = (
             "<!doctype html><html><head><meta charset=\"utf-8\"></head><body><article>"

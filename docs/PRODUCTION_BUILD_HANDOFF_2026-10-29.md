@@ -165,3 +165,10 @@ Verify the actual remote branch head and exact-SHA workflow state first. Then ch
 - Workspace owner/admin editorial approve/request-changes/reject decisions are one-time and bound to the expected content SHA. Approval does not change draft lifecycle or authorize external publishing.
 - Exact-SHA push [40897990313](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40897990313) and PR [40898005395](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40898005395) passed: Python 802 passed/8 skipped/5 warnings; Chromium UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by design.
 - Remaining: revisions, independent fact/currentness verification, official affiliate/network eligibility, legal/jurisdiction approval, production provider UAT, staging/deploy/monitoring/backup/restore/rollback. Product remains NOT PRODUCTION READY. See `docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md`.
+
+## Latest verified code checkpoint — source freshness gate (29 October 2026)
+
+- Corrected code SHA 662a72a7398849bd5ed463ead4824502f3a3d7f6 on the only permitted branch.
+- The comparison and listicle editorial-review flows now share source capture-time validation (24 hours maximum, five-minute future tolerance and exact URL-to-snapshot inventory matching). Stale/failed/invalid/future/missing evidence blocks approve with an audited HTTP 409; change/reject decisions remain available. UI reports state. Fresh capture time does not establish factual truth.
+- Exact push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909269285 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909278592 both passed. Python 812 passed / 9 skipped / 5 warnings; Chromium UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard passed. Push lockfile sync passed; PR lockfile sync was skipped by design.
+- The compact built/pending summary is docs/PRODUCTION_BUILD_SUMMARY_CURRENT.md. Product status is still NOT PRODUCTION READY; do not merge or deploy on CI alone.

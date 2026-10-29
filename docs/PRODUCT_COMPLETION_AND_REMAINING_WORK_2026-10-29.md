@@ -61,4 +61,9 @@ The immediately preceding baseline `c579fb5b9279d068f058eb00b42cd7d923f46343` ha
 ## Next feature candidate — create workspace (verification pending)
 
 - Added a dashboard form for registered users to create a workspace through the existing POST /api/workspaces route; local/demo users are not shown the control. On a confirmed creation response the page reloads into the newly active workspace with owner membership.
-- Added a Chromium browser acceptance test for create payload, server 201 receipt, active-workspace reload and owner role. Exact-SHA CI is pending; do not count this feature verified until both push and PR workflows pass.
+- Verified at exact SHA `9b27518bc25c63ce2a611fd97571f79a973e0b97`: push [40934573741](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40934573741) and PR [40934584582](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40934584582) both succeeded. Each reports 839 Python tests passed/9 skipped, 33 Chromium tests passed, 9 PostgreSQL integration tests passed, with frontend/Docker, AI/SBOM, security audit, repo guard and secret scan green.
+## Workspace creation verified — 29 October 2026
+
+- Latest tested code checkpoint: `9b27518bc25c63ce2a611fd97571f79a973e0b97`. The registered-user workspace create flow passed its exact push and draft-PR workflows. Push `40934573741`; PR `40934584582`.
+- Both workflows: Python 839 passed/9 skipped/5 warnings; browser UAT 33 passed; PostgreSQL integration 9 passed; frontend/Docker, AI profile/SBOM, security, secret scan and repo guard passed. Push lockfile sync passed; PR lockfile sync was skipped by the configured push-only condition.
+- A documentation-only commit updating this record still needs its own exact-SHA CI. Overall product readiness remains **NOT PRODUCTION READY**.

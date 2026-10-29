@@ -3,7 +3,7 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code SHA:** b6029444da8115bb6bfa8e8377278502aae3d1b9  
+**Latest verified code SHA before this documentation checkpoint:** 9b27518bc25c63ce2a611fd97571f79a973e0b97  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
 
@@ -140,4 +140,9 @@ Continue on build/omni-affiliate-os-production only. Do not create a branch, swi
 
 - The authenticated backend already supports POST /api/workspaces for registered accounts and automatically makes the creator an owner of the new active workspace. Local/demo identity is denied by the backend.
 - Added a registered-account-only dashboard entry point and validated 2–160 character workspace name form. Creation is submitted through the existing CSRF-aware apiFetch, requires a returned workspace ID, reloads the new session, and then shows the new workspace as active. API errors are surfaced in the form instead of claiming success.
-- Added Chromium end-to-end coverage for POST payload, 201 receipt, workspace reload, new active workspace and owner role. This candidate is unverified until exact-SHA push and PR workflows pass.
+- Added Chromium end-to-end coverage for POST payload, 201 receipt, workspace reload, new active workspace and owner role. Verified at exact SHA `9b27518bc25c63ce2a611fd97571f79a973e0b97`: [push CI 40934573741](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40934573741) and [draft-PR CI 40934584582](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40934584582) both passed. Python: 839 passed, 9 skipped, 5 warnings; Chromium: 33 passed; PostgreSQL integration: 9 passed. Frontend typecheck/build/Docker smoke, AI/RAG profile+SBOM, security audit, secret scan, repo guard and push lockfile-sync passed. PR lockfile-sync was skipped by the configured push-only condition.
+## Verified workspace-creation checkpoint — exact SHA 9b27518
+
+- `POST /api/workspaces` now has a registered-account-only dashboard form; backend still authorizes the operation and denies local/demo identities. The form validates the name, reports API failures, requires the returned workspace ID before treating creation as successful, and reloads into the active owner workspace.
+- Exact push CI [40934573741](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40934573741) and exact draft-PR CI [40934584582](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40934584582) completed with success. Results on both: Python 839 passed/9 skipped/5 warnings; Chromium 33 passed; PostgreSQL integration 9 passed; frontend build+Docker smoke, AI/SBOM, security, repository guard and secret scan passed. Push lockfile sync passed; PR lockfile sync was skipped as configured.
+- The new workspace creation and earlier manual-stage/workspace-switch fixes are verified in CI. Overall release readiness is still **NOT PRODUCTION READY**.

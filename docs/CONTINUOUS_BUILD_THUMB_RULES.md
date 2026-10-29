@@ -287,3 +287,10 @@ These additive rules apply to every future Project1 build session.
 - Push 40822087405 and PR 40822092898 passed. Python 743 passed / 7 skipped / 5 warnings; browser UAT 12 passed in both; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. PR lockfile-sync skipped by the configured push-only condition.
 - Earlier browser locator failure on 05323ad40bfe14c34bbf3b44da4931abbff37b4f was fixed by targeting the offer heading; the current exact SHA is green.
 - This checkpoint does not establish official provider verification or production readiness. Continue to the next unblocked traceability gap without creating a branch.
+
+
+## 2026-10-29 follow-up — shortlist note entry in the catalog UI
+
+- The offer catalog now provides an optional per-offer review-note input when a saved list is selected and persists the note through the existing shortlist item API. Notes are shown in the saved list detail. Browser UAT now enters a note, saves the offer, and verifies that the note appears before removing the item and deleting the list.
+- Exact code-and-test SHA: 267dd5c489b92c0d6b02c1229e4162d9736a7cd4. Push [40822952573](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40822952573) and PR [40822958502](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40822958502) passed all configured jobs. Python 743 passed / 7 skipped / 5 warnings; browser UAT 12 passed in both. PostgreSQL integration/migration, frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured condition.
+- Provider verification, offer qualification, live marketplace contracts and production readiness remain separate gaps.

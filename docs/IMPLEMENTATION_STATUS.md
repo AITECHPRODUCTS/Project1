@@ -1188,3 +1188,10 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Evidence boundary: this does not independently verify provider claims, account eligibility, terms or approval. Unknown EPC/conversion metrics remain unknown. No provider mutation, application submission, publishing or payout action occurs.
 - Exact verified checkpoint 3badf73a5c6eb25d8cdd06fd8e1d49ae7734e324: push 40822087405 and PR 40822092898 completed successfully. Python 743 passed, 7 skipped, 5 warnings; browser UAT 12 passed in both workflows. PostgreSQL migration/integration, frontend production/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile sync passed; PR lockfile sync was skipped by its configured event condition.
 - Product readiness remains partial: official affiliate-provider contracts/authorization, independent offer-term verification, full 53-skill parity, staging, backup/restore, legal/license and operational release gates remain open.
+
+
+## 2026-10-29 follow-up — shortlist note entry in the catalog UI
+
+- The offer catalog now provides an optional per-offer review-note input when a saved list is selected and persists the note through the existing shortlist item API. Notes are shown in the saved list detail. Browser UAT now enters a note, saves the offer, and verifies that the note appears before removing the item and deleting the list.
+- Exact code-and-test SHA: 267dd5c489b92c0d6b02c1229e4162d9736a7cd4. Push [40822952573](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40822952573) and PR [40822958502](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40822958502) passed all configured jobs. Python 743 passed / 7 skipped / 5 warnings; browser UAT 12 passed in both. PostgreSQL integration/migration, frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured condition.
+- Provider verification, offer qualification, live marketplace contracts and production readiness remain separate gaps.

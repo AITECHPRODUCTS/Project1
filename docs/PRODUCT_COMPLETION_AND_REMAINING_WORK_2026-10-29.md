@@ -58,3 +58,7 @@ The immediately preceding baseline `c579fb5b9279d068f058eb00b42cd7d923f46343` ha
 - Exact push CI: [40932887080](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932887080) — success. Exact draft-PR CI: [40932895264](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40932895264) — success. Both Chromium suites report 32 passed; both Python suites report 839 passed/9 skipped; both PostgreSQL integrations report 9 passed.
 - Prior workspace-switch candidate `1266f571eb18dd6c9e8757b278f1469309e1d8c6` failed a browser assertion and was corrected in `b6029444`; both subsequent exact-SHA workflows passed.
 - Product readiness remains **NOT PRODUCTION READY**. External account/OAuth connections, verified provider facts/transactions, full 53-skill acceptance, end-to-end role/access isolation, live publishing/ads and production operations remain open.
+## Next feature candidate — create workspace (verification pending)
+
+- Added a dashboard form for registered users to create a workspace through the existing POST /api/workspaces route; local/demo users are not shown the control. On a confirmed creation response the page reloads into the newly active workspace with owner membership.
+- Added a Chromium browser acceptance test for create payload, server 201 receipt, active-workspace reload and owner role. Exact-SHA CI is pending; do not count this feature verified until both push and PR workflows pass.

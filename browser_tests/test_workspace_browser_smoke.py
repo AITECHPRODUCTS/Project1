@@ -2009,3 +2009,120 @@ def test_dashboard_switches_active_workspace_using_authorized_backend_membership
             assert auth_calls.count("merchant-workspace") >= 1
         finally:
             browser.close()
+
+
+
+def test_registered_user_can_create_workspace_and_dashboard_reloads_into_it():
+    active_workspace = {"id": "publisher-workspace", "name": "Publisher workspace", "slug": "publisher", "role": "owner"}
+    workspaces = [
+        {"id": "publisher-workspace", "name": "Publisher workspace", "slug": "publisher", "role": "owner", "is_active": True, "lifecycle_state": "active"},
+    ]
+    created_payloads: list[dict] = []
+    workspace_list_active_ids: list[str] = []
+    auth_workspace_ids: list[str] = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                request = route.request
+                path = urlparse(request.url).path.removeprefix("/api")
+                if path == "/auth/me":
+                    auth_workspace_ids.append(active_workspace["id"])
+                    _fulfill_json(route, {
+                        "authenticated": True,
+                        "csrf_token": "workspace-create-csrf",
+                        "user": {
+                            "user_id": "registered-user-123",
+                            "email": "registered@example.test",
+                            "is_admin": False,
+                            "workspace_id": active_workspace["id"],
+                            "workspace_role": active_workspace["role"],
+                        },
+                    })
+                elif path == "/workspaces" and request.method == "GET":
+                    workspace_list_active_ids.append(active_workspace["id"])
+                    _fulfill_json(route, {
+                        "active_workspace_id": active_workspace["id"],
+                        "data": [{**item, "is_active": item["id"] == active_workspace["id"]} for item in workspaces],
+                    })
+                elif path == "/workspaces" and request.method == "POST":
+                    payload = json.loads(request.post_data or "{}")
+                    created_payloads.append(payload)
+                    name = payload.get("name", "")
+                    if len(name.strip()) < 2 or len(name) > 160:
+                        _fulfill_json(route, {"detail": "Workspace name must be between 2 and 160 characters"}, status=422)
+                    else:
+                        active_workspace.update({"id": "created-workspace", "name": name.strip(), "slug": "merchant-operations-test", "role": "owner"})
+                        workspaces.append({
+                            "id": active_workspace["id"], "name": active_workspace["name"],
+                            "slug": active_workspace["slug"], "role": "owner", "is_active": True,
+                            "lifecycle_state": "active",
+                        })
+                        _fulfill_json(route, {
+                            "id": active_workspace["id"], "name": active_workspace["name"],
+                            "slug": active_workspace["slug"], "role": active_workspace["role"],
+                            "csrf_token": "workspace-create-csrf-refreshed",
+                        }, status=201)
+                elif path == "/status":
+                    _fulfill_json(route, {
+                        "app_name": "OmniAffiliateOS", "environment": "test",
+                        "execution_mode": "SEMI_AUTONOMOUS", "stage_count": 8, "stages": [],
+                        "knowledge_index_available": False, "api_model_configured": False,
+                        "email_delivery_configured": False, "video_rendering_available": False,
+                        "publishing_dry_run": True, "ad_automation_execute": False,
+                        "clicks": 0, "conversion_events": 0, "commission_recorded": 0,
+                        "recent_workflows": [],
+                    })
+                elif path == "/resource-budget":
+                    _fulfill_json(route, {
+                        "daily_budget_usd": 5.0, "daily_estimated_used_usd": 0.0,
+                        "daily_estimated_remaining_usd": 5.0, "niche_budget_usd": 1.5,
+                        "note": "Test budget; no external spend is enabled.",
+                    })
+                elif path == "/integrations":
+                    _fulfill_json(route, {
+                        "total": 0, "counts": {"enabled": 0, "configured": 0},
+                        "items": [], "verification_policy": "Mock fixtures are not provider verification.",
+                    })
+                elif path == "/capabilities":
+                    _fulfill_json(route, {
+                        "statuses": [], "counts": {}, "items": [], "provider_items": [],
+                        "global_policy": "External actions remain disabled in this browser test.",
+                    })
+                elif path == "/flywheel/status":
+                    _fulfill_json(route, {
+                        "active_session": None, "workflow_name": None, "workflow_status": "idle",
+                        "cancel_requested": False, "current_step": 0,
+                        "execution_mode": "SEMI_AUTONOMOUS", "stages": [],
+                    })
+                else:
+                    _fulfill_json(route, {})
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("button", name="New workspace").click()
+            form = page.get_by_role("region", name="Create a workspace")
+            page.get_by_label("Workspace name").fill("Merchant operations")
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/workspaces")
+                and response.request.method == "POST"
+            ) as response_info:
+                page.get_by_role("button", name="Create workspace").click()
+            response = response_info.value
+            assert response.status == 201, response.text()
+
+            page.get_by_label("Active workspace").wait_for(state="visible")
+            assert page.get_by_label("Active workspace").input_value() == "created-workspace"
+            page.wait_for_function(
+                "document.querySelector('[data-testid=active-workspace-role]')?.textContent?.trim() === 'owner'",
+                timeout=15000,
+            )
+            assert created_payloads == [{"name": "Merchant operations"}]
+            assert "created-workspace" in workspace_list_active_ids
+            assert auth_workspace_ids.count("created-workspace") >= 1
+        finally:
+            browser.close()

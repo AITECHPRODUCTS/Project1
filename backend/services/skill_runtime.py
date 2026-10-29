@@ -11,12 +11,14 @@ from typing import Any
 from backend.services.ad_guardrails import evaluate_ad_budget_guardrail
 
 from backend.services.offer_intelligence import compute_offer_metrics
+from backend.services.offer_term_snapshots import TERM_FIELDS, compare_offer_terms
 
 SUPPORTED_RUNTIME_HANDLERS = (
     "none",
     "content.extractive_summary",
     "research.keyword_extract",
     "research.offer_metrics",
+    "research.offer_term_change_review",
     "ads.guardrail_review",
     "analytics.roas_calculator",
 )
@@ -26,6 +28,7 @@ _HANDLER_DESCRIPTIONS = {
     "content.extractive_summary": "Deterministic local extractive summary from supplied text; no model or network call.",
     "research.keyword_extract": "Deterministic frequency-based keyword extraction from supplied text; no search-volume claim.",
     "research.offer_metrics": "Evidence-dependent EPC, conversion rate and gravity calculations from supplied offer and measured data; no provider claims.",
+    "research.offer_term_change_review": "Normalize and compare supplied affiliate offer terms; flags material changes for human revalidation and never authenticates a provider or activates an offer.",
     "ads.guardrail_review": "Evaluate supplied provider-verified ad observations, freshness and spend caps; review-only, no provider action.",
     "analytics.roas_calculator": "Decimal-based ROAS calculation and review-only stop-loss signal; no campaign action.",
 }
@@ -115,6 +118,75 @@ def _offer_metrics(payload: dict[str, Any]) -> dict[str, Any]:
         gravity_weight=payload.get("gravity_weight", 1.0),
     )
 
+
+
+def _validated_offer_term_record(value: Any, field: str) -> dict[str, Any]:
+    """Validate bounded term fields before passing them to the shared comparator."""
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be a JSON object")
+    extra = sorted(set(value) - set(TERM_FIELDS))
+    if extra:
+        raise ValueError(f"{field} contains unsupported fields: " + ", ".join(extra[:8]))
+    for name, max_length in (("terms_version", 200), ("commission_type", 100), ("commission_currency", 12)):
+        candidate = value.get(name)
+        if candidate is not None and (
+            not isinstance(candidate, str) or len(candidate) > max_length
+        ):
+            raise ValueError(f"{field}.{name} must be a string of at most {max_length} characters")
+    for name in ("allowed_regions", "restricted_traffic_sources"):
+        candidate = value.get(name)
+        if candidate is None:
+            continue
+        if not isinstance(candidate, list) or len(candidate) > 200:
+            raise ValueError(f"{field}.{name} must be a list with at most 200 entries")
+        if any(
+            not isinstance(item, str) or not item.strip() or len(item) > 80
+            for item in candidate
+        ):
+            raise ValueError(f"{field}.{name} entries must be non-empty strings of at most 80 characters")
+    return dict(value)
+
+
+def _offer_term_change_review(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compare terms supplied by the caller without upgrading them to verified evidence."""
+    allowed = {"previous_terms", "current_terms", "has_previous_snapshot"}
+    unexpected = sorted(set(payload) - allowed)
+    if unexpected:
+        raise ValueError("unsupported offer-term-review input fields: " + ", ".join(unexpected[:8]))
+    missing = sorted({"current_terms", "has_previous_snapshot"} - set(payload))
+    if missing:
+        raise ValueError("offer-term review is missing fields: " + ", ".join(missing))
+    has_previous = payload["has_previous_snapshot"]
+    if not isinstance(has_previous, bool):
+        raise ValueError("has_previous_snapshot must be a boolean")
+
+    current = _validated_offer_term_record(payload["current_terms"], "current_terms")
+    if has_previous:
+        if "previous_terms" not in payload:
+            raise ValueError("previous_terms is required when has_previous_snapshot is true")
+        previous = _validated_offer_term_record(payload["previous_terms"], "previous_terms")
+    else:
+        if "previous_terms" in payload:
+            raise ValueError("previous_terms must be omitted when no previous snapshot exists")
+        # The first observation creates a baseline; it is not a change from invented history.
+        previous = current
+
+    result = compare_offer_terms(previous, current, has_previous_snapshot=has_previous)
+    review_reasons = ["source_authenticity_not_independently_verified"]
+    if result["requires_revalidation"]:
+        review_reasons.append("material_offer_terms_changed")
+    result.update({
+        "source_attestation_verified": False,
+        "provider_approval_verified": False,
+        "automatic_activation_permitted": False,
+        "requires_human_review": True,
+        "review_reasons": review_reasons,
+        "note": (
+            "This handler compares supplied term snapshots only. It does not authenticate the "
+            "merchant/network, prove current eligibility, or permit offer activation."
+        ),
+    })
+    return result
 
 
 def _guardrail_decimal(value: Any, field: str, *, nullable: bool = False) -> Decimal | None:
@@ -361,6 +433,8 @@ def execute_skill_handler(handler_key: str, input_value: Any) -> dict[str, Any]:
         return _keyword_extract(payload)
     if handler_key == "research.offer_metrics":
         return _offer_metrics(payload)
+    if handler_key == "research.offer_term_change_review":
+        return _offer_term_change_review(payload)
     if handler_key == "ads.guardrail_review":
         return _ad_guardrail_review(payload)
     if handler_key == "analytics.roas_calculator":

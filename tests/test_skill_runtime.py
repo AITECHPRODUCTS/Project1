@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from backend.services.offer_term_snapshots import compare_offer_terms
 from backend.services.skill_packager import build_skill_package, validate_skill_value
 from backend.services.skill_runtime import SUPPORTED_RUNTIME_HANDLERS, execute_skill_handler
 
@@ -157,7 +158,8 @@ def test_runtime_schema_validation_rejects_boolean_as_number_and_non_finite_valu
 
 def test_runtime_catalog_is_explicit_and_contains_no_user_supplied_code_execution():
     assert set(SUPPORTED_RUNTIME_HANDLERS) == {
-        "none", "content.extractive_summary", "research.keyword_extract", "research.offer_metrics", "ads.guardrail_review", "analytics.roas_calculator"
+        "none", "content.extractive_summary", "research.keyword_extract", "research.offer_metrics",
+        "research.offer_term_change_review", "ads.guardrail_review", "analytics.roas_calculator"
     }
 
 
@@ -434,3 +436,170 @@ def test_ad_guardrail_handler_blocks_stale_input_and_reports_only_hypothetical_r
 def test_ad_guardrail_handler_rejects_ambiguous_or_invalid_inputs(payload):
     with pytest.raises(ValueError):
         execute_skill_handler("ads.guardrail_review", payload)
+
+
+
+def _term_payload(**overrides):
+    values = {
+        "terms_version": "terms-v1",
+        "commission_type": "percentage",
+        "commission_value": "10.0000",
+        "commission_currency": "usd",
+        "cookie_days": 30,
+        "attribution_window_days": 30,
+        "allowed_regions": ["US", "GB"],
+        "restricted_traffic_sources": ["paid_search"],
+    }
+    values.update(overrides)
+    return values
+
+
+def test_offer_term_change_review_detects_material_changes_without_claiming_verification():
+    result = execute_skill_handler(
+        "research.offer_term_change_review",
+        {
+            "previous_terms": _term_payload(),
+            "current_terms": _term_payload(commission_value="12", commission_currency="USD", allowed_regions=["US"]),
+            "has_previous_snapshot": True,
+        },
+    )
+    assert result["change_status"] == "changes_detected"
+    assert result["changed_fields"] == ["commission_value", "allowed_regions"]
+    assert result["changes"] == [
+        {"field": "commission_value", "previous": "10.0000", "current": "12.0000"},
+        {"field": "allowed_regions", "previous": ["GB", "US"], "current": ["US"]},
+    ]
+    assert result["requires_revalidation"] is True
+    assert result["source_attestation_verified"] is False
+    assert result["provider_approval_verified"] is False
+    assert result["automatic_activation_permitted"] is False
+    assert result["requires_human_review"] is True
+    assert "material_offer_terms_changed" in result["review_reasons"]
+    assert len(result["terms_sha256"]) == 64
+
+
+def test_offer_term_change_review_normalizes_values_and_does_not_flag_equivalent_terms():
+    result = execute_skill_handler(
+        "research.offer_term_change_review",
+        {
+            "previous_terms": _term_payload(commission_value="10", commission_currency="usd", allowed_regions=["US", "GB"]),
+            "current_terms": _term_payload(commission_value="10.0000", commission_currency="USD", allowed_regions=["GB", "US"]),
+            "has_previous_snapshot": True,
+        },
+    )
+    assert result["change_status"] == "unchanged"
+    assert result["changed_fields"] == []
+    assert result["requires_revalidation"] is False
+    assert result["source_attestation_verified"] is False
+    assert result["automatic_activation_permitted"] is False
+    assert result["requires_human_review"] is True
+
+
+def test_offer_term_change_review_records_first_snapshot_as_baseline():
+    result = execute_skill_handler(
+        "research.offer_term_change_review",
+        {
+            "current_terms": _term_payload(),
+            "has_previous_snapshot": False,
+        },
+    )
+    assert result["change_status"] == "baseline_recorded"
+    assert result["changed_fields"] == []
+    assert result["requires_revalidation"] is False
+    assert result["requires_human_review"] is True
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"current_terms": _term_payload(), "has_previous_snapshot": "false"},
+        {"current_terms": _term_payload(), "has_previous_snapshot": True},
+        {"current_terms": _term_payload(), "has_previous_snapshot": False, "previous_terms": _term_payload()},
+        {"current_terms": _term_payload(extra_field="pretend_verified"), "has_previous_snapshot": False},
+        {"current_terms": _term_payload(allowed_regions="US"), "has_previous_snapshot": False},
+        {"current_terms": _term_payload(allowed_regions=[1]), "has_previous_snapshot": False},
+        {"current_terms": _term_payload(commission_value="NaN"), "has_previous_snapshot": False},
+        {"current_terms": _term_payload(), "has_previous_snapshot": False, "provider_approval_verified": True},
+    ],
+)
+def test_offer_term_change_review_rejects_ambiguous_or_untrusted_shapes(payload):
+    with pytest.raises(ValueError):
+        execute_skill_handler("research.offer_term_change_review", payload)
+
+
+def test_offer_term_change_review_executes_as_a_governed_skill_package_fixture():
+    previous = _term_payload()
+    current = _term_payload(commission_value="12", allowed_regions=["US"])
+    input_value = {
+        "previous_terms": previous,
+        "current_terms": current,
+        "has_previous_snapshot": True,
+    }
+    expected = compare_offer_terms(previous, current, has_previous_snapshot=True)
+    expected.update({
+        "source_attestation_verified": False,
+        "provider_approval_verified": False,
+        "automatic_activation_permitted": False,
+        "requires_human_review": True,
+        "review_reasons": ["source_authenticity_not_independently_verified", "material_offer_terms_changed"],
+        "note": (
+            "This handler compares supplied term snapshots only. It does not authenticate the "
+            "merchant/network, prove current eligibility, or permit offer activation."
+        ),
+    })
+    term_object = {"type": "object", "additionalProperties": True}
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "previous_terms": term_object,
+            "current_terms": term_object,
+            "has_previous_snapshot": {"type": "boolean"},
+        },
+        "required": ["previous_terms", "current_terms", "has_previous_snapshot"],
+        "additionalProperties": False,
+    }
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "current_terms": term_object,
+            "terms_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "change_status": {"type": "string", "enum": ["baseline_recorded", "unchanged", "changes_detected"]},
+            "changed_fields": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+            "changes": {"type": "array", "items": {"type": "object", "additionalProperties": True}, "maxItems": 8},
+            "requires_revalidation": {"type": "boolean"},
+            "source_attestation_verified": {"type": "boolean"},
+            "provider_approval_verified": {"type": "boolean"},
+            "automatic_activation_permitted": {"type": "boolean"},
+            "requires_human_review": {"type": "boolean"},
+            "review_reasons": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+            "note": {"type": "string"},
+        },
+        "required": [
+            "current_terms", "terms_sha256", "change_status", "changed_fields", "changes",
+            "requires_revalidation", "source_attestation_verified", "provider_approval_verified",
+            "automatic_activation_permitted", "requires_human_review", "review_reasons", "note",
+        ],
+        "additionalProperties": False,
+    }
+    package = build_skill_package({
+        "skill_id": "research/offer-term-change-review",
+        "display_name": "Offer term change review",
+        "version": "1.0.0",
+        "description": "Compare supplied affiliate-offer snapshots and request review after material changes.",
+        "stage": "S1",
+        "runtime_handler": "research.offer_term_change_review",
+        "capabilities": ["research.read"],
+        "input_schema": input_schema,
+        "output_schema": output_schema,
+        "instructions_markdown": "# Declarative guidance\nNever treat a term comparison as provider authentication or approval.",
+        "test_cases": [{
+            "name": "commission and region change",
+            "input": input_value,
+            "expected_output": expected,
+        }],
+    })
+    report = package["validation_report"]
+    assert report["all_fixtures_passed"] is True
+    assert report["runtime_handler_allowlisted"] is True
+    assert report["runtime_execution_tested"] is True
+    assert report["cases"][0]["runtime_output_matches_expected"] is True

@@ -1,5 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
-Updated: 2026-10-28
+Updated: 2026-10-29
+
+## 2026-10-29 implementation checkpoint — governed offer-term change review
+
+- Added the allowlisted `research.offer_term_change_review` handler in `backend/services/skill_runtime.py`. It reuses the shared `compare_offer_terms` normalizer and SHA-256 fingerprinting service, detects field-level material changes, rejects malformed/unexpected term fields, and reports first-snapshot baselines without inventing prior terms.
+- The handler always keeps source attestation and network approval false, requires human review, and explicitly prohibits automatic offer activation. It is a real deterministic comparison over caller-supplied values, not an affiliate-network integration.
+- Regression coverage includes changed terms, semantically equivalent normalized terms, first-snapshot baseline, malformed/untrusted payload rejection and an executable governed-package fixture. Hosted CI for this new commit must be inspected before the slice is reported as verified.
+
 
 ## 2026-10-28 verified checkpoint — persisted, workspace-scoped OpenAffiliate sync status
 

@@ -2901,7 +2901,9 @@ async def list_publisher_marketplace_applications(
 
 @api.get("/merchant/applications")
 async def list_merchant_incoming_applications(
-    limit: int = Query(default=100, ge=1, le=300),
+    response: Response,
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
     status: str | None = Query(default=None, max_length=40),
     user: dict[str, Any] = Depends(require_admin),
     db: AsyncSession = Depends(get_session),
@@ -2913,17 +2915,32 @@ async def list_merchant_incoming_applications(
     valid_statuses = {"pending_review", "approved", "rejected"}
     if status is not None and status not in valid_statuses:
         raise HTTPException(422, "Unsupported marketplace application status")
-    # Intentional cross-workspace read, constrained to the authenticated merchant's own offers.
+    # Incoming applications intentionally cross publisher workspaces but can only
+    # reference merchant offers belonging to the selected, authorized merchant.
     with workspace_scope(None):
         query = select(MarketplaceApplication).where(
             MarketplaceApplication.merchant_workspace_id == merchant_workspace_id
         )
         if status is not None:
             query = query.where(MarketplaceApplication.status == status)
+        total_count = int(
+            await db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
+        )
         rows = list((await db.scalars(
-            query.order_by(MarketplaceApplication.created_at.desc()).limit(limit)
+            query.order_by(MarketplaceApplication.created_at.desc(), MarketplaceApplication.id.desc())
+            .limit(limit)
+            .offset(offset)
         )).all())
-    return {"count": len(rows), "data": [_marketplace_application_dict(row) for row in rows]}
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    return {
+        "count": len(rows),
+        "total_count": total_count,
+        "limit": limit,
+        "offset": offset,
+        "status_filter": status or "all",
+        "data": [_marketplace_application_dict(row) for row in rows],
+    }
 
 
 @api.post("/merchant/applications/{application_id}/review")

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend import main
 from backend.database import Base, get_session
-from backend.models import MerchantOffer, Workspace
+from backend.models import MarketplaceApplication, MerchantOffer, Workspace
 from backend.schemas import MarketplaceApplicationCreateRequest
 from backend.tenancy import workspace_scope
 
@@ -261,3 +261,90 @@ def test_applications_are_rejected_when_regions_or_traffic_sources_conflict_with
             assert client.get("/api/marketplace/applications").json()["count"] == 1
     finally:
         cleanup(engine, client)
+
+def test_merchant_application_inbox_paginates_filters_and_is_not_cacheable(tmp_path):
+    engine, user, merchant_id, wrong_merchant_id, publisher_id, _, _, client = make_client(tmp_path)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def seed_applications():
+        async with sessions() as db:
+            for index in range(30):
+                publisher = Workspace(
+                    name=f"Publisher inbox {index:02d}",
+                    slug=f"merchant-inbox-publisher-{index:02d}",
+                )
+                db.add(publisher)
+                await db.flush()
+                offer = seed_offer(merchant_id)
+                offer.name = f"Marketplace inbox offer {index:02d}"
+                offer.product_url = f"https://seller.example.com/products/{index:02d}"
+                offer.commission_terms_url = f"https://seller.example.com/terms/{index:02d}"
+                offer.seller_authorization_url = f"https://seller.example.com/authorization/{index:02d}"
+                with workspace_scope(merchant_id):
+                    db.add(offer)
+                    await db.flush()
+                status = "pending_review" if index < 12 else "approved" if index < 22 else "rejected"
+                application = MarketplaceApplication(
+                    workspace_id=publisher.id,
+                    merchant_workspace_id=merchant_id,
+                    merchant_offer_id=offer.id,
+                    applicant_email=f"publisher-{index:02d}@example.test",
+                    publisher_website_url=f"https://publisher-{index:02d}.example.test",
+                    audience_description=f"Evidence-conscious audience number {index:02d}.",
+                    traffic_sources_json=["seo", "blog"],
+                    intended_regions_json=["US"],
+                    promotion_plan=f"Reviewable promotion plan for publisher number {index:02d}, including traffic-source and disclosure controls.",
+                    compliance_answers_json={"contact_sharing_consent": True},
+                    terms_snapshot_json={"name": offer.name, "terms_version": "terms-v1"},
+                    status=status,
+                )
+                with workspace_scope(publisher.id):
+                    db.add(application)
+                    await db.flush()
+            await db.commit()
+
+    asyncio.run(seed_applications())
+    try:
+        with client:
+            user["workspace_id"] = merchant_id
+            first = client.get("/api/merchant/applications?limit=7&offset=0")
+            second = client.get("/api/merchant/applications?limit=7&offset=7")
+            assert first.status_code == 200, first.text
+            assert second.status_code == 200, second.text
+            first_body, second_body = first.json(), second.json()
+            assert first_body["total_count"] == 30
+            assert first_body["count"] == 7
+            assert first_body["offset"] == 0
+            assert first_body["limit"] == 7
+            assert first_body["status_filter"] == "all"
+            assert second_body["total_count"] == 30
+            assert second_body["count"] == 7
+            assert second_body["offset"] == 7
+            assert {item["id"] for item in first_body["data"]}.isdisjoint(
+                {item["id"] for item in second_body["data"]}
+            )
+            assert first.headers["cache-control"] == "no-store"
+            assert "Cookie" in first.headers.get("vary", "")
+
+            pending = client.get("/api/merchant/applications?status=pending_review&limit=5&offset=10")
+            assert pending.status_code == 200, pending.text
+            pending_body = pending.json()
+            assert pending_body["total_count"] == 12
+            assert pending_body["count"] == 2
+            assert pending_body["offset"] == 10
+            assert {item["status"] for item in pending_body["data"]} == {"pending_review"}
+
+            beyond_last_page = client.get("/api/merchant/applications?limit=5&offset=1000")
+            assert beyond_last_page.status_code == 200
+            assert beyond_last_page.json()["count"] == 0
+            assert beyond_last_page.json()["total_count"] == 30
+
+            user["workspace_id"] = wrong_merchant_id
+            wrong_merchant_page = client.get("/api/merchant/applications?limit=7&offset=0")
+            assert wrong_merchant_page.status_code == 200
+            assert wrong_merchant_page.json()["total_count"] == 0
+            invalid_filter = client.get("/api/merchant/applications?status=all")
+            assert invalid_filter.status_code == 422
+    finally:
+        cleanup(engine, client)
+

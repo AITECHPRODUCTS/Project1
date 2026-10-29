@@ -1691,3 +1691,99 @@ def test_leads_page_downloads_individual_json_data_export():
             assert download.suggested_filename == "omni-affiliate-lead-data-2026-10-29.json"
         finally:
             browser.close()
+
+
+def test_merchant_application_inbox_filters_paginates_and_keeps_review_notes_per_application():
+    review_calls = []
+    applications = []
+    for index in range(30):
+        status = "pending_review" if index < 12 else "approved" if index < 22 else "rejected"
+        applications.append({
+            "id": f"merchant-app-{index:02d}",
+            "merchant_offer_id": f"merchant-offer-{index:02d}",
+            "publisher_workspace_id": f"publisher-workspace-{index:02d}",
+            "offer_name": f"Merchant offer {index:02d}",
+            "applicant_email": f"publisher-{index:02d}@example.test",
+            "publisher_website_url": f"https://publisher-{index:02d}.example.test",
+            "audience_description": f"Evidence-conscious audience {index:02d}.",
+            "traffic_sources": ["seo", "blog"],
+            "intended_regions": ["US"],
+            "promotion_plan": f"Promotion plan {index:02d} with disclosure and region compliance steps.",
+            "terms_snapshot": {"terms_version": "terms-v1"},
+            "status": status,
+            "reviewer_notes": None,
+            "provider_submission_status": "not_configured",
+            "affiliate_network_approved": False,
+            "created_at": f"2026-10-29T09:{index:02d}:00+00:00",
+            "reviewed_at": None,
+        })
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                url = route.request.url
+                path = urlparse(url).path.removeprefix("/api")
+                if path == "/auth/me":
+                    _fulfill_json(route, {"csrf_token": "merchant-inbox-test-csrf"})
+                    return
+                if path == "/merchant/applications" and route.request.method == "GET":
+                    query = parse_qs(urlparse(url).query)
+                    status_filter = query.get("status", ["all"])[0]
+                    limit = int(query.get("limit", ["25"])[0])
+                    offset = int(query.get("offset", ["0"])[0])
+                    filtered = applications if status_filter == "all" else [a for a in applications if a["status"] == status_filter]
+                    rows = filtered[offset:offset + limit]
+                    _fulfill_json(route, {
+                        "count": len(rows), "total_count": len(filtered), "limit": limit, "offset": offset,
+                        "status_filter": status_filter, "data": rows,
+                    })
+                    return
+                if path.startswith("/merchant/applications/") and path.endswith("/review") and route.request.method == "POST":
+                    app_id = path.split("/")[-2]
+                    body = json.loads(route.request.post_data or "{}")
+                    row = next((a for a in applications if a["id"] == app_id), None)
+                    if row is None:
+                        _fulfill_json(route, {"detail": "Application not found"}, status=404)
+                        return
+                    review_calls.append({"id": app_id, **body})
+                    row["status"] = "approved" if body.get("decision") == "approve" else "rejected"
+                    row["reviewer_notes"] = body.get("reviewer_notes")
+                    row["reviewed_at"] = "2026-10-29T12:00:00+00:00"
+                    _fulfill_json(route, row)
+                    return
+                _fulfill_json(route, {"detail": "Unexpected merchant application API request"}, status=404)
+
+            page.route("**/api/**", handle_api)
+            page.goto(f"{BASE_URL}/merchant/applications", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Publisher applications").wait_for(state="visible")
+            page.get_by_text("Showing 1–25 of 30 applications", exact=True).wait_for(state="visible")
+            cards = page.get_by_test_id("merchant-application-card")
+            assert cards.count() == 25
+            first = cards.nth(0)
+            second = cards.nth(1)
+            first.get_by_label("Review note for this application").fill("Reviewed source restrictions for application zero.")
+            assert second.get_by_label("Review note for this application").input_value() == ""
+            first.get_by_role("button", name="Approve publisher application").click()
+            page.get_by_role("status").get_by_text("Merchant offer 00 application approved.", exact=False).wait_for(state="visible")
+            assert len(review_calls) == 1
+            assert review_calls[0]["id"] == "merchant-app-00"
+            assert review_calls[0]["reviewer_notes"] == "Reviewed source restrictions for application zero."
+            reviewed = page.locator('[data-testid="merchant-application-card"][data-application-id="merchant-app-00"]')
+            reviewed.get_by_text("approved", exact=True).wait_for(state="visible")
+            assert reviewed.get_by_role("button", name="Approve publisher application").count() == 0
+            assert page.get_by_test_id("merchant-application-card").nth(1).get_by_label("Review note for this application").input_value() == ""
+
+            page.get_by_role("button", name="Next page").click()
+            page.get_by_text("Showing 26–30 of 30 applications", exact=True).wait_for(state="visible")
+            assert page.get_by_test_id("merchant-application-card").count() == 5
+            page.get_by_label("Filter applications by status").select_option("rejected")
+            page.get_by_text("Showing 1–8 of 8 applications", exact=True).wait_for(state="visible")
+            assert page.get_by_test_id("merchant-application-card").count() == 8
+            assert page.get_by_test_id("merchant-application-card").first.get_by_text("rejected", exact=True).is_visible()
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()
+

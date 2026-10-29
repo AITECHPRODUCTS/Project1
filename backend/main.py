@@ -6107,14 +6107,40 @@ async def receive_signed_ad_performance(
             AdPerformanceObservation.platform == platform,
             AdPerformanceObservation.provider_event_id == payload.provider_event_id,
         ))
-        if existing is not None:
+        def duplicate_response(existing_row):
+            stored_observed_at = existing_row.observed_at
+            if stored_observed_at.tzinfo is None or stored_observed_at.utcoffset() is None:
+                stored_observed_at = stored_observed_at.replace(tzinfo=timezone.utc)
+            else:
+                stored_observed_at = stored_observed_at.astimezone(timezone.utc)
+            same_event = (
+                existing_row.campaign_plan_id == plan.id
+                and existing_row.creative_id == payload.creative_id
+                and existing_row.source_reference_url == payload.source_reference_url
+                and int(existing_row.impressions or 0) == payload.impressions
+                and int(existing_row.clicks or 0) == payload.clicks
+                and int(existing_row.conversions or 0) == payload.conversions
+                and Decimal(existing_row.spend_usd or 0) == payload.spend_usd
+                and Decimal(existing_row.commission_usd or 0) == payload.commission_usd
+                and str(existing_row.currency or "USD").upper() == payload.currency
+                and stored_observed_at == payload.observed_at.astimezone(timezone.utc)
+                and existing_row.note == payload.note
+            )
+            if not same_event:
+                raise HTTPException(
+                    409,
+                    "Provider event ID was already recorded with different observation data",
+                )
             return JSONResponse(status_code=200, content={
                 "status": "duplicate_ignored",
-                "observation_id": existing.id,
+                "observation_id": existing_row.id,
                 "provider_event_id": payload.provider_event_id,
-                "evidence_status": existing.evidence_status,
+                "evidence_status": existing_row.evidence_status,
                 "provider_action_executed": False,
             })
+
+        if existing is not None:
+            return duplicate_response(existing)
 
         row = AdPerformanceObservation(
             workspace_id=workspace_id,
@@ -6167,13 +6193,7 @@ async def receive_signed_ad_performance(
                     AdPerformanceObservation.provider_event_id == payload.provider_event_id,
                 ))
             if existing is not None:
-                return JSONResponse(status_code=200, content={
-                    "status": "duplicate_ignored",
-                    "observation_id": existing.id,
-                    "provider_event_id": payload.provider_event_id,
-                    "evidence_status": existing.evidence_status,
-                    "provider_action_executed": False,
-                })
+                return duplicate_response(existing)
             raise HTTPException(409, "Signed ad performance event could not be persisted due to an integrity conflict") from exc
         await db.refresh(row)
 

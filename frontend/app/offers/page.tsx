@@ -145,6 +145,7 @@ export default function OfferCatalogPage() {
   const [shortlistLoading, setShortlistLoading] = useState(false);
   const [shortlistError, setShortlistError] = useState("");
   const [shortlistMessage, setShortlistMessage] = useState("");
+  const [offerNotes, setOfferNotes] = useState<Record<string, string>>({});
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -225,8 +226,9 @@ export default function OfferCatalogPage() {
     if (!selectedShortlistId) { setShortlistError("Create or select a saved offer list first."); return; }
     setShortlistError(""); setShortlistMessage("");
     try {
-      await apiFetch("/api/offers/shortlists/" + encodeURIComponent(selectedShortlistId) + "/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offer_id: offerId }) });
+      await apiFetch("/api/offers/shortlists/" + encodeURIComponent(selectedShortlistId) + "/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offer_id: offerId, note: offerNotes[offerId] ?? "" }) });
       setShortlistMessage("Offer saved. Displayed values reflect the current catalog and may be unknown or unverified.");
+      setOfferNotes(current => ({ ...current, [offerId]: "" }));
       await refreshShortlists(selectedShortlistId);
     } catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Offer could not be saved."); }
   };
@@ -498,7 +500,7 @@ export default function OfferCatalogPage() {
                   return <article key={offer.id} data-testid="offer-card" className="rounded-2xl border border-slate-200 p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="text-lg font-black">{offer.name}</h3><p className="mt-1 break-all text-xs text-slate-500">{offer.network} · ID {offer.external_id}</p><p className="mt-1 text-xs text-slate-500">{offer.category || "Category unknown"}</p></div><span className={"rounded-full px-3 py-1.5 text-xs font-bold " + (offer.verification_basis === "provider_claimed_unattested" ? "bg-amber-50 text-amber-900" : "bg-slate-100 text-slate-700")}>{providerVerificationLabel(offer)}</span></div>
                     <p className="mt-4 text-sm leading-6 text-slate-600">{offer.description || "Description not supplied."}</p>
-                    <div className="mt-3"><button type="button" onClick={() => void saveOffer(offer.id)} disabled={!selectedShortlistId || shortlistLoading} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50"><BookmarkPlus size={14}/> Save to selected list</button></div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input aria-label={"Review note for " + offer.name} value={offerNotes[offer.id] ?? ""} onChange={event => setOfferNotes(current => ({ ...current, [offer.id]: event.target.value }))} maxLength={1000} disabled={!selectedShortlistId || shortlistLoading} placeholder="Optional review note for this saved offer" className="rounded-lg border border-slate-200 px-3 py-2 text-xs disabled:bg-slate-50"/><button type="button" onClick={() => void saveOffer(offer.id)} disabled={!selectedShortlistId || shortlistLoading} className="inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50"><BookmarkPlus size={14}/> Save to selected list</button></div>
                     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <div data-testid={"offer-epc-" + offer.id} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">EPC (currency not recorded)</p><p className="mt-1 text-sm font-black">{numberLabel(offer.epc)}</p></div>
                       <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Conversion rate</p><p className="mt-1 text-sm font-black">{conversionRateLabel(offer.conversion_rate)}</p></div>

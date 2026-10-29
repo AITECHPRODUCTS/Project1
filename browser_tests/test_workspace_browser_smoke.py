@@ -1024,7 +1024,7 @@ def test_offer_shortlist_ui_creates_saves_compares_and_removes_persisted_catalog
 
     def detail():
         return {"id": "shortlist-1", "name": "Creator research", "description": "", "count": len(saved),
-                "items": [{"item_id": "saved-item-1", "note": "", "added_at": None, "offer": offer} for _ in saved]}
+                "items": [{"item_id": "saved-item-1", "note": item["note"], "added_at": None, "offer": offer} for item in saved]}
 
     def handle_api(route):
         path = urlparse(route.request.url).path
@@ -1055,8 +1055,9 @@ def test_offer_shortlist_ui_creates_saves_compares_and_removes_persisted_catalog
             return
         if path == "/api/offers/shortlists/shortlist-1/items":
             if method == "POST":
-                saved.append({"offer_id": offer["id"]})
-                _fulfill_json(route, {"id": "saved-item-1", "shortlist_id": "shortlist-1", "offer_id": offer["id"], "note": ""}, status=201)
+                submitted = json.loads(route.request.post_data or "{}")
+                saved.append({"offer_id": offer["id"], "note": submitted.get("note", "")})
+                _fulfill_json(route, {"id": "saved-item-1", "shortlist_id": "shortlist-1", "offer_id": offer["id"], "note": submitted.get("note", "")}, status=201)
             else:
                 _fulfill_json(route, {"detail": "unsupported"}, status=405)
             return
@@ -1080,8 +1081,10 @@ def test_offer_shortlist_ui_creates_saves_compares_and_removes_persisted_catalog
             page.get_by_role("button", name="Create list").click()
             page.get_by_test_id("shortlist-message").filter(has_text="Saved offer list created").wait_for(state="visible")
             page.get_by_label("Choose list to manage").select_option("shortlist-1")
+            page.get_by_label("Review note for Creator Suite").fill("Confirm program terms before selection.")
             page.get_by_role("button", name="Save to selected list").click()
             page.get_by_test_id("selected-shortlist-items").get_by_text("Creator Suite").wait_for(state="visible")
+            page.get_by_test_id("selected-shortlist-items").get_by_text("Confirm program terms before selection.").wait_for(state="visible")
             assert "EPC Unknown" in page.get_by_test_id("selected-shortlist-items").inner_text()
             page.get_by_role("button", name="Remove").click()
             page.get_by_text("This list is empty.", exact=False).wait_for(state="visible")

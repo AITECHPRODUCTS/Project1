@@ -7,11 +7,13 @@
 
 ## Exact checkpoint recovered
 
+The durable record was created during recovery and then updated with the completed exact-SHA verification evidence below. This is a CI/code checkpoint only—not production release approval.
+
 - Open draft PR: [#1](https://github.com/AITECHPRODUCTS/Project1/pull/1), targeting `main`.
 - Latest inspected PR-head before this repair: `564fb080c4d7d5378589538810a018130623d9f5`, commit message “feat: export individual lead data with audit and privacy bounds”.
 - PR CI run [40839857164](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40839857164) completed with **failure**. The `python` job reported **761 passed, 1 failed, 7 skipped**. Security audit, PostgreSQL integration, secret scan, frontend build/smoke test, AI profile, repo guard and browser UAT passed on that SHA. This is evidence for that SHA only, not a release certification.
 - Failure: `tests/test_lead_data_export.py::test_lead_json_data_export_is_scoped_audited_bounded_and_content_minimized`. The fixture queued workspace-A records for deferred persistence, then switched to workspace B before flushing. The intended tenant guard correctly raised `RuntimeError: Cross-workspace insert blocked`.
-- Repair commit: [`b893dc510400f8e27259d089d6b35375031ed817`](https://github.com/AITECHPRODUCTS/Project1/commit/b893dc510400f8e27259d089d6b35375031ed817) adds an explicit `await db.flush()` while workspace A is active. This is a **test-fixture correction**; the production tenant guard was not weakened. The repair remains **unverified until the new exact-head push and PR Actions runs finish**.
+- Repair commit: [`b893dc510400f8e27259d089d6b35375031ed817`](https://github.com/AITECHPRODUCTS/Project1/commit/b893dc510400f8e27259d089d6b35375031ed817) adds an explicit `await db.flush()` while workspace A is active. This is a **test-fixture correction**; the production tenant guard was not weakened. The repair is verified on candidate SHA `293250bf7e209fe78839eec8afad55080acb6449`: push run [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396) and PR run [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094) both completed successfully. Python: 762 passed, 7 skipped, 5 warnings; browser UAT: 22 passed; PostgreSQL integration, frontend typecheck/production build, security audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
 - Keep the existing branch only. Do not create branches, merge PR #1, deploy, or claim a green status without current exact-SHA evidence.
 
 ## Work present in the implementation branch (not all live-connected)
@@ -25,7 +27,7 @@
 
 ## Highest-priority remaining work
 
-1. **Verify the test repair:** inspect the latest exact-head push and PR runs, identify any remaining failed jobs from logs, fix and rerun; do not treat skipped/pending jobs as passes.
+1. **Test repair verified at the code candidate above.** Re-run and inspect all required workflows again after any subsequent source change; skipped jobs are not passes.
 2. **Close acceptance gaps:** map every product requirement and all 53 skills to real code paths, persistence, role/tenant protections, API contracts, negative tests and browser acceptance. Distinguish implemented, partial, stub/catalogue-only, and not implemented.
 3. **Provider connectivity:** official API/OAuth approval, scopes, sandbox contracts, pagination/rate limits/retries, revocation and provider-side verification for the selected affiliate, ad, social, CMS, email and CRM services. Catalogue entries and generic adapters do not prove connections.
 4. **Security/privacy/reliability:** workspace isolation across every route and worker, PostgreSQL concurrency, CSRF/session lifecycle, SSRF/egress, signed and replay-safe webhooks, deletion/export, abuse controls, durable queue recovery, load/soak and recovery tests.

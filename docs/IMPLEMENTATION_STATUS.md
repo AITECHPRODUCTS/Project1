@@ -1,12 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 individual lead JSON data export and Resend event integrity regressions (CI pending)
+## 2026-10-29 individual lead JSON data export and Resend event integrity regressions (verified on 293250bf7e209fe78839eec8afad55080acb6449)
 
 - New authenticated `GET /api/leads/{lead_id}/data-export.json` returns one active-workspace lead record plus associated consent evidence, delivery-event metadata, send-status activity and confirmation lifecycle timestamps. It rejects missing/cross-workspace leads and fails closed if any related collection exceeds 1,000 rows; it never returns email bodies, raw webhook payloads, provider tokens or payload checksums.
 - Export attempts are audited using a one-way opaque resource reference and counts/format/outcome only; audit details do not copy the lead email, consent wording or exported values. Successful downloads use attachment and no-store/nosniff headers.
 - Added SQLite integration tests for export payload, cross-tenant denial, missing workspace, fail-closed bounds and privacy-minimized audit logs; added browser download coverage.
-- Added Resend webhook regressions for provider event-ID reuse with a changed signed payload and for a late delivery event being unable to undo hard-bounce suppression. Exact-SHA CI is pending.
+- Added Resend webhook regressions for provider event-ID reuse with a changed signed payload and for a late delivery event being unable to undo hard-bounce suppression. Exact-SHA push [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396) and PR [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094) passed on `293250bf7e209fe78839eec8afad55080acb6449`: Python 762 passed, 7 skipped; browser UAT 22 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured event condition. This does not verify the live Resend provider/account.
 
 
 ## 2026-10-29 verified Resend delivery-event schema and test-fixture correction
@@ -23,11 +23,11 @@ Updated: 2026-10-29
 - Python 759 passed, 7 skipped; browser UAT 21 passed; PostgreSQL migration/integration, frontend production build/typecheck, security audit, secret scan, AI profile and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured event condition.
 - Live Resend endpoint/secret configuration and real account delivery, bounce, complaint and suppression UAT remain unverified.
 
-## 2026-10-29 real SQLite lead export integration test (CI pending)
+## 2026-10-29 real SQLite lead export integration test (verified on 293250bf7e209fe78839eec8afad55080acb6449)
 
 - Added a database-backed API integration test with two workspaces and three persisted leads. It searches by first-touch UTM, verifies the export contains only the matching lead in the active workspace, and checks that the successful export audit row persisted only for that workspace with no search/lead values in details.
 - The existing mocked tests still cover HTTP 403 without workspace, row-cap rejection/HTTP 413, response headers and spreadsheet formula escaping. This increment adds real database query/serialization coverage; it does not implement external CRM synchronization.
-- Source review of candidate `03566fa20a80b8005987ca3d61c831decc1ccdac` caught a missing import block for the real SQLite test before accepting it; the imports are corrected in the follow-up commit. That candidate's push [40834172282](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834172282) and PR [40834178239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834178239) were still running when the correction was prepared; their results are not being treated as verification. The corrected exact-SHA push/PR checks are pending.
+- The earlier missing-import and tenant-fixture failures have been corrected on the same existing branch. The fixture flush is performed while workspace A is active; the production cross-workspace guard is unchanged. Exact-SHA push [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396) and PR [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094) passed on `293250bf7e209fe78839eec8afad55080acb6449`: Python 762 passed, 7 skipped; browser UAT 22 passed; all required configured push jobs passed. External CRM synchronization and jurisdiction-specific legal completeness remain unverified.
 
 
 ## 2026-10-29 verified workspace-scoped lead CSV export

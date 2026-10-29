@@ -3,7 +3,7 @@
 **Snapshot:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Current verified code SHA:** 62dfa336dfa4c617359f01588037611ec93be899  
+**Current verified code SHA:** 532d909ddd074848b985f2ff87ff328b834d4549  
 **Release decision:** NOT PRODUCTION READY. Draft PR #1 is open and unmerged.
 
 ## Built in the current branch
@@ -34,7 +34,9 @@ The product comparison writer is now more than a draft-only fact table: it safel
 - Evidence ledgers/summaries persist with the active workspace's ContentAsset draft and audit row. The frontend displays snapshot and evidence counts, per-fact status and expandable source excerpts/hashes. Publishing remains off.
 - Service/schema/API/persistence/security regression tests and Chromium journeys cover bounded fetching, sanitization, source failure, product-scoped evidence matching, persistence/audit, evidence display and invalid input.
 
-**Exact-SHA evidence:** push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed on cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad. Python: **785 passed, 7 skipped, 5 warnings**. Browser UAT: **24 passed** on both runs. PostgreSQL integration, frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped under its configured push-only condition.
+**Latest exact-SHA evidence:** push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40860248603 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40860256236 passed all required jobs on code SHA `532d909ddd074848b985f2ff87ff328b834d4549`. Python: **788 passed, 8 skipped, 5 warnings**. Chromium UAT: **25 passed**. PostgreSQL migration/integration: **8 passed**, including 24 simultaneous revision-number reservations. Frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped under its configured push-only condition.
+
+**Earlier comparison-writer verification:** push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed on cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad. Python: **785 passed, 7 skipped, 5 warnings**. Browser UAT: **24 passed** on both runs. PostgreSQL integration, frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped under its configured push-only condition.
 
 The source-evidence feature is verified for snapshot collection and literal text matching only. Merchant facts, current pricing, eligibility, legal compliance, affiliate network authorization and live provider behavior remain independently unverified.
 
@@ -74,7 +76,7 @@ This feature makes saved comparison drafts retrievable; it does not change the o
 
 | Verification measure | Exact current result |
 |---|---|
-| Python CI suite | 787 passed · 7 skipped · 5 warnings |
+| Python CI suite | 788 passed · 8 skipped · 5 warnings |
 | Chromium browser UAT | 25 passed |
 | Push CI | Passed |
 | Draft-PR CI | Passed |
@@ -85,3 +87,9 @@ This feature makes saved comparison drafts retrievable; it does not change the o
 A trustworthy overall completion percentage is not reported because the complete requirement inventory has not been proven against production acceptance criteria, and green software CI does not establish provider/account, compliance, disaster-recovery or live deployment readiness.
 
 **Resume instruction:** continue from the existing build/omni-affiliate-os-production branch and this verified SHA. Do not create another branch, merge, deploy, or mark the product production-ready until the remaining gates have current evidence.
+
+## Latest verified fix: concurrent revision allocation
+
+Revision allocation is now backed by migration 0031 and a workspace/root-scoped sequence. The atomic reservation is audited before generation and does not alter the original draft. The SQLite test seeds prior revision history; the PostgreSQL test reserves 24 revision numbers concurrently and proves uniqueness/monotonic sequence.
+
+The first PostgreSQL attempt found a fixture ordering error (workspace parent not flushed before child asset); the fixture was corrected and the exact-SHA push/PR checks above passed. This does not close the broader release gates: product-source text is not verified truth; official network credentials/approval, compliance/legal review, external publishing, staging operations, monitoring, backup/restore and remaining skill parity remain pending.

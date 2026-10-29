@@ -123,13 +123,19 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - Corrected the test to scope its content assertions to `main [role='alert']`, retaining all warning/safety assertions. No runtime code was changed for this test-only correction. The new exact-SHA push and PR workflows must pass before the UI increment is verified.
 
 
-## 2026-10-29 lead consent evidence UI (verification pending)
+## 2026-10-29 verified lead consent evidence UI
 
 - The lead list now exposes the stored email confirmation timestamp and consent source. Each lead can lazily load its workspace-scoped consent event history; the view shows the exact captured consent text, purpose, policy version, source/channel and event time, and labels the history read-only.
-- Added an API regression and Chromium acceptance for the display. This does not mutate consent or send email. The current candidate needs exact-SHA CI and browser UAT; production email provider delivery and jurisdictional policy acceptance remain separate gates.
+- Added an API regression and Chromium acceptance for the display. Exact-SHA push [40830226995](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40830226995) and PR [40830233016](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40830233016) passed: Python 747 passed, 7 skipped, 5 warnings; browser UAT 17 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped. This does not mutate consent or send email; production email provider delivery and jurisdictional policy acceptance remain separate gates.
 
 
 ### Consent-history UI compile correction
 
 - First candidate `5f2696434be2d1de75e38d904658d176cb5279bf` passed Python (746 tests), PostgreSQL, AI profile, repository guard and secret scan, but frontend TypeScript and the security-audit job failed because the generated page contained literal `\\n` sequences in the new state declaration. Browser UAT was skipped as a dependent job.
 - Corrected the state declaration to real source lines and added the `Lead`, `ConsentEvent` and `ConsentHistory` TypeScript fields that the earlier escaped-newline replacement had not applied. Fresh exact-SHA push and PR verification is required; the feature remains unverified until all jobs pass.
+
+
+## 2026-10-29 workspace-scoped lead pagination (verification pending)
+
+- The leads API now supports bounded limit/offset pagination and returns a workspace-scoped total count. Ordering is stable for equal timestamps; the frontend shows total count and page navigation, clarifies that search applies to the current page, and recovers to the last valid page when records are deleted while viewing a later page.
+- Added API regression coverage and browser acceptance that navigates to page two and simulates the only record being deleted before refresh. Exact-SHA push and PR CI remains pending.

@@ -262,7 +262,7 @@ def test_lead_list_exposes_double_opt_in_timestamp_and_consent_source():
         workspace_id="workspace-1",
     )
     scalars_result = SimpleNamespace(all=Mock(return_value=[row]))
-    session = SimpleNamespace(scalars=AsyncMock(return_value=scalars_result))
+    session = SimpleNamespace(scalar=AsyncMock(return_value=1), scalars=AsyncMock(return_value=scalars_result))
     main.app.dependency_overrides[get_session] = _override_session(session)
     main.app.dependency_overrides[main.require_auth] = lambda: {
         "user_id": "user-1", "workspace_id": "workspace-1", "email": "reader@example.invalid"
@@ -279,6 +279,52 @@ def test_lead_list_exposes_double_opt_in_timestamp_and_consent_source():
         statement = session.scalars.await_args.args[0]
         assert "workspace_id" in str(statement)
         assert "workspace-1" in statement.compile().params.values()
+    finally:
+        main.app.dependency_overrides.pop(get_session, None)
+        main.app.dependency_overrides.pop(main.require_auth, None)
+
+
+def test_lead_list_paginates_and_counts_only_the_active_workspace():
+    observed = datetime(2026, 10, 28, 10, 0, tzinfo=timezone.utc)
+    row = SimpleNamespace(
+        id="lead-page-50",
+        email="page-50@example.invalid",
+        lead_magnet="Creator guide",
+        consent_at=observed,
+        email_consent_confirmed_at=None,
+        consent_source="persisted_landing_page",
+        unsubscribed_at=None,
+        purchased_at=None,
+        metadata_json={},
+        workspace_id="workspace-1",
+    )
+    scalars_result = SimpleNamespace(all=Mock(return_value=[row]))
+    session = SimpleNamespace(
+        scalar=AsyncMock(return_value=51),
+        scalars=AsyncMock(return_value=scalars_result),
+    )
+    main.app.dependency_overrides[get_session] = _override_session(session)
+    main.app.dependency_overrides[main.require_auth] = lambda: {
+        "user_id": "user-1", "workspace_id": "workspace-1", "email": "reader@example.invalid"
+    }
+    try:
+        with TestClient(main.app) as client:
+            response = client.get("/api/leads?limit=1&offset=50")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["count"] == 1
+        assert body["total_count"] == 51
+        assert body["limit"] == 1
+        assert body["offset"] == 50
+        assert body["data"][0]["id"] == "lead-page-50"
+
+        count_query = session.scalar.await_args.args[0]
+        page_query = session.scalars.await_args.args[0]
+        for statement in (count_query, page_query):
+            assert "workspace_id" in str(statement)
+            assert "workspace-1" in statement.compile().params.values()
+        assert page_query._limit_clause.value == 1
+        assert page_query._offset_clause.value == 50
     finally:
         main.app.dependency_overrides.pop(get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)

@@ -37,8 +37,9 @@ type ConsentEvent = {
   created_at: string | null;
 };
 type ConsentHistory = { lead_id: string; count: number; read_only: boolean; data: ConsentEvent[] };
-type LeadList = { count: number; data: Lead[] };
+type LeadList = { count: number; total_count: number; limit: number; offset: number; data: Lead[] };
 
+const PAGE_LIMIT = 50;
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100";
 const utmFields: Array<[UTMField, string]> = [
   ["utm_source", "Source"],
@@ -90,6 +91,8 @@ export default function LeadsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [consentHistory, setConsentHistory] = useState<Record<string, ConsentEvent[]>>({});
   const [consentHistoryOpen, setConsentHistoryOpen] = useState<Record<string, boolean>>({});
   const [consentHistoryLoading, setConsentHistoryLoading] = useState<Record<string, boolean>>({});
@@ -99,7 +102,19 @@ export default function LeadsPage() {
     setLoading(true);
     setError("");
     try {
-      const result = await apiFetch<LeadList>("/api/leads");
+      const result = await apiFetch<LeadList>("/api/leads?limit=" + PAGE_LIMIT + "&offset=" + offset);
+      const total = Number.isFinite(result.total_count)
+        ? Math.max(0, result.total_count)
+        : Math.max(0, Number(result.count) || 0);
+      if (offset > 0 && offset >= total) {
+        const lastOffset = Math.max(0, Math.floor((total - 1) / PAGE_LIMIT) * PAGE_LIMIT);
+        if (lastOffset !== offset) {
+          setTotalCount(total);
+          setOffset(lastOffset);
+          return;
+        }
+      }
+      setTotalCount(total);
       setLeads(Array.isArray(result.data) ? result.data : []);
     } catch (caught) {
       setError(message(caught));
@@ -107,7 +122,7 @@ export default function LeadsPage() {
       setLoading(false);
       setBusy(false);
     }
-  }, []);
+  }, [offset]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -199,19 +214,19 @@ export default function LeadsPage() {
         )}
 
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <SummaryCard title="Workspace leads" value={String(leads.length)} note="Records returned for the active workspace" icon={Users} />
-          <SummaryCard title="With UTM attribution" value={String(attributedCount)} note="At least one first- or last-touch field is recorded" icon={Activity} />
-          <SummaryCard title="Unsubscribed" value={String(suppressedCount)} note="Suppressed from future marketing delivery" icon={ShieldCheck} />
+          <SummaryCard title="Workspace leads" value={String(totalCount)} note="Total records in the active workspace" icon={Users} />
+          <SummaryCard title="With UTM attribution" value={String(attributedCount)} note="On the current page" icon={Activity} />
+          <SummaryCard title="Unsubscribed" value={String(suppressedCount)} note="On the current page; suppressed from future delivery" icon={ShieldCheck} />
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-xl font-black text-slate-950">Lead records</h2>
-              <p className="mt-1 text-sm text-slate-500">Shows at most the latest 200 lead records returned by the API.</p>
+              <p className="mt-1 text-sm text-slate-500">Shows 50 workspace-scoped records per page. Search filters the current page; the total count covers the active workspace.</p>
             </div>
             <div className="w-full sm:max-w-sm">
-              <label htmlFor="lead-search" className="block text-sm font-bold text-slate-700">Search email, resource or UTM values</label>
+              <label htmlFor="lead-search" className="block text-sm font-bold text-slate-700">Search this page: email, resource or UTM values</label>
               <input
                 id="lead-search"
                 className={inputClass}
@@ -351,8 +366,19 @@ export default function LeadsPage() {
               })}
             </div>
           )}
+          {!loading && totalCount > PAGE_LIMIT && (
+            <nav aria-label="Lead pagination" className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+              <p className="text-sm text-slate-600">
+                Showing {totalCount === 0 ? 0 : offset + 1}–{Math.min(offset + leads.length, totalCount)} of {totalCount} leads · page {Math.floor(offset / PAGE_LIMIT) + 1} of {Math.ceil(totalCount / PAGE_LIMIT)}
+              </p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setOffset(Math.max(0, offset - PAGE_LIMIT))} disabled={offset === 0 || loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-40">Previous</button>
+                <button type="button" onClick={() => setOffset(offset + PAGE_LIMIT)} disabled={offset + PAGE_LIMIT >= totalCount || loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-40">Next</button>
+              </div>
+            </nav>
+          )}
           {!loading && filtered.length > 0 && (
-            <p className="mt-4 text-xs text-slate-500">Showing {filtered.length} of {leads.length} workspace records. This page is read-only; changing consent or suppression remains in the existing subscription controls.</p>
+            <p className="mt-4 text-xs text-slate-500">Showing {filtered.length} matching records on this page; {totalCount} total workspace records. This page is read-only; changing consent or suppression remains in the existing subscription controls.</p>
           )}
         </section>
 

@@ -1,11 +1,18 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 lead consent evidence visibility (CI pending)
+## 2026-10-29 workspace-scoped lead pagination (CI pending)
+
+- The leads API now accepts bounded limit/offset parameters (default 50, maximum 200), applies the same active-workspace predicate to both rows and total count, and uses a stable created-at/id ordering.
+- The UI shows total workspace lead count, current-page metrics, previous/next navigation and explicit current-page search scope. If records are removed while the user is on a now-invalid page, it falls back to the last valid page rather than displaying a misleading empty workspace.
+- Added API coverage for scoped count and requested limit/offset, plus browser acceptance for pagination and stale-page recovery. Exact-SHA push and PR verification is pending.
+
+
+## 2026-10-29 verified lead consent evidence visibility
 
 - The workspace lead-list API now returns the persisted email-confirmation timestamp and consent source, in addition to the existing consent time, unsubscribe/purchase state and attribution. A missing confirmation timestamp remains explicitly unrecorded; the UI does not infer a pending/confirmed state from unrelated data.
 - The leads page adds a lazy-loaded, read-only view of the existing workspace-scoped append-only consent-event endpoint. It displays event type/time, purpose, source/channel, policy version and the captured consent text (or an explicit note for withdrawal events without consent wording). API errors and empty history have visible states.
-- Added an API regression for the new fields and browser coverage for confirmed timestamp/source and consent-event rendering. The first exact-SHA run caught literal escaped newline characters in the new frontend state declaration and a missed type replacement; the state declarations are now split onto real lines and the new API types are declared. No consent or email behavior changed. Exact-SHA push and PR rerun is pending.
+- Added an API regression for the new fields and browser coverage for confirmed timestamp/source and consent-event rendering. The first exact-SHA run caught literal escaped newline characters in the new frontend state declaration and a missed type replacement; the correction was verified on push [40830226995](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40830226995) and PR [40830233016](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40830233016). Python 747 passed, 7 skipped, 5 warnings; PostgreSQL, frontend, security, AI profile, secret scan, repository guard and browser UAT (17 passed) succeeded. Push lockfile-sync passed; PR lockfile-sync was skipped.
 
 
 ## 2026-10-29 verified paid-ad guardrail conflict visibility in UI

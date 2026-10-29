@@ -4792,26 +4792,40 @@ async def public_webinar_register(public_id: str, request: Request, db: AsyncSes
 
 @api.get("/leads")
 async def leads(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=100000),
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = user.get("workspace_id")
     if not workspace_id:
         raise HTTPException(403, "Select an authorized workspace before viewing leads")
+    workspace_filter = Lead.workspace_id == str(workspace_id)
+    total_count = int(await db.scalar(
+        select(func.count(Lead.id)).where(workspace_filter)
+    ) or 0)
     rows = list((await db.scalars(
-        select(Lead).where(Lead.workspace_id == str(workspace_id))
-        .order_by(Lead.created_at.desc()).limit(200)
+        select(Lead).where(workspace_filter)
+        .order_by(Lead.created_at.desc(), Lead.id.asc())
+        .limit(limit)
+        .offset(offset)
     )).all())
-    return {"count": len(rows), "data": [
-        {"id": x.id, "email": x.email, "lead_magnet": x.lead_magnet,
-         "consented_at": x.consent_at.isoformat(),
-         "email_consent_confirmed_at": x.email_consent_confirmed_at.isoformat() if x.email_consent_confirmed_at else None,
-         "consent_source": x.consent_source,
-         "unsubscribed": x.unsubscribed_at is not None,
-         "purchased": x.purchased_at is not None,
-         "attribution": lead_attribution_summary(x.metadata_json)}
-        for x in rows
-    ]}
+    return {
+        "count": len(rows),
+        "total_count": total_count,
+        "limit": limit,
+        "offset": offset,
+        "data": [
+            {"id": x.id, "email": x.email, "lead_magnet": x.lead_magnet,
+             "consented_at": x.consent_at.isoformat(),
+             "email_consent_confirmed_at": x.email_consent_confirmed_at.isoformat() if x.email_consent_confirmed_at else None,
+             "consent_source": x.consent_source,
+             "unsubscribed": x.unsubscribed_at is not None,
+             "purchased": x.purchased_at is not None,
+             "attribution": lead_attribution_summary(x.metadata_json)}
+            for x in rows
+        ],
+    }
 
 
 

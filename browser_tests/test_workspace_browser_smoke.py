@@ -1376,7 +1376,7 @@ def test_leads_page_displays_email_confirmation_and_read_only_consent_history():
                 if "/api/leads/lead-confirmed/consent-events" in route.request.url:
                     _fulfill_json(route, history)
                 elif route.request.url.rstrip("/").endswith("/api/leads"):
-                    _fulfill_json(route, {"count": 1, "data": [lead]})
+                    _fulfill_json(route, {"count": 1, "total_count": 1, "limit": 50, "offset": 0, "data": [lead]})
                 else:
                     _fulfill_json(route, {"detail": "Unexpected leads API request"}, status=404)
 
@@ -1392,5 +1392,71 @@ def test_leads_page_displays_email_confirmation_and_read_only_consent_history():
             history_panel.get_by_text("I agree to receive email updates about relevant offers and can unsubscribe at any time.").wait_for(state="visible")
             assert history_panel.get_by_text("Read-only consent event ledger", exact=False).is_visible()
             assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()
+
+
+def test_leads_page_paginates_and_recovers_when_last_page_becomes_stale():
+    observed = "2026-10-28T10:00:00+00:00"
+    first_page = [{
+        "id": f"lead-{index}",
+        "email": f"lead-{index}@example.test",
+        "lead_magnet": "Creator guide",
+        "consented_at": observed,
+        "email_consent_confirmed_at": None,
+        "consent_source": "persisted_landing_page",
+        "unsubscribed": False,
+        "purchased": False,
+        "attribution": {"first_touch": {}, "last_touch": {}, "last_touch_at": None},
+    } for index in range(50)]
+    last_lead = {
+        "id": "lead-50",
+        "email": "lead-50@example.test",
+        "lead_magnet": "Creator guide",
+        "consented_at": observed,
+        "email_consent_confirmed_at": observed,
+        "consent_source": "persisted_landing_page",
+        "unsubscribed": False,
+        "purchased": False,
+        "attribution": {"first_touch": {}, "last_touch": {}, "last_touch_at": None},
+    }
+    offset_zero_calls = [0]
+    offset_fifty_calls = [0]
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_leads(route):
+                url = route.request.url
+                if "/api/leads/" in url and "/consent-events" in url:
+                    _fulfill_json(route, {"lead_id": "lead-50", "count": 0, "read_only": True, "data": []})
+                elif "offset=50" in url:
+                    offset_fifty_calls[0] += 1
+                    if offset_fifty_calls[0] == 1:
+                        _fulfill_json(route, {"count": 1, "total_count": 51, "limit": 50, "offset": 50, "data": [last_lead]})
+                    else:
+                        # Simulate the only record on page two being removed after it was viewed.
+                        _fulfill_json(route, {"count": 0, "total_count": 50, "limit": 50, "offset": 50, "data": []})
+                elif "offset=0" in url:
+                    offset_zero_calls[0] += 1
+                    total = 51 if offset_zero_calls[0] == 1 else 50
+                    _fulfill_json(route, {"count": 50, "total_count": total, "limit": 50, "offset": 0, "data": first_page})
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected leads API request"}, status=404)
+
+            page.route("**/api/leads**", handle_leads)
+            page.goto(f"{BASE_URL}/leads", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Leads & attribution").wait_for(state="visible")
+            page.get_by_text("lead-0@example.test").wait_for(state="visible")
+            page.get_by_role("button", name="Next").click()
+            page.get_by_text("lead-50@example.test").wait_for(state="visible")
+            page.get_by_text("page 2 of 2", exact=False).wait_for(state="visible")
+            page.get_by_role("button", name="Refresh").click()
+            page.get_by_text("lead-0@example.test").wait_for(state="visible")
+            assert offset_fifty_calls[0] == 2
+            assert offset_zero_calls[0] == 2
+            assert page.get_by_role("button", name="Next").count() == 0
         finally:
             browser.close()

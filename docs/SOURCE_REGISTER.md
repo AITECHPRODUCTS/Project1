@@ -105,3 +105,10 @@ This repository does **not** yet contain a byte-for-byte mirror of every source 
 - Exact candidate 602f761732ce8930bc103ed3f19b13ee524dc6a3 validates malformed/non-finite JSON schema bounds and out-of-range or over-precision numeric input to the deterministic local ROAS handler.
 - Added regression tests; exact push run 40721720474 and PR run 40721732685 completed successfully. Python: 640 passed, 7 skipped, 5 warnings; browser UAT: 5 passed in both. All other configured jobs, including PostgreSQL migration/concurrency, frontend/Docker, AI/RAG and security/SBOM passed.
 - All 53 skill rows remain partial; this is a narrow hardening step. Current release blockers include provider-backed acceptance, staging/restore, two temporary build-only LGPL inventory notices expiring 2026-11-02, and owner decision on repository visibility.
+
+
+## 2026-10-29 — saved offer shortlist source/verification record
+
+The current build branch added workspace-owned saved offer shortlists and comparison views over the shared catalog. Implementation includes backend/models.py, backend/schemas.py, backend/main.py, migration 0028_offer_shortlists, frontend/app/offers/page.tsx, tests/test_offer_shortlists_api.py, and browser lifecycle acceptance in browser_tests/test_workspace_browser_smoke.py. Requirement coverage is tracked in docs/skill-parity-matrix.csv and docs/requirements/v4/12_REQUIREMENTS_TRACEABILITY_BACKLOG.md.
+
+Exact verified code checkpoint: 3badf73a5c6eb25d8cdd06fd8e1d49ae7734e324; push 40822087405 and PR 40822092898 passed. Python 743 passed / 7 skipped / 5 warnings; browser UAT 12 passed in both. This feature persists operator selections but does not attest source authenticity, provider eligibility, terms or approval. The separately described newer live-app ZIP remains unavailable in the Library inventory; do not claim its code was reviewed or ported.

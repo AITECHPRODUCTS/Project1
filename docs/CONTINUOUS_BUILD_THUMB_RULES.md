@@ -278,3 +278,12 @@ These additive rules apply to every future Project1 build session.
 18. Public landing pages must expose separate controls for consent to receive marketing emails and optional explicit re-subscription confirmation. Never make the re-subscribe checkbox required for first-time subscribers; server-side logic must still require it when the existing lead is unsubscribed.
 
 19. Learning must not count reversal event rows as new conversions or train on fully reversed outcomes. For partially reversed original conversions, use the append-only ledger to calculate net commission; keep sample-size gates and human review/promotion safeguards in place.
+
+
+## 2026-10-29 verified checkpoint — workspace offer shortlists
+
+- Current exact code checkpoint: 3badf73a5c6eb25d8cdd06fd8e1d49ae7734e324.
+- Workspace-scoped saved offer lists and comparison API/UI are implemented with migration, API regression tests and browser lifecycle UAT.
+- Push 40822087405 and PR 40822092898 passed. Python 743 passed / 7 skipped / 5 warnings; browser UAT 12 passed in both; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. PR lockfile-sync skipped by the configured push-only condition.
+- Earlier browser locator failure on 05323ad40bfe14c34bbf3b44da4931abbff37b4f was fixed by targeting the offer heading; the current exact SHA is green.
+- This checkpoint does not establish official provider verification or production readiness. Continue to the next unblocked traceability gap without creating a branch.

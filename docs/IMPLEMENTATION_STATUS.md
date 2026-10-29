@@ -1179,3 +1179,12 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - Exact PR CI: [40678593095](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678593095) — completed successfully. The PR lockfile-sync job was skipped by the workflow's configured condition, not failed.
 - Code slice: whitespace-only reconciliation evidence status defaults to pending verification; explicit fully-reversed/refunded, charge-back and commission-reversed status variants are excluded from candidate matching. Matching remains review-only and no payout is confirmed.
 - No overall product-completion percentage is inferred from the 53-row skill parity inventory. Production release remains blocked by provider authorization/contracts, full tenant/SaaS acceptance, legal/license decisions, staging deployment, restore/rollback rehearsal, operational monitoring and full browser/accessibility UAT.
+
+
+## 2026-10-29 — verified workspace-scoped offer shortlists
+
+- Implemented workspace-owned persisted saved offer lists over the shared affiliate offer catalog. Operators can create/list/view/delete lists, add/remove catalog offers, attach notes, and compare current catalog facts. All list and item operations explicitly scope reads and writes to the authenticated active workspace. Catalog rows are not changed by shortlist operations.
+- Added OfferShortlist and OfferShortlistItem, Alembic migration 0028_offer_shortlists, bounded/validated request schemas, API routes, catalog-page controls, API lifecycle/duplicate/unknown-metric/tenant-isolation tests, and Chromium browser acceptance for create → select → save → view → remove → delete.
+- Evidence boundary: this does not independently verify provider claims, account eligibility, terms or approval. Unknown EPC/conversion metrics remain unknown. No provider mutation, application submission, publishing or payout action occurs.
+- Exact verified checkpoint 3badf73a5c6eb25d8cdd06fd8e1d49ae7734e324: push 40822087405 and PR 40822092898 completed successfully. Python 743 passed, 7 skipped, 5 warnings; browser UAT 12 passed in both workflows. PostgreSQL migration/integration, frontend production/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile sync passed; PR lockfile sync was skipped by its configured event condition.
+- Product readiness remains partial: official affiliate-provider contracts/authorization, independent offer-term verification, full 53-skill parity, staging, backup/restore, legal/license and operational release gates remain open.

@@ -473,3 +473,11 @@ Implementation captures a bounded public-page snapshot through the pinned outbou
 - UI loads the history on page entry, refreshes after generation and can reopen saved HTML and evidence metadata. API tests cover the two-workspace case; browser UAT covers creation and reopening after page reload.
 - Verified exact-SHA on 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0: push 40855889234 and PR 40855896327 passed; Python 787 passed/7 skipped/5 warnings and browser UAT 25 passed. PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile-sync passed.
 - This closes saved draft retrieval only. Product evidence verification, live provider connections, compliance and production deployment/restore remain open.
+
+## R-26 — Immutable comparison draft revisions — verified 2026-10-29
+
+- Added the optional `revision_of_asset_id` request field and workspace-scoped source validation for `POST /api/content/comparison-post`. Missing/foreign source IDs return 404; only comparison drafts with `status=draft` can be revised. Access is validated before model/source network work.
+- Each revision creates a new `ContentAsset`, stores revision number and parent/root asset IDs in metadata, and records a distinct `content_comparison_post.revised` audit event. The source asset is not changed; the editor can choose a revision or an independent draft.
+- Added API/database and Chromium acceptance for the new revision, original immutability, root metadata persistence and cross-workspace denial.
+- Exact-SHA push [40858629542](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858629542) and PR [40858638120](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858638120) passed. Python 787 passed/7 skipped/5 warnings; browser UAT 25 passed. PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
+- Remaining acceptance: immutable revision lineage is implemented, but sourced text presence is not fact verification; official affiliate eligibility, compliance/legal review, live provider/publishing, staging and production operations remain open.

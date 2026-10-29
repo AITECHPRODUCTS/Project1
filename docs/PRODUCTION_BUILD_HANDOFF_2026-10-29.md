@@ -130,3 +130,10 @@ Verify the actual remote branch head and exact-SHA workflow state first. Then ch
 - Python 787 passed, 7 skipped, 5 warnings; browser UAT 25 passed on both runs. PostgreSQL, frontend build/final-image smoke, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile-sync passed and PR lockfile-sync skipped by design.
 - Saved comparison API list/detail reads now enforce the active workspace and asset type, mark responses no-store, and return 404 for cross-workspace IDs. UI loads and reopens saved drafts after page reload.
 - The product remains NOT PRODUCTION READY. Live provider/account UAT, legal/governance, staging/deployment, monitoring and backup/restore requirements remain unresolved.
+
+## Latest verified implementation — immutable comparison draft revisions — 29 October 2026
+
+- Code SHA `62dfa336dfa4c617359f01588037611ec93be899` is verified on the current single branch. Commit: https://github.com/AITECHPRODUCTS/Project1/commit/62dfa336dfa4c617359f01588037611ec93be899.
+- Exact-SHA push [40858629542](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858629542) and PR [40858638120](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858638120) passed: Python 787 passed/7 skipped/5 warnings, browser UAT 25 passed on both; PostgreSQL migration/integration, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard passed; push lockfile-sync passed and PR lockfile-sync skipped by configured condition.
+- A saved comparison draft can be reopened and used to create a new revision. The original asset is preserved; each revision has its own ID, parent/root metadata and audit record. Source ownership is checked against the active workspace before model/network work. “Save as separate draft” creates an independent asset.
+- The current short build/remaining document is `docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md`. Product status remains NOT PRODUCTION READY because account-level provider UAT, legal/eligibility acceptance, remaining skill parity, deployment/staging, monitoring and backup/restore gates remain open.

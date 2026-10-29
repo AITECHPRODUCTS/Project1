@@ -3,7 +3,7 @@
 **Snapshot:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Current verified code SHA:** 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0  
+**Current verified code SHA:** 62dfa336dfa4c617359f01588037611ec93be899  
 **Release decision:** NOT PRODUCTION READY. Draft PR #1 is open and unmerged.
 
 ## Built in the current branch
@@ -38,7 +38,7 @@ The product comparison writer is now more than a draft-only fact table: it safel
 
 The source-evidence feature is verified for snapshot collection and literal text matching only. Merchant facts, current pricing, eligibility, legal compliance, affiliate network authorization and live provider behavior remain independently unverified.
 
-## Latest feature: saved comparison draft retrieval — verified on 29 October 2026
+## Previous feature: saved comparison draft retrieval — verified on 29 October 2026
 
 The comparison writing workflow now supports durable retrieval after navigating away or reloading the page.
 
@@ -51,6 +51,15 @@ The comparison writing workflow now supports durable retrieval after navigating 
 Exact-SHA push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40855889234 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40855896327 passed on code SHA 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0. Python: 787 passed, 7 skipped, 5 warnings. Chromium browser UAT: 25 passed on both runs. PostgreSQL integration, frontend typecheck/build/final Docker smoke, AI/RAG profile, security/SBOM, secret scan, repository guard and push lockfile-sync passed. PR lockfile-sync was skipped by its push-only condition.
 
 This feature makes saved comparison drafts retrievable; it does not change the overall release decision. Merchant evidence, true/current product facts, eligibility, legal/compliance approval, live affiliate provider connections, production deployment and backup/restore remain separate open gates.
+
+## Latest feature: immutable comparison draft revisions — verified on 29 October 2026
+
+- Added the optional `revision_of_asset_id` request field for `POST /api/content/comparison-post`. The API verifies that the source is a comparison draft inside the authenticated active workspace, returns 404 for missing/foreign resources and rejects non-draft resources without changing them.
+- A revision creates a new `ContentAsset` and stores `revision_number`, `revision_of_asset_id` and `revision_root_asset_id` in metadata. The original body, title, evidence and audit row remain unchanged. Revision creation has the separate `content_comparison_post.revised` audit action. Existing metadata storage is reused; no database migration is needed.
+- Saved draft detail now returns the topic, audience, disclosure and revision lineage. The UI loads the saved form values, can save a new revision or intentionally start a separate independent draft, updates the workspace history, and displays the parent/root lineage.
+- API regression coverage verifies revision 1/root identity, revision 2 lineage, persisted root metadata, immutable original content, revision audit evidence and denial of cross-workspace revision attempts before invoking the generation service. Chromium UAT exercises opening a saved draft, changing it, saving a revision and confirming the original remains unchanged.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858629542 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858638120 passed on code SHA 62dfa336dfa4c617359f01588037611ec93be899. Python: 787 passed, 7 skipped, 5 warnings. Chromium UAT: 25 passed on both runs. PostgreSQL migration/integration, frontend typecheck/build/Docker smoke, AI/RAG profile, security/SBOM audit, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by the configured push-only condition.
+- Revision history establishes lineage/auditability, not claim truth or provider approval. Product-source snapshots record literal text presence only; legal review, official affiliate eligibility, provider credentials/UAT, live publishing, staging deployment, observability and backup/restore remain production blockers.
 
 ## Remaining before a production launch
 

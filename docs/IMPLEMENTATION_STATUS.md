@@ -1,7 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 paid-ad guardrail snapshot-conflict safety (CI pending)
+## 2026-10-29 paid-ad guardrail conflict visibility in UI (CI pending)
+
+- The ad-budget guardrail page now renders an accessible alert when its saved evaluation contains snapshot_conflicts, identifying the platform/creative, UTC day, conflicting fields and candidate count.
+- The alert explains that stop-loss evaluation is blocked pending source reconciliation and that no remote campaign action was executed. The existing raw evaluation JSON remains available for detailed diagnosis.
+- Added Chromium coverage for the rendered conflict state and its safety language. This improves operator visibility; it does not authorize ad spend or add a provider integration. Exact-SHA push and PR CI is pending.
+
+
+## 2026-10-29 verified paid-ad guardrail snapshot-conflict safety
 
 - Hardened `backend/services/ad_guardrails.py` to group provider observations by platform, creative and UTC day, select the latest timestamp for each group, and detect conflicting metric/currency values among records tied at that latest timestamp.
 - Exact duplicates still collapse to one snapshot. Contradictory latest snapshots now return `blocked_ambiguous_provider_snapshots` with conflicting field names and candidate count; they cannot produce stop-loss breaches or latch the guardrail from ambiguous evidence. No provider action is executed.

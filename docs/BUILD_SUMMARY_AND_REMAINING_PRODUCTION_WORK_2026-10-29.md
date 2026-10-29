@@ -102,9 +102,16 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - Release remains **NOT RELEASE READY**. No provider integration, affiliate-network approval, paid campaign action, production deployment, or live external delivery is claimed as verified.
 
 
-## 2026-10-29 additive paid-ad snapshot conflict safeguard (verification pending)
+## 2026-10-29 verified paid-ad snapshot conflict safeguard
 
 - Candidate change groups provider-verified observations by platform, creative and UTC day, then chooses the latest timestamp for each group. If multiple latest records share the same timestamp but disagree on spend, commission, impressions, clicks, conversions or currency, the evaluation returns `blocked_ambiguous_provider_snapshots`.
 - Exact duplicates remain deduplicated. Ambiguous evidence returns no breach recommendations and cannot trigger the guardrail latch. Regression tests cover both conflicting and identical duplicate records.
 - This is not provider authentication or live campaign control. It does not execute a remote pause, change budgets, authorize spend, or certify source authenticity.
 - Current candidate before this slice: `06a47498fc6cba7186884cf4ccbc4962042f7f39`. The new candidate must be verified with exact-SHA push and PR Actions, including Python, PostgreSQL, frontend, security, repository guard and browser UAT. Release remains **NOT RELEASE READY**.
+
+
+## 2026-10-29 operator-visible ad snapshot conflict alert (verification pending)
+
+- The /ads/guardrails page now renders a semantic alert for the blocked_ambiguous_provider_snapshots evaluation, showing the affected platform/creative, UTC day, conflicting metric fields and number of same-timestamp records.
+- The alert explicitly states that evaluation is blocked until reconciliation and that no remote campaign action was executed; the raw evaluation payload remains available for debugging.
+- Added Chromium browser acceptance coverage for the rendered warning. The UI change requires fresh exact-SHA push and PR workflows. Live provider authentication/action and production release remain unverified.

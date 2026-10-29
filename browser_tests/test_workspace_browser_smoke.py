@@ -56,6 +56,73 @@ def test_skill_package_builder_supports_keyboard_navigation_and_rejects_invalid_
             browser.close()
 
 
+def test_ad_guardrails_browser_surfaces_ambiguous_provider_snapshot_block():
+    plan = {
+        "id": "plan-ambiguous",
+        "campaign_name": "Ambiguous snapshot test campaign",
+        "daily_budget_usd": "40.00",
+        "status": "draft",
+        "platforms": ["meta"],
+        "created_at": None,
+    }
+    guardrail = {
+        "id": "guardrail-ambiguous",
+        "campaign_plan_id": "plan-ambiguous",
+        "daily_spend_cap_usd": "35.00",
+        "campaign_spend_cap_usd": "500.00",
+        "minimum_roas": "1.20",
+        "maximum_cpa_usd": "35.00",
+        "minimum_verified_impressions": 1000,
+        "minimum_verified_clicks": 30,
+        "minimum_verified_conversions": 3,
+        "kill_switch_engaged": False,
+        "stop_latched": False,
+        "last_evaluated_at": "2026-10-29T06:00:00+00:00",
+        "last_evaluation": {
+            "status": "blocked_ambiguous_provider_snapshots",
+            "snapshot_conflicts": [{
+                "platform": "meta",
+                "creative_id": "creative-1",
+                "day": "2026-10-29",
+                "observed_at": "2026-10-29T05:00:00+00:00",
+                "conflicting_fields": ["commission_usd", "spend_usd"],
+                "candidate_count": 2,
+            }],
+            "breaches": [],
+            "provider_action_executed": False,
+            "live_spend_authorized": False,
+        },
+        "live_spend_authorized": False,
+        "external_campaign_changes_executed": False,
+        "execution_note": "Review only.",
+    }
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_ads(route):
+                if "/api/ads/plans?" in route.request.url:
+                    _fulfill_json(route, {"count": 1, "data": [plan]})
+                elif "/api/ads/guardrails?" in route.request.url:
+                    _fulfill_json(route, {"count": 1, "data": [guardrail]})
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected API request"}, status=404)
+
+            page.route("**/api/ads/**", handle_ads)
+            page.goto(f"{BASE_URL}/ads/guardrails", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Ad budget guardrails").wait_for(state="visible")
+            page.get_by_role("alert").get_by_text(
+                "Conflicting provider snapshots — evaluation blocked"
+            ).wait_for(state="visible")
+            assert "creative-1" in page.locator("[role='alert']").inner_text()
+            assert "commission_usd, spend_usd" in page.locator("[role='alert']").inner_text()
+            assert "no remote campaign action was executed" in page.locator("[role='alert']").inner_text().lower()
+            assert page.locator("main [role='alert']").count() == 1
+        finally:
+            browser.close()
+
+
 def test_ad_guardrails_browser_exposes_read_only_provider_boundary():
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)

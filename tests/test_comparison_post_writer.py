@@ -256,11 +256,14 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             ))
             await session.commit()
 
+    writer_topics = []
+
     async def fake_writer(**kwargs):
-        assert kwargs["topic"] == "Analytics products comparison"
+        writer_topics.append(kwargs["topic"])
+        assert kwargs["topic"].startswith("Analytics products comparison")
         return {
-            "title": "Analytics products comparison — Product Comparison",
-            "html": "<!doctype html><html><body><article><p>Draft only.</p></article></body></html>",
+            "title": f"{kwargs['topic']} — Product Comparison",
+            "html": f"<!doctype html><html><body><article><p>{kwargs['topic']}</p></article></body></html>",
             "word_count": 8,
             "minimum_word_target": 500,
             "minimum_word_target_met": False,
@@ -296,15 +299,40 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             response = client.post("/api/content/comparison-post", json=valid_payload())
             assert response.status_code == 201, response.text
             result = response.json()
+            original_asset_id = result["asset_id"]
+            original_title = result["title"]
+            original_html = result["html"]
+            assert result["revision_number"] == 1
+            assert result["revision_of_asset_id"] is None
+            assert result["revision_root_asset_id"] == original_asset_id
+
+            revision_response = client.post(
+                "/api/content/comparison-post",
+                json=valid_payload(topic="Analytics products comparison revised", revision_of_asset_id=original_asset_id),
+            )
+            assert revision_response.status_code == 201, revision_response.text
+            revision_result = revision_response.json()
+            assert revision_result["asset_id"] != original_asset_id
+            assert revision_result["revision_number"] == 2
+            assert revision_result["revision_of_asset_id"] == original_asset_id
+            assert revision_result["revision_root_asset_id"] == original_asset_id
+            assert revision_result["topic"] == "Analytics products comparison revised"
+
             listed = client.get("/api/content/comparison-posts?limit=10")
             assert listed.status_code == 200, listed.text
             listed_body = listed.json()
-            assert listed_body["total"] == 1
-            assert listed_body["items"][0]["asset_id"] == result["asset_id"]
-            assert listed_body["items"][0]["product_count"] == 2
+            assert listed_body["total"] == 2
+            listed_by_id = {item["asset_id"]: item for item in listed_body["items"]}
+            assert set(listed_by_id) == {original_asset_id, revision_result["asset_id"]}
+            assert listed_by_id[original_asset_id]["revision_number"] == 1
+            assert listed_by_id[revision_result["asset_id"]]["revision_number"] == 2
+            assert listed_by_id[revision_result["asset_id"]]["revision_of_asset_id"] == original_asset_id
+            assert listed_by_id[original_asset_id]["product_count"] == 2
             detail = client.get("/api/content/comparison-posts/" + result["asset_id"])
             assert detail.status_code == 200, detail.text
             assert detail.json()["html"].startswith("<!doctype html>")
+            assert detail.json()["revision_number"] == 1
+            assert detail.json()["revision_root_asset_id"] == original_asset_id
             assert detail.json()["source_snapshots"][0]["excerpt_sha256"] == "a" * 64
             assert detail.json()["evidence_summary"]["source_snapshots_fetched"] == 1
             assert detail.headers["cache-control"] == "no-store"
@@ -314,6 +342,13 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             assert other_list.json()["total"] == 0
             cross_workspace_detail = client.get("/api/content/comparison-posts/" + result["asset_id"])
             assert cross_workspace_detail.status_code == 404
+            calls_before_denied_revision = list(writer_topics)
+            denied_revision = client.post(
+                "/api/content/comparison-post",
+                json=valid_payload(topic="Analytics products comparison other tenant", revision_of_asset_id=original_asset_id),
+            )
+            assert denied_revision.status_code == 404
+            assert writer_topics == calls_before_denied_revision
             active["workspace_id"] = "comparison-workspace"
         assert result["asset_id"]
         assert result["asset_status"] == "draft"
@@ -328,13 +363,21 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
                 asset = await session.get(ContentAsset, result["asset_id"])
                 audit = await session.scalar(select(AuditLog).where(
                     AuditLog.action == "content_comparison_post.created",
-                    AuditLog.resource_id == result["asset_id"],
+                    AuditLog.resource_id == original_asset_id,
                 ))
-            return asset, audit
+                revision_asset = await session.get(ContentAsset, revision_result["asset_id"])
+                revision_audit = await session.scalar(select(AuditLog).where(
+                    AuditLog.action == "content_comparison_post.revised",
+                    AuditLog.resource_id == revision_result["asset_id"],
+                ))
+            return asset, audit, revision_asset, revision_audit
 
-        asset, audit = asyncio.run(read_records())
+        asset, audit, revision_asset, revision_audit = asyncio.run(read_records())
         assert asset is not None and asset.workspace_id == active["workspace_id"]
         assert asset.asset_type == "comparison_post" and asset.status == "draft"
+        assert asset.title == original_title and asset.body == original_html
+        assert asset.metadata_json["revision_number"] == 1
+        assert asset.metadata_json["revision_root_asset_id"] == original_asset_id
         assert asset.metadata_json["evidence_status"] == "public_snapshot_captured_not_fact_verified"
         assert asset.metadata_json["source_snapshots"][0]["excerpt_sha256"] == "a" * 64
         assert asset.metadata_json["fact_evidence"][0]["evidence_status"] == "exact_text_observed"
@@ -343,6 +386,15 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
         assert audit.details_json["publishing_started"] is False
         assert audit.details_json["source_snapshots_fetched"] == 1
         assert audit.details_json["exact_text_match_count"] == 1
+        assert revision_asset is not None and revision_asset.workspace_id == active["workspace_id"]
+        assert revision_asset.id != asset.id and revision_asset.status == "draft"
+        assert revision_asset.title == revision_result["title"] and revision_asset.body != original_html
+        assert revision_asset.metadata_json["revision_number"] == 2
+        assert revision_asset.metadata_json["revision_of_asset_id"] == original_asset_id
+        assert revision_asset.metadata_json["revision_root_asset_id"] == original_asset_id
+        assert revision_audit is not None and revision_audit.outcome == "draft"
+        assert revision_audit.details_json["revision_number"] == 2
+        assert revision_audit.details_json["revision_of_asset_id"] == original_asset_id
     finally:
         main.app.dependency_overrides.pop(main.get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)

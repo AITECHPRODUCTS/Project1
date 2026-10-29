@@ -234,6 +234,17 @@ class ComparisonPostRequest(BaseModel):
         max_length=1200,
     )
     minimum_words: int = Field(default=900, ge=300, le=2200)
+    revision_of_asset_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+    @field_validator("revision_of_asset_id")
+    @classmethod
+    def normalize_revision_source(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("revision source ID must not be blank")
+        return normalized
 
     @field_validator("topic", "audience", "affiliate_disclosure")
     @classmethod

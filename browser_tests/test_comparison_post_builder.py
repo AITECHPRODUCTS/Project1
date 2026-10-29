@@ -147,6 +147,12 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
         "asset_id": "saved-comparison-77",
         "asset_status": "draft",
         "title": "Saved analytics products — Product Comparison",
+        "topic": "Historical analytics products",
+        "audience": "Affiliate operators choosing analytics products",
+        "affiliate_disclosure": "Disclosure: I may earn a commission from qualifying purchases.",
+        "revision_number": 1,
+        "revision_of_asset_id": None,
+        "revision_root_asset_id": "saved-comparison-77",
         "html": "<!doctype html><html><body><article><h1>Saved draft preview</h1></article></body></html>",
         "word_count": 450,
         "minimum_word_target": 500,
@@ -177,6 +183,8 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
         "execution_boundary": "Saved workspace review draft; not published.",
     }
     detail_calls = []
+    revision_posts = []
+    revision_result = None
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -186,23 +194,51 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
             def handle_auth(route):
                 _fulfill_json(route, {"csrf_token": "browser-test-csrf"})
 
+            def handle_revision(route):
+                payload = json.loads(route.request.post_data or "{}")
+                revision_posts.append(payload)
+                nonlocal revision_result
+                revision_result = dict(stored)
+                revision_result.update({
+                    "asset_id": "saved-comparison-78",
+                    "title": payload["topic"] + " — Product Comparison",
+                    "topic": payload["topic"],
+                    "revision_number": 2,
+                    "revision_of_asset_id": stored["asset_id"],
+                    "revision_root_asset_id": stored["asset_id"],
+                    "html": "<!doctype html><html><body><article><h1>New revision preview</h1></article></body></html>",
+                })
+                _fulfill_json(route, revision_result, status=201)
+
             def handle_saved(route):
                 path = urlsplit(route.request.url).path.rstrip('/')
                 if path.endswith("/api/content/comparison-posts"):
-                    _fulfill_json(route, {
-                        "items": [{
-                            "asset_id": stored["asset_id"], "title": stored["title"], "asset_status": "draft",
-                            "created_at": "2026-10-29T00:00:00+00:00", "word_count": stored["word_count"],
-                            "product_count": stored["product_count"], "unknown_fact_count": stored["unknown_fact_count"],
-                            "evidence_status": stored["evidence_status"], "source_snapshots_fetched": 0,
+                    items = [{
+                        "asset_id": stored["asset_id"], "title": stored["title"], "asset_status": "draft",
+                        "created_at": "2026-10-29T00:00:00+00:00", "word_count": stored["word_count"],
+                        "product_count": stored["product_count"], "unknown_fact_count": stored["unknown_fact_count"],
+                        "evidence_status": stored["evidence_status"], "source_snapshots_fetched": 0,
+                        "revision_number": stored["revision_number"], "revision_of_asset_id": stored["revision_of_asset_id"],
+                        "revision_root_asset_id": stored["revision_root_asset_id"],
+                        "requires_review": True, "publishing_started": False,
+                    }]
+                    if revision_result is not None:
+                        items.append({
+                            "asset_id": revision_result["asset_id"], "title": revision_result["title"], "asset_status": "draft",
+                            "created_at": "2026-10-29T00:01:00+00:00", "word_count": revision_result["word_count"],
+                            "product_count": revision_result["product_count"], "unknown_fact_count": revision_result["unknown_fact_count"],
+                            "evidence_status": revision_result["evidence_status"], "source_snapshots_fetched": 0,
+                            "revision_number": revision_result["revision_number"], "revision_of_asset_id": revision_result["revision_of_asset_id"],
+                            "revision_root_asset_id": revision_result["revision_root_asset_id"],
                             "requires_review": True, "publishing_started": False,
-                        }], "total": 1, "limit": 20, "offset": 0,
-                    })
+                        })
+                    _fulfill_json(route, {"items": items, "total": len(items), "limit": 20, "offset": 0})
                 else:
                     detail_calls.append(path)
                     _fulfill_json(route, stored)
 
             page.route("**/api/auth/me", handle_auth)
+            page.route("**/api/content/comparison-post", handle_revision)
             page.route("**/api/content/comparison-posts**", handle_saved)
             page.goto(f"{BASE_URL}/comparison-post", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Product comparison writer").wait_for(state="visible")
@@ -210,6 +246,20 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
             page.get_by_role("heading", name="Saved analytics products — Product Comparison").wait_for(state="visible")
             page.get_by_title("Comparison article preview").wait_for(state="visible")
             assert detail_calls == ["/api/content/comparison-posts/saved-comparison-77"]
+            assert page.get_by_label("Topic").input_value() == "Historical analytics products"
+            assert page.get_by_label("Target audience").input_value() == "Affiliate operators choosing analytics products"
+            assert page.get_by_label("Affiliate disclosure").input_value() == stored["affiliate_disclosure"]
+            page.get_by_label("Topic").fill("Revised analytics products")
+            page.get_by_role("button", name="Save new revision").click()
+            page.get_by_role("heading", name="Revised analytics products — Product Comparison").wait_for(state="visible")
+            page.get_by_text("Saved a new draft revision. The original remains unchanged.", exact=True).wait_for(state="visible")
+            assert revision_posts and revision_posts[0]["revision_of_asset_id"] == "saved-comparison-77"
+            assert revision_posts[0]["topic"] == "Revised analytics products"
+            assert revision_result["asset_id"] == "saved-comparison-78"
+            assert revision_result["revision_number"] == 2
+            assert revision_result["revision_root_asset_id"] == "saved-comparison-77"
+            assert stored["title"] == "Saved analytics products — Product Comparison"
+            page.get_by_text("Workspace-only history · 2 saved · drafts never auto-publish", exact=True).wait_for(state="visible")
             assert page.get_by_text("Published: No", exact=False).count() == 1
             assert page.locator("main [role='alert']").count() == 0
         finally:

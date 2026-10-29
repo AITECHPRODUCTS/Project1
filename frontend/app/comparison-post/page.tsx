@@ -8,10 +8,11 @@ type Row={criterion:string;values:Array<{product:string;value:string}>};
 type SourceSnapshot={source_id:string;url:string;product_names:string[];title:string;status:string;http_status:number|null;content_type:string;fetched_at:string;excerpt:string;excerpt_sha256:string|null;error_type:string|null;detail:string|null};
 type FactEvidence={product:string;fact_name:string;supplied_value:string;source_id:string|null;source_url:string|null;excerpt_sha256:string|null;exact_text_match:boolean;evidence_status:string;evidence_note?:string;editorial_review_required:boolean};
 type EvidenceSummary={source_count:number;source_snapshots_fetched:number;source_snapshots_failed:number;fact_count:number;exact_text_match_count:number;exact_text_not_found_count:number;facts_not_compared:number;interpretation:string};
-type DraftSummary={asset_id:string;title:string;asset_status:string;created_at:string|null;word_count:number;product_count:number;unknown_fact_count:number;evidence_status:string;source_snapshots_fetched:number;requires_review:boolean;publishing_started:boolean};
+type DraftSummary={asset_id:string;title:string;asset_status:string;created_at:string|null;revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string|null;word_count:number;product_count:number;unknown_fact_count:number;evidence_status:string;source_snapshots_fetched:number;requires_review:boolean;publishing_started:boolean};
 type DraftList={items:DraftSummary[];total:number;limit:number;offset:number};
 type Result={
- asset_id:string;asset_status:string;title:string;html:string;word_count:number;
+ asset_id:string;asset_status:string;title:string;topic:string;audience:string;affiliate_disclosure:string;
+ revision_number:number;revision_of_asset_id:string|null;revision_root_asset_id:string;html:string;word_count:number;
  minimum_word_target:number;minimum_word_target_met:boolean;word_count_warning:string|null;
  product_count:number;products:Product[];decision_criteria:string[];comparison_table:Row[];
  unknown_fact_count:number;source_urls:string[];source_snapshots:SourceSnapshot[];fact_evidence:FactEvidence[];evidence_summary:EvidenceSummary;evidence_status:string;
@@ -31,6 +32,7 @@ export default function ComparisonPostPage(){
  const [productsJson,setProductsJson]=useState(initialProducts);
  const [minimumWords,setMinimumWords]=useState("900");
  const [disclosure,setDisclosure]=useState("Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.");
+ const [revisionOfAssetId,setRevisionOfAssetId]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
@@ -53,7 +55,14 @@ export default function ComparisonPostPage(){
   setOpeningId(assetId);setError("");setNotice("");
   try{
    const response=await apiFetch<Result>("/api/content/comparison-posts/"+encodeURIComponent(assetId));
-   setResult(response);setNotice("Opened saved comparison draft. Verify every source and claim before using it.");
+   setTopic(response.topic||response.title.replace(/ — Product Comparison$/,""));
+   setAudience(response.audience||"");
+   setCriteriaText((response.decision_criteria||[]).join("\n"));
+   setProductsJson(JSON.stringify((response.products||[]).map(product=>({name:product.name,facts:product.facts||{},source_urls:product.source_urls||[]})),null,2));
+   setMinimumWords(String(response.minimum_word_target||900));
+   setDisclosure(response.affiliate_disclosure||"Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.");
+   setRevisionOfAssetId(response.asset_id);
+   setResult(response);setNotice("Loaded saved draft as a revision starting point. The original remains unchanged.");
   }catch(err){setDraftsError(errorMessage(err));}
   finally{setOpeningId("");}
  };
@@ -67,8 +76,10 @@ export default function ComparisonPostPage(){
   if(!Number.isInteger(minimum)||minimum<300||minimum>2200){setError("Minimum word target must be a whole number from 300 to 2200.");setBusy(false);return;}
   const decision_criteria=Array.from(new Set(criteriaText.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)));
   try{
-   const response=await apiFetch<Result>("/api/content/comparison-post",{method:"POST",body:JSON.stringify({topic:topic.trim(),audience:audience.trim(),products,decision_criteria,affiliate_disclosure:disclosure,minimum_words:minimum})});
-   setResult(response);setNotice("Comparison draft saved to this workspace. Verify every supplied fact before using it.");
+   const requestBody={topic:topic.trim(),audience:audience.trim(),products,decision_criteria,affiliate_disclosure:disclosure,minimum_words:minimum,...(revisionOfAssetId?{revision_of_asset_id:revisionOfAssetId}:{})};
+   const response=await apiFetch<Result>("/api/content/comparison-post",{method:"POST",body:JSON.stringify(requestBody)});
+   setResult(response);setRevisionOfAssetId(response.asset_id);
+   setNotice(response.revision_of_asset_id?"Saved a new draft revision. The original remains unchanged.":"Comparison draft saved to this workspace. You can revise it without overwriting the original.");
    await loadDrafts();
   }catch(err){setError(errorMessage(err));}finally{setBusy(false);}
  };
@@ -76,7 +87,7 @@ export default function ComparisonPostPage(){
   <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
    <div><div className="flex flex-wrap gap-4 text-sm font-semibold"><a href="/" className="text-indigo-600 hover:underline">← Growth command</a><a href="/research-brief" className="text-indigo-600 hover:underline">Source-backed research brief →</a></div>
     <h1 className="mt-2 text-3xl font-black tracking-tight">Product comparison writer</h1><p className="mt-1 max-w-3xl text-sm text-slate-600">Create a workspace-persisted comparison article with a deterministic facts table, disclosure, source references and explicit unknowns.</p>
-   </div><span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">Draft only · No publishing</span>
+   </div><span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">{revisionOfAssetId?"Revision · Original preserved":"Draft only · No publishing"}</span>
   </header>
   <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Evidence boundary:</strong> supplied HTTPS links are fetched through a bounded, DNS-pinned public transport and saved as timestamped excerpt snapshots with SHA-256 hashes. Facts remain operator supplied: exact wording found in a snapshot is not independent verification of truth, freshness, completeness, merchant identity, program eligibility or compliance. No affiliate account is authenticated and nothing is published. Missing values are shown as “Not supplied — verify”.</div>
   {error&&<div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
@@ -88,13 +99,13 @@ export default function ComparisonPostPage(){
    {!draftsLoading&&!drafts.length&&!draftsError&&<p className="mt-3 text-sm text-slate-500">No comparison drafts saved in this workspace yet.</p>}
    {drafts.length>0&&<div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{drafts.map(draft=><article key={draft.asset_id} className="rounded-xl border border-slate-200 p-3">
     <h3 className="font-semibold">{draft.title}</h3><p className="mt-1 break-all font-mono text-[10px] text-slate-500">{draft.asset_id}</p>
-    <p className="mt-2 text-xs text-slate-600">{draft.product_count} products · {draft.word_count} words · {draft.unknown_fact_count} unknown cells</p>
+    <p className="mt-2 text-xs text-slate-600">{draft.product_count} products · {draft.word_count} words · {draft.unknown_fact_count} unknown cells</p><p className="mt-1 text-xs text-slate-500">{draft.revision_number>1?`Revision ${draft.revision_number} · Parent ${draft.revision_of_asset_id||"unknown"}`:"Original draft"}</p>
     <p className="mt-1 text-xs text-amber-800">{draft.evidence_status.replaceAll("_"," ")} · Draft only</p>
     <button type="button" onClick={()=>void openDraft(draft.asset_id)} disabled={Boolean(openingId)} className="mt-3 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{openingId===draft.asset_id?"Opening…":"Open draft"}</button>
    </article>)}</div>}
   </section>
   <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(320px,.85fr)_minmax(0,1.15fr)]">
-   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-xl font-bold">Comparison brief</h2><form onSubmit={submit} className="mt-4 space-y-4">
+   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Comparison brief</h2>{revisionOfAssetId&&<button type="button" onClick={()=>{setRevisionOfAssetId(null);setResult(null);setNotice("Separate draft mode. The loaded values will be saved as a new independent draft.");}} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">Save as separate draft</button>}</div><form onSubmit={submit} className="mt-4 space-y-4">
     <label className={label}>Topic<input aria-label="Topic" className={field} minLength={3} maxLength={400} required value={topic} onChange={e=>setTopic(e.target.value)}/></label>
     <label className={label}>Target audience<input aria-label="Target audience" className={field} minLength={2} maxLength={300} required value={audience} onChange={e=>setAudience(e.target.value)}/></label>
     <label className={label}>Decision criteria (one per line)<textarea aria-label="Decision criteria" className={field} rows={4} maxLength={1000} value={criteriaText} onChange={e=>setCriteriaText(e.target.value)}/></label>
@@ -102,7 +113,7 @@ export default function ComparisonPostPage(){
     <p className="text-xs leading-5 text-slate-500">Each product contains a name, facts object and optional HTTPS source_urls list. Up to 12 facts per product and 10 unique source URLs total. Credential-like query parameters are blocked. Each public page is size-limited; its saved wording and hash still require human review.</p>
     <label className={label}>Minimum article word target<input aria-label="Minimum article word target" className={field} type="number" min="300" max="2200" step="1" required value={minimumWords} onChange={e=>setMinimumWords(e.target.value)}/></label>
     <label className={label}>Affiliate disclosure<input aria-label="Affiliate disclosure" className={field} minLength={20} maxLength={1200} required value={disclosure} onChange={e=>setDisclosure(e.target.value)}/></label>
-    <button type="submit" disabled={busy} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?"Generating and saving…":"Generate comparison draft"}</button>
+    <button type="submit" disabled={busy} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?(revisionOfAssetId?"Generating revision…":"Generating and saving…"):(revisionOfAssetId?"Save new revision":"Generate comparison draft")}</button>
    </form></section>
    <section className="space-y-5">
     {!result&&<div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><h2 className="text-lg font-bold">Your comparison will appear here</h2><p className="mt-2 text-sm leading-6 text-slate-500">The app generates editorial narrative, then builds a table from exact supplied facts. Unknown values are not guessed.</p></div>}

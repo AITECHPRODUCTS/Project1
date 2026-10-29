@@ -3784,12 +3784,41 @@ async def create_comparison_post(
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Persist an evidence-labelled comparison article draft for the active workspace."""
+    """Create an immutable workspace comparison draft or a new revision of a saved draft."""
     workspace_id = str(user.get("workspace_id") or "").strip()
     if not workspace_id:
         raise HTTPException(403, "Select an authorized workspace before generating a comparison article")
     _validate_generation_payload_size(payload)
     await workspace_generation_rate_limit(request, workspace_id)
+
+    revision_parent: ContentAsset | None = None
+    revision_parent_id: str | None = None
+    revision_number = 1
+    revision_root_asset_id: str | None = None
+    if payload.revision_of_asset_id:
+        with workspace_scope(workspace_id):
+            revision_parent = await db.scalar(select(ContentAsset).where(
+                ContentAsset.id == payload.revision_of_asset_id,
+                ContentAsset.workspace_id == workspace_id,
+                ContentAsset.asset_type == "comparison_post",
+            ).with_for_update())
+        if revision_parent is None:
+            raise HTTPException(404, "Revision source was not found in this workspace")
+        if revision_parent.status != "draft":
+            raise HTTPException(409, "Only a saved draft can be revised; the original asset was not changed")
+        revision_parent_id = revision_parent.id
+        parent_metadata = revision_parent.metadata_json if isinstance(revision_parent.metadata_json, dict) else {}
+        try:
+            parent_revision_number = int(parent_metadata.get("revision_number") or 1)
+        except (TypeError, ValueError):
+            raise HTTPException(409, "Saved draft revision metadata is invalid")
+        if not 1 <= parent_revision_number < 100000:
+            raise HTTPException(409, "Saved draft revision metadata is outside supported bounds")
+        revision_number = parent_revision_number + 1
+        revision_root_asset_id = str(parent_metadata.get("revision_root_asset_id") or revision_parent.id)
+        # Release the read transaction before the model/network work.
+        await db.commit()
+
     try:
         result = await comparison_post_writer_service(
             topic=payload.topic,
@@ -3809,6 +3838,31 @@ async def create_comparison_post(
         ) from exc
 
     actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    asset_metadata = {
+        "schema_version": 1,
+        "topic": payload.topic,
+        "audience": payload.audience,
+        "affiliate_disclosure": payload.affiliate_disclosure,
+        "revision_number": revision_number,
+        "revision_of_asset_id": revision_parent_id,
+        "revision_root_asset_id": revision_root_asset_id,
+        "products": result["products"],
+        "decision_criteria": result["decision_criteria"],
+        "comparison_table": result["comparison_table"],
+        "unknown_fact_count": result["unknown_fact_count"],
+        "word_count": result["word_count"],
+        "minimum_word_target": result["minimum_word_target"],
+        "minimum_word_target_met": result["minimum_word_target_met"],
+        "evidence_status": result.get("evidence_status", "operator_supplied_unverified"),
+        "product_facts_independently_verified": False,
+        "external_product_sources_fetched": bool(result.get("external_product_sources_fetched", False)),
+        "source_snapshots": result.get("source_snapshots", [])[:10],
+        "fact_evidence": result.get("fact_evidence", [])[:60],
+        "evidence_summary": result.get("evidence_summary", {}),
+        "requires_review": True,
+        "publishing_started": False,
+        "model_provider": result["provider"],
+    }
     with workspace_scope(workspace_id):
         asset = ContentAsset(
             workspace_id=workspace_id,
@@ -3817,33 +3871,18 @@ async def create_comparison_post(
             body=result["html"],
             status="draft",
             source_urls=result["source_urls"],
-            metadata_json={
-                "schema_version": 1,
-                "audience": payload.audience,
-                "products": result["products"],
-                "decision_criteria": result["decision_criteria"],
-                "comparison_table": result["comparison_table"],
-                "unknown_fact_count": result["unknown_fact_count"],
-                "word_count": result["word_count"],
-                "minimum_word_target": result["minimum_word_target"],
-                "minimum_word_target_met": result["minimum_word_target_met"],
-                "evidence_status": result.get("evidence_status", "operator_supplied_unverified"),
-                "product_facts_independently_verified": False,
-                "external_product_sources_fetched": bool(result.get("external_product_sources_fetched", False)),
-                "source_snapshots": result.get("source_snapshots", [])[:10],
-                "fact_evidence": result.get("fact_evidence", [])[:60],
-                "evidence_summary": result.get("evidence_summary", {}),
-                "requires_review": True,
-                "publishing_started": False,
-                "model_provider": result["provider"],
-            },
+            metadata_json=asset_metadata,
         )
         db.add(asset)
         await db.flush()
+        root_id = revision_root_asset_id or asset.id
+        if asset_metadata["revision_root_asset_id"] is None:
+            asset_metadata["revision_root_asset_id"] = root_id
+            asset.metadata_json = dict(asset_metadata)
         db.add(AuditLog(
             workspace_id=workspace_id,
             actor=actor,
-            action="content_comparison_post.created",
+            action="content_comparison_post.revised" if revision_parent_id else "content_comparison_post.created",
             resource_type="content_asset",
             resource_id=asset.id,
             outcome="draft",
@@ -3855,6 +3894,9 @@ async def create_comparison_post(
                 "source_snapshots_fetched": (result.get("evidence_summary") or {}).get("source_snapshots_fetched", 0),
                 "exact_text_match_count": (result.get("evidence_summary") or {}).get("exact_text_match_count", 0),
                 "exact_text_not_found_count": (result.get("evidence_summary") or {}).get("exact_text_not_found_count", 0),
+                "revision_number": revision_number,
+                "revision_of_asset_id": revision_parent_id,
+                "revision_root_asset_id": root_id,
                 "product_facts_independently_verified": False,
                 "publishing_started": False,
             },
@@ -3863,9 +3905,16 @@ async def create_comparison_post(
         await db.refresh(asset)
     result["asset_id"] = asset.id
     result["asset_status"] = asset.status
+    result["topic"] = payload.topic
+    result["audience"] = payload.audience
+    result["affiliate_disclosure"] = payload.affiliate_disclosure
+    result["revision_number"] = revision_number
+    result["revision_of_asset_id"] = revision_parent_id
+    result["revision_root_asset_id"] = root_id
     result["execution_boundary"] = (
-        "Workspace-owned review draft. Public sources are fetched through the pinned transport into bounded snapshots. "
-        "Exact text matches establish text presence only, not factual truth, currentness, eligibility, compliance approval or publication readiness."
+        "Workspace-owned review draft. Revisions create a new asset and preserve the prior draft. Public sources are fetched "
+        "through the pinned transport into bounded snapshots. Exact text matches establish text presence only, not factual truth, "
+        "currentness, eligibility, compliance approval or publication readiness."
     )
     return result
 
@@ -3907,6 +3956,9 @@ async def list_comparison_posts(
             "title": row.title,
             "asset_status": row.status,
             "created_at": row.created_at.isoformat() if row.created_at else None,
+            "revision_number": metadata.get("revision_number", 1),
+            "revision_of_asset_id": metadata.get("revision_of_asset_id"),
+            "revision_root_asset_id": metadata.get("revision_root_asset_id") or row.id,
             "word_count": metadata.get("word_count", 0),
             "product_count": len(products),
             "unknown_fact_count": metadata.get("unknown_fact_count", 0),
@@ -3949,10 +4001,23 @@ async def get_comparison_post(
     minimum_word_target = int(metadata.get("minimum_word_target") or 0)
     minimum_word_target_met = bool(metadata.get("minimum_word_target_met", False))
     word_count = int(metadata.get("word_count") or 0)
+    saved_topic = str(metadata.get("topic") or row.title.removesuffix(" — Product Comparison"))[:400]
+    saved_audience = str(metadata.get("audience") or "")[:300]
+    saved_disclosure = str(metadata.get("affiliate_disclosure") or "Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.")[:1200]
+    try:
+        revision_number = max(1, min(100000, int(metadata.get("revision_number") or 1)))
+    except (TypeError, ValueError):
+        revision_number = 1
     return {
         "asset_id": row.id,
         "asset_status": row.status,
         "title": row.title,
+        "topic": saved_topic,
+        "audience": saved_audience,
+        "affiliate_disclosure": saved_disclosure,
+        "revision_number": revision_number,
+        "revision_of_asset_id": metadata.get("revision_of_asset_id"),
+        "revision_root_asset_id": metadata.get("revision_root_asset_id") or row.id,
         "html": row.body,
         "word_count": word_count,
         "minimum_word_target": minimum_word_target,

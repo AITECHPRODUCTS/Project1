@@ -59,6 +59,14 @@ The Library audit records 35 items at its 27 October checkpoint, representing 21
 - Pull-request workflow [40817725978](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40817725978) was still pending at the last check; the prior stale PR run `40817668626` had remaining in-progress cleanup/audit jobs. Do not mark PR verification complete until the exact latest SHA's PR run completes.
 - The new reporting filters operate on stored observations only. Provider spend sync, provider attestation, reconciliation, and verified provider contract tests remain unimplemented; the parity status remains `partial`.
 
+## 2026-10-29 signed ad webhook conflicting-replay protection (verification pending)
+
+- Changed `backend/main.py` so a repeated `(workspace, platform, provider_event_id)` is treated as an idempotent duplicate only when the stored business payload matches the new validated payload (campaign plan, creative, source URL, counts, monetary values, currency, observation time and note). Reusing an event ID with changed values now returns HTTP 409 instead of silently discarding a conflicting event.
+- Applied the same comparison to the unique-constraint race path after transaction rollback, so concurrent deliveries cannot bypass the conflict check. Identical retries still return HTTP 200 `duplicate_ignored`; no provider action is executed.
+- Added a regression to `tests/test_ad_performance_webhooks.py` that submits the same signed event twice successfully, then resubmits the event ID with a newly signed changed spend amount and expects HTTP 409.
+- Commits: implementation `2109b3589e42282f3189c9e5dc55a81276b71e79`; regression test `70e9d8f7adaff316f36de243c217ad7424777378`.
+- Verification is pending until push and pull-request workflows complete for the final documentation SHA. This hardening addresses event-id data-integrity ambiguity; it does not create native ad-provider OAuth or prove the collector's upstream metrics.
+
 ## Verification rules
 - Keep work on the existing branch; do not create a branch, reset, force-push, or overwrite unrelated code.
 - Add focused regression tests with every feature and preserve safety/approval boundaries.

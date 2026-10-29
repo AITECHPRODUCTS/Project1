@@ -1,12 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
-## 2026-10-29 database readiness probe (candidate; CI pending)
+## 2026-10-29 database readiness probe — verified
 
-- Added `GET /health/ready` as an additive database-readiness endpoint while preserving the existing liveness-only `GET /health` contract.
-- The readiness route executes `SELECT 1` using the standard session dependency, returns a minimal 200 response on success, and returns a generic 503 response without exposing database exception details on query failure.
-- Added tests for both successful database reachability and fail-closed error handling. Hosted CI must pass on the exact candidate SHA before this feature is marked verified; this probe does not establish production deployment, migration freshness, worker health, or provider connectivity.
-
+- Added `GET /health/ready` in `backend/main.py`. It executes `SELECT 1` through the standard database session dependency; success returns a minimal ready response and query errors return generic HTTP 503 without exposing driver details. The existing `GET /health` liveness behavior is preserved.
+- Tests in `tests/test_health_readiness.py` cover the successful query and safe failure response.
+- Exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) passed on `10c985564dfea7b9494ecdf7bd0045753ef8c00c`: Python 764 passed, 7 skipped, 5 warnings; browser UAT 22 passed; PostgreSQL, frontend, security audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- This probe verifies database query reachability only—not migration freshness, workers/queues, real staging, monitoring, restore or provider connectivity.
 
 ## 2026-10-29 individual lead JSON data export and Resend event integrity regressions (verified on 293250bf7e209fe78839eec8afad55080acb6449)
 

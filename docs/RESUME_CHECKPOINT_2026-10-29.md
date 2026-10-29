@@ -16,6 +16,13 @@ The durable record was created during recovery and then updated with the complet
 - Repair commit: [`b893dc510400f8e27259d089d6b35375031ed817`](https://github.com/AITECHPRODUCTS/Project1/commit/b893dc510400f8e27259d089d6b35375031ed817) adds an explicit `await db.flush()` while workspace A is active. This is a **test-fixture correction**; the production tenant guard was not weakened. The repair is verified on candidate SHA `293250bf7e209fe78839eec8afad55080acb6449`: push run [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396) and PR run [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094) both completed successfully. Python: 762 passed, 7 skipped, 5 warnings; browser UAT: 22 passed; PostgreSQL integration, frontend typecheck/production build, security audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
 - Keep the existing branch only. Do not create branches, merge PR #1, deploy, or claim a green status without current exact-SHA evidence.
 
+## 2026-10-29 database readiness probe — verified
+
+- Added `GET /health/ready` in `backend/main.py`. It executes `SELECT 1` through the standard database session dependency; success returns a minimal ready response and query errors return generic HTTP 503 without exposing driver details. The existing `GET /health` liveness behavior is preserved.
+- Tests in `tests/test_health_readiness.py` cover the successful query and safe failure response.
+- Exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) passed on `10c985564dfea7b9494ecdf7bd0045753ef8c00c`: Python 764 passed, 7 skipped, 5 warnings; browser UAT 22 passed; PostgreSQL, frontend, security audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- This probe verifies database query reachability only—not migration freshness, workers/queues, real staging, monitoring, restore or provider connectivity.
+
 ## Work present in the implementation branch (not all live-connected)
 
 - FastAPI/SQLAlchemy services, Alembic migrations, workspace-scoped authorization patterns, audit records and workflow S1–S8 foundations.
@@ -27,7 +34,7 @@ The durable record was created during recovery and then updated with the complet
 
 ## Highest-priority remaining work
 
-1. **Test repair verified at the code candidate above.** Re-run and inspect all required workflows again after any subsequent source change; skipped jobs are not passes.
+1. **Test repair verified** (push [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396), PR [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094)). The **database readiness probe is also verified** at `10c985564dfea7b9494ecdf7bd0045753ef8c00c` (push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161), PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920)). Re-run all required workflows after subsequent source changes; skipped jobs are not passes.
 2. **Close acceptance gaps:** map every product requirement and all 53 skills to real code paths, persistence, role/tenant protections, API contracts, negative tests and browser acceptance. Distinguish implemented, partial, stub/catalogue-only, and not implemented.
 3. **Provider connectivity:** official API/OAuth approval, scopes, sandbox contracts, pagination/rate limits/retries, revocation and provider-side verification for the selected affiliate, ad, social, CMS, email and CRM services. Catalogue entries and generic adapters do not prove connections.
 4. **Security/privacy/reliability:** workspace isolation across every route and worker, PostgreSQL concurrency, CSRF/session lifecycle, SSRF/egress, signed and replay-safe webhooks, deletion/export, abuse controls, durable queue recovery, load/soak and recovery tests.

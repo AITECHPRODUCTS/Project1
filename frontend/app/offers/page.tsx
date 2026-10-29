@@ -191,19 +191,19 @@ export default function OfferCatalogPage() {
     }
   }, []);
 
-  const refreshShortlists = useCallback(async (preferredId?: string) => {
+  const refreshShortlists = useCallback(async (preferredId: string = "") => {
     setShortlistLoading(true); setShortlistError("");
     try {
       const result = await apiFetch<{ count: number; data: ShortlistSummary[] }>("/api/offers/shortlists");
       setShortlists(result.data);
-      const nextId = preferredId ?? selectedShortlistId;
+      const nextId = preferredId;
       if (nextId && result.data.some(item => item.id === nextId)) {
         setSelectedShortlistId(nextId);
         setSelectedShortlist(await apiFetch<ShortlistDetail>("/api/offers/shortlists/" + encodeURIComponent(nextId)));
       } else { setSelectedShortlistId(""); setSelectedShortlist(null); }
     } catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Saved offer lists could not be loaded."); }
     finally { setShortlistLoading(false); }
-  }, [selectedShortlistId]);
+  }, []);
 
   const createShortlist = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setShortlistError(""); setShortlistMessage("");
@@ -277,7 +277,7 @@ export default function OfferCatalogPage() {
 
   useEffect(() => {
     void loadCatalog(DEFAULT_FILTERS, 0);
-    void refreshShortlists();
+    void refreshShortlists("");
   }, [loadCatalog, refreshShortlists]);
 
   useEffect(() => {
@@ -438,7 +438,7 @@ export default function OfferCatalogPage() {
         <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-label="Saved offer shortlists" data-testid="offer-shortlists">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div><p className="text-xs font-black uppercase tracking-wider text-indigo-600">Research workspace</p><h2 className="mt-1 text-xl font-black">Saved offer lists</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">Save offers for comparison and review. Values are current shared-catalog data, not verified provider terms or approval.</p></div>
-            <button type="button" onClick={() => void refreshShortlists()} disabled={shortlistLoading} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-50"><RefreshCw size={14} className="mr-1 inline"/> Refresh lists</button>
+            <button type="button" onClick={() => void refreshShortlists(selectedShortlistId)} disabled={shortlistLoading} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-50"><RefreshCw size={14} className="mr-1 inline"/> Refresh lists</button>
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <form onSubmit={createShortlist} className="rounded-2xl border border-slate-200 p-4">

@@ -88,6 +88,7 @@ def test_saved_offer_shortlists_are_isolated_between_workspaces(tmp_path):
             assert client.get("/api/offers/shortlists").json()["count"] == 0
             assert client.get(f"/api/offers/shortlists/{shortlist_id}").status_code == 404
             assert client.delete(f"/api/offers/shortlists/{shortlist_id}").status_code == 404
+            assert client.post(f"/api/offers/shortlists/{shortlist_id}/items", json={"offer_id": "missing"}).status_code == 404
             user["workspace_id"] = None
             assert client.post("/api/offers/shortlists", json={"name": "No workspace"}).status_code == 403
     finally:

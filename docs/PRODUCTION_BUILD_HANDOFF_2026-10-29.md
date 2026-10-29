@@ -122,3 +122,11 @@ Verify the actual remote branch head and exact-SHA workflow state first. Then ch
 - Python suite 785 passed / 7 skipped / 5 warnings; Chromium browser UAT 24 passed on push and PR. PostgreSQL integration, frontend typecheck/build/container smoke, AI/RAG, security/SBOM, secret scan, repo guard passed; push lockfile sync passed. PR lockfile sync skipped by event condition.
 - Comparison drafts now capture bounded public source snapshots, record excerpt SHA-256 and UTC timestamps, and perform product-scoped exact-text matching for supplied facts. This proves text presence only, not the correctness or freshness of the underlying claim. Failed-source outcomes remain visible; publishing stays disabled.
 - Status artifact: docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md. Product remains NOT PRODUCTION READY; continue on the same branch with the next highest-priority unblocked requirement.
+
+## Latest verified code checkpoint — saved comparison draft retrieval — 29 October 2026
+
+- Verified code SHA 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0 on the existing build/omni-affiliate-os-production branch.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40855889234 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40855896327 succeeded.
+- Python 787 passed, 7 skipped, 5 warnings; browser UAT 25 passed on both runs. PostgreSQL, frontend build/final-image smoke, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile-sync passed and PR lockfile-sync skipped by design.
+- Saved comparison API list/detail reads now enforce the active workspace and asset type, mark responses no-store, and return 404 for cross-workspace IDs. UI loads and reopens saved drafts after page reload.
+- The product remains NOT PRODUCTION READY. Live provider/account UAT, legal/governance, staging/deployment, monitoring and backup/restore requirements remain unresolved.

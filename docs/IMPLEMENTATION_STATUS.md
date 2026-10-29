@@ -1329,3 +1329,11 @@ The GitHub Actions run linked from the repository is the authoritative check res
 - The first browser run failed because one Playwright assertion expected the old evidence wording; the corrected run then caught a strict locator ambiguity because “Not supplied — verify” was present in two valid UI locations. Both test-only failures were corrected on the same branch without weakening product assertions. The latest exact-SHA run is clean.
 - Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed. Python: 785 passed, 7 skipped, 5 warnings. Chromium browser UAT: 24 passed on each run. PostgreSQL integration, frontend typecheck/build and production Docker smoke, AI/RAG profile, security/SBOM audit, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
 - Scope remains partial: snapshot capture and exact-text comparison do not independently validate product claims or provide official affiliate/provider eligibility. No offer approval, price guarantee, external publication or paid action is performed. Overall product release status remains NOT PRODUCTION READY.
+
+## Saved comparison draft retrieval — exact-SHA verified on 29 October 2026
+
+- Current code SHA: 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0.
+- Implemented workspace-scoped paginated GET /api/content/comparison-posts and workspace-scoped GET /api/content/comparison-posts/{asset_id}; both require authenticated active workspace, filter by workspace ID and comparison-post asset type, and set Cache-Control: no-store. A foreign-workspace asset ID returns 404.
+- UI loads saved drafts on page entry, refreshes after generation and reopens stored HTML/evidence after reload.
+- Exact push 40855889234 and PR 40855896327 passed. Python 787 passed/7 skipped/5 warnings; Chromium UAT 25 passed. PostgreSQL, frontend production image, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile sync passed; PR lockfile sync skipped by configured push-only condition.
+- Draft history does not equal provider UAT, compliance acceptance or production deployment. Product stays NOT PRODUCTION READY.

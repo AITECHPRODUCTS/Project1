@@ -465,3 +465,11 @@
 Exact-SHA verification for cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed. Python 785 passed, 7 skipped, 5 warnings; browser UAT 24 passed on each run. PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by its configured push-only condition.
 
 Implementation captures a bounded public-page snapshot through the pinned outbound transport, stores UTC time and excerpt hash, and records per-product exact-text presence/not-found/fetch failure. This is evidence of text presence, not independent truth/currentness/provider approval. Product and release status remain partial/not production ready; provider authorization, live terms, legal review, staging, backup/restore and remaining skill acceptance are still separate gates.
+
+## R-25 — Saved comparison draft history and workspace isolation — verified 2026-10-29
+
+- Added GET /api/content/comparison-posts with bounded pagination and GET /api/content/comparison-posts/{asset_id} for authenticated active-workspace users.
+- Both reads explicitly filter by workspace ID and comparison_post asset type. Responses are no-store; missing or foreign-workspace IDs return 404.
+- UI loads the history on page entry, refreshes after generation and can reopen saved HTML and evidence metadata. API tests cover the two-workspace case; browser UAT covers creation and reopening after page reload.
+- Verified exact-SHA on 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0: push 40855889234 and PR 40855896327 passed; Python 787 passed/7 skipped/5 warnings and browser UAT 25 passed. PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile-sync passed.
+- This closes saved draft retrieval only. Product evidence verification, live provider connections, compliance and production deployment/restore remain open.

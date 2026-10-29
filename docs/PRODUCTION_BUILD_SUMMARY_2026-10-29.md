@@ -3,7 +3,7 @@
 **Snapshot:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Current verified code SHA:** cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad  
+**Current verified code SHA:** 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0  
 **Release decision:** NOT PRODUCTION READY. Draft PR #1 is open and unmerged.
 
 ## Built in the current branch
@@ -23,7 +23,7 @@ Major vertical slices already present include:
 
 This means code paths are present, not that every feature or provider is production complete. Some capabilities are draft-only, partially connected, based on operator input, or pending dedicated acceptance.
 
-## Latest feature verified
+## Comparison source evidence feature — previously verified at cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad
 
 The product comparison writer is now more than a draft-only fact table: it safely captures bounded public source snapshots and records which supplied fact wording was, or was not, present in the corresponding product's snapshot.
 
@@ -38,6 +38,20 @@ The product comparison writer is now more than a draft-only fact table: it safel
 
 The source-evidence feature is verified for snapshot collection and literal text matching only. Merchant facts, current pricing, eligibility, legal compliance, affiliate network authorization and live provider behavior remain independently unverified.
 
+## Latest feature: saved comparison draft retrieval — verified on 29 October 2026
+
+The comparison writing workflow now supports durable retrieval after navigating away or reloading the page.
+
+- GET /api/content/comparison-posts returns a bounded, paginated summary of comparison drafts for the authenticated active workspace only; it orders newest first, caps the page size at 100, and returns Cache-Control: no-store.
+- GET /api/content/comparison-posts/{asset_id} returns the stored HTML, product/fact matrix, bounded source snapshots and hashes, evidence ledger, word-target state and explicit review-only execution boundary. It also uses no-store responses.
+- Both endpoints require an authenticated active workspace and explicitly filter the content_assets query by both workspace_id and asset_type. A missing or cross-workspace ID returns 404, so the endpoint does not disclose that another workspace's record exists.
+- The Next.js comparison page now loads the workspace's saved draft list on page load, refreshes after creating a draft, and can reopen a saved record in the evidence review and isolated HTML preview. It remains draft-only and does not publish.
+- Regression coverage verifies persisted source evidence, list/detail response data, no-store headers and cross-workspace denial in SQLite API tests. Chromium UAT verifies draft creation, opening the created draft and reopening an existing saved draft after a page reload.
+
+Exact-SHA push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40855889234 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40855896327 passed on code SHA 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0. Python: 787 passed, 7 skipped, 5 warnings. Chromium browser UAT: 25 passed on both runs. PostgreSQL integration, frontend typecheck/build/final Docker smoke, AI/RAG profile, security/SBOM, secret scan, repository guard and push lockfile-sync passed. PR lockfile-sync was skipped by its push-only condition.
+
+This feature makes saved comparison drafts retrievable; it does not change the overall release decision. Merchant evidence, true/current product facts, eligibility, legal/compliance approval, live affiliate provider connections, production deployment and backup/restore remain separate open gates.
+
 ## Remaining before a production launch
 
 1. **Close P0 authorization and safety findings:** continue reviewing remaining workspace/tenant ownership checks, globally configured provider surfaces, public-route abuse/rate limits, outbound HTTP/SSRF boundaries, workflow retry/idempotency and externally impactful provider paths. Add negative tests for each finding.
@@ -51,8 +65,8 @@ The source-evidence feature is verified for snapshot collection and literal text
 
 | Verification measure | Exact current result |
 |---|---|
-| Python CI suite | 784 passed · 7 skipped · 5 warnings |
-| Chromium browser UAT | 24 passed |
+| Python CI suite | 787 passed · 7 skipped · 5 warnings |
+| Chromium browser UAT | 25 passed |
 | Push CI | Passed |
 | Draft-PR CI | Passed |
 | Push lockfile sync | Passed |

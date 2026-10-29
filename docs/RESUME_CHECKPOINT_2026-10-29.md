@@ -81,3 +81,11 @@ The Library contains multiple recent requirement files, blueprint/audit Markdown
 - Each supplied product fact is checked only against that product's snapshot. Literal match/not-found and missing/failed-source states are recorded and shown in the UI. A literal match does not establish truth, currentness, pricing, program eligibility or compliance. No publishing/provider write is performed.
 - Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed. Python 785 passed, 7 skipped, 5 warnings; browser UAT 24 passed on both runs; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
 - Continue next with a concrete unblocked P0/P1 gap from the source register/backlog on the same branch. Overall release remains NOT PRODUCTION READY because provider UAT, remaining skill parity, license/legal sign-off, deployment/staging, trusted-proxy, monitoring, backup/restore and rollback gates are not fully established.
+
+## Latest verified checkpoint — saved comparison draft retrieval — 29 October 2026
+
+- Code SHA 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0 on build/omni-affiliate-os-production.
+- Added authenticated workspace-scoped list/detail APIs for saved comparison drafts and UI loading/refresh/reopen flows. Queries explicitly filter workspace_id and comparison_post asset type, return no-store responses, and hide foreign workspace records with 404.
+- Exact push 40855889234 and PR 40855896327 passed all required jobs. Python 787 passed/7 skipped/5 warnings; Chromium UAT 25 passed. PostgreSQL, frontend production image, AI/RAG, security/SBOM, secret scan, repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its push-only condition.
+- Draft content remains review-only; product claims/provider eligibility and real external provider behavior are not certified.
+- Release remains NOT PRODUCTION READY. Continue the next P0 authorization, idempotency, live-provider and deployment/restore gates without creating another branch.

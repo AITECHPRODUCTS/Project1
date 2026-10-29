@@ -7,7 +7,7 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -23,6 +23,47 @@ _DROP_TAGS = {"script", "style", "iframe", "object", "embed", "svg", "math", "fo
 _MAX_SOURCE_URLS = 10
 _MAX_SOURCE_BYTES = 1_000_000
 _MAX_EXCERPT_CHARS = 8_000
+
+_SENSITIVE_QUERY_KEYS = {
+    "access_token", "api_key", "apikey", "auth", "authorization", "bearer",
+    "client_secret", "credential", "jwt", "key", "password", "private_key",
+    "secret", "sig", "signature", "token", "x_amz_credential", "x_amz_signature",
+}
+_SAFE_SOURCE_FETCH_DETAILS = {
+    "Source did not return readable HTML or plain text",
+    "Source did not return a successful HTTP status",
+    "Source contained no readable text",
+    "Only absolute HTTP(S) URLs are allowed",
+    "URLs containing credentials are not allowed",
+    "Local/private hostname blocked",
+    "Public hostname DNS lookup timed out",
+    "Public hostname DNS lookup failed",
+    "Hostname returned an invalid IP address",
+    "Hostname has no addresses",
+    "Private, loopback, link-local, multicast or reserved destinations are blocked",
+}
+
+
+def _has_sensitive_query_parameter(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        for raw_key, _ in parse_qsl(parsed.query, keep_blank_values=True):
+            normalized_key = re.sub(r"[^a-z0-9]+", "_", raw_key.casefold()).strip("_")
+            if normalized_key in _SENSITIVE_QUERY_KEYS:
+                return True
+    except (TypeError, ValueError):
+        return True
+    return False
+
+
+def _safe_source_fetch_detail(exc: Exception) -> str:
+    """Keep provider URLs, query tokens and arbitrary transport text out of persisted errors."""
+    message = str(exc)
+    if isinstance(exc, ValueError) and message in _SAFE_SOURCE_FETCH_DETAILS:
+        return message
+    return "Public source fetch failed; verify URL reachability and readable content."
+
+
 
 
 def _word_count(value: str) -> int:
@@ -72,8 +113,9 @@ async def _capture_source_snapshots(products: list[dict[str, Any]]) -> list[dict
                 or parsed.username
                 or parsed.password
                 or len(url) > 2048
+                or _has_sensitive_query_parameter(url)
             ):
-                raise ValueError("Product evidence sources must be absolute HTTPS URLs without credentials")
+                raise ValueError("Product evidence sources must be absolute HTTPS URLs without credentials or credential-like query parameters")
             if url not in url_products:
                 url_products[url] = []
             if product_name and product_name not in url_products[url]:
@@ -132,7 +174,7 @@ async def _capture_source_snapshots(products: list[dict[str, Any]]) -> list[dict
                 "excerpt": "",
                 "excerpt_sha256": None,
                 "error_type": type(exc).__name__[:80],
-                "detail": str(exc)[:220] or "Source fetch failed",
+                "detail": _safe_source_fetch_detail(exc),
             }
 
     return list(await asyncio.gather(*(capture(index, url) for index, url in enumerate(url_products, start=1))))

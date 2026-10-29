@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -43,6 +44,12 @@ def test_comparison_request_requires_distinct_products_and_safe_https_source_url
     with pytest.raises(ValidationError):
         ComparisonPostRequest(**valid_payload(products=[
             {"name": "Alpha", "facts": {"Price": "$20"}, "source_urls": ["http://vendor.example/alpha"]},
+            {"name": "Beta", "facts": {"Price": "$35"}},
+        ]))
+
+    with pytest.raises(ValidationError, match="credential-like query parameters"):
+        ComparisonPostRequest(**valid_payload(products=[
+            {"name": "Alpha", "facts": {"Price": "$20"}, "source_urls": ["https://vendor.example/alpha?api_key=DO_NOT_STORE"]},
             {"name": "Beta", "facts": {"Price": "$35"}},
         ]))
     with pytest.raises(ValidationError):
@@ -120,6 +127,38 @@ async def test_comparison_writer_fetches_bounded_sources_and_matches_only_produc
     assert result["evidence_summary"]["exact_text_match_count"] == 2
     assert result["evidence_summary"]["exact_text_not_found_count"] == 1
     assert result["source_urls"] == ["https://vendor.example/alpha", "https://vendor.example/beta"]
+
+
+@pytest.mark.asyncio
+async def test_comparison_writer_does_not_persist_transport_tokens(monkeypatch):
+    called = []
+
+    async def leaking_error_fetch(url, *, max_bytes, timeout):
+        called.append(url)
+        raise RuntimeError("request failed for https://vendor.example/alpha?token=SUPER_SECRET_VALUE")
+
+    async def fake_complete(system_prompt, user_prompt, **kwargs):
+        return {"text": "<p>Review the supplied options.</p>", "sources": [], "provider": "test-model"}
+
+    monkeypatch.setattr(comparison_service, "fetch_public_page", leaking_error_fetch)
+    monkeypatch.setattr(comparison_service.llm_service, "complete", fake_complete)
+    products = [
+        {"name": "Alpha", "facts": {"Price": "$20"}, "source_urls": ["https://vendor.example/alpha"]},
+        {"name": "Beta", "facts": {"Price": "$35"}, "source_urls": ["https://vendor.example/beta"]},
+    ]
+    result = await comparison_service.build_comparison_post(
+        topic="Analytics products comparison",
+        audience="Small affiliate publishers",
+        products=products,
+        decision_criteria=["Price"],
+        affiliate_disclosure="Disclosure: I may earn a commission from qualifying purchases.",
+        minimum_words=500,
+    )
+    assert len(called) == 2
+    assert "SUPER_SECRET_VALUE" not in json.dumps(result)
+    assert all("Public source fetch failed" in source["detail"] for source in result["source_snapshots"])
+    assert result["product_facts_independently_verified"] is False
+    assert result["publishing_started"] is False
 
 
 @pytest.mark.asyncio

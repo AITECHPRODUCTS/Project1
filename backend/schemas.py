@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from backend.services.consent_ledger import (
     EMAIL_MARKETING_CONSENT_PURPOSE,
@@ -61,6 +61,15 @@ class OfferQualificationReviewRequest(BaseModel):
             parsed = urlparse(value)
             if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
                 raise ValueError("evidence URLs must be absolute HTTPS URLs without credentials")
+            sensitive_query_keys = {
+                "access_token", "api_key", "apikey", "auth", "authorization", "bearer",
+                "client_secret", "credential", "jwt", "key", "password", "private_key",
+                "secret", "sig", "signature", "token", "x_amz_credential", "x_amz_signature",
+            }
+            for raw_key, _ in parse_qsl(parsed.query, keep_blank_values=True):
+                normalized_key = re.sub(r"[^a-z0-9]+", "_", raw_key.casefold()).strip("_")
+                if normalized_key in sensitive_query_keys:
+                    raise ValueError("product source URLs must not include credential-like query parameters")
             try:
                 address = ipaddress.ip_address(parsed.hostname)
             except ValueError:
@@ -147,7 +156,7 @@ class BlogRequest(BaseModel):
 
 
 class ComparisonProductInput(BaseModel):
-    """Operator-supplied product facts; source URLs are references, never fetched here."""
+    """Operator-supplied facts with bounded HTTPS public-page evidence snapshots."""
 
     model_config = ConfigDict(extra="forbid")
 

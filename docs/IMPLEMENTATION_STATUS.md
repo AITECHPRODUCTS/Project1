@@ -1,6 +1,13 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 workspace-scoped lead CSV export (CI pending)
+
+- Added `GET /api/leads/export.csv`, reusing the same workspace predicate and global email/resource/first-touch/last-touch UTM search as the paginated lead list. Export columns include current lead fields, consent timestamps/source, subscription/purchase state and allowlisted UTM attribution.
+- Successful and oversized export attempts are audit logged with row count and a boolean search-present flag; audit details deliberately omit search values and lead values. Responses are no-store, formula-leading cells are escaped for spreadsheet use, and over 10,000 matching leads return HTTP 413 rather than a silent partial export.
+- The leads page exposes an accessible Export CSV link based on global search, explicitly stating that the current-page UTM quick filter is not applied. API tests cover tenant filtering, formula safety, audit privacy and overflow handling; browser acceptance checks link scope. Exact-SHA push and PR verification is pending.
+
+
 ## 2026-10-29 verified global UTM attribution search
 
 - Global lead search now includes the allowlisted first-touch and last-touch UTM fields alongside email and lead-resource name, using the same workspace-scoped, bounded, parameterized filter for both count and page results.

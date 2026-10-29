@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity, ArrowLeft, CheckCircle2, CircleAlert, RefreshCw, ShieldCheck, Users,
+  Activity, ArrowLeft, CheckCircle2, CircleAlert, Download, RefreshCw, ShieldCheck, Users,
   type LucideIcon,
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { API_BASE, apiFetch } from "@/lib/api";
 
 type UTMField = "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term";
 type UTMValues = Partial<Record<UTMField, string>>;
@@ -183,7 +183,17 @@ export default function LeadsPage() {
                 First touch is retained; last touch updates when a lead submits again with tagged campaign values.
               </p>
             </div>
-            <button
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={API_BASE + "/api/leads/export.csv" + (appliedSearch ? "?search=" + encodeURIComponent(appliedSearch) : "")}
+                aria-label={appliedSearch ? "Export matching workspace leads as CSV" : "Export all workspace leads as CSV"}
+                title="Exports all workspace matches for global search (maximum 10,000 rows); the page-only UTM quick filter is not applied."
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700"
+              >
+                <Download size={16} aria-hidden="true" />
+                Export CSV
+              </a>
+                          <button
               type="button"
               onClick={() => { setBusy(true); void load(); }}
               disabled={loading || busy}
@@ -192,11 +202,13 @@ export default function LeadsPage() {
               <RefreshCw size={16} className={loading || busy ? "animate-spin" : ""} aria-hidden="true" />
               Refresh
             </button>
+            </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">Read-only CRM view</span>
             <span className="rounded-full bg-slate-100 px-3 py-2 text-slate-600">No email is sent from this page</span>
             <span className="rounded-full bg-slate-100 px-3 py-2 text-slate-600">Attribution values are recorded, not proof of conversion or payout</span>
+            <span className="rounded-full bg-slate-100 px-3 py-2 text-slate-600">CSV export: global search only, up to 10,000 leads</span>
           </div>
         </header>
 

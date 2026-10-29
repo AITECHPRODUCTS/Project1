@@ -1,5 +1,7 @@
 from __future__ import annotations
 import asyncio,base64,hashlib,hmac,json,logging,re,secrets,time
+import csv
+import io
 import httpx
 from uuid import UUID
 from contextlib import asynccontextmanager
@@ -14,7 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter,Depends,FastAPI,HTTPException,Query,Request,WebSocket,WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse,JSONResponse,RedirectResponse
+from fastapi.responses import HTMLResponse,JSONResponse,RedirectResponse,Response
 from pwdlib import PasswordHash
 from sqlalchemy import and_,func,or_,select
 from sqlalchemy.exc import IntegrityError
@@ -4790,17 +4792,11 @@ async def public_webinar_register(public_id: str, request: Request, db: AsyncSes
             "email_delivery": "not_configured", "external_webinar_provider": "not_configured"}
 
 
-@api.get("/leads")
-async def leads(
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0, le=100000),
-    search: str | None = Query(default=None, max_length=120),
-    user: dict[str, Any] = Depends(require_auth),
-    db: AsyncSession = Depends(get_session),
-):
-    workspace_id = user.get("workspace_id")
-    if not workspace_id:
-        raise HTTPException(403, "Select an authorized workspace before viewing leads")
+MAX_LEAD_EXPORT_ROWS = 10_000
+
+
+def _workspace_lead_filter(workspace_id: str, search: str | None):
+    """Apply the same workspace boundary and allowlisted global-search rules everywhere."""
     filters = [Lead.workspace_id == str(workspace_id)]
     search_term = (search or "").strip()
     if search_term:
@@ -4815,7 +4811,144 @@ async def leads(
             Lead.lead_magnet.ilike(search_pattern),
             *attribution_search,
         ))
-    lead_filter = and_(*filters)
+    return and_(*filters)
+
+
+def _lead_csv_cell(value: Any) -> str:
+    """Prevent spreadsheet formula execution in exported text cells."""
+    text_value = "" if value is None else str(value)
+    if text_value.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + text_value
+    return text_value
+
+
+async def _audit_lead_csv_export(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    user: dict[str, Any],
+    outcome: str,
+    matching_rows: int,
+    search_supplied: bool,
+) -> None:
+    """Audit export attempts without persisting searched PII or the search term."""
+    with workspace_scope(workspace_id):
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="leads.export_csv",
+            resource_type="lead_export",
+            outcome=outcome[:80],
+            details_json={
+                "format": "csv",
+                "matching_rows": matching_rows,
+                "row_limit": MAX_LEAD_EXPORT_ROWS,
+                "search_supplied": bool(search_supplied),
+                "search_value_recorded": False,
+                "lead_values_recorded": False,
+            },
+        ))
+        await db.commit()
+
+
+@api.get("/leads/export.csv")
+async def export_leads_csv(
+    search: str | None = Query(default=None, max_length=120),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before exporting leads")
+    lead_filter = _workspace_lead_filter(workspace_id, search)
+    total_count = int(await db.scalar(
+        select(func.count(Lead.id)).where(lead_filter)
+    ) or 0)
+    if total_count > MAX_LEAD_EXPORT_ROWS:
+        await _audit_lead_csv_export(
+            db, workspace_id=workspace_id, user=user, outcome="rejected_row_limit",
+            matching_rows=total_count, search_supplied=bool((search or "").strip()),
+        )
+        raise HTTPException(
+            413,
+            f"Export matches {total_count} leads; the CSV safety limit is {MAX_LEAD_EXPORT_ROWS}. Narrow the global search and retry.",
+        )
+
+    rows = list((await db.scalars(
+        select(Lead).where(lead_filter)
+        .order_by(Lead.created_at.desc(), Lead.id.asc())
+        .limit(MAX_LEAD_EXPORT_ROWS + 1)
+    )).all())
+    if len(rows) > MAX_LEAD_EXPORT_ROWS:
+        await _audit_lead_csv_export(
+            db, workspace_id=workspace_id, user=user, outcome="rejected_row_limit",
+            matching_rows=len(rows), search_supplied=bool((search or "").strip()),
+        )
+        raise HTTPException(
+            413,
+            f"Export exceeds the CSV safety limit of {MAX_LEAD_EXPORT_ROWS} leads. Narrow the global search and retry.",
+        )
+
+    first_fields = [f"first_touch_{field}" for field in UTM_FIELD_LIMITS]
+    last_fields = [f"last_touch_{field}" for field in UTM_FIELD_LIMITS]
+    columns = [
+        "lead_id", "email", "lead_magnet", "consented_at",
+        "email_consent_confirmed_at", "consent_source", "unsubscribed", "purchased",
+        *first_fields, *last_fields, "last_touch_at",
+    ]
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow(columns)
+    for row in rows:
+        attribution = lead_attribution_summary(row.metadata_json)
+        first_touch = attribution.get("first_touch")
+        last_touch = attribution.get("last_touch")
+        first_touch = first_touch if isinstance(first_touch, dict) else {}
+        last_touch = last_touch if isinstance(last_touch, dict) else {}
+        values = [
+            row.id,
+            row.email,
+            row.lead_magnet,
+            row.consent_at.isoformat() if row.consent_at else "",
+            row.email_consent_confirmed_at.isoformat() if row.email_consent_confirmed_at else "",
+            row.consent_source,
+            str(row.unsubscribed_at is not None).lower(),
+            str(row.purchased_at is not None).lower(),
+            *[first_touch.get(field, "") for field in UTM_FIELD_LIMITS],
+            *[last_touch.get(field, "") for field in UTM_FIELD_LIMITS],
+            attribution.get("last_touch_at") or "",
+        ]
+        writer.writerow([_lead_csv_cell(value) for value in values])
+
+    await _audit_lead_csv_export(
+        db, workspace_id=workspace_id, user=user, outcome="completed",
+        matching_rows=len(rows), search_supplied=bool((search or "").strip()),
+    )
+    file_date = utcnow().date().isoformat()
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="omni-affiliate-leads-{file_date}.csv"',
+            "Cache-Control": "no-store, private",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@api.get("/leads")
+async def leads(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=100000),
+    search: str | None = Query(default=None, max_length=120),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing leads")
+    lead_filter = _workspace_lead_filter(str(workspace_id), search)
     total_count = int(await db.scalar(
         select(func.count(Lead.id)).where(lead_filter)
     ) or 0)

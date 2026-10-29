@@ -1515,3 +1515,52 @@ def test_leads_page_searches_email_and_resource_across_workspace_results():
             assert page.get_by_text("beta@example.test").count() == 0
         finally:
             browser.close()
+
+
+def test_leads_page_exposes_csv_export_scoped_to_global_search():
+    lead = {
+        "id": "lead-export-1",
+        "email": "reader@example.test",
+        "lead_magnet": "Creator guide",
+        "consented_at": "2026-10-28T10:00:00+00:00",
+        "email_consent_confirmed_at": "2026-10-28T10:01:00+00:00",
+        "consent_source": "persisted_landing_page",
+        "unsubscribed": False,
+        "purchased": False,
+        "attribution": {
+            "first_touch": {"utm_source": "newsletter", "utm_campaign": "launch"},
+            "last_touch": {"utm_source": "social", "utm_campaign": "autumn"},
+            "last_touch_at": "2026-10-28T10:00:00+00:00",
+        },
+    }
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_leads(route):
+                if "/api/leads/" in route.request.url and "/consent-events" in route.request.url:
+                    _fulfill_json(route, {"lead_id": lead["id"], "count": 0, "read_only": True, "data": []})
+                elif route.request.url.split("?", 1)[0].rstrip("/").endswith("/api/leads"):
+                    _fulfill_json(route, {
+                        "count": 1, "total_count": 1, "limit": 50, "offset": 0,
+                        "data": [lead],
+                    })
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected lead API request"}, status=404)
+
+            page.route("**/api/leads**", handle_leads)
+            page.goto(f"{BASE_URL}/leads", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Leads & attribution").wait_for(state="visible")
+            page.get_by_label("Search all leads by email, resource or UTM").fill("newsletter")
+            page.get_by_role("button", name="Search").click()
+            page.get_by_text("reader@example.test").wait_for(state="visible")
+            page.get_by_label("Filter UTM values on this page").fill("social")
+            export_link = page.get_by_role("link", name="Export matching workspace leads as CSV")
+            href = export_link.get_attribute("href")
+            assert href is not None
+            assert "/api/leads/export.csv?search=newsletter" in href
+            assert "page-only UTM quick filter is not applied" in (export_link.get_attribute("title") or "")
+            assert page.get_by_text("CSV export: global search only, up to 10,000 leads").is_visible()
+        finally:
+            browser.close()

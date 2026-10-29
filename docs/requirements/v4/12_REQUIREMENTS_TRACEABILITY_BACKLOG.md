@@ -394,3 +394,10 @@
 - Paid-ad guardrail: same-latest-timestamp provider snapshot conflicts are detected; ambiguous evidence blocks stop-loss decisions. UI exposes the conflicting fields and explains that no remote action was executed.
 - Exact-SHA CI evidence: push [40832233239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832233239), PR [40832239987](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832239987); Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
 - Remaining: authenticated production provider adapters, external account UAT, full workflow E2E/staging, 53-skill parity, public/proprietary licensing decision and release/deployment evidence. These changes do not authorize live ad spend or send marketing email.
+
+
+## 2026-10-29 lead CRM export checkpoint (CI pending)
+
+- Current lead workspace view supports bounded pagination, stale-page recovery, global search across email/resource and allowlisted first/last-touch UTM values, and a read-only view of consent history. Exact-SHA push/PR evidence for global UTM search passed on `448c281f31d4576adee77774bfc1c2d786223bc9` (Python 748 passed; browser UAT 19 passed).
+- New candidate `/api/leads/export.csv` reuses the same workspace and global-search filter. It logs export attempts without search/lead values, escapes spreadsheet-formula cells, sets no-store headers, and fails closed above 10,000 rows. API and browser tests are pending exact-SHA CI.
+- Still partial: external CRM sync, full consent lifecycle journey UAT, email-provider verification, retention/deletion policy acceptance and complete production end-to-end coverage.

@@ -165,3 +165,10 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - Lead CRM: consent confirmation/source visibility and read-only consent history; bounded workspace pagination with stale-page recovery; global email/resource/first-touch/last-touch UTM search plus current-page UTM quick filter.
 - Exact-SHA push [40832233239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832233239) and PR [40832239987](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832239987) passed. Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security audit, AI profile, secret scan, repository guard passed. Push lockfile-sync passed; PR lockfile-sync is skipped by its configured condition.
 - These slices improve real product behavior but do not close production readiness. Open gates include official affiliate/ad provider authentication and contract tests, live provider data/remote actions, full workflow end-to-end and staging UAT, 53-skill parity, legal/license approval, deployment/rollback/observability evidence and the live-app ZIP if it is supplied/available.
+
+
+## 2026-10-29 workspace-scoped lead CSV export (verification pending)
+
+- Added a workspace-authenticated `/api/leads/export.csv` endpoint using the shared filter that powers paginated global search. It exports consent/source flags and allowlisted first/last-touch attribution, not arbitrary stored lead metadata.
+- Export attempts are audited without recording search terms or lead values; CSV cells beginning with spreadsheet formula characters are prefixed safely; responses are `no-store`; and exports over 10,000 rows are rejected with HTTP 413 rather than silently truncated.
+- Added the leads-page export link and clear scope text: the export uses global search across the workspace; it does not apply the current-page-only UTM quick filter. API and browser acceptance tests were added. This candidate needs exact-SHA push/PR CI before it is marked verified.

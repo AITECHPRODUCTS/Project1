@@ -3,7 +3,7 @@
 **Snapshot:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Working branch:** build/omni-affiliate-os-production  
-**Current verified code SHA:** 532d909ddd074848b985f2ff87ff328b834d4549  
+**Current verified code SHA:** 585c30cf91d8d8baf64796ddbd565c90550412eb  
 **Release decision:** NOT PRODUCTION READY. Draft PR #1 is open and unmerged.
 
 ## Built in the current branch
@@ -76,8 +76,8 @@ This feature makes saved comparison drafts retrievable; it does not change the o
 
 | Verification measure | Exact current result |
 |---|---|
-| Python CI suite | 788 passed · 8 skipped · 5 warnings |
-| Chromium browser UAT | 25 passed |
+| Python CI suite | 796 passed · 8 skipped · 5 warnings |
+| Chromium browser UAT | 26 passed |
 | Push CI | Passed |
 | Draft-PR CI | Passed |
 | Push lockfile sync | Passed |
@@ -93,3 +93,9 @@ A trustworthy overall completion percentage is not reported because the complete
 Revision allocation is now backed by migration 0031 and a workspace/root-scoped sequence. The atomic reservation is audited before generation and does not alter the original draft. The SQLite test seeds prior revision history; the PostgreSQL test reserves 24 revision numbers concurrently and proves uniqueness/monotonic sequence.
 
 The first PostgreSQL attempt found a fixture ordering error (workspace parent not flushed before child asset); the fixture was corrected and the exact-SHA push/PR checks above passed. This does not close the broader release gates: product-source text is not verified truth; official network credentials/approval, compliance/legal review, external publishing, staging operations, monitoring, backup/restore and remaining skill parity remain pending.
+
+## Latest verified fix: comparison draft and evidence integrity
+
+Code SHA 585c30cf91d8d8baf64796ddbd565c90550412eb passed exact-SHA push [40882079872](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40882079872) and PR [40882091616](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40882091616). New drafts store an SHA-256 body baseline and canonical source-snapshot manifest/hash, with both recorded in the creation/revision audit. Detail and review operations detect changed HTML, snapshot identity/metadata, excerpt bytes, and missing or mismatched audit baselines; a failed check blocks editorial review with HTTP 409 and the UI explains the blocked state.
+
+Regression suite results: Python 796 passed, 8 skipped, 5 warnings; browser UAT 26 passed; PostgreSQL migration/integration 8 passed; frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its push-only condition. A direct-insert test fixture initially failed because it omitted the new creation-baseline/audit contract; the fixture was corrected and the fresh exact-SHA push/PR runs passed. This protects against ordinary drift and partial tampering, not a privileged attacker rewriting all database records. Product fact truth, legal/compliance status, provider eligibility and publication readiness remain independently unverified.

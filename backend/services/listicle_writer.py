@@ -246,7 +246,7 @@ async def build_listicle_post(
         "been independently ranked, tested or approved. Public-page snapshots and literal text matches do not "
         "establish fact truth, freshness, availability, eligibility or compliance.</p>"
         "<h2>At a glance</h2>" + rendered_products
-        "<h2>Evaluation criteria</h2><ul>"
+        + "<h2>Evaluation criteria</h2><ul>"
         + "".join("<li>" + html.escape(value) + "</li>" for value in criteria)
         + "</ul>" + narrative + rendered_facts
         + _render_sources(source_snapshots)

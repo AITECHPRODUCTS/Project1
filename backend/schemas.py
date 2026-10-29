@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from backend.services.consent_ledger import (
     EMAIL_MARKETING_CONSENT_PURPOSE,
     EMAIL_MARKETING_CONSENT_TEXT,
@@ -291,6 +291,79 @@ class CommissionEvidenceReviewRequest(BaseModel):
     candidate_conversion_id: str | None = Field(default=None, min_length=1, max_length=36)
     note: str = Field(default="", max_length=4000)
 
+
+
+class CommissionProjectionProgramRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    reward_type: Literal["cps_one_time", "cps_recurring", "cpl", "cpa"]
+    commission_type: Literal["percentage", "fixed"]
+    commission_value: Decimal = Field(gt=Decimal("0"), le=Decimal("1000000000"), allow_inf_nan=False)
+    currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    average_order_value: Decimal | None = Field(default=None, gt=Decimal("0"), le=Decimal("1000000000"), allow_inf_nan=False)
+    recurring_paid_months: int | None = Field(default=None, ge=1, le=120)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_program_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Program name must not be blank")
+        return normalized
+
+    @field_validator("currency")
+    @classmethod
+    def normalize_program_currency(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("commission_value", "average_order_value")
+    @classmethod
+    def require_supported_decimal_precision(cls, value: Decimal | None) -> Decimal | None:
+        if value is None:
+            return None
+        if not value.is_finite():
+            raise ValueError("Commission inputs must be finite decimal amounts")
+        if value.quantize(Decimal("0.000001")) != value:
+            raise ValueError("Commission inputs support at most six meaningful decimal places")
+        return value
+
+    @model_validator(mode="after")
+    def validate_payout_terms(self) -> "CommissionProjectionProgramRequest":
+        if self.commission_type == "percentage":
+            if self.reward_type not in {"cps_one_time", "cps_recurring"}:
+                raise ValueError("Percentage commissions are only supported for CPS programs")
+            if self.commission_value > Decimal("100"):
+                raise ValueError("Percentage commission cannot exceed 100")
+            if self.average_order_value is None:
+                raise ValueError("Average order value is required for percentage commissions")
+        elif self.average_order_value is not None:
+            raise ValueError("Average order value must be omitted for fixed commissions")
+
+        if self.reward_type == "cps_recurring":
+            if self.recurring_paid_months is None:
+                raise ValueError("Recurring paid months are required for recurring CPS programs")
+        elif self.recurring_paid_months is not None:
+            raise ValueError("Recurring paid months are only valid for recurring CPS programs")
+        return self
+
+
+class CommissionCalculatorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monthly_visitors: int = Field(strict=True, ge=0, le=1_000_000_000)
+    click_through_rate_pct: Decimal = Field(ge=Decimal("0"), le=Decimal("100"), allow_inf_nan=False)
+    affiliate_conversion_rate_pct: Decimal = Field(ge=Decimal("0"), le=Decimal("100"), allow_inf_nan=False)
+    programs: list[CommissionProjectionProgramRequest] = Field(min_length=1, max_length=10)
+
+    @field_validator("click_through_rate_pct", "affiliate_conversion_rate_pct")
+    @classmethod
+    def validate_rate_precision(cls, value: Decimal) -> Decimal:
+        if not value.is_finite():
+            raise ValueError("Rate assumptions must be finite")
+        if value.quantize(Decimal("0.000001")) != value:
+            raise ValueError("Rate assumptions support at most six meaningful decimal places")
+        return value
 
 
 AdPlatform = Literal[

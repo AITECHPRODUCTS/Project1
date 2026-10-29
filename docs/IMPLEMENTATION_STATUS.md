@@ -1,6 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 implementation increment — authenticated commission calculator user journey
+
+- Added a workspace-authenticated `POST /api/research/commission-calculator` endpoint using the previously verified deterministic handler. It validates bounded payout inputs, requires an active workspace, rate-limits requests, persists each result as a review-required `ContentAsset` draft and records an audit event.
+- Added `/commission-calculator`, with editable traffic assumptions and up to ten payout programs, same-currency ranking, recurring-duration controls, saved-draft ID and exportable JSON. The dashboard links to the page. The UI states that estimates are assumptions and not actual earnings; no external provider calls or transfers occur.
+- Added API persistence/authorization/invalid-input tests and a Chromium user-journey test. Exact-SHA CI is now required for this new code increment; release readiness remains NOT RELEASE READY.
+
 ## 2026-10-29 verified checkpoint — commission calculator wired through Skill Studio
 
 - Exact code SHA: [`06a5bbd86aa21ce2a85729c5438ee4991b45e421](https://github.com/AITECHPRODUCTS/Project1/commit/06a5bbd86aa21ce2a85729c5438ee4991b45e421) on the existing `build/omni-affiliate-os-production` branch. The commission calculator, measured offer-metrics handler and offer-term change review are now selectable in Skill Studio and allowed by `SkillPackageCreateRequest`.

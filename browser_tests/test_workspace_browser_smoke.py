@@ -843,3 +843,69 @@ def test_commission_calculator_skill_studio_preset_loads_contract_and_fixture():
             assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()
+
+
+
+def test_commission_calculator_user_journey_submits_assumptions_and_shows_review_draft():
+    response = {
+        "asset_id": "projection-draft-001",
+        "asset_status": "draft",
+        "requires_review": True,
+        "publishing_started": False,
+        "programs": [{
+            "name": "One-time Example",
+            "reward_type": "cps_one_time",
+            "currency": "USD",
+            "commission_per_conversion_amount": "10.000000",
+            "expected_monthly_clicks": "10.000000",
+            "expected_monthly_conversions": "1.000000",
+            "estimated_first_month_commission": "10.000000",
+            "estimated_12_month_commission": "120.000000",
+            "recurring_paid_months": None,
+            "projection_basis": "one-time commission for each monthly conversion cohort",
+        }],
+        "measurement_basis": {
+            "monthly_visitors": 100,
+            "click_through_rate_pct_assumption": "10.000000",
+            "affiliate_conversion_rate_pct_assumption": "10.000000",
+        },
+        "currency_comparison": "USD",
+        "input_provenance": "caller_supplied_assumptions",
+        "provider_metrics_verified": False,
+        "earnings_guaranteed": False,
+        "external_provider_calls_made": False,
+        "money_transferred": False,
+        "requires_human_review": True,
+        "notes": [
+            "Clicks, conversions and commissions are expected-value estimates, not observed counts or earnings.",
+            "The projection assumes constant monthly visitors and rates, with no refunds, cancellations, fraud or attribution loss.",
+            "Recurring projections assume each cohort continues paying for the supplied duration; churn is not modeled.",
+            "No market benchmarks or provider metrics were fetched or inferred.",
+        ],
+    }
+    submitted = {}
+
+    def handle_calculation(route):
+        submitted.update(route.request.post_data_json)
+        _fulfill_json(route, response)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/api/research/commission-calculator", handle_calculation)
+            page.goto(f"{BASE_URL}/commission-calculator", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Commission projection calculator").wait_for(state="visible")
+            page.get_by_label("Monthly visitors").fill("100")
+            page.get_by_label("Click-through rate (%)").fill("10")
+            page.get_by_label("Affiliate conversion rate (%)").fill("10")
+            page.get_by_label("Program 1 name").fill("One-time Example")
+            page.get_by_role("button", name="Estimate commissions").click()
+            page.get_by_role("status").get_by_text("Projection saved as a workspace draft").wait_for(state="visible")
+            assert submitted["monthly_visitors"] == 100
+            assert submitted["programs"][0]["commission_value"] == 20
+            assert "average_order_value" in submitted["programs"][0]
+            assert page.get_by_text("USD 120.000000").count() >= 1
+            assert page.get_by_text("Provider metrics verified: false").count() == 1
+        finally:
+            browser.close()

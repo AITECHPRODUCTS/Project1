@@ -8,7 +8,11 @@
 
 This document is a practical handoff for continuing the implementation. It distinguishes existing code and automated verification from provider-connected, staging-verified and production-live behavior.
 
-## New code in this continuation checkpoint
+## New user-facing calculator journey in this continuation checkpoint
+
+The commission calculator is now available at `/commission-calculator` and `POST /api/research/commission-calculator`. It authenticates through the existing workspace session, validates traffic/rate/program assumptions, writes a review-required workspace draft, and records an audit event. The UI compares up to ten programs, restricts ranking to a single currency, and lets users export the JSON report. It does not fetch provider metrics, claim earnings or perform payout operations. API and Chromium UAT coverage has been added; this new head must pass exact-SHA push and PR CI before the increment is marked verified.
+
+## Previous code increment
 
 Added the executable allowlisted handler `research.commission_calculator` for S1 affiliate earnings projections. It calculates expected clicks/conversions, commission per conversion and 12-month payout projections from explicitly provided visitor counts, click-through and conversion-rate assumptions, payout rules, currency, average order value and recurring duration. All money calculations use bounded Decimal arithmetic and fixed-point strings. Comparisons reject mixed currencies and results are sorted only within one shared currency. Recurring cohorts use the submitted payment duration and are labelled as pre-churn estimates.
 

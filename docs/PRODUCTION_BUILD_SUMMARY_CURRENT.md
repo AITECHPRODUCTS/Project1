@@ -3,7 +3,7 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code SHA:** b576807c9a6bea9a6f1d1ab1c6654d443f06641b  
+**Latest verified code SHA:** 56edbec957d1667dea4e2a9dbc4efd19de422632  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
 
@@ -15,6 +15,16 @@
 - Exact-SHA push [40914232006](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40914232006) and PR [40914245417](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40914245417) passed. Python: **823 passed, 9 skipped, 5 warnings**; Chromium browser UAT: **29 passed**; PostgreSQL migration/integration, frontend typecheck/build/final Docker smoke, AI/RAG profile, security/SBOM audit, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
 - The runtime authorization fix does not complete the separate Platform Super Admin console lifecycle, provider/account authorization, production staging or release gates. Product remains **NOT PRODUCTION READY**.
 
+
+## Newest verified P0 feature — platform-wide provider-write pause (29 October 2026)
+
+- Feature code commit: 5eec93f45f466888c9cb544b2cd4b648f94fada3; test-fixture correction/current verified code head: 56edbec957d1667dea4e2a9dbc4efd19de422632.
+- Added migration 0033_platform_execution_control with a singleton global control row (default unpaused), a Platform Super Admin-only GET/POST API, mandatory human reason, persisted actor/time/state, and workspace-scoped audit records for pause and resume.
+- The shared backend/services/external_action_registry.py now checks the control before claiming a new provider-write action. It fails closed with HTTP 503 if the control record is missing and returns HTTP 423 for new claims while paused. Completed idempotency replays still return their recorded result without re-calling the provider.
+- The existing admin page now includes a pause/resume panel. Regression coverage includes admin role/validation/audit behavior, missing-row fail-closed behavior, new-write denial while a completed result still replays, existing registered-provider fixtures and browser pause/resume UAT.
+- Exact-SHA push [40921800860](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40921800860) and PR [40921812153](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40921812153) passed. Python 835 passed, 9 skipped, 5 warnings; Chromium browser UAT 30 passed; PostgreSQL migration/integration, frontend typecheck/build/final Docker smoke, AI/RAG profile, security/SBOM audit, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- Explicit boundary: this switch applies only to new provider writes that use the shared external-action registry (currently social, CMS, bio-link, GitHub Pages and workflow S5 paths). It does not cancel already-claimed/in-flight actions, undo remote work or block side-effect paths that bypass the registry; those paths still need their own enforced gates. Provider sandbox/account UAT and actual deployed emergency-response tests remain open.
+- This closes the code and CI acceptance for this control slice only. Product release remains NOT PRODUCTION READY.
 
 ## What is built in the current branch
 

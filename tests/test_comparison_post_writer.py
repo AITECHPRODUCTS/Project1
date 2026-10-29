@@ -130,6 +130,31 @@ async def test_comparison_writer_fetches_bounded_sources_and_matches_only_produc
 
 
 @pytest.mark.asyncio
+async def test_comparison_writer_rejects_credential_query_before_network(monkeypatch):
+    fetched = []
+
+    async def should_not_fetch(url, *, max_bytes, timeout):
+        fetched.append(url)
+        return "<html><body>not expected</body></html>", "text/html", 200
+
+    monkeypatch.setattr(comparison_service, "fetch_public_page", should_not_fetch)
+    products = [
+        {"name": "Alpha", "facts": {"Price": "$20"}, "source_urls": ["https://vendor.example/alpha?token=DO_NOT_STORE"]},
+        {"name": "Beta", "facts": {"Price": "$35"}, "source_urls": ["https://vendor.example/beta"]},
+    ]
+    with pytest.raises(ValueError, match="credential-like query parameters"):
+        await comparison_service.build_comparison_post(
+            topic="Analytics products comparison",
+            audience="Small affiliate publishers",
+            products=products,
+            decision_criteria=["Price"],
+            affiliate_disclosure="Disclosure: I may earn a commission from qualifying purchases.",
+            minimum_words=500,
+        )
+    assert fetched == []
+
+
+@pytest.mark.asyncio
 async def test_comparison_writer_does_not_persist_transport_tokens(monkeypatch):
     called = []
 

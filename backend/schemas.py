@@ -61,15 +61,6 @@ class OfferQualificationReviewRequest(BaseModel):
             parsed = urlparse(value)
             if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
                 raise ValueError("evidence URLs must be absolute HTTPS URLs without credentials")
-            sensitive_query_keys = {
-                "access_token", "api_key", "apikey", "auth", "authorization", "bearer",
-                "client_secret", "credential", "jwt", "key", "password", "private_key",
-                "secret", "sig", "signature", "token", "x_amz_credential", "x_amz_signature",
-            }
-            for raw_key, _ in parse_qsl(parsed.query, keep_blank_values=True):
-                normalized_key = re.sub(r"[^a-z0-9]+", "_", raw_key.casefold()).strip("_")
-                if normalized_key in sensitive_query_keys:
-                    raise ValueError("product source URLs must not include credential-like query parameters")
             try:
                 address = ipaddress.ip_address(parsed.hostname)
             except ValueError:
@@ -208,6 +199,15 @@ class ComparisonProductInput(BaseModel):
                 or len(value) > 2048
             ):
                 raise ValueError("product source references must be absolute HTTPS URLs without credentials")
+            sensitive_query_keys = {
+                "access_token", "api_key", "apikey", "auth", "authorization", "bearer",
+                "client_secret", "credential", "jwt", "key", "password", "private_key",
+                "secret", "sig", "signature", "token", "x_amz_credential", "x_amz_signature",
+            }
+            for raw_key, _ in parse_qsl(parsed.query, keep_blank_values=True):
+                normalized_key = re.sub(r"[^a-z0-9]+", "_", raw_key.casefold()).strip("_")
+                if normalized_key in sensitive_query_keys:
+                    raise ValueError("product source URLs must not include credential-like query parameters")
             try:
                 address = ipaddress.ip_address(parsed.hostname)
             except ValueError:

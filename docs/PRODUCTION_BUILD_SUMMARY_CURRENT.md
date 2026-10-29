@@ -3,10 +3,20 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code SHA:** 7145e2f2189cbac940c9471139388f4a1d89750d  
+**Latest verified code SHA:** a3e578b2643ddab73833301d6cb20f43c2ad5e96  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
 
+
+
+## Latest verified tenant-isolation fix — ad plans and observations (29 October 2026)
+
+- Verified source SHA: a3e578b2643ddab73833301d6cb20f43c2ad5e96.
+- The ad-plan and ad-observation routes now explicitly bind created records and audit rows to the authenticated active workspace. List/detail/performance reads filter by that workspace; linking an observation to another workspace's plan returns 404.
+- Added an isolated SQLite API regression that intentionally runs without ambient workspace context and verifies list/detail filtering, rejection of a foreign plan, and workspace ownership on created plans, observations and audit records.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40927405639 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40927413492 both passed. Python **839 passed, 9 skipped, 5 warnings**; Chromium UAT **30 passed**; PostgreSQL migration/integration **9 passed**. Frontend typecheck/build/Docker smoke, AI/RAG, security/SBOM, secret scan, repository guard and push lockfile-sync passed. PR lockfile-sync was skipped by its configured push-only condition.
+- Hosted browser UAT runs in the GitHub Actions runner; it did not test the user's personal browser. The local hands-on procedure is recorded in docs/LOCAL_BROWSER_UAT_RUNBOOK_2026-10-29.md.
+- This closes the code/CI acceptance for this ad-route scoping correction only. The product remains NOT PRODUCTION READY.
 
 ## Latest verified P0 extension — pause enforcement for Resend email sends (29 October 2026)
 

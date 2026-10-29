@@ -1,6 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## Paid-ad ROAS numeric input validation (candidate; CI pending)
+
+- Replaced silent `max(0, value)` clamping with explicit validation for non-empty campaign identifiers and finite, non-negative spend, commission and threshold numbers. Boolean, NaN, infinity, negative values and ratio overflow fail closed with HTTP 422 at the endpoint.
+- Recommendations remain review-only; this change does not execute campaign actions. Exact-head push/PR CI and browser UAT are required before marking verified.
+
+
 ## 2026-10-29 database readiness probe — verified
 
 - Added `GET /health/ready` in `backend/main.py`. It executes `SELECT 1` through the standard database session dependency; success returns a minimal ready response and query errors return generic HTTP 503 without exposing driver details. The existing `GET /health` liveness behavior is preserved.

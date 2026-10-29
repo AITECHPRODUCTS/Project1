@@ -6410,11 +6410,30 @@ async def ads_evaluate(
     p: dict[str, Any],
     user: dict[str, Any] = Depends(require_auth),
 ):
- if not user.get("workspace_id"):
-  raise HTTPException(403, "Select an authorized workspace before evaluating ad performance")
- try:d=evaluate_roas(str(p["campaign_id"]),float(p["spend"]),float(p["commission"]),float(p.get("threshold",1.2)))
- except (KeyError,ValueError,TypeError) as exc:raise HTTPException(422,"campaign_id, spend and commission are required numeric values") from exc
- return {"campaign_id":d.campaign_id,"roas":d.roas,"threshold":d.threshold,"pause_recommended":d.pause_recommended,"executed":False,"reason":d.reason}
+    if not user.get("workspace_id"):
+        raise HTTPException(
+            403, "Select an authorized workspace before evaluating ad performance"
+        )
+    try:
+        decision = evaluate_roas(
+            p["campaign_id"],
+            p["spend"],
+            p["commission"],
+            p.get("threshold", 1.2),
+        )
+    except (KeyError, ValueError, TypeError) as exc:
+        raise HTTPException(
+            422,
+            "campaign_id must be non-empty; spend, commission and threshold must be finite non-negative numbers",
+        ) from exc
+    return {
+        "campaign_id": decision.campaign_id,
+        "roas": decision.roas,
+        "threshold": decision.threshold,
+        "pause_recommended": decision.pause_recommended,
+        "executed": False,
+        "reason": decision.reason,
+    }
 def _ad_guardrail_dict(row: AdBudgetGuardrail) -> dict[str, Any]:
     last = row.last_evaluation_json or {}
     return {

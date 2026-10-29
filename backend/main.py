@@ -27,10 +27,10 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem
+from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,DistributionQueueItem,OfferShortlist,OfferShortlistItem
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -1259,6 +1259,126 @@ async def offers(
             for offer in rows
         ],
     }
+@api.get("/offers/shortlists")
+async def list_offer_shortlists(user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    """List only the active workspace's saved offer shortlists."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing saved offer lists")
+    rows = list((await db.scalars(select(OfferShortlist).where(
+        OfferShortlist.workspace_id == str(workspace_id)
+    ).order_by(OfferShortlist.updated_at.desc(), OfferShortlist.name.asc()).limit(100))).all())
+    result = []
+    for row in rows:
+        count = int(await db.scalar(select(func.count()).select_from(OfferShortlistItem).where(
+            OfferShortlistItem.workspace_id == str(workspace_id), OfferShortlistItem.shortlist_id == row.id
+        )) or 0)
+        result.append({"id": row.id, "name": row.name, "description": row.description, "item_count": count,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None})
+    return {"count": len(result), "limit": 100, "data": result}
+
+
+@api.post("/offers/shortlists", status_code=201)
+async def create_offer_shortlist(payload: OfferShortlistCreateRequest, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    """Create a workspace-owned shortlist; no provider-side action is performed."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before creating a saved offer list")
+    row = OfferShortlist(workspace_id=str(workspace_id), name=payload.name, description=payload.description)
+    db.add(row)
+    try:
+        await db.commit()
+        await db.refresh(row)
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(409, "A saved offer list with this name already exists in the workspace") from exc
+    return {"id": row.id, "name": row.name, "description": row.description, "item_count": 0,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None}
+
+
+@api.get("/offers/shortlists/{shortlist_id}")
+async def get_offer_shortlist(shortlist_id: str, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    """Return a saved list with current catalog facts and explicit unknowns."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing a saved offer list")
+    row = await db.scalar(select(OfferShortlist).where(OfferShortlist.id == shortlist_id, OfferShortlist.workspace_id == str(workspace_id)))
+    if row is None:
+        raise HTTPException(404, "Saved offer list not found")
+    pairs = (await db.execute(select(OfferShortlistItem, Offer).join(Offer, Offer.id == OfferShortlistItem.offer_id).where(
+        OfferShortlistItem.workspace_id == str(workspace_id), OfferShortlistItem.shortlist_id == row.id
+    ).order_by(OfferShortlistItem.created_at.asc(), Offer.name.asc()))).all()
+    items = []
+    for item, offer in pairs:
+        items.append({"item_id": item.id, "note": item.note, "added_at": item.created_at.isoformat() if item.created_at else None,
+            "offer": {"id": offer.id, "network": offer.network, "external_id": offer.external_id, "name": offer.name,
+                "url": offer.url, "category": offer.category, "description": offer.description, "reward_type": offer.reward_type,
+                "reward_value": offer.reward_value, "cookie_days": offer.cookie_days, "traffic_score": offer.traffic_score,
+                "gravity_score": offer.gravity_score, "normalized_gravity": offer.normalized_gravity, "epc": offer.epc,
+                "conversion_rate": offer.conversion_rate, "recurring_commission": offer.recurring_commission,
+                "source_stars": offer.source_stars,
+                "verification_basis": "provider_claimed_unattested" if offer.verified else "provider_not_verified_or_unknown",
+                "source_url": offer.source_url}})
+    return {"id": row.id, "name": row.name, "description": row.description, "count": len(items), "items": items,
+        "created_at": row.created_at.isoformat() if row.created_at else None, "updated_at": row.updated_at.isoformat() if row.updated_at else None}
+
+
+@api.post("/offers/shortlists/{shortlist_id}/items", status_code=201)
+async def add_offer_to_shortlist(shortlist_id: str, payload: OfferShortlistItemCreateRequest, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before saving an offer")
+    shortlist = await db.scalar(select(OfferShortlist).where(OfferShortlist.id == shortlist_id, OfferShortlist.workspace_id == str(workspace_id)))
+    if shortlist is None:
+        raise HTTPException(404, "Saved offer list not found")
+    offer = await db.scalar(select(Offer).where(Offer.id == payload.offer_id))
+    if offer is None:
+        raise HTTPException(404, "Catalog offer not found")
+    item = OfferShortlistItem(workspace_id=str(workspace_id), shortlist_id=shortlist.id, offer_id=offer.id, note=payload.note)
+    db.add(item)
+    try:
+        await db.commit()
+        await db.refresh(item)
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(409, "This offer is already in the saved list") from exc
+    return {"id": item.id, "shortlist_id": shortlist.id, "offer_id": offer.id, "note": item.note,
+        "created_at": item.created_at.isoformat() if item.created_at else None}
+
+
+@api.delete("/offers/shortlists/{shortlist_id}/items/{offer_id}")
+async def remove_offer_from_shortlist(shortlist_id: str, offer_id: str, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before editing a saved offer list")
+    item = await db.scalar(select(OfferShortlistItem).where(OfferShortlistItem.workspace_id == str(workspace_id),
+        OfferShortlistItem.shortlist_id == shortlist_id, OfferShortlistItem.offer_id == offer_id))
+    if item is None:
+        raise HTTPException(404, "Saved offer item not found")
+    await db.delete(item)
+    await db.commit()
+    return {"deleted": True, "shortlist_id": shortlist_id, "offer_id": offer_id}
+
+
+@api.delete("/offers/shortlists/{shortlist_id}")
+async def delete_offer_shortlist(shortlist_id: str, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before deleting a saved offer list")
+    row = await db.scalar(select(OfferShortlist).where(OfferShortlist.id == shortlist_id, OfferShortlist.workspace_id == str(workspace_id)))
+    if row is None:
+        raise HTTPException(404, "Saved offer list not found")
+    items = list((await db.scalars(select(OfferShortlistItem).where(
+        OfferShortlistItem.workspace_id == str(workspace_id), OfferShortlistItem.shortlist_id == row.id))).all())
+    for item in items:
+        await db.delete(item)
+    await db.delete(row)
+    await db.commit()
+    return {"deleted": True, "id": shortlist_id}
+
+
 @api.get("/integrations/openaffiliate/sync-status")
 async def openaffiliate_sync_status(
     user: dict[str, Any] = Depends(require_platform_admin),

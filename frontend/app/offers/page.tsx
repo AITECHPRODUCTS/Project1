@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, RefreshCw, Search } from "lucide-react";
+import { BookmarkPlus, ChevronLeft, ChevronRight, ExternalLink, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 type Offer = {
@@ -62,6 +62,9 @@ type SyncHistory = {
   note: string;
   items: SyncHistoryItem[];
 };
+
+type ShortlistSummary = { id: string; name: string; description: string; item_count: number; created_at: string | null; updated_at: string | null };
+type ShortlistDetail = { id: string; name: string; description: string; count: number; items: { item_id: string; note: string; added_at: string | null; offer: Offer }[] };
 
 type CatalogResponse = {
   count: number;
@@ -134,6 +137,14 @@ function providerVerificationLabel(offer: Offer): string {
 export default function OfferCatalogPage() {
   const [draftFilters, setDraftFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [activeFilters, setActiveFilters] = useState<Filters>(DEFAULT_FILTERS);
+
+  const [shortlists, setShortlists] = useState<ShortlistSummary[]>([]);
+  const [selectedShortlistId, setSelectedShortlistId] = useState("");
+  const [selectedShortlist, setSelectedShortlist] = useState<ShortlistDetail | null>(null);
+  const [shortlistName, setShortlistName] = useState("");
+  const [shortlistLoading, setShortlistLoading] = useState(false);
+  const [shortlistError, setShortlistError] = useState("");
+  const [shortlistMessage, setShortlistMessage] = useState("");
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -180,6 +191,64 @@ export default function OfferCatalogPage() {
     }
   }, []);
 
+  const refreshShortlists = useCallback(async (preferredId?: string) => {
+    setShortlistLoading(true); setShortlistError("");
+    try {
+      const result = await apiFetch<{ count: number; data: ShortlistSummary[] }>("/api/offers/shortlists");
+      setShortlists(result.data);
+      const nextId = preferredId ?? selectedShortlistId;
+      if (nextId && result.data.some(item => item.id === nextId)) {
+        setSelectedShortlistId(nextId);
+        setSelectedShortlist(await apiFetch<ShortlistDetail>("/api/offers/shortlists/" + encodeURIComponent(nextId)));
+      } else { setSelectedShortlistId(""); setSelectedShortlist(null); }
+    } catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Saved offer lists could not be loaded."); }
+    finally { setShortlistLoading(false); }
+  }, [selectedShortlistId]);
+
+  const createShortlist = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setShortlistError(""); setShortlistMessage("");
+    try {
+      const created = await apiFetch<ShortlistSummary>("/api/offers/shortlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: shortlistName }) });
+      setShortlistName(""); setShortlistMessage("Saved offer list created. Provider terms and metrics are not independently verified.");
+      await refreshShortlists(created.id);
+    } catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Saved offer list could not be created."); }
+  };
+
+  const chooseShortlist = async (id: string) => {
+    setSelectedShortlistId(id); setSelectedShortlist(null); setShortlistError(""); setShortlistMessage("");
+    if (!id) return;
+    try { setSelectedShortlist(await apiFetch<ShortlistDetail>("/api/offers/shortlists/" + encodeURIComponent(id))); }
+    catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Saved offer list could not be loaded."); }
+  };
+
+  const saveOffer = async (offerId: string) => {
+    if (!selectedShortlistId) { setShortlistError("Create or select a saved offer list first."); return; }
+    setShortlistError(""); setShortlistMessage("");
+    try {
+      await apiFetch("/api/offers/shortlists/" + encodeURIComponent(selectedShortlistId) + "/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offer_id: offerId }) });
+      setShortlistMessage("Offer saved. Displayed values reflect the current catalog and may be unknown or unverified.");
+      await refreshShortlists(selectedShortlistId);
+    } catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Offer could not be saved."); }
+  };
+
+  const removeSavedOffer = async (offerId: string) => {
+    if (!selectedShortlistId) return;
+    setShortlistError(""); setShortlistMessage("");
+    try {
+      await apiFetch("/api/offers/shortlists/" + encodeURIComponent(selectedShortlistId) + "/items/" + encodeURIComponent(offerId), { method: "DELETE" });
+      setShortlistMessage("Offer removed from saved list."); await refreshShortlists(selectedShortlistId);
+    } catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Offer could not be removed."); }
+  };
+
+  const deleteShortlist = async () => {
+    if (!selectedShortlistId) return;
+    setShortlistError(""); setShortlistMessage("");
+    try {
+      await apiFetch("/api/offers/shortlists/" + encodeURIComponent(selectedShortlistId), { method: "DELETE" });
+      setShortlistMessage("Saved list deleted."); await refreshShortlists("");
+    } catch (cause) { setShortlistError(cause instanceof Error ? cause.message : "Saved list could not be deleted."); }
+  };
+
   const refreshSyncStatus = useCallback(async () => {
     setSyncStatusLoading(true);
     setSyncStatusError("");
@@ -208,7 +277,8 @@ export default function OfferCatalogPage() {
 
   useEffect(() => {
     void loadCatalog(DEFAULT_FILTERS, 0);
-  }, [loadCatalog]);
+    void refreshShortlists();
+  }, [loadCatalog, refreshShortlists]);
 
   useEffect(() => {
     let mounted = true;
@@ -364,6 +434,33 @@ export default function OfferCatalogPage() {
           </section>
         )}
 
+
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-label="Saved offer shortlists" data-testid="offer-shortlists">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div><p className="text-xs font-black uppercase tracking-wider text-indigo-600">Research workspace</p><h2 className="mt-1 text-xl font-black">Saved offer lists</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">Save offers for comparison and review. Values are current shared-catalog data, not verified provider terms or approval.</p></div>
+            <button type="button" onClick={() => void refreshShortlists()} disabled={shortlistLoading} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-50"><RefreshCw size={14} className="mr-1 inline"/> Refresh lists</button>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <form onSubmit={createShortlist} className="rounded-2xl border border-slate-200 p-4">
+              <label htmlFor="shortlist-name" className={labelClass}>Create a saved list</label>
+              <input id="shortlist-name" value={shortlistName} onChange={event => setShortlistName(event.target.value)} minLength={2} maxLength={120} required placeholder="e.g. Creator tools Q4" className={fieldClass}/>
+              <button type="submit" disabled={shortlistLoading || shortlistName.trim().length < 2} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Plus size={15}/> Create list</button>
+            </form>
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <label htmlFor="shortlist-select" className={labelClass}>Choose list to manage</label>
+              <select id="shortlist-select" value={selectedShortlistId} onChange={event => void chooseShortlist(event.target.value)} className={fieldClass}><option value="">Select a saved list…</option>{shortlists.map(item => <option key={item.id} value={item.id}>{item.name} ({item.item_count})</option>)}</select>
+              {selectedShortlist && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-600">{selectedShortlist.count} saved offers</p><button type="button" onClick={() => void deleteShortlist()} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700"><Trash2 size={13}/> Delete list</button></div>}
+            </div>
+          </div>
+          {shortlistError && <p role="alert" data-testid="shortlist-error" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{shortlistError}</p>}
+          {shortlistMessage && <p role="status" data-testid="shortlist-message" className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{shortlistMessage}</p>}
+          {selectedShortlist && <div className="mt-4 divide-y divide-slate-100 rounded-2xl border border-slate-200 px-4" data-testid="selected-shortlist-items">
+            {selectedShortlist.items.length === 0 && <p className="py-4 text-sm text-slate-500">This list is empty. Use “Save to list” on a catalog offer below.</p>}
+            {selectedShortlist.items.map(item => <div key={item.item_id} className="flex flex-wrap items-start justify-between gap-3 py-3"><div><p className="font-bold">{item.offer.name}</p><p className="mt-1 text-xs text-slate-500">{item.offer.network} · EPC {numberLabel(item.offer.epc)} · cookie {item.offer.cookie_days === null ? "unknown" : item.offer.cookie_days + " days"} · {providerVerificationLabel(item.offer)}</p>{item.note && <p className="mt-1 text-sm text-slate-600">{item.note}</p>}</div><button type="button" onClick={() => void removeSavedOffer(item.offer.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">Remove</button></div>)}
+          </div>}
+          {!selectedShortlist && shortlists.length === 0 && <p className="mt-3 text-sm text-slate-500">No saved lists yet. Create one to collect offers for later comparison.</p>}
+        </section>
+
         <section className="mt-7 rounded-3xl border border-white bg-white p-5 shadow-sm sm:p-7" aria-label="Offer catalog filters">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Search size={18}/></span>
@@ -401,6 +498,7 @@ export default function OfferCatalogPage() {
                   return <article key={offer.id} data-testid="offer-card" className="rounded-2xl border border-slate-200 p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="text-lg font-black">{offer.name}</h3><p className="mt-1 break-all text-xs text-slate-500">{offer.network} · ID {offer.external_id}</p><p className="mt-1 text-xs text-slate-500">{offer.category || "Category unknown"}</p></div><span className={"rounded-full px-3 py-1.5 text-xs font-bold " + (offer.verification_basis === "provider_claimed_unattested" ? "bg-amber-50 text-amber-900" : "bg-slate-100 text-slate-700")}>{providerVerificationLabel(offer)}</span></div>
                     <p className="mt-4 text-sm leading-6 text-slate-600">{offer.description || "Description not supplied."}</p>
+                    <div className="mt-3"><button type="button" onClick={() => void saveOffer(offer.id)} disabled={!selectedShortlistId || shortlistLoading} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50"><BookmarkPlus size={14}/> Save to selected list</button></div>
                     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <div data-testid={"offer-epc-" + offer.id} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">EPC (currency not recorded)</p><p className="mt-1 text-sm font-black">{numberLabel(offer.epc)}</p></div>
                       <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Conversion rate</p><p className="mt-1 text-sm font-black">{conversionRateLabel(offer.conversion_rate)}</p></div>

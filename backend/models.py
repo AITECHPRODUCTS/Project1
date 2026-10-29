@@ -38,6 +38,28 @@ class Offer(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+
+class OfferShortlist(TenantScopedMixin, Base):
+    """Workspace-owned saved offer collection; catalog offers remain shared and read-only."""
+    __tablename__ = "offer_shortlists"
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_offer_shortlist_workspace_name"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class OfferShortlistItem(TenantScopedMixin, Base):
+    """Workspace-scoped reference to a shared catalog offer, with operator notes."""
+    __tablename__ = "offer_shortlist_items"
+    __table_args__ = (UniqueConstraint("shortlist_id", "offer_id", name="uq_offer_shortlist_item_offer"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    shortlist_id: Mapped[str] = mapped_column(String(36), ForeignKey("offer_shortlists.id", ondelete="CASCADE"), nullable=False, index=True)
+    offer_id: Mapped[str] = mapped_column(String(36), ForeignKey("offers.id", ondelete="RESTRICT"), nullable=False, index=True)
+    note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
 class Campaign(TenantScopedMixin, Base):
     __tablename__ = "campaigns"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

@@ -379,3 +379,6 @@
 
 
 | R-21 | S6 commission reconciliation status hardening | `backend/services/commission_reconciliation.py`, `tests/test_commission_reconciliation.py`, exact commit `32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969` | Implemented and exact-head push/PR CI passed: [push](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678582977), [PR](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678593095) | Live network statement contracts, provider-authenticated evidence, PostgreSQL finance tenant UAT, currency minor-unit policies and end-to-end finance browser UAT |
+
+
+| R-21 | Persisted offer shortlists and compare workflow | `OfferShortlist`, `OfferShortlistItem`, migration `0028_offer_shortlists`, `GET/POST /api/offers/shortlists`, detail/add/remove/delete routes, `frontend/app/offers/page.tsx`, `tests/test_offer_shortlists_api.py` | implementation added; exact-SHA CI pending | PostgreSQL migration/rollback and tenant isolation acceptance; UI browser UAT; evidence-backed provider terms and live API source validation remain |

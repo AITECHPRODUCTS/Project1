@@ -38,6 +38,34 @@ class WorkflowStartRequest(BaseModel):
     state: dict[str, Any] = Field(default_factory=dict)
 
 
+
+class OfferShortlistCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str = Field(default="", max_length=1000)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("name must contain at least two non-whitespace characters")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        return value.strip()
+
+
+class OfferShortlistItemCreateRequest(BaseModel):
+    offer_id: str = Field(min_length=1, max_length=36)
+    note: str = Field(default="", max_length=1000)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        return value.strip()
+
 class ResumeRequest(BaseModel):
     verification_code: str = Field(min_length=1, max_length=512)
 

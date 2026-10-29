@@ -76,3 +76,11 @@ The Library audit records 35 items at its 27 October checkpoint, representing 21
 
 ## Next action
 Verify the actual remote branch head and exact-SHA workflow state first. Then choose the highest-priority unblocked code gap from the current traceability matrix, implement it additively with regression tests, and update this document only with evidence from that resulting SHA.
+
+
+## 2026-10-29 persisted workspace offer shortlists (verification pending)
+
+- Added workspace-owned saved offer lists over the shared offer catalog: create/list/detail/delete shortlists, add/remove offers, operator notes, duplicate conflict handling and current catalog evidence in comparisons. API reads/writes explicitly scope both list and item rows to the authenticated active workspace; shared catalog records are not mutated.
+- Added migration `0028_offer_shortlists`, SQLAlchemy models, validated request schemas, API routes, regression tests for lifecycle/unknown metrics/duplicate handling/workspace isolation, and controls in the offer catalog UI.
+- Evidence boundary: saving an offer does not verify provider claims, authorize network participation, validate terms, or initiate any external action. Current catalog metrics can remain unknown.
+- Candidate code commit SHA is recorded by the Git history after this change. Exact-SHA push and pull-request Actions must complete before treating this feature as verified.

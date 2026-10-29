@@ -280,6 +280,8 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             assert created["publishing_started"] is False
             assert created["product_facts_independently_verified"] is False
             assert created["review_status"] == "pending_review"
+            assert created["source_freshness"]["status"] == "no_sources_supplied"
+            assert created["source_freshness"]["approval_allowed"] is True
             assert len(created["products_featured"]) == 5
             assert len(created["content_sha256"]) == 64
 
@@ -293,6 +295,7 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             assert detail.status_code == 200, detail.text
             opened = detail.json()
             assert opened["content_integrity_status"] == "verified"
+            assert opened["source_freshness"]["status"] == "no_sources_supplied"
             assert opened["title"] == created["title"]
             assert opened["publishing_started"] is False
             assert detail.headers["cache-control"] == "no-store"
@@ -330,13 +333,28 @@ def test_listicle_api_persists_workspace_draft_hash_review_and_blocks_tampering(
             assert listed_by_id[asset_id]["revision_number"] == 1
             assert listed_by_id[revision_id]["revision_number"] == 2
 
+            review_payload = {
+                "decision": "approve",
+                "expected_content_sha256": created["content_sha256"],
+                "confirm_editorial_reviewed": True,
+            }
+            actual_freshness_evaluator = main.evaluate_source_freshness
+            monkeypatch.setattr(main, "evaluate_source_freshness", lambda *args, **kwargs: {
+                "policy_version": 1, "checked_at": main.utcnow().isoformat(), "max_age_hours": 24,
+                "future_tolerance_seconds": 300, "status": "source_fetch_failed", "source_count": 1,
+                "fresh_count": 0, "blocked_count": 1, "approval_allowed": False,
+                "capture_window_satisfied": False, "message": "failed source test", "items": [],
+            })
+            blocked_review = client.post(
+                "/api/content/listicles/" + asset_id + "/review",
+                json=review_payload,
+            )
+            assert blocked_review.status_code == 409, blocked_review.text
+            assert blocked_review.json()["detail"]["code"] == "SOURCE_EVIDENCE_NOT_CURRENT"
+            monkeypatch.setattr(main, "evaluate_source_freshness", actual_freshness_evaluator)
             review = client.post(
                 "/api/content/listicles/" + asset_id + "/review",
-                json={
-                    "decision": "approve",
-                    "expected_content_sha256": created["content_sha256"],
-                    "confirm_editorial_reviewed": True,
-                },
+                json=review_payload,
             )
             assert review.status_code == 200, review.text
             assert review.json()["review_status"] == "approved"

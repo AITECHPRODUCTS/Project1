@@ -83,7 +83,7 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
                 "status": "fetched",
                 "http_status": 200,
                 "content_type": "text/html",
-                "fetched_at": "2026-10-29T10:00:00+00:00",
+                "fetched_at": main.utcnow().isoformat(),
                 "excerpt": snapshot_excerpt,
                 "excerpt_sha256": sha256_text(snapshot_excerpt),
                 "error_type": None,
@@ -185,6 +185,21 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
             assert foreign.status_code == 404
 
             active["workspace_id"] = "review-workspace"
+            actual_freshness_evaluator = main.evaluate_source_freshness
+            monkeypatch.setattr(main, "evaluate_source_freshness", lambda *args, **kwargs: {
+                "policy_version": 1, "checked_at": main.utcnow().isoformat(), "max_age_hours": 24,
+                "future_tolerance_seconds": 300, "status": "stale", "source_count": 1,
+                "fresh_count": 0, "blocked_count": 1, "approval_allowed": False,
+                "capture_window_satisfied": False, "message": "stale test evidence", "items": [],
+            })
+            stale_blocked = client.post(
+                f"/api/content/comparison-posts/{asset_id}/review",
+                json=review_payload(content_hash, reviewer_notes="Reviewed wording and disclosure."),
+            )
+            assert stale_blocked.status_code == 409, stale_blocked.text
+            assert stale_blocked.json()["detail"]["code"] == "SOURCE_EVIDENCE_NOT_CURRENT"
+            assert stale_blocked.json()["detail"]["source_freshness"]["status"] == "stale"
+            monkeypatch.setattr(main, "evaluate_source_freshness", actual_freshness_evaluator)
             approved = client.post(
                 f"/api/content/comparison-posts/{asset_id}/review",
                 json=review_payload(content_hash, reviewer_notes="Reviewed wording and disclosure."),
@@ -213,6 +228,8 @@ def test_comparison_review_is_owner_admin_only_hash_bound_audited_and_never_publ
             assert detail.json()["review_status"] == "approved"
             assert detail.json()["content_sha256"] == content_hash
             assert detail.json()["evidence_payload_integrity_status"] == "verified"
+            assert detail.json()["source_freshness"]["status"] == "fresh"
+            assert detail.json()["can_approve"] is False
             assert detail.json()["review_history"][-1]["content_sha256"] == content_hash
 
         async def read_records():

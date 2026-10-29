@@ -80,6 +80,7 @@ from backend.services.comparison_post_writer import build_comparison_post as com
 from backend.services.listicle_writer import build_listicle_post as listicle_writer_service
 from backend.services.comparison_draft_revisions import reserve_comparison_revision_number, reserve_content_revision_number
 from backend.services.comparison_integrity import build_source_snapshot_manifest, evaluate_comparison_integrity, sha256_text, source_snapshot_manifest_sha256, comparison_evidence_payload_sha256
+from backend.services.source_freshness import evaluate_source_freshness
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
@@ -3971,6 +3972,8 @@ async def create_comparison_post(
         await db.refresh(asset)
     result["asset_id"] = asset.id
     result["asset_status"] = asset.status
+    result["source_freshness"] = evaluate_source_freshness(result.get("source_snapshots"), result.get("source_urls") or [])
+    result["can_approve"] = str(user.get("workspace_role") or "").lower() in {"owner", "admin"} and bool(result["source_freshness"]["approval_allowed"])
     result["topic"] = payload.topic
     result["audience"] = payload.audience
     result["affiliate_disclosure"] = payload.affiliate_disclosure
@@ -4099,6 +4102,7 @@ async def get_comparison_post(
     source_snapshots = metadata.get("source_snapshots") if isinstance(metadata.get("source_snapshots"), list) else []
     fact_evidence = metadata.get("fact_evidence") if isinstance(metadata.get("fact_evidence"), list) else []
     evidence_summary = metadata.get("evidence_summary") if isinstance(metadata.get("evidence_summary"), dict) else {}
+    source_freshness = evaluate_source_freshness(source_snapshots, row.source_urls if isinstance(row.source_urls, list) else [])
     minimum_word_target = int(metadata.get("minimum_word_target") or 0)
     minimum_word_target_met = bool(metadata.get("minimum_word_target_met", False))
     word_count = int(metadata.get("word_count") or 0)
@@ -4142,6 +4146,7 @@ async def get_comparison_post(
         "source_snapshots": source_snapshots[:10],
         "fact_evidence": fact_evidence[:60],
         "evidence_summary": evidence_summary,
+        "source_freshness": source_freshness,
         "evidence_status": metadata.get("evidence_status", "unknown"),
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": bool(metadata.get("external_product_sources_fetched", False)),
@@ -4160,6 +4165,7 @@ async def get_comparison_post(
         "reviewer_notes": metadata.get("reviewer_notes"),
         "is_workspace_reviewer": is_workspace_reviewer,
         "can_review": is_workspace_reviewer and row.status == "draft" and saved_review_status == "pending_review" and bool(integrity["integrity_verified"]),
+        "can_approve": is_workspace_reviewer and row.status == "draft" and saved_review_status == "pending_review" and bool(integrity["integrity_verified"]) and bool(source_freshness["approval_allowed"]),
         "requires_review": bool(metadata.get("requires_review", True)),
         "publishing_started": False,
         "provider_write_access_verified": False,
@@ -4236,6 +4242,23 @@ async def review_comparison_post(
             raise HTTPException(409, "The saved draft content changed; reload it and review the current content hash")
         if payload.decision == "approve" and payload.confirm_editorial_reviewed is not True:
             raise HTTPException(409, "Approval requires confirm_editorial_reviewed=true after reviewing the saved article")
+        source_freshness = evaluate_source_freshness(metadata.get("source_snapshots"), row.source_urls if isinstance(row.source_urls, list) else [])
+        if payload.decision == "approve" and not source_freshness["approval_allowed"]:
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=actor,
+                action="content_comparison_post.approval_blocked",
+                resource_type="content_asset",
+                resource_id=row.id,
+                outcome="source_evidence_not_current",
+                details_json={"code": "SOURCE_EVIDENCE_NOT_CURRENT", "freshness_status": source_freshness["status"], "source_count": source_freshness["source_count"], "fresh_count": source_freshness["fresh_count"], "blocked_count": source_freshness["blocked_count"], "content_sha256": content_sha256, "publishing_started": False},
+            ))
+            await db.commit()
+            raise HTTPException(409, {
+                "code": "SOURCE_EVIDENCE_NOT_CURRENT",
+                "message": "Editorial approval is blocked because supplied source evidence is stale or incomplete. Create a new revision to refresh evidence before approval.",
+                "source_freshness": source_freshness,
+            })
 
         next_status = {
             "approve": "approved",
@@ -4290,6 +4313,9 @@ async def review_comparison_post(
                 "evidence_payload_integrity_verified": True,
                 "content_integrity_verified": True,
                 "source_snapshot_integrity_verified": True,
+                "source_freshness_status": source_freshness["status"],
+                "source_freshness_policy_version": source_freshness["policy_version"],
+                "source_freshness_approval_allowed": source_freshness["approval_allowed"],
                 "product_facts_independently_verified": False,
                 "affiliate_eligibility_verified": False,
                 "external_publication_started": False,
@@ -4317,6 +4343,7 @@ async def review_comparison_post(
         "source_snapshot_integrity_status": "verified",
         "evidence_payload_sha256": integrity["actual_evidence_payload_sha256"],
         "evidence_payload_integrity_status": "verified",
+        "source_freshness": source_freshness,
         "integrity_review_blocked": False,
         "requires_review": False,
         "publishing_started": False,
@@ -4619,6 +4646,8 @@ async def create_listicle_post(
     result["reviewer_role"] = None
     result["reviewer_notes"] = None
     result["can_review"] = str(user.get("workspace_role") or "").lower() in {"owner", "admin"}
+    result["source_freshness"] = evaluate_source_freshness(source_snapshots, source_urls)
+    result["can_approve"] = result["can_review"] and bool(result["source_freshness"]["approval_allowed"])
     return result
 
 
@@ -4705,6 +4734,9 @@ async def get_listicle_post(
                 "integrity_flags": flags,
             })
         metadata = dict(asset.metadata_json)
+    source_freshness = evaluate_source_freshness(metadata.get("source_snapshots"), metadata.get("source_urls") or [])
+    can_review = str(user.get("workspace_role") or "").lower() in {"owner", "admin"}
+    can_approve = can_review and asset.status == "draft" and metadata.get("review_status", "pending_review") == "pending_review" and bool(source_freshness["approval_allowed"])
     return {
         "asset_id": asset.id,
         "asset_status": asset.status,
@@ -4721,7 +4753,9 @@ async def get_listicle_post(
             "source_snapshot_manifest_sha256", "evidence_payload_sha256",
         )},
         "content_integrity_status": "verified",
-        "can_review": str(user.get("workspace_role") or "").lower() in {"owner", "admin"},
+        "source_freshness": source_freshness,
+        "can_review": can_review,
+        "can_approve": can_approve,
         "execution_boundary": "Draft only; source text is not truth verification and editorial approval does not authorize publishing.",
     }
 
@@ -4771,6 +4805,23 @@ async def review_listicle_post(
             raise HTTPException(409, "The reviewed listicle changed; reload it and review the current saved draft")
         if metadata.get("review_status", "pending_review") != "pending_review":
             raise HTTPException(409, "This immutable draft already has an editorial decision; create a new draft to make changes")
+        source_freshness = evaluate_source_freshness(metadata.get("source_snapshots"), metadata.get("source_urls") or [])
+        if payload.decision == "approve" and not source_freshness["approval_allowed"]:
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=actor,
+                action="content_listicle_post.approval_blocked",
+                resource_type="content_asset",
+                resource_id=asset.id,
+                outcome="source_evidence_not_current",
+                details_json={"code": "SOURCE_EVIDENCE_NOT_CURRENT", "freshness_status": source_freshness["status"], "source_count": source_freshness["source_count"], "fresh_count": source_freshness["fresh_count"], "blocked_count": source_freshness["blocked_count"], "content_sha256": payload.expected_content_sha256, "publishing_started": False},
+            ))
+            await db.commit()
+            raise HTTPException(409, {
+                "code": "SOURCE_EVIDENCE_NOT_CURRENT",
+                "message": "Editorial approval is blocked because supplied source evidence is stale or incomplete. Create a new revision to refresh evidence before approval.",
+                "source_freshness": source_freshness,
+            })
         reviewed_at = utcnow()
         review_status = {
             "approve": "approved",
@@ -4813,6 +4864,9 @@ async def review_listicle_post(
                 "content_sha256": payload.expected_content_sha256,
                 "evidence_payload_sha256": metadata.get("evidence_payload_sha256"),
                 "reviewer_role": role,
+                "source_freshness_status": source_freshness["status"],
+                "source_freshness_policy_version": source_freshness["policy_version"],
+                "source_freshness_approval_allowed": source_freshness["approval_allowed"],
                 "external_publication_started": False,
             },
         ))
@@ -4822,6 +4876,7 @@ async def review_listicle_post(
         "asset_id": asset.id,
         "asset_status": asset.status,
         "review_status": review_status,
+        "source_freshness": source_freshness,
         "revision_number": (asset.metadata_json or {}).get("revision_number", 1) if isinstance(asset.metadata_json, dict) else 1,
         "revision_of_asset_id": (asset.metadata_json or {}).get("revision_of_asset_id") if isinstance(asset.metadata_json, dict) else None,
         "revision_root_asset_id": ((asset.metadata_json or {}).get("revision_root_asset_id") or asset.id) if isinstance(asset.metadata_json, dict) else asset.id,

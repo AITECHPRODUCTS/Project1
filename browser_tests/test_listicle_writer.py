@@ -73,6 +73,7 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
             "facts_not_compared": 5, "interpretation": "Text presence is not fact verification.",
         },
         "evidence_status": "operator_supplied_unverified",
+        "source_freshness": {"policy_version": 1, "checked_at": "2026-10-29T00:00:00+00:00", "max_age_hours": 24, "future_tolerance_seconds": 300, "status": "no_sources_supplied", "source_count": 0, "fresh_count": 0, "blocked_count": 0, "approval_allowed": True, "capture_window_satisfied": False, "message": "No sources were supplied. Editorial review may proceed, but product facts and currentness remain unverified.", "items": []},
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": False,
         "requires_review": True,
@@ -147,6 +148,7 @@ def test_listicle_writer_persists_and_opens_review_required_draft():
             page.get_by_role("button", name="Generate listicle draft").click()
             page.get_by_text("Source snapshots", exact=True).wait_for(state="visible")
             page.get_by_text("operator supplied unverified", exact=False).first.wait_for(state="visible")
+            page.get_by_text("Source freshness: no sources supplied", exact=False).first.wait_for(state="visible")
             page.get_by_text("Not supplied — verify", exact=False).first.wait_for(state="visible")
             page.get_by_title("Listicle article preview").wait_for(state="visible")
             assert len(posted) == 1

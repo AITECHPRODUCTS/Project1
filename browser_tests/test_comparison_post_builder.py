@@ -53,6 +53,7 @@ def test_comparison_writer_saves_review_draft_and_displays_unknown_facts():
         "fact_evidence": [{"product": "Product Alpha", "fact_name": "Price", "supplied_value": "Not supplied — verify", "source_id": None, "source_url": None, "excerpt_sha256": None, "exact_text_match": False, "evidence_status": "not_supplied", "editorial_review_required": True}],
         "evidence_summary": {"source_count": 1, "source_snapshots_fetched": 1, "source_snapshots_failed": 0, "fact_count": 1, "exact_text_match_count": 0, "exact_text_not_found_count": 0, "facts_not_compared": 1, "interpretation": "A text match is not fact verification."},
         "evidence_status": "public_snapshot_captured_not_fact_verified",
+        "source_freshness": {"policy_version": 1, "checked_at": "2026-10-29T00:01:00+00:00", "max_age_hours": 24, "future_tolerance_seconds": 300, "status": "fresh", "source_count": 1, "fresh_count": 1, "blocked_count": 0, "approval_allowed": True, "capture_window_satisfied": True, "message": "One captured source is within the capture-time window; source-page truth is not verified.", "items": [{"source_id": "S01", "host": "vendor.example", "fetch_status": "fetched", "status": "fresh", "fetched_at": "2026-10-29T00:00:00+00:00", "age_seconds": 60}]},
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": False,
         "requires_review": True,
@@ -103,6 +104,7 @@ def test_comparison_writer_saves_review_draft_and_displays_unknown_facts():
             page.get_by_text("S01 · Alpha evidence · fetched", exact=True).wait_for(state="visible")
             page.get_by_text("Not supplied — verify", exact=True).first.wait_for(state="visible")
             page.get_by_text("public snapshot captured not fact verified", exact=False).first.wait_for(state="visible")
+            page.get_by_text("Source freshness: fresh", exact=False).first.wait_for(state="visible")
             page.get_by_title("Comparison article preview").wait_for(state="visible")
             assert len(posted) == 1
             assert posted[0]["topic"] == "Affiliate analytics tools compared"
@@ -310,6 +312,7 @@ def test_owner_can_approve_exact_comparison_revision_without_publishing():
         "fact_evidence": [],
         "evidence_summary": {"source_count": 0, "source_snapshots_fetched": 0, "source_snapshots_failed": 0, "fact_count": 2, "exact_text_match_count": 0, "exact_text_not_found_count": 0, "facts_not_compared": 0, "interpretation": "Text presence is not verification."},
         "evidence_status": "public_snapshot_captured_not_fact_verified",
+        "source_freshness": {"policy_version": 1, "checked_at": "2026-10-29T00:01:00+00:00", "max_age_hours": 24, "future_tolerance_seconds": 300, "status": "fresh", "source_count": 1, "fresh_count": 1, "blocked_count": 0, "approval_allowed": True, "capture_window_satisfied": True, "message": "One captured source is within the capture-time window; source-page truth is not verified.", "items": [{"source_id": "S01", "host": "vendor.example", "fetch_status": "fetched", "status": "fresh", "fetched_at": "2026-10-29T00:00:00+00:00", "age_seconds": 60}]},
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": False,
         "review_status": "pending_review",

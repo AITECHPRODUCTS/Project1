@@ -62,7 +62,7 @@ export default function ComparisonPostPage(){
    setMinimumWords(String(response.minimum_word_target||900));
    setDisclosure(response.affiliate_disclosure||"Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.");
    setRevisionOfAssetId(response.asset_id);
-   setResult(response);setNotice("Loaded saved draft as a revision starting point. The original remains unchanged.");
+   setResult(response);setNotice("Opened saved comparison draft. Loaded as a revision starting point; the original remains unchanged.");
   }catch(err){setDraftsError(errorMessage(err));}
   finally{setOpeningId("");}
  };

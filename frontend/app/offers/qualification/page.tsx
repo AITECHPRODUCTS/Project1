@@ -97,7 +97,14 @@ export default function OfferQualificationPage() {
   const load = useCallback(async (nextFilter: string, nextOffset = 0) => {
     setLoading(true); setError("");
     try {
-      const result = await apiFetch<QueueResponse>("/api/offers/qualification-queue?status=" + encodeURIComponent(nextFilter) + "&limit=50&offset=" + String(nextOffset));
+      const requestQueue = (offset: number) => apiFetch<QueueResponse>("/api/offers/qualification-queue?status=" + encodeURIComponent(nextFilter) + "&limit=50&offset=" + String(offset));
+      let result = await requestQueue(nextOffset);
+      // A saved decision can remove the last page from a filtered queue. Clamp to the
+      // final valid page rather than leaving the operator on an empty, un-navigable page.
+      if (nextOffset > 0 && nextOffset >= result.total_count) {
+        const lastOffset = Math.max(0, Math.floor((result.total_count - 1) / result.limit) * result.limit);
+        if (lastOffset !== nextOffset) result = await requestQueue(lastOffset);
+      }
       setQueue(result);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Qualification queue could not be loaded."); }
     finally { setLoading(false); }

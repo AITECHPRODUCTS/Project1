@@ -5,7 +5,7 @@ Updated: 2026-10-29
 
 - Added a database-backed API integration test with two workspaces and three persisted leads. It searches by first-touch UTM, verifies the export contains only the matching lead in the active workspace, and checks that the successful export audit row persisted only for that workspace with no search/lead values in details.
 - The existing mocked tests still cover HTTP 403 without workspace, row-cap rejection/HTTP 413, response headers and spreadsheet formula escaping. This increment adds real database query/serialization coverage; it does not implement external CRM synchronization.
-- Exact-SHA push and PR CI is pending.
+- Source review of candidate `03566fa20a80b8005987ca3d61c831decc1ccdac` caught a missing import block for the real SQLite test before accepting it; the imports are corrected in the follow-up commit. That candidate's push [40834172282](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834172282) and PR [40834178239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834178239) were still running when the correction was prepared; their results are not being treated as verification. The corrected exact-SHA push/PR checks are pending.
 
 
 ## 2026-10-29 verified workspace-scoped lead CSV export

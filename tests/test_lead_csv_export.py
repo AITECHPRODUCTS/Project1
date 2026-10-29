@@ -9,10 +9,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from backend import main
-from backend.database import get_session
-from backend.models import AuditLog
+from backend.database import Base, get_session
+from backend.models import AuditLog, Lead, Workspace
+from backend.tenancy import workspace_scope
 
 
 WORKSPACE_ID = "lead-export-workspace"

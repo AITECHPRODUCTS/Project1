@@ -178,3 +178,8 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 
 - Added a real database-backed test that creates two workspaces and leads in both, uses the production endpoint against persisted SQLite rows, proves a UTM search returns only the matching lead from the active workspace, and verifies the export audit event persists only in the active workspace without PII/search values.
 - Existing mock-based endpoint tests remain in place for fail-closed missing-workspace and oversize responses, formula safety and headers. New exact-SHA push/PR CI is required before treating this additional integration test as verified.
+
+
+### CSV export integration-test import correction
+
+- The first SQLite-backed test candidate `03566fa20a80b8005987ca3d61c831decc1ccdac` had an incomplete import block for SQLAlchemy's async engine/session factory, `NullPool`, `Base`, `Lead`, `Workspace`, and `workspace_scope`. I caught this by fetching the actual committed file before accepting test evidence and corrected the import block on the same branch. No runtime/export behavior changed. The first candidate's exact-SHA push [40834172282](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834172282) and PR [40834178239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40834178239) were still in progress at that point; the corrected SHA must be green before the additional integration test is verified.

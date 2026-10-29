@@ -194,3 +194,47 @@ def test_guardrail_accepts_exact_freshness_and_clock_skew_boundaries():
     assert future["freshness_gate"]["passed"] is True
     assert future["freshness_gate"]["future_dated_creatives"] == []
     assert future["status"] == "monitoring"
+
+
+
+def test_guardrail_blocks_conflicting_latest_provider_snapshots_at_same_timestamp():
+    now = datetime(2026, 10, 27, 18, tzinfo=timezone.utc)
+    first = observation(day=27, spend="10.00", commission="20.00", hour=17)
+    conflicting = observation(day=27, spend="60.00", commission="0.00", hour=17)
+    result = evaluate_ad_budget_guardrail(
+        policy=policy(daily_spend_cap_usd=Decimal("50.00"), minimum_roas=Decimal("0")),
+        observations=[first, conflicting],
+        now=now,
+    )
+
+    assert result["status"] == "blocked_ambiguous_provider_snapshots"
+    assert result["snapshot_observation_count"] == 1
+    assert result["snapshot_conflicts"] == [{
+        "platform": "meta",
+        "creative_id": "creative-1",
+        "day": "2026-10-27",
+        "observed_at": "2026-10-27T17:00:00+00:00",
+        "conflicting_fields": ["commission_usd", "spend_usd"],
+        "candidate_count": 2,
+    }]
+    assert result["breaches"] == []
+    assert result["stop_recommended"] is False
+    assert result["kill_switch_should_engage"] is False
+    assert result["provider_action_executed"] is False
+    assert result["live_spend_authorized"] is False
+
+
+def test_guardrail_collapses_identical_latest_provider_snapshots_without_blocking():
+    now = datetime(2026, 10, 27, 18, tzinfo=timezone.utc)
+    duplicate_a = observation(day=27, spend="10.00", commission="20.00", hour=17)
+    duplicate_b = observation(day=27, spend="10.00", commission="20.00", hour=17)
+    result = evaluate_ad_budget_guardrail(
+        policy=policy(minimum_roas=Decimal("0"), maximum_cpa_usd=None),
+        observations=[duplicate_a, duplicate_b],
+        now=now,
+    )
+
+    assert result["status"] == "monitoring"
+    assert result["snapshot_observation_count"] == 1
+    assert result["snapshot_conflicts"] == []
+    assert result["verified_campaign_spend_usd"] == "10.00"

@@ -1,6 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 paid-ad guardrail snapshot-conflict safety (CI pending)
+
+- Hardened `backend/services/ad_guardrails.py` to group provider observations by platform, creative and UTC day, select the latest timestamp for each group, and detect conflicting metric/currency values among records tied at that latest timestamp.
+- Exact duplicates still collapse to one snapshot. Contradictory latest snapshots now return `blocked_ambiguous_provider_snapshots` with conflicting field names and candidate count; they cannot produce stop-loss breaches or latch the guardrail from ambiguous evidence. No provider action is executed.
+- Added regression tests for conflicting spend/commission at the same timestamp and safe deduplication of identical repeated snapshots.
+- This is a review-only data-integrity safeguard. It does not connect an ad platform, verify provider authenticity, pause a remote campaign or authorize spend. Exact-SHA push and PR CI, including PostgreSQL and browser jobs, must pass before marking this increment verified.
+
+
 ## 2026-10-29 feature increment — workspace-scoped commission projection history
 
 - Follow-up PR browser UAT exposed a strict-locator ambiguity in the new test: the projection ID appears both in the current-result caption and saved-history row. The browser assertion now requires exact text, targeting the saved-history ID rather than loosening strict-mode behavior. Re-run exact-SHA push/PR UAT after this test correction.

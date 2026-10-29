@@ -100,3 +100,11 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - The existing 52-offer pagination acceptance test remains in place.
 - Candidate code commit: `871d6d30e0852163cdf147e7410e9203a10d1c5f`. At documentation time, the exact-SHA PR workflow `40825056412` was still in progress and the exact-SHA push workflow `40825051280` was queued. Earlier runs for superseded commits were cancelled when new commits were pushed; none of those cancelled runs is evidence of a pass. This entry must not be marked verified until both current-commit workflows complete successfully, including browser UAT where configured.
 - Release remains **NOT RELEASE READY**. No provider integration, affiliate-network approval, paid campaign action, production deployment, or live external delivery is claimed as verified.
+
+
+## 2026-10-29 additive paid-ad snapshot conflict safeguard (verification pending)
+
+- Candidate change groups provider-verified observations by platform, creative and UTC day, then chooses the latest timestamp for each group. If multiple latest records share the same timestamp but disagree on spend, commission, impressions, clicks, conversions or currency, the evaluation returns `blocked_ambiguous_provider_snapshots`.
+- Exact duplicates remain deduplicated. Ambiguous evidence returns no breach recommendations and cannot trigger the guardrail latch. Regression tests cover both conflicting and identical duplicate records.
+- This is not provider authentication or live campaign control. It does not execute a remote pause, change budgets, authorize spend, or certify source authenticity.
+- Current candidate before this slice: `06a47498fc6cba7186884cf4ccbc4962042f7f39`. The new candidate must be verified with exact-SHA push and PR Actions, including Python, PostgreSQL, frontend, security, repository guard and browser UAT. Release remains **NOT RELEASE READY**.

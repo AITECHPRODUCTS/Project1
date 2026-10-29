@@ -19,16 +19,57 @@ def _number(value: Any) -> Decimal:
     return Decimal(str(value if value is not None else "0"))
 
 
-def _daily_snapshots(rows: Iterable[Any]) -> list[Any]:
-    """Keep the latest provider observation per creative/platform/UTC day."""
-    latest: dict[tuple[str, str, date], Any] = {}
+def _snapshot_values(row: Any) -> dict[str, str]:
+    """Canonical values used to detect contradictory reports at one timestamp."""
+    return {
+        "spend_usd": str(_number(getattr(row, "spend_usd", None))),
+        "commission_usd": str(_number(getattr(row, "commission_usd", None))),
+        "impressions": str(int(getattr(row, "impressions", None) or 0)),
+        "clicks": str(int(getattr(row, "clicks", None) or 0)),
+        "conversions": str(int(getattr(row, "conversions", None) or 0)),
+        "currency": str(getattr(row, "currency", "USD") or "USD").upper(),
+    }
+
+
+def _daily_snapshots(rows: Iterable[Any]) -> tuple[list[Any], list[dict[str, Any]]]:
+    """Keep latest daily snapshots and report contradictory ties at the latest timestamp.
+
+    Some providers emit repeated exports with the same observation timestamp. Exact
+    duplicates are safe to collapse; different metrics at that same latest timestamp
+    are ambiguous and must not drive stop-loss decisions.
+    """
+    grouped: dict[tuple[str, str, date], list[Any]] = {}
     for row in rows:
         observed_at = _as_utc(row.observed_at)
         key = (str(row.platform), str(row.creative_id), observed_at.date())
-        previous = latest.get(key)
-        if previous is None or _as_utc(previous.observed_at) <= observed_at:
-            latest[key] = row
-    return list(latest.values())
+        grouped.setdefault(key, []).append(row)
+
+    latest: list[Any] = []
+    conflicts: list[dict[str, Any]] = []
+    for (platform, creative_id, day), candidates in grouped.items():
+        latest_at = max(_as_utc(row.observed_at) for row in candidates)
+        latest_candidates = [
+            row for row in candidates if _as_utc(row.observed_at) == latest_at
+        ]
+        chosen = latest_candidates[0]
+        chosen_values = _snapshot_values(chosen)
+        conflicting_fields = sorted({
+            field
+            for row in latest_candidates[1:]
+            for field, value in _snapshot_values(row).items()
+            if value != chosen_values[field]
+        })
+        if conflicting_fields:
+            conflicts.append({
+                "platform": platform,
+                "creative_id": creative_id,
+                "day": day.isoformat(),
+                "observed_at": latest_at.isoformat(),
+                "conflicting_fields": conflicting_fields,
+                "candidate_count": len(latest_candidates),
+            })
+        latest.append(chosen)
+    return latest, conflicts
 
 
 def evaluate_ad_budget_guardrail(
@@ -41,7 +82,7 @@ def evaluate_ad_budget_guardrail(
     """Evaluate caps from provider-verified evidence only; never invokes ad providers."""
     all_rows = list(observations)
     verified_rows = [row for row in all_rows if getattr(row, "evidence_status", None) == "provider_verified"]
-    snapshots = _daily_snapshots(verified_rows)
+    snapshots, snapshot_conflicts = _daily_snapshots(verified_rows)
     now_utc = _as_utc(now)
     # Historical daily snapshots feed campaign totals, but every creative/platform
     # needs a recent latest observation before a current stop/monitor decision.
@@ -95,6 +136,7 @@ def evaluate_ad_budget_guardrail(
         "reported_observation_count": len(all_rows),
         "verified_observation_count": len(verified_rows),
         "snapshot_observation_count": len(snapshots),
+        "snapshot_conflicts": snapshot_conflicts,
         "unverified_observation_count": len(all_rows) - len(verified_rows),
         "configured_daily_spend_cap_usd": format(configured_daily, ".2f"),
         "plan_daily_budget_usd": format(plan_daily, ".2f"),
@@ -137,6 +179,13 @@ def evaluate_ad_budget_guardrail(
     if not complete:
         result["status"] = "blocked_mixed_evidence"
         result["note"] = "At least one linked observation is not provider-verified. Evaluation is blocked rather than mixing reported and verified totals."
+        return result
+    if snapshot_conflicts:
+        result["status"] = "blocked_ambiguous_provider_snapshots"
+        result["note"] = (
+            "Provider-verified observations conflict at the same latest timestamp for one or more "
+            "creative/platform/day groups. No stop-loss decision is made until the provider data is reconciled."
+        )
         return result
     if stale_observations or future_observations:
         result["status"] = "blocked_stale_provider_evidence" if stale_observations else "blocked_future_provider_evidence"

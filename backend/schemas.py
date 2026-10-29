@@ -146,6 +146,117 @@ class BlogRequest(BaseModel):
     minimum_words: int = Field(default=1500, ge=1500, le=2500)
 
 
+class ComparisonProductInput(BaseModel):
+    """Operator-supplied product facts; source URLs are references, never fetched here."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=120)
+    facts: dict[str, str] = Field(min_length=1, max_length=12)
+    source_urls: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_product_name(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("product name must contain at least two characters")
+        return value
+
+    @field_validator("facts")
+    @classmethod
+    def normalize_facts(cls, value: dict[str, str]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        seen: set[str] = set()
+        if not 1 <= len(value) <= 12:
+            raise ValueError("each product must include between one and twelve fact fields")
+        for raw_key, raw_value in value.items():
+            key = " ".join(str(raw_key).split())[:80]
+            fact = str(raw_value).strip()
+            folded = key.casefold()
+            if not key or not fact:
+                raise ValueError("fact names and values must not be blank")
+            if folded in seen:
+                raise ValueError("fact names must be unique, ignoring case")
+            if len(fact) > 600:
+                raise ValueError("each fact value must be at most 600 characters")
+            seen.add(folded)
+            normalized[key] = fact
+        return normalized
+
+    @field_validator("source_urls")
+    @classmethod
+    def validate_source_urls(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for raw in values:
+            value = raw.strip()
+            parsed = urlparse(value)
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or len(value) > 2048
+            ):
+                raise ValueError("product source references must be absolute HTTPS URLs without credentials")
+            try:
+                address = ipaddress.ip_address(parsed.hostname)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("product source references must not use private or non-public IP addresses")
+            if value not in normalized:
+                normalized.append(value)
+        return normalized
+
+
+class ComparisonPostRequest(BaseModel):
+    """Request for a review-only product comparison article draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(min_length=3, max_length=400)
+    audience: str = Field(min_length=2, max_length=300)
+    products: list[ComparisonProductInput] = Field(min_length=2, max_length=5)
+    decision_criteria: list[str] = Field(default_factory=list, max_length=12)
+    affiliate_disclosure: str = Field(
+        default="Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.",
+        min_length=20,
+        max_length=1200,
+    )
+    minimum_words: int = Field(default=900, ge=300, le=2200)
+
+    @field_validator("topic", "audience", "affiliate_disclosure")
+    @classmethod
+    def normalize_text_fields(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("this field must not be blank")
+        return value
+
+    @field_validator("decision_criteria")
+    @classmethod
+    def normalize_criteria(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in values:
+            value = " ".join(raw.split())[:80]
+            if not value:
+                raise ValueError("decision criteria must not be blank")
+            if value.casefold() in seen:
+                raise ValueError("decision criteria must be unique, ignoring case")
+            seen.add(value.casefold())
+            normalized.append(value)
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_product_set(self) -> "ComparisonPostRequest":
+        names = [product.name.casefold() for product in self.products]
+        if len(set(names)) != len(names):
+            raise ValueError("product names must be unique, ignoring case")
+        return self
+
+
 class SocialPostRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=400)
     hooks: list[dict[str, Any]] = Field(min_length=1, max_length=20)

@@ -1,0 +1,81 @@
+"use client";
+
+import {useState,type FormEvent} from "react";
+import {apiFetch} from "@/lib/api";
+
+type Product={name:string;facts:Record<string,string>;source_urls:string[]};
+type Row={criterion:string;values:Array<{product:string;value:string}>};
+type Result={
+ asset_id:string;asset_status:string;title:string;html:string;word_count:number;
+ minimum_word_target:number;minimum_word_target_met:boolean;word_count_warning:string|null;
+ product_count:number;products:Product[];decision_criteria:string[];comparison_table:Row[];
+ unknown_fact_count:number;source_urls:string[];evidence_status:string;
+ product_facts_independently_verified:boolean;external_product_sources_fetched:boolean;
+ requires_review:boolean;publishing_started:boolean;provider_write_access_verified:boolean;
+ provider:string;execution_boundary:string;
+};
+const initialProducts = "[\n  {\n    \"name\": \"Product Alpha\",\n    \"facts\": {\"Price\": \"Not supplied\", \"Platform support\": \"Web and desktop\"},\n    \"source_urls\": [\"https://vendor.example/products/alpha\"]\n  },\n  {\n    \"name\": \"Product Beta\",\n    \"facts\": {\"Price\": \"$49/month\", \"Support\": \"Email support\"},\n    \"source_urls\": [\"https://vendor.example/products/beta\"]\n  }\n]";
+const field="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
+const label="block text-sm font-semibold text-slate-700";
+function errorMessage(error:unknown){return error instanceof Error?error.message:"Comparison article request failed";}
+
+export default function ComparisonPostPage(){
+ const [topic,setTopic]=useState("Affiliate analytics tools compared");
+ const [audience,setAudience]=useState("Small affiliate publishers comparing analytics tools");
+ const [criteriaText,setCriteriaText]=useState("Pricing\nEase of use\nIntegrations\nReporting");
+ const [productsJson,setProductsJson]=useState(initialProducts);
+ const [minimumWords,setMinimumWords]=useState("900");
+ const [disclosure,setDisclosure]=useState("Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.");
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ const [notice,setNotice]=useState("");
+ const [result,setResult]=useState<Result|null>(null);
+ const submit=async(event:FormEvent)=>{
+  event.preventDefault();setBusy(true);setError("");setNotice("");setResult(null);
+  let products:unknown;
+  try{products=JSON.parse(productsJson);}catch{setError("Products must be valid JSON.");setBusy(false);return;}
+  if(!Array.isArray(products)||products.length<2||products.length>5){setError("Supply between two and five product objects.");setBusy(false);return;}
+  if(products.some(p=>!p||typeof p!=="object"||typeof p.name!=="string"||!p.name.trim()||!p.facts||typeof p.facts!=="object"||Array.isArray(p.facts))){setError("Every product needs a name and a facts object.");setBusy(false);return;}
+  const minimum=Number(minimumWords);
+  if(!Number.isInteger(minimum)||minimum<300||minimum>2200){setError("Minimum word target must be a whole number from 300 to 2200.");setBusy(false);return;}
+  const decision_criteria=Array.from(new Set(criteriaText.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)));
+  try{
+   const response=await apiFetch<Result>("/api/content/comparison-post",{method:"POST",body:JSON.stringify({topic:topic.trim(),audience:audience.trim(),products,decision_criteria,affiliate_disclosure:disclosure,minimum_words:minimum})});
+   setResult(response);setNotice("Comparison draft saved to this workspace. Verify every supplied fact before using it.");
+  }catch(err){setError(errorMessage(err));}finally{setBusy(false);}
+ };
+ return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10"><div className="mx-auto max-w-7xl">
+  <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+   <div><div className="flex flex-wrap gap-4 text-sm font-semibold"><a href="/" className="text-indigo-600 hover:underline">← Growth command</a><a href="/research-brief" className="text-indigo-600 hover:underline">Source-backed research brief →</a></div>
+    <h1 className="mt-2 text-3xl font-black tracking-tight">Product comparison writer</h1><p className="mt-1 max-w-3xl text-sm text-slate-600">Create a workspace-persisted comparison article with a deterministic facts table, disclosure, source references and explicit unknowns.</p>
+   </div><span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">Draft only · No publishing</span>
+  </header>
+  <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Evidence boundary:</strong> facts and HTTPS source links are supplied by you. This feature does not fetch or authenticate merchant data, verify product claims, connect affiliate accounts, publish content, or guarantee rankings/earnings. Missing values are shown as “Not supplied — verify”.</div>
+  {error&&<div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
+  {notice&&<div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
+  <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(320px,.85fr)_minmax(0,1.15fr)]">
+   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-xl font-bold">Comparison brief</h2><form onSubmit={submit} className="mt-4 space-y-4">
+    <label className={label}>Topic<input aria-label="Topic" className={field} minLength={3} maxLength={400} required value={topic} onChange={e=>setTopic(e.target.value)}/></label>
+    <label className={label}>Target audience<input aria-label="Target audience" className={field} minLength={2} maxLength={300} required value={audience} onChange={e=>setAudience(e.target.value)}/></label>
+    <label className={label}>Decision criteria (one per line)<textarea aria-label="Decision criteria" className={field} rows={4} maxLength={1000} value={criteriaText} onChange={e=>setCriteriaText(e.target.value)}/></label>
+    <label className={label}>Products and facts (JSON, 2–5 products)<textarea id="comparison-products" aria-label="Products and facts (JSON, 2–5 products)" className={field+" font-mono text-xs leading-5"} rows={16} maxLength={20000} required spellCheck={false} value={productsJson} onChange={e=>setProductsJson(e.target.value)}/></label>
+    <p className="text-xs leading-5 text-slate-500">Each product contains a name, facts object and optional HTTPS source_urls list. Up to 12 facts and 10 references per product; references are not fetched.</p>
+    <label className={label}>Minimum article word target<input aria-label="Minimum article word target" className={field} type="number" min="300" max="2200" step="1" required value={minimumWords} onChange={e=>setMinimumWords(e.target.value)}/></label>
+    <label className={label}>Affiliate disclosure<input aria-label="Affiliate disclosure" className={field} minLength={20} maxLength={1200} required value={disclosure} onChange={e=>setDisclosure(e.target.value)}/></label>
+    <button type="submit" disabled={busy} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?"Generating and saving…":"Generate comparison draft"}</button>
+   </form></section>
+   <section className="space-y-5">
+    {!result&&<div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><h2 className="text-lg font-bold">Your comparison will appear here</h2><p className="mt-2 text-sm leading-6 text-slate-500">The app generates editorial narrative, then builds a table from exact supplied facts. Unknown values are not guessed.</p></div>}
+    {result&&<div className="space-y-5"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-black">{result.title}</h2><p className="mt-1 break-all font-mono text-xs text-slate-500">Saved draft · {result.asset_id}</p></div><a href={"data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(result,null,2))} download="omni-affiliate-comparison-draft.json" className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Export JSON</a></div>
+     <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Products</p><p className="mt-1 text-xl font-black">{result.product_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Unknown table cells</p><p className="mt-1 text-xl font-black">{result.unknown_fact_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Draft words</p><p className="mt-1 text-xl font-black">{result.word_count}</p></div></div>
+     <p className="mt-3 text-sm font-semibold text-amber-800">Evidence: {result.evidence_status.replaceAll("_"," ")} · Product facts independently verified: No · Source fetch: No · Published: No</p>
+     {result.word_count_warning&&<p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{result.word_count_warning}</p>}
+     <h3 className="mt-5 font-bold">Structured comparison table</h3>
+     <div className="mt-2 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-slate-200"><th className="p-2">Criterion</th>{result.products.map(product=><th className="p-2" key={product.name}>{product.name}</th>)}</tr></thead><tbody>{result.comparison_table.map(row=><tr className="border-b border-slate-100" key={row.criterion}><th className="p-2">{row.criterion}</th>{row.values.map(value=><td className="p-2" key={value.product}>{value.value}</td>)}</tr>)}</tbody></table></div>
+    </section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-bold">Isolated HTML preview</h3><p className="mt-1 text-xs text-slate-500">The article is displayed in a sandboxed frame without script permission.</p><iframe title="Comparison article preview" sandbox="" srcDoc={result.html} className="mt-3 h-[640px] w-full rounded-xl border border-slate-200 bg-white"/></section>
+    <p className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600">{result.execution_boundary}</p></div>}
+   </section>
+  </div>
+ </div></main>;
+}

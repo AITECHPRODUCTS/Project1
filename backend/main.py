@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -76,6 +76,7 @@ from backend.services.offer_term_snapshots import compare_offer_terms
 from backend.services.resource_budget import status as budget_status
 from backend.services.s1_research import competitor_spy,monopoly_niche_finder,trending_content_scout
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
+from backend.services.comparison_post_writer import build_comparison_post as comparison_post_writer_service
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
@@ -3776,6 +3777,93 @@ async def blog(
         await db.commit()
         result["asset_id"] = asset.id
         return result
+@api.post("/content/comparison-post", status_code=201)
+async def create_comparison_post(
+    payload: ComparisonPostRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Persist an evidence-labelled comparison article draft for the active workspace."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before generating a comparison article")
+    _validate_generation_payload_size(payload)
+    await workspace_generation_rate_limit(request, workspace_id)
+    try:
+        result = await comparison_post_writer_service(
+            topic=payload.topic,
+            audience=payload.audience,
+            products=[product.model_dump() for product in payload.products],
+            decision_criteria=payload.decision_criteria,
+            affiliate_disclosure=payload.affiliate_disclosure,
+            minimum_words=payload.minimum_words,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Comparison article generation failed")
+        raise HTTPException(
+            502,
+            {"code": "COMPARISON_DRAFT_GENERATION_FAILED", "message": "Comparison draft generation failed; no draft was saved."},
+        ) from exc
+
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    with workspace_scope(workspace_id):
+        asset = ContentAsset(
+            workspace_id=workspace_id,
+            asset_type="comparison_post",
+            title=str(result["title"])[:500],
+            body=result["html"],
+            status="draft",
+            source_urls=result["source_urls"],
+            metadata_json={
+                "schema_version": 1,
+                "audience": payload.audience,
+                "products": result["products"],
+                "decision_criteria": result["decision_criteria"],
+                "comparison_table": result["comparison_table"],
+                "unknown_fact_count": result["unknown_fact_count"],
+                "word_count": result["word_count"],
+                "minimum_word_target": result["minimum_word_target"],
+                "minimum_word_target_met": result["minimum_word_target_met"],
+                "evidence_status": "operator_supplied_unverified",
+                "product_facts_independently_verified": False,
+                "external_product_sources_fetched": False,
+                "requires_review": True,
+                "publishing_started": False,
+                "model_provider": result["provider"],
+            },
+        )
+        db.add(asset)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="content_comparison_post.created",
+            resource_type="content_asset",
+            resource_id=asset.id,
+            outcome="draft",
+            details_json={
+                "product_count": result["product_count"],
+                "decision_criteria_count": len(result["decision_criteria"]),
+                "unknown_fact_count": result["unknown_fact_count"],
+                "evidence_status": "operator_supplied_unverified",
+                "product_facts_independently_verified": False,
+                "publishing_started": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(asset)
+    result["asset_id"] = asset.id
+    result["asset_status"] = asset.status
+    result["execution_boundary"] = (
+        "Workspace-owned review draft. Facts and HTTPS source references are operator supplied and are not fetched, "
+        "independently verified, approved for compliance, or published. Missing comparison values remain unknown."
+    )
+    return result
+
+
 @api.post("/content/video")
 async def video(
     payload: VideoRequest,

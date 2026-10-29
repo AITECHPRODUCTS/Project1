@@ -16,7 +16,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), primary_key=True),
         sa.Column("workspace_id", sa.String(length=36), sa.ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=True),
         sa.Column("name", sa.String(length=120), nullable=False),
-        sa.Column("description", sa.Text(), nullable=False, server_default=""),
+        sa.Column("description", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint("workspace_id", "name", name="uq_offer_shortlist_workspace_name"),
@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("workspace_id", sa.String(length=36), sa.ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=True),
         sa.Column("shortlist_id", sa.String(length=36), sa.ForeignKey("offer_shortlists.id", ondelete="CASCADE"), nullable=False),
         sa.Column("offer_id", sa.String(length=36), sa.ForeignKey("offers.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("note", sa.Text(), nullable=False, server_default=""),
+        sa.Column("note", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint("shortlist_id", "offer_id", name="uq_offer_shortlist_item_offer"),
     )

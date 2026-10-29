@@ -152,7 +152,16 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 - Added API query assertions and browser acceptance for global search plus current-page UTM filtering. Exact-SHA push [40831713023](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831713023) and PR [40831720664](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40831720664) passed: Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
 
 
-## 2026-10-29 global UTM attribution search (verification pending)
+## 2026-10-29 verified global UTM attribution search
 
 - Global lead search now includes allowlisted first-touch and last-touch UTM dimensions, so campaign/source values can locate leads across pages without relying on the current-page-only quick filter. Workspace scope and bounded pagination remain applied to both count and row queries.
-- Updated browser acceptance to search by UTM source; exact-SHA push and PR CI is pending.
+- Updated browser acceptance to search by UTM source. Exact-SHA push [40832233239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832233239) and PR [40832239987](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832239987) passed: Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
+
+
+## Latest verified checkpoint — 2026-10-29
+
+- Branch: `build/omni-affiliate-os-production` only. Latest feature commit before this progress-record update: `448c281f31d4576adee77774bfc1c2d786223bc9`.
+- Paid-ad guardrail: contradictory provider snapshots at the same latest timestamp now fail closed; operator UI explains the block and no-remote-action boundary.
+- Lead CRM: consent confirmation/source visibility and read-only consent history; bounded workspace pagination with stale-page recovery; global email/resource/first-touch/last-touch UTM search plus current-page UTM quick filter.
+- Exact-SHA push [40832233239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832233239) and PR [40832239987](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832239987) passed. Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security audit, AI profile, secret scan, repository guard passed. Push lockfile-sync passed; PR lockfile-sync is skipped by its configured condition.
+- These slices improve real product behavior but do not close production readiness. Open gates include official affiliate/ad provider authentication and contract tests, live provider data/remote actions, full workflow end-to-end and staging UAT, 53-skill parity, legal/license approval, deployment/rollback/observability evidence and the live-app ZIP if it is supplied/available.

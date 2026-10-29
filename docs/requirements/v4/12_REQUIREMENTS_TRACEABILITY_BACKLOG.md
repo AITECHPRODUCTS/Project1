@@ -386,3 +386,11 @@
 | R-22 | S1 offer qualification and decision workflow | OfferQualificationReview model, migration 0029_offer_qualification_reviews, workspace-scoped queue, owner/admin decision API, qualification UI, API and browser acceptance tests | Implemented and hosted-CI verified on exact SHA 03bdbb6f60a6e8b9f86472a86f17d0156214dadc (push 40824127725, PR 40824132752) | Provider-backed eligibility/terms/authenticity, live marketplace contracts and external approval remain unverified; production readiness remains open |
 
 | R-23 | Qualification queue pagination | Qualification UI offset navigation and 52-offer browser acceptance | Candidate fe86be600d4c526fa9226cef1b424726fa9d27e0; exact-head CI pending because initial candidate runs were canceled | Verify push and PR jobs for the latest SHA, including browser UAT and lockfile sync; preserve bounded API pagination and active filters |
+
+
+## R-24 — Lead CRM evidence/search and paid-ad snapshot safety verified (2026-10-29)
+- Lead API: workspace-scoped bounded limit/offset, stable ordering, global email/resource/first-touch/last-touch UTM search, and total count; UI previous/next, stale-page recovery, global search and current-page UTM filter.
+- Lead consent evidence: persisted email-confirmation timestamp and source; lazy read-only consent-event history with purpose, source/channel, policy version, event time and captured wording.
+- Paid-ad guardrail: same-latest-timestamp provider snapshot conflicts are detected; ambiguous evidence blocks stop-loss decisions. UI exposes the conflicting fields and explains that no remote action was executed.
+- Exact-SHA CI evidence: push [40832233239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832233239), PR [40832239987](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832239987); Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
+- Remaining: authenticated production provider adapters, external account UAT, full workflow E2E/staging, 53-skill parity, public/proprietary licensing decision and release/deployment evidence. These changes do not authorize live ad spend or send marketing email.

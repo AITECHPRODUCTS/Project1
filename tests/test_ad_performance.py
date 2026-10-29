@@ -168,7 +168,7 @@ def test_ad_reports_filter_inclusive_utc_observation_dates():
             response = client.post("/api/ads/observations", json={
                 "platform": "meta",
                 "creative_id": f"date-filter-{suffix}",
-                "source_type": "manual",
+                "source_type": "manual_report",
                 "impressions": 100,
                 "clicks": 5,
                 "conversions": 1,

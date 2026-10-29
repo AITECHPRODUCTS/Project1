@@ -2964,6 +2964,59 @@ async def create_commission_projection(
     }
 
 
+
+@api.get("/research/commission-projections")
+async def list_commission_projections(
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0, le=10000),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return only the active workspace's saved, review-required commission projection drafts."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing commission projections")
+
+    with workspace_scope(workspace_id):
+        base_query = select(ContentAsset).where(
+            ContentAsset.workspace_id == workspace_id,
+            ContentAsset.asset_type == "commission_projection",
+        )
+        total = await db.scalar(select(func.count()).select_from(base_query.subquery()))
+        rows = (await db.scalars(
+            base_query.order_by(ContentAsset.created_at.desc(), ContentAsset.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )).all()
+
+    items = []
+    for asset in rows:
+        try:
+            calculated = json.loads(asset.body)
+        except (json.JSONDecodeError, TypeError):
+            # A malformed historical record is not silently presented as a valid result.
+            calculated = None
+        if not isinstance(calculated, dict):
+            calculated = None
+        items.append({
+            "asset_id": asset.id,
+            "title": asset.title,
+            "asset_status": asset.status,
+            "created_at": asset.created_at.isoformat() if asset.created_at else None,
+            "requires_review": True,
+            "publishing_started": False,
+            "assumptions": (asset.metadata_json or {}).get("assumptions", {}),
+            "result": ({
+                **calculated,
+                "asset_id": asset.id,
+                "asset_status": asset.status,
+                "requires_review": True,
+                "publishing_started": False,
+            } if calculated is not None else None),
+        })
+    return {"count": int(total or 0), "limit": limit, "offset": offset, "items": items}
+
+
 @api.post("/research/content-moat", status_code=201)
 async def research_content_moat(
     payload: ContentMoatRequest,

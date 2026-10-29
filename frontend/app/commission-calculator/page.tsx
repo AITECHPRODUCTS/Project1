@@ -1,6 +1,6 @@
 "use client";
 
-import {useState,type FormEvent} from "react";
+import {useCallback,useEffect,useState,type FormEvent} from "react";
 import {apiFetch} from "@/lib/api";
 
 type RewardType="cps_one_time"|"cps_recurring"|"cpl"|"cpa";
@@ -23,6 +23,11 @@ type CommissionResult={
   earnings_guaranteed:boolean;external_provider_calls_made:boolean;money_transferred:boolean;
   requires_human_review:boolean;notes:string[];
 };
+type SavedProjection={
+  asset_id:string;title:string;asset_status:string;created_at:string|null;requires_review:boolean;
+  publishing_started:boolean;assumptions:Record<string,unknown>;result:CommissionResult|null;
+};
+type ProjectionHistoryResponse={count:number;limit:number;offset:number;items:SavedProjection[]};
 const inputClass="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
 const labelClass="block text-sm font-semibold text-slate-700";
 function message(error:unknown){return error instanceof Error?error.message:"Commission calculation failed";}
@@ -39,6 +44,21 @@ export default function CommissionCalculatorPage(){
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
  const [result,setResult]=useState<CommissionResult|null>(null);
+ const [history,setHistory]=useState<SavedProjection[]>([]);
+ const [historyCount,setHistoryCount]=useState(0);
+ const [historyBusy,setHistoryBusy]=useState(false);
+ const [historyError,setHistoryError]=useState("");
+ const loadHistory=useCallback(async()=>{
+  setHistoryBusy(true);
+  try{
+   const response=await apiFetch<ProjectionHistoryResponse>("/api/research/commission-projections?limit=20");
+   setHistory(response.items);
+   setHistoryCount(response.count);
+   setHistoryError("");
+  }catch(err){setHistoryError(message(err));}
+  finally{setHistoryBusy(false);}
+ },[]);
+ useEffect(()=>{void loadHistory();},[loadHistory]);
  const updateProgram=(id:number,patch:Partial<ProgramInput>)=>setPrograms(current=>current.map(p=>p.id===id?{...p,...patch}:p));
  const addProgram=()=>{if(programs.length>=10)return;setPrograms(current=>[...current,freshProgram(nextId,current[0]?.currency||"USD")]);setNextId(value=>value+1);};
  const removeProgram=(id:number)=>setPrograms(current=>current.length>1?current.filter(p=>p.id!==id):current);
@@ -59,6 +79,7 @@ export default function CommissionCalculatorPage(){
    const response=await apiFetch<CommissionResult>("/api/research/commission-calculator",{method:"POST",body:JSON.stringify(payload)});
    setResult(response);
    setNotice("Projection saved as a workspace draft. Review payout terms and assumptions before making decisions.");
+   await loadHistory();
   }catch(err){setError(message(err));}
   finally{setBusy(false);}
  };
@@ -109,5 +130,23 @@ export default function CommissionCalculatorPage(){
     </div>}
    </section>
   </div>
+
+  <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+   <div className="flex flex-wrap items-center justify-between gap-3">
+    <div><h2 className="text-xl font-bold">Saved commission projections</h2><p className="mt-1 text-sm text-slate-500">Workspace-only review drafts · {historyCount} saved</p></div>
+    <button type="button" onClick={()=>void loadHistory()} disabled={historyBusy} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">{historyBusy?"Refreshing…":"Refresh history"}</button>
+   </div>
+   {historyError&&<p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">Unable to load saved projections: {historyError}</p>}
+   {history.length===0&&!historyBusy?<p role="status" className="mt-4 rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">No saved commission projections in this workspace yet.</p>:null}
+   <div className="mt-4 grid gap-3 md:grid-cols-2">
+    {history.map(item=><article key={item.asset_id} className="rounded-xl border border-slate-200 p-4">
+     <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold">{item.title}</h3><p className="mt-1 break-all font-mono text-[10px] text-slate-400">{item.asset_id}</p><p className="mt-1 text-xs text-slate-500">{item.created_at?new Date(item.created_at).toLocaleString():"Creation time unavailable"} · {item.asset_status}</p></div><span className="shrink-0 rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">Review required</span></div>
+     {item.result&&<p className="mt-3 text-sm text-slate-600">{item.result.programs.length} program(s) · {item.result.currency_comparison} · estimates only</p>}
+     <button type="button" onClick={()=>{if(item.result){setResult(item.result);setNotice("Loaded saved projection. It remains a draft requiring review.");setError("");}}} disabled={!item.result} className="mt-3 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">View saved results</button>
+     {!item.result&&<p className="mt-2 text-xs text-rose-700">This historical record could not be parsed as a projection result.</p>}
+    </article>)}
+   </div>
+   {historyCount>history.length&&<p className="mt-3 text-xs text-slate-500">Showing the latest {history.length} of {historyCount}; use refresh after a new calculation.</p>}
+  </section>
  </div></main>;
 }

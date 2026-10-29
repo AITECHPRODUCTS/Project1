@@ -1,6 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-29
 
+## 2026-10-29 feature increment — workspace-scoped commission projection history
+
+- Added `GET /api/research/commission-projections` with active-workspace enforcement, explicit workspace filtering, deterministic newest-first ordering, bounded `limit`/`offset`, total count, and draft-only result metadata. A malformed stored body is flagged as unparseable, not presented as valid projection output.
+- The calculator page loads saved history on entry, refreshes it after a calculation, supports refresh/manual review of an existing result, and displays the projection draft ID/timestamp. Existing generation and no-payout safeguards remain unchanged.
+- Added API tests for pagination/order, missing workspace, cross-workspace isolation, and safe result status; added Chromium history-refresh/restore coverage. New exact-SHA CI is pending until the current code candidate is checked.
+
 ## 2026-10-29 implementation increment — authenticated commission calculator user journey
 
 - Added a workspace-authenticated `POST /api/research/commission-calculator` endpoint using the previously verified deterministic handler. It validates bounded payout inputs, requires an active workspace, rate-limits requests, persists each result as a review-required `ContentAsset` draft and records an audit event.

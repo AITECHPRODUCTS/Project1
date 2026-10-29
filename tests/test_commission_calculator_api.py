@@ -27,11 +27,18 @@ def _client(tmp_path, active_workspace="commission-workspace"):
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         async with sessions() as session:
-            session.add(Workspace(
-                id="commission-workspace",
-                name="Commission workspace",
-                slug="commission-workspace",
-            ))
+            session.add_all([
+                Workspace(
+                    id="commission-workspace",
+                    name="Commission workspace",
+                    slug="commission-workspace",
+                ),
+                Workspace(
+                    id="other-commission-workspace",
+                    name="Other commission workspace",
+                    slug="other-commission-workspace",
+                ),
+            ])
             await session.commit()
 
     async def override_session():
@@ -173,5 +180,77 @@ def test_commission_calculator_recurring_projection_requires_explicit_duration(t
         with client:
             response = client.post("/api/research/commission-calculator", json=payload)
         assert response.status_code == 422
+    finally:
+        _cleanup(engine, client)
+
+
+
+def test_commission_projection_history_is_persisted_paginated_and_workspace_scoped(tmp_path):
+    engine, sessions, active, client = _client(tmp_path)
+    try:
+        with client:
+            first = client.post("/api/research/commission-calculator", json=_payload())
+            second_payload = _payload()
+            second_payload["programs"][0]["name"] = "Second program"
+            second = client.post("/api/research/commission-calculator", json=second_payload)
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+
+        with client:
+            history = client.get("/api/research/commission-projections?limit=1&offset=0")
+        assert history.status_code == 200, history.text
+        body = history.json()
+        assert body["count"] == 2
+        assert body["limit"] == 1 and body["offset"] == 0
+        assert len(body["items"]) == 1
+        assert body["items"][0]["asset_id"] == second.json()["asset_id"]
+        assert body["items"][0]["result"]["programs"][0]["name"] == "Second program"
+        assert body["items"][0]["result"]["provider_metrics_verified"] is False
+        assert body["items"][0]["requires_review"] is True
+        assert body["items"][0]["publishing_started"] is False
+
+        async def create_other_workspace_projection():
+            async with sessions() as session:
+                session.add(ContentAsset(
+                    workspace_id="other-commission-workspace",
+                    asset_type="commission_projection",
+                    title="Private other workspace projection",
+                    body=json.dumps({"programs": [], "currency_comparison": "GBP"}),
+                    status="draft",
+                    source_urls=[],
+                    metadata_json={"requires_human_review": True},
+                ))
+                await session.commit()
+
+        asyncio.run(create_other_workspace_projection())
+        active["workspace_id"] = "other-commission-workspace"
+        with client:
+            isolated = client.get("/api/research/commission-projections")
+        assert isolated.status_code == 200, isolated.text
+        isolated_body = isolated.json()
+        assert isolated_body["count"] == 1
+        assert len(isolated_body["items"]) == 1
+        assert isolated_body["items"][0]["title"] == "Private other workspace projection"
+        assert isolated_body["items"][0]["asset_id"] not in {
+            first.json()["asset_id"], second.json()["asset_id"],
+        }
+    finally:
+        _cleanup(engine, client)
+
+
+def test_commission_projection_history_requires_workspace_and_bounded_pagination(tmp_path):
+    engine, _, active, client = _client(tmp_path)
+    try:
+        active["workspace_id"] = ""
+        with client:
+            denied = client.get("/api/research/commission-projections")
+        assert denied.status_code == 403
+
+        active["workspace_id"] = "commission-workspace"
+        with client:
+            too_many = client.get("/api/research/commission-projections?limit=1000")
+            invalid_offset = client.get("/api/research/commission-projections?offset=-1")
+        assert too_many.status_code == 422
+        assert invalid_offset.status_code == 422
     finally:
         _cleanup(engine, client)

@@ -909,3 +909,91 @@ def test_commission_calculator_user_journey_submits_assumptions_and_shows_review
             assert page.get_by_text("Provider metrics verified: false").count() == 1
         finally:
             browser.close()
+
+
+
+def test_commission_calculator_shows_and_reloads_workspace_saved_projection_history():
+    created_result = {
+        "asset_id": "history-projection-001",
+        "asset_status": "draft",
+        "requires_review": True,
+        "publishing_started": False,
+        "programs": [{
+            "name": "History Program",
+            "reward_type": "cps_one_time",
+            "currency": "USD",
+            "commission_per_conversion_amount": "10.000000",
+            "expected_monthly_clicks": "10.000000",
+            "expected_monthly_conversions": "1.000000",
+            "estimated_first_month_commission": "10.000000",
+            "estimated_12_month_commission": "120.000000",
+            "recurring_paid_months": None,
+            "projection_basis": "one-time commission for each monthly conversion cohort",
+        }],
+        "measurement_basis": {
+            "monthly_visitors": 100,
+            "click_through_rate_pct_assumption": "10.000000",
+            "affiliate_conversion_rate_pct_assumption": "10.000000",
+        },
+        "currency_comparison": "USD",
+        "input_provenance": "caller_supplied_assumptions",
+        "provider_metrics_verified": False,
+        "earnings_guaranteed": False,
+        "external_provider_calls_made": False,
+        "money_transferred": False,
+        "requires_human_review": True,
+        "notes": [
+            "Clicks, conversions and commissions are expected-value estimates, not observed counts or earnings.",
+            "The projection assumes constant monthly visitors and rates, with no refunds, cancellations, fraud or attribution loss.",
+            "Recurring projections assume each cohort continues paying for the supplied duration; churn is not modeled.",
+            "No market benchmarks or provider metrics were fetched or inferred.",
+        ],
+    }
+    history_reads = {"count": 0}
+
+    def handle_history(route):
+        history_reads["count"] += 1
+        if history_reads["count"] == 1:
+            _fulfill_json(route, {"count": 0, "limit": 20, "offset": 0, "items": []})
+        else:
+            _fulfill_json(route, {
+                "count": 1, "limit": 20, "offset": 0,
+                "items": [{
+                    "asset_id": "history-projection-001",
+                    "title": "Commission projection — 1 program(s) — USD",
+                    "asset_status": "draft",
+                    "created_at": "2026-10-29T03:00:00+00:00",
+                    "requires_review": True,
+                    "publishing_started": False,
+                    "assumptions": {},
+                    "result": created_result,
+                }],
+            })
+
+    def handle_calculation(route):
+        _fulfill_json(route, created_result)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/api/research/commission-projections**", handle_history)
+            page.route("**/api/research/commission-calculator", handle_calculation)
+            page.goto(f"{BASE_URL}/commission-calculator", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Commission projection calculator").wait_for(state="visible")
+            page.get_by_role("heading", name="Saved commission projections").wait_for(state="visible")
+            page.get_by_text("No saved commission projections in this workspace yet.").wait_for(state="visible")
+
+            page.get_by_label("Monthly visitors").fill("100")
+            page.get_by_label("Click-through rate (%)").fill("10")
+            page.get_by_label("Affiliate conversion rate (%)").fill("10")
+            page.get_by_label("Program 1 name").fill("History Program")
+            page.get_by_role("button", name="Estimate commissions").click()
+            page.get_by_role("status").get_by_text("Projection saved as a workspace draft").wait_for(state="visible")
+            page.get_by_text("history-projection-001").wait_for(state="visible")
+            assert history_reads["count"] >= 2
+            page.get_by_role("button", name="View saved results").click()
+            assert page.get_by_text("Loaded saved projection. It remains a draft requiring review.").count() == 1
+            assert page.get_by_text("USD 120.000000").count() >= 1
+        finally:
+            browser.close()

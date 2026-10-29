@@ -8,7 +8,11 @@
 
 This document is a practical handoff for continuing the implementation. It distinguishes existing code and automated verification from provider-connected, staging-verified and production-live behavior.
 
-## New user-facing calculator journey in this continuation checkpoint
+## Commission projection history increment (CI pending for new head)
+
+The calculator now retrieves saved workspace projections through `GET /api/research/commission-projections`, sorted newest first and paginated with bounded inputs. It returns only records owned by the active workspace, plus parsed result and assumption metadata, and the UI loads/refreshes saved history and allows reopening a stored result after navigation or page reload. API tests cover pagination and cross-workspace isolation; Chromium tests cover refresh and restore. This is not a provider data feed and does not authorize publishing or payout. Await exact-SHA push/PR checks for this increment.
+
+## Previous user-facing calculator journey
 
 The commission calculator is now available at `/commission-calculator` and `POST /api/research/commission-calculator`. It authenticates through the existing workspace session, validates traffic/rate/program assumptions, writes a review-required workspace draft, and records an audit event. The UI compares up to ten programs, restricts ranking to a single currency, and lets users export the JSON report. It does not fetch provider metrics, claim earnings or perform payout operations. API and Chromium UAT coverage has been added; this new head must pass exact-SHA push and PR CI before the increment is marked verified.
 

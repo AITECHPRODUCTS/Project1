@@ -7311,9 +7311,11 @@ async def ads_plan(
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before creating an ad plan")
+    workspace_id = str(user["workspace_id"])
     plan = await generate_ad_campaign_plan(payload)
     db.add(
         AdCampaignPlanRecord(
+            workspace_id=workspace_id,
             id=plan["plan_id"],
             campaign_name=plan["campaign_name"],
             niche=payload.niche,
@@ -7328,6 +7330,7 @@ async def ads_plan(
     )
     db.add(
         AuditLog(
+            workspace_id=workspace_id,
             actor=str(user.get("email") or "unknown"),
             action="ads.plan.created",
             resource_type="ad_plan",
@@ -7354,8 +7357,10 @@ async def list_ad_plans(
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before listing ad plans")
+    workspace_id = str(user["workspace_id"])
     rows = list((await db.scalars(
         select(AdCampaignPlanRecord)
+        .where(AdCampaignPlanRecord.workspace_id == workspace_id)
         .order_by(AdCampaignPlanRecord.created_at.desc())
         .limit(limit)
     )).all())
@@ -7393,8 +7398,12 @@ async def get_ad_plan(
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before viewing an ad plan")
+    workspace_id = str(user["workspace_id"])
     row = await db.scalar(
-        select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == plan_id)
+        select(AdCampaignPlanRecord).where(
+            AdCampaignPlanRecord.id == plan_id,
+            AdCampaignPlanRecord.workspace_id == workspace_id,
+        )
     )
     if row is None:
         raise HTTPException(404, "Ad plan not found")
@@ -7423,14 +7432,19 @@ async def create_ad_observation(
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before recording ad observations")
+    workspace_id = str(user["workspace_id"])
     if payload.campaign_plan_id:
         plan = await db.scalar(
-            select(AdCampaignPlanRecord).where(AdCampaignPlanRecord.id == payload.campaign_plan_id)
+            select(AdCampaignPlanRecord).where(
+                AdCampaignPlanRecord.id == payload.campaign_plan_id,
+                AdCampaignPlanRecord.workspace_id == workspace_id,
+            )
         )
         if plan is None:
             raise HTTPException(404, "Ad plan not found in the active workspace")
 
     row = AdPerformanceObservation(
+        workspace_id=workspace_id,
         campaign_plan_id=payload.campaign_plan_id,
         platform=payload.platform,
         creative_id=payload.creative_id.strip(),
@@ -7450,6 +7464,7 @@ async def create_ad_observation(
     await db.flush()
     db.add(
         AuditLog(
+            workspace_id=workspace_id,
             actor=str(user.get("email") or "unknown"),
             action="ads.performance_observation.created",
             resource_type="ad_performance_observation",
@@ -7498,9 +7513,12 @@ async def list_ad_observations(
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before listing ad observations")
+    workspace_id = str(user["workspace_id"])
     if from_date and to_date and from_date > to_date:
         raise HTTPException(422, "from_date must be on or before to_date")
-    statement = select(AdPerformanceObservation)
+    statement = select(AdPerformanceObservation).where(
+        AdPerformanceObservation.workspace_id == workspace_id
+    )
     if from_date:
         statement = statement.where(
             AdPerformanceObservation.observed_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
@@ -7551,9 +7569,12 @@ async def get_ad_performance(
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before reading ad performance")
+    workspace_id = str(user["workspace_id"])
     if from_date and to_date and from_date > to_date:
         raise HTTPException(422, "from_date must be on or before to_date")
-    statement = select(AdPerformanceObservation)
+    statement = select(AdPerformanceObservation).where(
+        AdPerformanceObservation.workspace_id == workspace_id
+    )
     if from_date:
         statement = statement.where(
             AdPerformanceObservation.observed_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)

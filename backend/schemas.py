@@ -1847,7 +1847,16 @@ class SkillPackageCreateRequest(BaseModel):
     version: str = Field(min_length=5, max_length=40)
     description: str = Field(min_length=10, max_length=3000)
     stage: SkillStage
-    runtime_handler: Literal["none", "content.extractive_summary", "research.keyword_extract", "analytics.roas_calculator"] = "none"
+    runtime_handler: Literal[
+        "none",
+        "content.extractive_summary",
+        "research.keyword_extract",
+        "research.offer_metrics",
+        "research.commission_calculator",
+        "research.offer_term_change_review",
+        "ads.guardrail_review",
+        "analytics.roas_calculator",
+    ] = "none"
     capabilities: list[str] = Field(min_length=1, max_length=50)
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]

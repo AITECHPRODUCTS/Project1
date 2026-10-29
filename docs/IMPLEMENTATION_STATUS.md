@@ -3,6 +3,8 @@ Updated: 2026-10-29
 
 ## 2026-10-29 implementation checkpoint — commission projections and complete schema traversal
 
+- Follow-up integration audit found the new handler was not selectable through Skill Studio and its API request schema did not allow it. The current increment adds Skill Studio presets for measured offer metrics, commission calculation, and offer-term change review; expands the governed package API schema to the existing allowlisted handler set; and adds API create → approval gate → execute coverage plus a Chromium preset acceptance test. Hosted CI for this wiring change must pass on the exact new head before this UI/API slice is called verified.
+
 - Post-edit code review tightened reward/commission type validation so non-string containers fail with a controlled `ValueError` rather than a server error. The fixed-commission test helper now omits average order value where appropriate and tests the conflicting-field rejection explicitly.
 
 - Added allowlisted `research.commission_calculator`: it projects expected clicks/conversions and commission estimates from explicitly supplied monthly visitors, CTR/CVR assumptions, payout type/value, average order value and recurring duration. Results use bounded Decimal arithmetic and fixed-point strings, require comparable same-currency programs, rank only those same-currency estimates, and explicitly state that inputs are assumptions, no provider metrics were verified, no earnings are guaranteed, and no money was transferred.

@@ -55,11 +55,69 @@ const runtimePresets:Record<string,{skillId:string;name:string;stage:string;desc
     instructions:"# Declarative guidance\\nCalculate commission divided by ad spend; return review-only signals, never change a campaign.",
     testCases:[{name:"above threshold review signal",input:{spend_usd:50,commission_usd:75,minimum_roas:1.2},expected_output:{roas_available:true,roas:1.5,pause_recommended:false,minimum_roas:1.2,reason:"At or above threshold; no remote campaign action was taken.",requires_human_review:true}}],
   },
+  "research.offer_metrics":{
+    skillId:"research/offer-metrics",name:"Measured offer metrics",stage:"S1",
+    description:"Calculate EPC, conversion rate and supplied gravity from explicit measured observations; unknown values remain unknown.",
+    capabilities:"research.read",
+    inputSchema:{type:"object",properties:{
+      offer:{type:"object",properties:{reward_type:{type:"string"},gravity_score:{type:"number",minimum:0}},required:["reward_type","gravity_score"],additionalProperties:false},
+      clicks:{type:"integer",minimum:0},conversions:{type:"integer",minimum:0},total_revenue:{type:"number",minimum:0},gravity_weight:{type:"number",minimum:0,maximum:10},
+    },required:["offer","clicks","conversions","total_revenue","gravity_weight"],additionalProperties:false},
+    outputSchema:{type:"object",properties:{
+      gravity_score:{type:"number",minimum:0},normalized_gravity:{type:"number",minimum:0},epc:{type:"number",minimum:0},conversion_rate:{type:"number",minimum:0,maximum:1},
+      recurring_commission:{type:"boolean"},recurring_commission_value:{type:"null"},
+      measurement_basis:{type:"object",properties:{clicks:{type:"integer",minimum:0},conversions:{type:"integer",minimum:0},total_revenue:{type:"number",minimum:0},gravity_weight:{type:"number",minimum:0,maximum:10}},required:["clicks","conversions","total_revenue","gravity_weight"],additionalProperties:false},
+    },required:["gravity_score","normalized_gravity","epc","conversion_rate","recurring_commission","recurring_commission_value","measurement_basis"],additionalProperties:false},
+    instructions:"# Deterministic runtime: use supplied measurements only. Never infer provider approval or missing results.",
+    testCases:[{name:"measured offer metrics",input:{offer:{reward_type:"one-time",gravity_score:4.5},clicks:20,conversions:2,total_revenue:50,gravity_weight:2},expected_output:{gravity_score:4.5,normalized_gravity:9,epc:2.5,conversion_rate:0.1,recurring_commission:false,recurring_commission_value:null,measurement_basis:{clicks:20,conversions:2,total_revenue:50,gravity_weight:2}}}],
+  },
+  "research.commission_calculator":{
+    skillId:"research/commission-calculator",name:"Commission calculator",stage:"S1",
+    description:"Estimate affiliate commission from explicitly supplied traffic, conversion and payout assumptions; projections are not guarantees.",
+    capabilities:"research.read",
+    inputSchema:{type:"object",properties:{
+      monthly_visitors:{type:"integer",minimum:0,maximum:1000000000},click_through_rate_pct:{type:"number",minimum:0,maximum:100},affiliate_conversion_rate_pct:{type:"number",minimum:0,maximum:100},
+      programs:{type:"array",minItems:1,maxItems:10,items:{type:"object",properties:{
+        name:{type:"string",minLength:1,maxLength:120},reward_type:{type:"string",enum:["cps_one_time","cps_recurring","cpl","cpa"]},
+        commission_type:{type:"string",enum:["percentage","fixed"]},commission_value:{type:"number",minimum:0.000001,maximum:1000000000},
+        currency:{type:"string",pattern:"^[A-Za-z]{3}$"},average_order_value:{type:"number",minimum:0.000001,maximum:1000000000},recurring_paid_months:{type:"integer",minimum:1,maximum:120},
+      },required:["name","reward_type","commission_type","commission_value","currency"],additionalProperties:false}},
+    },required:["monthly_visitors","click_through_rate_pct","affiliate_conversion_rate_pct","programs"],additionalProperties:false},
+    outputSchema:{type:"object",properties:{
+      programs:{type:"array",minItems:1,maxItems:10,items:{type:"object",additionalProperties:true}},measurement_basis:{type:"object",additionalProperties:true},
+      currency_comparison:{type:"string",pattern:"^[A-Z]{3}$"},input_provenance:{type:"string",enum:["caller_supplied_assumptions"]},
+      provider_metrics_verified:{type:"boolean"},earnings_guaranteed:{type:"boolean"},external_provider_calls_made:{type:"boolean"},money_transferred:{type:"boolean"},
+      requires_human_review:{type:"boolean"},notes:{type:"array",minItems:1,maxItems:4,items:{type:"string"}},
+    },required:["programs","measurement_basis","currency_comparison","input_provenance","provider_metrics_verified","earnings_guaranteed","external_provider_calls_made","money_transferred","requires_human_review","notes"],additionalProperties:false},
+    instructions:"# Projection only: use explicit assumptions and label them. Never claim provider verification or guaranteed earnings.",
+    testCases:[{name:"explicit one-time program projection",input:{monthly_visitors:100,click_through_rate_pct:10,affiliate_conversion_rate_pct:10,programs:[{name:"One-time Example",reward_type:"cps_one_time",commission_type:"percentage",commission_value:20,currency:"USD",average_order_value:50}]},expected_output:{programs:[{name:"One-time Example",reward_type:"cps_one_time",currency:"USD",commission_per_conversion_amount:"10.000000",expected_monthly_clicks:"10.000000",expected_monthly_conversions:"1.000000",estimated_first_month_commission:"10.000000",estimated_12_month_commission:"120.000000",recurring_paid_months:null,projection_basis:"one-time commission for each monthly conversion cohort"}],measurement_basis:{monthly_visitors:100,click_through_rate_pct_assumption:"10.000000",affiliate_conversion_rate_pct_assumption:"10.000000"},currency_comparison:"USD",input_provenance:"caller_supplied_assumptions",provider_metrics_verified:false,earnings_guaranteed:false,external_provider_calls_made:false,money_transferred:false,requires_human_review:true,notes:["Clicks, conversions and commissions are expected-value estimates, not observed counts or earnings.","The projection assumes constant monthly visitors and rates, with no refunds, cancellations, fraud or attribution loss.","Recurring projections assume each cohort continues paying for the supplied duration; churn is not modeled.","No market benchmarks or provider metrics were fetched or inferred."]}}],
+  },
+  "research.offer_term_change_review":{
+    skillId:"research/offer-term-change-review",name:"Offer term change review",stage:"S1",
+    description:"Compare supplied offer-term snapshots and flag material changes for human revalidation without authenticating the source.",
+    capabilities:"research.read",
+    inputSchema:{type:"object",properties:{
+      previous_terms:{type:"object",properties:{terms_version:{type:"string",maxLength:200},commission_type:{type:"string",maxLength:100},commission_value:{type:"string"},commission_currency:{type:"string",maxLength:12},cookie_days:{type:"integer",minimum:0},attribution_window_days:{type:"integer",minimum:0},allowed_regions:{type:"array",maxItems:200,items:{type:"string",maxLength:80}},restricted_traffic_sources:{type:"array",maxItems:200,items:{type:"string",maxLength:80}},},additionalProperties:false},
+      current_terms:{type:"object",properties:{terms_version:{type:"string",maxLength:200},commission_type:{type:"string",maxLength:100},commission_value:{type:"string"},commission_currency:{type:"string",maxLength:12},cookie_days:{type:"integer",minimum:0},attribution_window_days:{type:"integer",minimum:0},allowed_regions:{type:"array",maxItems:200,items:{type:"string",maxLength:80}},restricted_traffic_sources:{type:"array",maxItems:200,items:{type:"string",maxLength:80}},},required:["terms_version","commission_type","commission_value","commission_currency","cookie_days","attribution_window_days","allowed_regions","restricted_traffic_sources"],additionalProperties:false},
+      has_previous_snapshot:{type:"boolean"},
+    },required:["current_terms","has_previous_snapshot"],additionalProperties:false},
+    outputSchema:{type:"object",properties:{
+      current_terms:{type:"object",additionalProperties:true},terms_sha256:{type:"string",pattern:"^[0-9a-f]{64}$"},change_status:{type:"string",enum:["baseline_recorded","unchanged","changes_detected"]},
+      changed_fields:{type:"array",items:{type:"string"},maxItems:8},changes:{type:"array",items:{type:"object",additionalProperties:true},maxItems:8},requires_revalidation:{type:"boolean"},
+      source_attestation_verified:{type:"boolean"},provider_approval_verified:{type:"boolean"},automatic_activation_permitted:{type:"boolean"},requires_human_review:{type:"boolean"},
+      review_reasons:{type:"array",items:{type:"string"},maxItems:4},note:{type:"string"},
+    },required:["current_terms","terms_sha256","change_status","changed_fields","changes","requires_revalidation","source_attestation_verified","provider_approval_verified","automatic_activation_permitted","requires_human_review","review_reasons","note"],additionalProperties:false},
+    instructions:"# Comparison only: term snapshots are not source authentication or network approval; human review is mandatory.",
+    testCases:[{name:"commission and geography changed",input:{previous_terms:{terms_version:"terms-v1",commission_type:"percentage",commission_value:"10.0000",commission_currency:"usd",cookie_days:30,attribution_window_days:30,allowed_regions:["US","GB"],restricted_traffic_sources:["paid_search"]},current_terms:{terms_version:"terms-v1",commission_type:"percentage",commission_value:"12",commission_currency:"USD",cookie_days:30,attribution_window_days:30,allowed_regions:["US"],restricted_traffic_sources:["paid_search"]},has_previous_snapshot:true},expected_output:{current_terms:{terms_version:"terms-v1",commission_type:"percentage",commission_value:"12.0000",commission_currency:"USD",cookie_days:30,attribution_window_days:30,allowed_regions:["US"],restricted_traffic_sources:["paid_search"]},terms_sha256:"b067e15f070fd9a8d702f0549d2462e5095a0cd5574065a03af977585f0bcb23",change_status:"changes_detected",changed_fields:["commission_value","allowed_regions"],changes:[{field:"commission_value",previous:"10.0000",current:"12.0000"},{field:"allowed_regions",previous:["GB","US"],current:["US"]}],requires_revalidation:true,source_attestation_verified:false,provider_approval_verified:false,automatic_activation_permitted:false,requires_human_review:true,review_reasons:["source_authenticity_not_independently_verified","material_offer_terms_changed"],note:"This handler compares supplied term snapshots only. It does not authenticate the merchant/network, prove current eligibility, or permit offer activation."}}],
+  },
 };
 function sampleRuntimeInput(handler:string){
   if(handler==="content.extractive_summary")return {text:summaryFixtureText,max_sentences:2};
   if(handler==="research.keyword_extract")return {text:"Affiliate marketing guide guide builds conversion",limit:3};
   if(handler==="analytics.roas_calculator")return {spend_usd:50,commission_usd:75,minimum_roas:1.2};
+  if(handler==="research.offer_metrics")return {offer:{reward_type:"one-time",gravity_score:4.5},clicks:20,conversions:2,total_revenue:50,gravity_weight:2};
+  if(handler==="research.commission_calculator")return {monthly_visitors:100,click_through_rate_pct:10,affiliate_conversion_rate_pct:10,programs:[{name:"One-time Example",reward_type:"cps_one_time",commission_type:"percentage",commission_value:20,currency:"USD",average_order_value:50}]};
+  if(handler==="research.offer_term_change_review")return runtimePresets["research.offer_term_change_review"].testCases[0].input;
   return {};
 }
 type ExecutionResult={ok:boolean;body:string};
@@ -158,7 +216,7 @@ export default function SkillPackagesPage(){
           <form onSubmit={submit} className="mt-4 space-y-4">
             <div className="grid gap-3 sm:grid-cols-2"><label className={label}>Skill ID<input className={field} value={skillId} onChange={e=>setSkillId(e.target.value)} required minLength={3}/></label><label className={label}>Version<input className={field} value={version} onChange={e=>setVersion(e.target.value)} required pattern="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?" title="Use semantic version, e.g. 1.0.0"/></label></div>
             <div className="grid gap-3 sm:grid-cols-2"><label className={label}>Display name<input className={field} value={name} onChange={e=>setName(e.target.value)} required minLength={3}/></label><label className={label}>Lifecycle stage<select className={field} value={stage} onChange={e=>setStage(e.target.value)}>{["S1","S2","S3","S4","S5","S6","S7","S8"].map(v=><option key={v}>{v}</option>)}</select></label></div>
-            <label className={label}>Safe runtime handler<select className={field} value={runtimeHandler} onChange={e=>changeRuntimeHandler(e.target.value)}><option value="none">None — contract-only package</option><option value="content.extractive_summary">Content · extractive summary</option><option value="research.keyword_extract">Research · keyword extraction</option><option value="analytics.roas_calculator">Analytics · ROAS calculator (review only)</option></select><span className="mt-1 block text-xs font-normal text-slate-500">Selecting a handler loads its real input/output contract and a regression fixture. User-authored Markdown remains data, never executable code.</span></label>
+            <label className={label}>Safe runtime handler<select className={field} value={runtimeHandler} onChange={e=>changeRuntimeHandler(e.target.value)}><option value="none">None — contract-only package</option><option value="content.extractive_summary">Content · extractive summary</option><option value="research.keyword_extract">Research · keyword extraction</option><option value="research.offer_metrics">Research · measured offer metrics</option><option value="research.commission_calculator">Research · commission calculator</option><option value="research.offer_term_change_review">Research · offer-term change review</option><option value="analytics.roas_calculator">Analytics · ROAS calculator (review only)</option></select><span className="mt-1 block text-xs font-normal text-slate-500">Selecting a handler loads its real input/output contract and a regression fixture. User-authored Markdown remains data, never executable code.</span></label>
             <label className={label}>Description<textarea className={field} rows={2} value={description} onChange={e=>setDescription(e.target.value)} required minLength={10}/></label>
             <label className={label}>Declared capabilities<input className={field} value={capabilities} onChange={e=>setCapabilities(e.target.value)} required/><span className="mt-1 block text-xs font-normal text-slate-500">Comma-separated identifiers. Provider/write/spend-related capabilities are flagged for human review.</span></label>
             <label className={label}>Input JSON schema<textarea className={field+" font-mono text-xs"} rows={7} value={inputSchema} onChange={e=>setInputSchema(e.target.value)} required spellCheck={false}/></label>

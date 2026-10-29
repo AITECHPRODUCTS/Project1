@@ -335,3 +335,107 @@ def test_invalid_numeric_or_integer_bounds_are_reported_without_comparison_type_
             input_schema={"type": "string", "minLength": "not numeric", "maxLength": 10},
             output_schema={"type": "string"},
         ))
+
+
+
+def test_commission_calculator_package_is_created_reviewed_and_executed(monkeypatch):
+    engine, _, _ = _setup(monkeypatch)
+    input_value = {
+        "monthly_visitors": 100,
+        "click_through_rate_pct": 10,
+        "affiliate_conversion_rate_pct": 10,
+        "programs": [{
+            "name": "One-time Example",
+            "reward_type": "cps_one_time",
+            "commission_type": "percentage",
+            "commission_value": 20,
+            "currency": "USD",
+            "average_order_value": 50,
+        }],
+    }
+    expected = {
+        "programs": [{
+            "name": "One-time Example", "reward_type": "cps_one_time", "currency": "USD",
+            "commission_per_conversion_amount": "10.000000",
+            "expected_monthly_clicks": "10.000000",
+            "expected_monthly_conversions": "1.000000",
+            "estimated_first_month_commission": "10.000000",
+            "estimated_12_month_commission": "120.000000",
+            "recurring_paid_months": None,
+            "projection_basis": "one-time commission for each monthly conversion cohort",
+        }],
+        "measurement_basis": {"monthly_visitors": 100, "click_through_rate_pct_assumption": "10.000000", "affiliate_conversion_rate_pct_assumption": "10.000000"},
+        "currency_comparison": "USD", "input_provenance": "caller_supplied_assumptions",
+        "provider_metrics_verified": False, "earnings_guaranteed": False,
+        "external_provider_calls_made": False, "money_transferred": False,
+        "requires_human_review": True,
+        "notes": [
+            "Clicks, conversions and commissions are expected-value estimates, not observed counts or earnings.",
+            "The projection assumes constant monthly visitors and rates, with no refunds, cancellations, fraud or attribution loss.",
+            "Recurring projections assume each cohort continues paying for the supplied duration; churn is not modeled.",
+            "No market benchmarks or provider metrics were fetched or inferred.",
+        ],
+    }
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "monthly_visitors": {"type": "integer", "minimum": 0, "maximum": 1000000000},
+            "click_through_rate_pct": {"type": "number", "minimum": 0, "maximum": 100},
+            "affiliate_conversion_rate_pct": {"type": "number", "minimum": 0, "maximum": 100},
+            "programs": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "object", "additionalProperties": True}},
+        },
+        "required": ["monthly_visitors", "click_through_rate_pct", "affiliate_conversion_rate_pct", "programs"],
+        "additionalProperties": False,
+    }
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "programs": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "object", "additionalProperties": True}},
+            "measurement_basis": {"type": "object", "additionalProperties": True},
+            "currency_comparison": {"type": "string"}, "input_provenance": {"type": "string"},
+            "provider_metrics_verified": {"type": "boolean"}, "earnings_guaranteed": {"type": "boolean"},
+            "external_provider_calls_made": {"type": "boolean"}, "money_transferred": {"type": "boolean"},
+            "requires_human_review": {"type": "boolean"}, "notes": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["programs", "measurement_basis", "currency_comparison", "input_provenance", "provider_metrics_verified", "earnings_guaranteed", "external_provider_calls_made", "money_transferred", "requires_human_review", "notes"],
+        "additionalProperties": False,
+    }
+    payload = package_payload(
+        skill_id="research/commission-calculator",
+        display_name="Commission calculator",
+        description="Estimate affiliate earnings from explicit traffic, conversion and payout assumptions.",
+        stage="S1",
+        runtime_handler="research.commission_calculator",
+        capabilities=["research.read"],
+        input_schema=input_schema,
+        output_schema=output_schema,
+        instructions_markdown="# Declarative guidance\nTreat projections as assumptions, not actual earnings or guarantees.",
+        test_cases=[{"name": "explicit one-time estimate", "input": input_value, "expected_output": expected}],
+    )
+    try:
+        with TestClient(main.app) as client:
+            created = client.post("/api/skills/packages", json=payload)
+            assert created.status_code == 201, created.text
+            package = created.json()
+            assert package["runtime_handler"] == "research.commission_calculator"
+            assert package["validation_report"]["all_fixtures_passed"] is True
+            assert package["validation_report"]["runtime_execution_tested"] is True
+            before_review = client.post(f"/api/skills/packages/{package['id']}/execute", json={"input": input_value})
+            assert before_review.status_code == 409
+            approved = client.post(f"/api/skills/packages/{package['id']}/review", json={
+                "decision": "approve", "confirm_contract_reviewed": True,
+                "reviewer_notes": "Reviewed commission assumptions, currency and recurring estimate caveats.",
+            })
+            assert approved.status_code == 200, approved.text
+            response = client.post(f"/api/skills/packages/{package['id']}/execute", json={"input": input_value})
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["status"] == "executed"
+            assert body["result"]["programs"][0]["estimated_12_month_commission"] == "120.000000"
+            assert body["result"]["provider_metrics_verified"] is False
+            assert body["result"]["earnings_guaranteed"] is False
+            assert body["result"]["money_transferred"] is False
+            assert body["skill_instructions_executed"] is False
+            assert body["external_actions_executed"] is False
+    finally:
+        asyncio.run(engine.dispose())

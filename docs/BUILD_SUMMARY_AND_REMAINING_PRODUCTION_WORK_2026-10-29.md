@@ -12,7 +12,7 @@ This document is a practical handoff for continuing the implementation. It disti
 
 Added the executable allowlisted handler `research.commission_calculator` for S1 affiliate earnings projections. It calculates expected clicks/conversions, commission per conversion and 12-month payout projections from explicitly provided visitor counts, click-through and conversion-rate assumptions, payout rules, currency, average order value and recurring duration. All money calculations use bounded Decimal arithmetic and fixed-point strings. Comparisons reject mixed currencies and results are sorted only within one shared currency. Recurring cohorts use the submitted payment duration and are labelled as pre-churn estimates.
 
-The handler does not assume market benchmark CTR/CVR or visitor counts, fetch provider metrics, promise earnings, or transfer money. Outputs explicitly mark the estimates as caller-supplied assumptions and require human review.
+The handler does not assume market benchmark CTR/CVR or visitor counts, fetch provider metrics, promise earnings, or transfer money. Outputs explicitly mark the estimates as caller-supplied assumptions and require human review. It is now exposed through Skill Studio presets and the API runtime contract, with a tested package create/review/execute path and browser preset acceptance test.
 
 Also hardened the skill-package schema validator: it now validates every value in an array/object, not just the first 100 entries/properties. Regression tests cover malformed values beyond that former cutoff and explicit boolean/NaN/infinity rejection. A follow-up code review also ensures unhashable reward/commission type inputs are rejected as controlled validation errors rather than uncaught type errors.
 
@@ -42,7 +42,9 @@ Regression coverage includes material changes, semantically equivalent term norm
 - **S7–S8 automation/learning:** persisted workflow checkpoints/leases/recovery/cancellation, human approval boundaries, resource budget controls and review-only learning primitives.
 - **Skill runtime:** seven deterministic, code-owned handlers plus a declarative-only option; includes extractive summary, keyword extraction, evidence-dependent offer metrics, commission projections, offer-term change review, review-only ad guardrails and ROAS review. User-authored Markdown/instructions are not executed. Runtime and parity work is still partial.
 
-## Last verified CI before this change
+## Last verified CI before this UI/API wiring increment
+
+Exact-SHA push [40811838953](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40811838953) and PR [40811844496](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40811844496) completed successfully on `316c1c5d9ee41f6a64a4bae4e30d23f9cfa22a6c`. Those runs verify the commission calculator backend, schema-validator hardening, service tests and existing UI before the new Skill Studio/API integration below. The current UI/API wiring needs its own exact-head push and PR results.
 
 On the previous base SHA, the exact push run [40744627789](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40744627789) and PR run [40744637275](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40744637275) completed successfully. Python, PostgreSQL integration, frontend, AI/RAG, security audit, secret scan, repository guard and browser UAT passed. Push lockfile synchronization passed; PR lockfile synchronization was skipped by the workflow's configured event condition. These runs verify the previous SHA only; the new offer-term runtime change requires its own exact-head push and PR checks.
 

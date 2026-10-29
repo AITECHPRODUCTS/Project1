@@ -818,3 +818,28 @@ def test_distribution_queue_is_persisted_review_gated_and_never_claims_sent():
             card.get_by_text("a separate dispatch confirmation and verified provider capability are required", exact=False).wait_for(state="visible")
         finally:
             browser.close()
+
+
+
+def test_commission_calculator_skill_studio_preset_loads_contract_and_fixture():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/api/skills/packages**", lambda route: _fulfill_json(route, {"count": 0, "data": []}))
+            page.goto(f"{BASE_URL}/skills", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Governed skill packages").wait_for(state="visible")
+            page.get_by_label("Safe runtime handler").select_option("research.commission_calculator")
+            assert page.get_by_label("Skill ID").input_value() == "research/commission-calculator"
+            assert page.get_by_label("Display name").input_value() == "Commission calculator"
+            input_schema = json.loads(page.get_by_label("Input JSON schema").input_value())
+            assert "monthly_visitors" in input_schema["properties"]
+            assert "click_through_rate_pct" in input_schema["properties"]
+            assert "programs" in input_schema["properties"]
+            fixtures = json.loads(page.get_by_label("Contract fixtures JSON").input_value())
+            assert len(fixtures) == 1
+            assert fixtures[0]["expected_output"]["programs"][0]["estimated_12_month_commission"] == "120.000000"
+            assert fixtures[0]["expected_output"]["earnings_guaranteed"] is False
+            assert page.locator("main [role='alert']").count() == 0
+        finally:
+            browser.close()

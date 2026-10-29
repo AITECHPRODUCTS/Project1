@@ -19,10 +19,24 @@ type Lead = {
   email: string;
   lead_magnet: string;
   consented_at: string;
+  email_consent_confirmed_at: string | null;
+  consent_source: string;
   unsubscribed: boolean;
   purchased: boolean;
   attribution?: Attribution;
 };
+type ConsentEvent = {
+  id: string;
+  event_type: string;
+  purpose: string;
+  consent_text: string | null;
+  policy_version: string;
+  source: string;
+  channel: string;
+  observed_at: string | null;
+  created_at: string | null;
+};
+type ConsentHistory = { lead_id: string; count: number; read_only: boolean; data: ConsentEvent[] };
 type LeadList = { count: number; data: Lead[] };
 
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100";
@@ -75,7 +89,11 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");\n  const [consentHistory, setConsentHistory] = useState<Record<string, ConsentEvent[]>>({});\n  const [consentHistoryOpen, setConsentHistoryOpen] = useState<Record<string, boolean>>({});\n  const [consentHistoryLoading, setConsentHistoryLoading] = useState<Record<string, boolean>>({});\n  const [consentHistoryErrors, setConsentHistoryErrors] = useState<Record<string, string>>({});
+  const [query, setQuery] = useState("");
+  const [consentHistory, setConsentHistory] = useState<Record<string, ConsentEvent[]>>({});
+  const [consentHistoryOpen, setConsentHistoryOpen] = useState<Record<string, boolean>>({});
+  const [consentHistoryLoading, setConsentHistoryLoading] = useState<Record<string, boolean>>({});
+  const [consentHistoryErrors, setConsentHistoryErrors] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);

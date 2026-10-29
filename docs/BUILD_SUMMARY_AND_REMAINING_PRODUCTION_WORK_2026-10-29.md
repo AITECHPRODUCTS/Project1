@@ -127,3 +127,9 @@ Do not assert a completion percentage until feature-level acceptance criteria an
 
 - The lead list now exposes the stored email confirmation timestamp and consent source. Each lead can lazily load its workspace-scoped consent event history; the view shows the exact captured consent text, purpose, policy version, source/channel and event time, and labels the history read-only.
 - Added an API regression and Chromium acceptance for the display. This does not mutate consent or send email. The current candidate needs exact-SHA CI and browser UAT; production email provider delivery and jurisdictional policy acceptance remain separate gates.
+
+
+### Consent-history UI compile correction
+
+- First candidate `5f2696434be2d1de75e38d904658d176cb5279bf` passed Python (746 tests), PostgreSQL, AI profile, repository guard and secret scan, but frontend TypeScript and the security-audit job failed because the generated page contained literal `\\n` sequences in the new state declaration. Browser UAT was skipped as a dependent job.
+- Corrected the state declaration to real source lines and added the `Lead`, `ConsentEvent` and `ConsentHistory` TypeScript fields that the earlier escaped-newline replacement had not applied. Fresh exact-SHA push and PR verification is required; the feature remains unverified until all jobs pass.

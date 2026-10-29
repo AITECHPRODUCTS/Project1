@@ -5,7 +5,7 @@ Updated: 2026-10-29
 
 - The workspace lead-list API now returns the persisted email-confirmation timestamp and consent source, in addition to the existing consent time, unsubscribe/purchase state and attribution. A missing confirmation timestamp remains explicitly unrecorded; the UI does not infer a pending/confirmed state from unrelated data.
 - The leads page adds a lazy-loaded, read-only view of the existing workspace-scoped append-only consent-event endpoint. It displays event type/time, purpose, source/channel, policy version and the captured consent text (or an explicit note for withdrawal events without consent wording). API errors and empty history have visible states.
-- Added an API regression for the new fields and browser coverage for confirmed timestamp/source and consent-event rendering. This is a review surface only; it does not change consent, resubscribe, or send email. Exact-SHA push and PR CI is pending.
+- Added an API regression for the new fields and browser coverage for confirmed timestamp/source and consent-event rendering. The first exact-SHA run caught literal escaped newline characters in the new frontend state declaration and a missed type replacement; the state declarations are now split onto real lines and the new API types are declared. No consent or email behavior changed. Exact-SHA push and PR rerun is pending.
 
 
 ## 2026-10-29 verified paid-ad guardrail conflict visibility in UI

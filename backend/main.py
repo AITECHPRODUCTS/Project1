@@ -5,7 +5,7 @@ from uuid import UUID
 from contextlib import asynccontextmanager
 from html import escape as html_escape
 from html.parser import HTMLParser
-from datetime import datetime,timedelta,timezone
+from datetime import date,datetime,timedelta,timezone
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qsl,urlencode,urlparse,urlunparse
@@ -5642,19 +5642,33 @@ async def create_ad_observation(
 @api.get("/ads/observations")
 async def list_ad_observations(
     limit: int = Query(100, ge=1, le=500),
+    from_date: date | None = Query(None, description="Inclusive UTC observation date (YYYY-MM-DD)"),
+    to_date: date | None = Query(None, description="Inclusive UTC observation date (YYYY-MM-DD)"),
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before listing ad observations")
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(422, "from_date must be on or before to_date")
+    statement = select(AdPerformanceObservation)
+    if from_date:
+        statement = statement.where(
+            AdPerformanceObservation.observed_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
+        )
+    if to_date:
+        statement = statement.where(
+            AdPerformanceObservation.observed_at < datetime.combine(to_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+        )
     rows = list((await db.scalars(
-        select(AdPerformanceObservation)
-        .order_by(AdPerformanceObservation.created_at.desc())
-        .limit(limit)
+        statement.order_by(AdPerformanceObservation.created_at.desc()).limit(limit)
     )).all())
     return {
         "count": len(rows),
         "limit": limit,
+        "from_date": from_date.isoformat() if from_date else None,
+        "to_date": to_date.isoformat() if to_date else None,
+        "date_timezone": "UTC",
         "data": [
             {
                 "id": row.id,
@@ -5681,19 +5695,33 @@ async def list_ad_observations(
 @api.get("/ads/performance")
 async def get_ad_performance(
     limit: int = Query(250, ge=1, le=1000),
+    from_date: date | None = Query(None, description="Inclusive UTC observation date (YYYY-MM-DD)"),
+    to_date: date | None = Query(None, description="Inclusive UTC observation date (YYYY-MM-DD)"),
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
     if not user.get("workspace_id"):
         raise HTTPException(403, "Select an authorized workspace before reading ad performance")
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(422, "from_date must be on or before to_date")
+    statement = select(AdPerformanceObservation)
+    if from_date:
+        statement = statement.where(
+            AdPerformanceObservation.observed_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
+        )
+    if to_date:
+        statement = statement.where(
+            AdPerformanceObservation.observed_at < datetime.combine(to_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+        )
     rows = list((await db.scalars(
-        select(AdPerformanceObservation)
-        .order_by(AdPerformanceObservation.observed_at.desc())
-        .limit(limit)
+        statement.order_by(AdPerformanceObservation.observed_at.desc()).limit(limit)
     )).all())
     return {
         "count": len(rows),
         "limit": limit,
+        "from_date": from_date.isoformat() if from_date else None,
+        "to_date": to_date.isoformat() if to_date else None,
+        "date_timezone": "UTC",
         "items": summarize_ad_performance(rows),
         "note": "Reported KPIs are not treated as verified evidence. No campaign changes or spend actions are executed by this endpoint.",
     }

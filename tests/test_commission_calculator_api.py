@@ -203,11 +203,34 @@ def test_commission_projection_history_is_persisted_paginated_and_workspace_scop
         assert body["count"] == 2
         assert body["limit"] == 1 and body["offset"] == 0
         assert len(body["items"]) == 1
-        assert body["items"][0]["asset_id"] == second.json()["asset_id"]
-        assert body["items"][0]["result"]["programs"][0]["name"] == "Second program"
-        assert body["items"][0]["result"]["provider_metrics_verified"] is False
-        assert body["items"][0]["requires_review"] is True
-        assert body["items"][0]["publishing_started"] is False
+        first_page_item = body["items"][0]
+        assert first_page_item["asset_id"] in {
+            first.json()["asset_id"], second.json()["asset_id"],
+        }
+        assert first_page_item["result"]["provider_metrics_verified"] is False
+        assert first_page_item["requires_review"] is True
+        assert first_page_item["publishing_started"] is False
+
+        with client:
+            next_page = client.get("/api/research/commission-projections?limit=1&offset=1")
+        assert next_page.status_code == 200, next_page.text
+        next_page_item = next_page.json()["items"][0]
+        page_items = [first_page_item, next_page_item]
+        expected_items = sorted(
+            page_items,
+            key=lambda item: (item["created_at"], item["asset_id"]),
+            reverse=True,
+        )
+        assert [item["asset_id"] for item in page_items] == [
+            item["asset_id"] for item in expected_items
+        ]
+        expected_names = {
+            first.json()["asset_id"]: "One-time Example",
+            second.json()["asset_id"]: "Second program",
+        }
+        assert {item["asset_id"] for item in page_items} == set(expected_names)
+        for item in page_items:
+            assert item["result"]["programs"][0]["name"] == expected_names[item["asset_id"]]
 
         async def create_other_workspace_projection():
             async with sessions() as session:

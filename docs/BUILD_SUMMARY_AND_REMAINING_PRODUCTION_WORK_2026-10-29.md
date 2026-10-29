@@ -8,7 +8,9 @@
 
 This document is a practical handoff for continuing the implementation. It distinguishes existing code and automated verification from provider-connected, staging-verified and production-live behavior.
 
-## Commission projection history increment (CI pending for new head)
+## Commission projection history increment (test correction in current candidate; CI pending)
+
+The initial exact-SHA test run found a test assertion that assumed insertion order even when SQLite timestamps tie. The test now checks the endpoint's deterministic `(created_at DESC, id DESC)` order and verifies both records across the first two pages; application ordering remains unchanged. The corrected candidate must pass new exact-SHA push and PR workflows.
 
 The calculator now retrieves saved workspace projections through `GET /api/research/commission-projections`, sorted newest first and paginated with bounded inputs. It returns only records owned by the active workspace, plus parsed result and assumption metadata, and the UI loads/refreshes saved history and allows reopening a stored result after navigation or page reload. API tests cover pagination and cross-workspace isolation; Chromium tests cover refresh and restore. This is not a provider data feed and does not authorize publishing or payout. Await exact-SHA push/PR checks for this increment.
 

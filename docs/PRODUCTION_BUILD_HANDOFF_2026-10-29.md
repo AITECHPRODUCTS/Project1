@@ -108,3 +108,10 @@ Verify the actual remote branch head and exact-SHA workflow state first. Then ch
 - Added Chromium acceptance for a 52-offer queue, next/previous navigation, filter preservation and error-free rendering. The qualification decision and evidence contracts are unchanged.
 - Candidate SHA: fe86be600d4c526fa9226cef1b424726fa9d27e0 (parent 03bdbb6f60a6e8b9f86472a86f17d0156214dadc). The immediately preceding code checkpoint 03bdbb6f60a6e8b9f86472a86f17d0156214dadc passed push 40824127725 and PR 40824132752, including 744 Python tests and 13 browser tests. Workflows for the pagination candidate were canceled while concurrent workflow attempts were in flight; do not treat those canceled runs as passing. Exact-head push and PR verification is pending for the current candidate.
 - Product status remains NOT RELEASE READY; pagination improves access to the queue but does not establish provider verification or production acceptance.
+
+## Newest verified code checkpoint — 29 October 2026
+
+- 7cfd4125b1be096239992b559e6b5ba935331d62 (https://github.com/AITECHPRODUCTS/Project1/commit/7cfd4125b1be096239992b559e6b5ba935331d62) implements the product comparison writer API, workspace persistence/audit, deterministic fact table, safe HTML narrative, frontend preview/export and regression coverage.
+- Exact-head push 40847820733 and draft-PR 40847830590 both passed all required jobs. Python 784 passed, 7 skipped, 5 warnings; browser UAT 24 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret-scan and repo-guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by design.
+- Scope boundary: operator facts and source URLs remain unverified; no merchant fetch, live affiliate/provider action, compliance approval or external publication is performed. The broader product remains NOT PRODUCTION READY.
+- The one-page progress artifact is docs/PRODUCTION_BUILD_SUMMARY_2026-10-29.md. Continue with the next unblocked P0 tenancy/authorization/idempotency audit on the same existing branch.

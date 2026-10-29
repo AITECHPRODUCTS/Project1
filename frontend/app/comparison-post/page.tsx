@@ -18,6 +18,7 @@ type Result={
  product_count:number;products:Product[];decision_criteria:string[];comparison_table:Row[];
  unknown_fact_count:number;source_urls:string[];source_snapshots:SourceSnapshot[];fact_evidence:FactEvidence[];evidence_summary:EvidenceSummary;evidence_status:string;
  product_facts_independently_verified:boolean;external_product_sources_fetched:boolean;
+ content_integrity_status:string;source_snapshot_integrity_status:string;integrity_review_blocked:boolean;review_block_reason:string|null;is_workspace_reviewer:boolean;
  review_status:string;review_history:ReviewEntry[];reviewed_at:string|null;reviewed_by:string|null;reviewer_role:string|null;reviewer_notes:string|null;can_review:boolean;
  requires_review:boolean;publishing_started:boolean;provider_write_access_verified:boolean;
  provider:string;execution_boundary:string;
@@ -162,6 +163,8 @@ export default function ComparisonPostPage(){
      <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Products</p><p className="mt-1 text-xl font-black">{result.product_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Unknown table cells</p><p className="mt-1 text-xl font-black">{result.unknown_fact_count}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Draft words</p><p className="mt-1 text-xl font-black">{result.word_count}</p></div></div>
      <p className="mt-3 text-sm font-semibold text-amber-800">Evidence: {result.evidence_status.replaceAll("_"," ")} · Product facts independently verified: No · Source fetch: {result.external_product_sources_fetched?"bounded public snapshots fetched":"no successful snapshot"} · Published: No</p>
      <p className="mt-2 text-sm font-semibold text-slate-700">Review status: {(result.review_status||"pending_review").replaceAll("_"," ")} · Revision {result.revision_number} · Content SHA-256: <span className="break-all font-mono text-xs">{result.content_sha256}</span></p>
+     <p className="mt-1 text-xs font-semibold text-slate-600">Saved integrity: article {(result.content_integrity_status||"unknown").replaceAll("_"," ")} · source snapshots {(result.source_snapshot_integrity_status||"unknown").replaceAll("_"," ")}</p>
+     {result.integrity_review_blocked&&<p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{result.review_block_reason||"Saved article or source evidence integrity could not be verified. Create a new revision before review."}</p>}
      {result.word_count_warning&&<p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{result.word_count_warning}</p>}
      <div className="mt-5 grid gap-3 sm:grid-cols-3">
       <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Fetched snapshots</p><p className="mt-1 text-xl font-black">{result.evidence_summary.source_snapshots_fetched}</p></div>
@@ -186,7 +189,7 @@ export default function ComparisonPostPage(){
        </div>
       </div>}
       {result.can_review&&result.review_status!=="pending_review"&&<div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm"><p className="font-semibold">Decision: {(result.review_status||"unknown").replaceAll("_"," ")}</p><p className="mt-1 text-xs text-slate-600">Reviewed by {result.reviewed_by||"unknown"} on {result.reviewed_at||"unknown"}; this revision is immutable. Create a new revision for further editorial changes.</p>{result.reviewer_notes&&<p className="mt-2 whitespace-pre-wrap text-sm">{result.reviewer_notes}</p>}</div>}
-      {!result.can_review&&<p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">A workspace owner or admin must record the editorial decision. This draft remains unpublished.</p>}
+      {!result.can_review&&!result.integrity_review_blocked&&<p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">A workspace owner or admin must record the editorial decision. This draft remains unpublished.</p>}
       {(result.review_history||[]).length>0&&<details className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-semibold">Review audit history ({result.review_history.length})</summary><ul className="mt-2 space-y-2">{result.review_history.map((entry,index)=><li key={entry.reviewed_at+"-"+index} className="border-t border-slate-100 pt-2 text-xs"><p className="font-semibold">{entry.review_status.replaceAll("_"," ")} · {entry.reviewed_by} · {entry.reviewed_at}</p><p className="mt-1 break-all font-mono text-[10px]">SHA-256 {entry.content_sha256}</p>{entry.reviewer_notes&&<p className="mt-1 whitespace-pre-wrap">{entry.reviewer_notes}</p>}</li>)}</ul></details>}
      </section>
      <h3 className="mt-5 font-bold">Structured comparison table</h3>

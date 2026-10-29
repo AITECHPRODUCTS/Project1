@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 
 import pytest
@@ -15,6 +16,7 @@ from backend.database import Base
 from backend.models import AuditLog, ContentAsset, Workspace
 from backend.schemas import ComparisonPostRequest
 from backend.services import comparison_post_writer as comparison_service
+from backend.tenancy import workspace_scope
 
 
 def valid_payload(**overrides):
@@ -277,7 +279,7 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             "unknown_fact_count": 1,
             "source_urls": ["https://vendor.example/alpha", "https://vendor.example/beta"],
             "evidence_status": "public_snapshot_captured_not_fact_verified",
-            "source_snapshots": [{"source_id": "S01", "url": "https://vendor.example/alpha", "status": "fetched", "title": "Alpha", "product_names": ["Alpha"], "http_status": 200, "content_type": "text/html", "fetched_at": "2026-10-29T00:00:00+00:00", "excerpt": "Price $20", "excerpt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "error_type": None, "detail": None}],
+            "source_snapshots": [{"source_id": "S01", "url": "https://vendor.example/alpha", "status": "fetched", "title": "Alpha", "product_names": ["Alpha"], "http_status": 200, "content_type": "text/html", "fetched_at": "2026-10-29T00:00:00+00:00", "excerpt": "Price $20", "excerpt_sha256": hashlib.sha256("Price $20".encode("utf-8")).hexdigest(), "error_type": None, "detail": None}],
             "fact_evidence": [{"product": "Alpha", "fact_name": "Price", "supplied_value": "$20", "evidence_status": "exact_text_observed", "exact_text_match": True}],
             "evidence_summary": {"source_snapshots_fetched": 1, "source_snapshots_failed": 0, "exact_text_match_count": 1, "exact_text_not_found_count": 0},
             "product_facts_independently_verified": False,
@@ -333,8 +335,11 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             assert detail.json()["html"].startswith("<!doctype html>")
             assert detail.json()["revision_number"] == 1
             assert detail.json()["revision_root_asset_id"] == original_asset_id
-            assert detail.json()["source_snapshots"][0]["excerpt_sha256"] == "a" * 64
+            assert detail.json()["source_snapshots"][0]["excerpt_sha256"] == hashlib.sha256("Price $20".encode("utf-8")).hexdigest()
             assert detail.json()["evidence_summary"]["source_snapshots_fetched"] == 1
+            assert detail.json()["content_integrity_status"] == "verified"
+            assert detail.json()["source_snapshot_integrity_status"] == "verified"
+            assert detail.json()["integrity_review_blocked"] is False
             assert detail.headers["cache-control"] == "no-store"
             active["workspace_id"] = "other-workspace"
             other_list = client.get("/api/content/comparison-posts?limit=10")
@@ -350,6 +355,35 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
             assert denied_revision.status_code == 404
             assert writer_topics == calls_before_denied_revision
             active["workspace_id"] = "comparison-workspace"
+
+            async def corrupt_saved_revision():
+                async with sessions() as session:
+                    with workspace_scope("comparison-workspace"):
+                        row = await session.get(ContentAsset, revision_result["asset_id"])
+                        metadata = dict(row.metadata_json)
+                        snapshots = [dict(value) for value in metadata["source_snapshots"]]
+                        snapshots[0]["excerpt"] = str(snapshots[0]["excerpt"]) + " changed after persistence"
+                        metadata["source_snapshots"] = snapshots
+                        row.metadata_json = metadata
+                        row.body = (row.body or "") + "<p>Changed after persistence</p>"
+                        await session.commit()
+
+            asyncio.run(corrupt_saved_revision())
+            tampered_detail = client.get("/api/content/comparison-posts/" + revision_result["asset_id"])
+            assert tampered_detail.status_code == 200, tampered_detail.text
+            tampered_body = tampered_detail.json()
+            assert tampered_body["content_integrity_status"] == "mismatch"
+            assert tampered_body["source_snapshot_integrity_status"] == "mismatch"
+            assert tampered_body["integrity_review_blocked"] is True
+            review_attempt = client.post(
+                "/api/content/comparison-posts/" + revision_result["asset_id"] + "/review",
+                json={
+                    "decision": "approve",
+                    "expected_content_sha256": tampered_body["content_sha256"],
+                    "confirm_editorial_reviewed": True,
+                },
+            )
+            assert review_attempt.status_code == 409, review_attempt.text
         assert result["asset_id"]
         assert result["asset_status"] == "draft"
         assert result["publishing_started"] is False
@@ -370,22 +404,30 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
                     AuditLog.action == "content_comparison_post.revised",
                     AuditLog.resource_id == revision_result["asset_id"],
                 ))
-            return asset, audit, revision_asset, revision_audit
+                review_audit = await session.scalar(select(AuditLog).where(
+                    AuditLog.action == "content_comparison_post.reviewed",
+                    AuditLog.resource_id == revision_result["asset_id"],
+                ))
+            return asset, audit, revision_asset, revision_audit, review_audit
 
-        asset, audit, revision_asset, revision_audit = asyncio.run(read_records())
+        asset, audit, revision_asset, revision_audit, review_audit = asyncio.run(read_records())
         assert asset is not None and asset.workspace_id == active["workspace_id"]
         assert asset.asset_type == "comparison_post" and asset.status == "draft"
         assert asset.title == original_title and asset.body == original_html
         assert asset.metadata_json["revision_number"] == 1
         assert asset.metadata_json["revision_root_asset_id"] == original_asset_id
         assert asset.metadata_json["evidence_status"] == "public_snapshot_captured_not_fact_verified"
-        assert asset.metadata_json["source_snapshots"][0]["excerpt_sha256"] == "a" * 64
+        assert asset.metadata_json["source_snapshots"][0]["excerpt_sha256"] == hashlib.sha256("Price $20".encode("utf-8")).hexdigest()
         assert asset.metadata_json["fact_evidence"][0]["evidence_status"] == "exact_text_observed"
         assert asset.metadata_json["comparison_table"][0]["values"][1]["value"] == "Not supplied — verify"
         assert audit is not None and audit.outcome == "draft"
         assert audit.details_json["publishing_started"] is False
         assert audit.details_json["source_snapshots_fetched"] == 1
         assert audit.details_json["exact_text_match_count"] == 1
+        expected_body_hash = hashlib.sha256(original_html.encode("utf-8")).hexdigest()
+        assert asset.metadata_json["content_sha256"] == expected_body_hash
+        assert audit.details_json["content_sha256"] == expected_body_hash
+        assert audit.details_json["source_snapshot_manifest_sha256"] == asset.metadata_json["source_snapshot_manifest_sha256"]
         assert revision_asset is not None and revision_asset.workspace_id == active["workspace_id"]
         assert revision_asset.id != asset.id and revision_asset.status == "draft"
         assert revision_asset.title == revision_result["title"] and revision_asset.body != original_html
@@ -395,6 +437,8 @@ def test_comparison_post_api_persists_workspace_draft_and_audit_without_provider
         assert revision_audit is not None and revision_audit.outcome == "draft"
         assert revision_audit.details_json["revision_number"] == 2
         assert revision_audit.details_json["revision_of_asset_id"] == original_asset_id
+        assert revision_asset.metadata_json["review_status"] == "pending_review"
+        assert review_audit is None
     finally:
         main.app.dependency_overrides.pop(main.get_session, None)
         main.app.dependency_overrides.pop(main.require_auth, None)

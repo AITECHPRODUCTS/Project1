@@ -78,6 +78,7 @@ from backend.services.s1_research import competitor_spy,monopoly_niche_finder,tr
 from backend.services.s2_s3_content import content_research_brief as content_research_brief_service,affiliate_blog_builder,keyword_cluster_architect,tiktok_script_writer,viral_post_writer
 from backend.services.comparison_post_writer import build_comparison_post as comparison_post_writer_service
 from backend.services.comparison_draft_revisions import reserve_comparison_revision_number
+from backend.services.comparison_integrity import build_source_snapshot_manifest, evaluate_comparison_integrity, sha256_text, source_snapshot_manifest_sha256
 from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_generator,render_workspace_landing_page,social_media_scheduler,squeeze_page_builder,value_ladder_architect
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
@@ -3859,8 +3860,18 @@ async def create_comparison_post(
             {"code": "COMPARISON_DRAFT_GENERATION_FAILED", "message": "Comparison draft generation failed; no draft was saved."},
         ) from exc
 
+    html_body = str(result.get("html") or "")
+    persisted_content_sha256 = sha256_text(html_body)
+    raw_snapshots = result.get("source_snapshots")
+    source_snapshots = raw_snapshots[:10] if isinstance(raw_snapshots, list) else []
+    source_snapshot_manifest = build_source_snapshot_manifest(source_snapshots)
+    snapshot_manifest_sha256 = source_snapshot_manifest_sha256(source_snapshot_manifest)
+
     asset_metadata = {
         "schema_version": 1,
+        "content_sha256": persisted_content_sha256,
+        "source_snapshot_manifest": source_snapshot_manifest,
+        "source_snapshot_manifest_sha256": snapshot_manifest_sha256,
         "topic": payload.topic,
         "audience": payload.audience,
         "affiliate_disclosure": payload.affiliate_disclosure,
@@ -3877,7 +3888,7 @@ async def create_comparison_post(
         "evidence_status": result.get("evidence_status", "operator_supplied_unverified"),
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": bool(result.get("external_product_sources_fetched", False)),
-        "source_snapshots": result.get("source_snapshots", [])[:10],
+        "source_snapshots": source_snapshots,
         "fact_evidence": result.get("fact_evidence", [])[:60],
         "evidence_summary": result.get("evidence_summary", {}),
         "review_status": "pending_review",
@@ -3896,7 +3907,7 @@ async def create_comparison_post(
             workspace_id=workspace_id,
             asset_type="comparison_post",
             title=str(result["title"])[:500],
-            body=result["html"],
+            body=html_body,
             status="draft",
             source_urls=result["source_urls"],
             metadata_json=asset_metadata,
@@ -3923,6 +3934,8 @@ async def create_comparison_post(
                 "source_snapshots_fetched": (result.get("evidence_summary") or {}).get("source_snapshots_fetched", 0),
                 "exact_text_match_count": (result.get("evidence_summary") or {}).get("exact_text_match_count", 0),
                 "exact_text_not_found_count": (result.get("evidence_summary") or {}).get("exact_text_not_found_count", 0),
+                "content_sha256": persisted_content_sha256,
+                "source_snapshot_manifest_sha256": snapshot_manifest_sha256,
                 "revision_number": revision_number,
                 "revision_of_asset_id": revision_parent_id,
                 "revision_root_asset_id": root_id,
@@ -3940,7 +3953,11 @@ async def create_comparison_post(
     result["revision_number"] = revision_number
     result["revision_of_asset_id"] = revision_parent_id
     result["revision_root_asset_id"] = root_id
-    result["content_sha256"] = hashlib.sha256((asset.body or "").encode("utf-8")).hexdigest()
+    result["content_sha256"] = persisted_content_sha256
+    result["content_integrity_status"] = "verified"
+    result["source_snapshot_integrity_status"] = "verified"
+    result["integrity_review_blocked"] = False
+    result["review_block_reason"] = None
     result["review_status"] = "pending_review"
     result["review_history"] = []
     result["reviewed_by"] = None
@@ -4031,9 +4048,22 @@ async def get_comparison_post(
             ContentAsset.workspace_id == workspace_id,
             ContentAsset.asset_type == "comparison_post",
         ))
+        creation_audit = None
+        if row is not None:
+            creation_audit = await db.scalar(select(AuditLog).where(
+                AuditLog.workspace_id == workspace_id,
+                AuditLog.resource_type == "content_asset",
+                AuditLog.resource_id == asset_id,
+                AuditLog.action.in_(("content_comparison_post.created", "content_comparison_post.revised")),
+            ).limit(1))
     if row is None:
         raise HTTPException(404, "Comparison draft was not found in this workspace")
     metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    integrity = evaluate_comparison_integrity(
+        row.body,
+        metadata,
+        creation_audit.details_json if creation_audit is not None and isinstance(creation_audit.details_json, dict) else None,
+    )
     products = metadata.get("products") if isinstance(metadata.get("products"), list) else []
     decision_criteria = metadata.get("decision_criteria") if isinstance(metadata.get("decision_criteria"), list) else []
     comparison_table = metadata.get("comparison_table") if isinstance(metadata.get("comparison_table"), list) else []
@@ -4046,6 +4076,13 @@ async def get_comparison_post(
     saved_topic = str(metadata.get("topic") or row.title.removesuffix(" — Product Comparison"))[:400]
     saved_audience = str(metadata.get("audience") or "")[:300]
     saved_disclosure = str(metadata.get("affiliate_disclosure") or "Disclosure: This article may contain affiliate links. I may earn a commission from qualifying purchases.")[:1200]
+    saved_review_status = str(metadata.get("review_status") or "pending_review")
+    is_workspace_reviewer = str(user.get("workspace_role") or "").lower() in {"owner", "admin"}
+    integrity_review_blocked = not bool(integrity["integrity_verified"])
+    review_block_reason = None if not integrity_review_blocked else (
+        "Saved article or source evidence no longer matches its creation-time integrity baseline. "
+        "Create a new revision before editorial review."
+    )
     try:
         revision_number = max(1, min(100000, int(metadata.get("revision_number") or 1)))
     except (TypeError, ValueError):
@@ -4079,14 +4116,19 @@ async def get_comparison_post(
         "evidence_status": metadata.get("evidence_status", "unknown"),
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": bool(metadata.get("external_product_sources_fetched", False)),
-        "content_sha256": hashlib.sha256((row.body or "").encode("utf-8")).hexdigest(),
-        "review_status": str(metadata.get("review_status") or "pending_review"),
+        "content_sha256": integrity["actual_content_sha256"],
+        "content_integrity_status": integrity["content_integrity_status"],
+        "source_snapshot_integrity_status": integrity["source_snapshot_integrity_status"],
+        "integrity_review_blocked": integrity_review_blocked,
+        "review_block_reason": review_block_reason,
+        "review_status": saved_review_status,
         "review_history": (metadata.get("review_history") if isinstance(metadata.get("review_history"), list) else [])[-25:],
         "reviewed_at": metadata.get("reviewed_at"),
         "reviewed_by": metadata.get("reviewed_by"),
         "reviewer_role": metadata.get("reviewer_role"),
         "reviewer_notes": metadata.get("reviewer_notes"),
-        "can_review": str(user.get("workspace_role") or "").lower() in {"owner", "admin"},
+        "is_workspace_reviewer": is_workspace_reviewer,
+        "can_review": is_workspace_reviewer and row.status == "draft" and saved_review_status == "pending_review" and bool(integrity["integrity_verified"]),
         "requires_review": bool(metadata.get("requires_review", True)),
         "publishing_started": False,
         "provider_write_access_verified": False,
@@ -4127,6 +4169,14 @@ async def review_comparison_post(
             ContentAsset.workspace_id == workspace_id,
             ContentAsset.asset_type == "comparison_post",
         ).with_for_update())
+        creation_audit = None
+        if row is not None:
+            creation_audit = await db.scalar(select(AuditLog).where(
+                AuditLog.workspace_id == workspace_id,
+                AuditLog.resource_type == "content_asset",
+                AuditLog.resource_id == asset_id,
+                AuditLog.action.in_(("content_comparison_post.created", "content_comparison_post.revised")),
+            ).limit(1))
         if row is None:
             raise HTTPException(404, "Comparison draft was not found in this workspace")
         if row.status != "draft":
@@ -4138,7 +4188,17 @@ async def review_comparison_post(
                 409,
                 "This immutable draft revision already has a review decision; create a new revision before reviewing again.",
             )
-        content_sha256 = hashlib.sha256((row.body or "").encode("utf-8")).hexdigest()
+        integrity = evaluate_comparison_integrity(
+            row.body,
+            metadata,
+            creation_audit.details_json if creation_audit is not None and isinstance(creation_audit.details_json, dict) else None,
+        )
+        if not integrity["integrity_verified"]:
+            raise HTTPException(
+                409,
+                "Saved article or source evidence does not match its creation-time integrity baseline; create a new revision before review.",
+            )
+        content_sha256 = integrity["actual_content_sha256"]
         if not hmac.compare_digest(content_sha256, payload.expected_content_sha256):
             raise HTTPException(409, "The saved draft content changed; reload it and review the current content hash")
         if payload.decision == "approve" and payload.confirm_editorial_reviewed is not True:
@@ -4192,6 +4252,9 @@ async def review_comparison_post(
                 "reviewer_role": reviewer_role,
                 "revision_number": revision_number,
                 "content_sha256": content_sha256,
+                "source_snapshot_manifest_sha256": metadata.get("source_snapshot_manifest_sha256"),
+                "content_integrity_verified": True,
+                "source_snapshot_integrity_verified": True,
                 "product_facts_independently_verified": False,
                 "affiliate_eligibility_verified": False,
                 "external_publication_started": False,
@@ -4215,6 +4278,9 @@ async def review_comparison_post(
         "reviewer_role": reviewer_role,
         "reviewer_notes": payload.reviewer_notes or None,
         "content_sha256": content_sha256,
+        "content_integrity_status": "verified",
+        "source_snapshot_integrity_status": "verified",
+        "integrity_review_blocked": False,
         "requires_review": False,
         "publishing_started": False,
         "external_publication_started": False,

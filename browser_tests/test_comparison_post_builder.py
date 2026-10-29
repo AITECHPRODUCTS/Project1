@@ -243,7 +243,7 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
             page.goto(f"{BASE_URL}/comparison-post", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Product comparison writer").wait_for(state="visible")
             page.get_by_role("button", name="Open draft").click()
-            page.get_by_role("heading", name="Saved analytics products — Product Comparison").wait_for(state="visible")
+            page.get_by_role("heading", name="Saved analytics products — Product Comparison").last.wait_for(state="visible")
             page.get_by_title("Comparison article preview").wait_for(state="visible")
             assert detail_calls == ["/api/content/comparison-posts/saved-comparison-77"]
             assert page.get_by_label("Topic").input_value() == "Historical analytics products"

@@ -322,7 +322,7 @@ def test_platform_admin_can_sync_persisted_openaffiliate_catalog_explicitly():
             assert "2 created, 1 updated" in result_text
             assert "upstream registry total 23" in result_text
             assert "remain unverified" in result_text
-            page.get_by_text("Synced partner program").wait_for(state="visible")
+            page.get_by_role("heading", name="Synced partner program").wait_for(state="visible")
             assert len(calls) == 1
             assert calls[0]["method"] == "POST"
             assert urlparse(calls[0]["url"]).path == "/api/offers/sync"

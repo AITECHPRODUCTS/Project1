@@ -187,7 +187,7 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
                 _fulfill_json(route, {"csrf_token": "browser-test-csrf"})
 
             def handle_saved(route):
-                path = route.request.url.split("?", 1)[0].rstrip("/")
+                path = urlsplit(route.request.url).path.rstrip('/')
                 if path.endswith("/api/content/comparison-posts"):
                     _fulfill_json(route, {
                         "items": [{

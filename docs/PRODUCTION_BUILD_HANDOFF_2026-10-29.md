@@ -42,6 +42,13 @@ The Library audit records 35 items at its 27 October checkpoint, representing 21
 - The CI runs started for the intermediate service commit were superseded/cancelled by branch concurrency before all jobs completed. Do not treat those runs as verification of the final tests commit. A fresh exact-SHA run is required.
 - Existing verified baseline immediately before this code change: commit `4885c01deb0e4d4cbfc7b7af17d3ab1d9e435289`, push run [40815420346](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40815420346) and PR run [40815426572](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40815426572), both completed successfully across configured jobs.
 
+## 2026-10-29 S3 UI addition and current verification boundary
+
+- Added `frontend/app/content-decay/page.tsx`: a real operator UI calls the existing authenticated `POST /api/research/content-decay` endpoint, validates JSON-array shape client-side, and renders the persisted draft's prioritized candidates, supplied metric deltas, suggested editorial actions, healthy pages, missing-data requests and evidence limitations. The UI explicitly states that it does not crawl, connect to Search Console or publish.
+- Linked the content-decay review queue from the source-backed research page. The new page and navigation are additive; no existing page or API contract was replaced.
+- Before the UI addition, both configured workflows completed successfully on the code checkpoint `7e2cc88aecda436ffcbbb505e97ab8b15378c7ec`: push run [40816195101](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40816195101) and PR run [40816200110](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40816200110). Python suite: **738 passed, 7 skipped, 5 warnings**; PostgreSQL integration, repo guard, security audit, AI/RAG profile, frontend production build/Docker smoke, secret scan, browser UAT and push lockfile sync all completed successfully.
+- The UI addition and its navigation commit are newer than that verified SHA. Their exact-SHA push/PR workflow runs must finish before the current tree can be marked verified. A successful earlier SHA does not verify the new frontend code.
+
 ## Verification rules
 - Keep work on the existing branch; do not create a branch, reset, force-push, or overwrite unrelated code.
 - Add focused regression tests with every feature and preserve safety/approval boundaries.

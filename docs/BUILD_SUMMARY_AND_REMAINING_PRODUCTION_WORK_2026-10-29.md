@@ -14,7 +14,7 @@ Added the executable allowlisted handler `research.commission_calculator` for S1
 
 The handler does not assume market benchmark CTR/CVR or visitor counts, fetch provider metrics, promise earnings, or transfer money. Outputs explicitly mark the estimates as caller-supplied assumptions and require human review.
 
-Also hardened the skill-package schema validator: it now validates every value in an array/object, not just the first 100 entries/properties. Regression tests cover malformed values beyond that former cutoff and explicit boolean/NaN/infinity rejection.
+Also hardened the skill-package schema validator: it now validates every value in an array/object, not just the first 100 entries/properties. Regression tests cover malformed values beyond that former cutoff and explicit boolean/NaN/infinity rejection. A follow-up code review also ensures unhashable reward/commission type inputs are rejected as controlled validation errors rather than uncaught type errors.
 
 ## Previous checkpoint's additive feature
 

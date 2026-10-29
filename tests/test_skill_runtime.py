@@ -645,6 +645,8 @@ def _commission_program(name, **overrides):
         "average_order_value": "50",
     }
     value.update(overrides)
+    if overrides.get("commission_type") == "fixed" and "average_order_value" not in overrides:
+        value.pop("average_order_value", None)
     return value
 
 
@@ -717,7 +719,9 @@ def test_commission_calculator_uses_explicit_assumptions_and_ranks_same_currency
         _commission_payload(programs=[_commission_program("Too much", commission_value=101)]),
         _commission_payload(programs=[_commission_program("Recurring without duration", reward_type="cps_recurring")]),
         _commission_payload(programs=[_commission_program("One-time with duration", recurring_paid_months=3)]),
-        _commission_payload(programs=[_commission_program("Fixed with price", commission_type="fixed")]),
+        _commission_payload(programs=[_commission_program("Fixed with price", commission_type="fixed", average_order_value="50")]),
+        _commission_payload(programs=[_commission_program("Unhashable reward type", reward_type=[])]),
+        _commission_payload(programs=[_commission_program("Unhashable commission type", commission_type={})]),
         _commission_payload(extra_field="untrusted"),
     ],
 )

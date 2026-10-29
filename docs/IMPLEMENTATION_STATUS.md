@@ -3,6 +3,8 @@ Updated: 2026-10-29
 
 ## 2026-10-29 implementation checkpoint — commission projections and complete schema traversal
 
+- Post-edit code review tightened reward/commission type validation so non-string containers fail with a controlled `ValueError` rather than a server error. The fixed-commission test helper now omits average order value where appropriate and tests the conflicting-field rejection explicitly.
+
 - Added allowlisted `research.commission_calculator`: it projects expected clicks/conversions and commission estimates from explicitly supplied monthly visitors, CTR/CVR assumptions, payout type/value, average order value and recurring duration. Results use bounded Decimal arithmetic and fixed-point strings, require comparable same-currency programs, rank only those same-currency estimates, and explicitly state that inputs are assumptions, no provider metrics were verified, no earnings are guaranteed, and no money was transferred.
 - Recurring 12-month totals use explicit duration-bounded monthly cohorts and are marked as pre-churn projections; they do not infer traffic benchmarks, churn, refunds, or actual conversion outcomes.
 - Hardened governed-skill schema validation to check every array item and object property rather than silently stopping after the first 100. Added regressions for invalid input at position 101, non-finite/bool numerics, invalid commission assumptions and a real commission runtime-fixture contract.

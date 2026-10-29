@@ -213,10 +213,10 @@ def _commission_calculator(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 120:
             raise ValueError(f"{prefix}.name must be a non-empty string of at most 120 characters")
         reward_type = item["reward_type"]
-        if reward_type not in reward_types:
+        if not isinstance(reward_type, str) or reward_type not in reward_types:
             raise ValueError(f"{prefix}.reward_type is unsupported")
         commission_type = item["commission_type"]
-        if commission_type not in {"percentage", "fixed"}:
+        if not isinstance(commission_type, str) or commission_type not in {"percentage", "fixed"}:
             raise ValueError(f"{prefix}.commission_type must be percentage or fixed")
         if commission_type == "percentage" and reward_type not in {"cps_one_time", "cps_recurring"}:
             raise ValueError(f"{prefix} percentage commissions are only valid for CPS programs")

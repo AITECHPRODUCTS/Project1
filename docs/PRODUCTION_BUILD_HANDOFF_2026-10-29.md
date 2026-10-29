@@ -1,0 +1,45 @@
+# OmniAffiliateOS — Production Build Handoff
+**Checkpoint date:** 29 October 2026  
+**Canonical repository:** https://github.com/AITECHPRODUCTS/Project1  
+**Permitted working branch:** `build/omni-affiliate-os-production`  
+**Release decision:** **NOT PRODUCTION READY**
+
+## Checkpoint integrity
+This is a status/handoff document, not evidence that new application code or deployment has been completed in this session. The last detailed persisted status available to this review is `docs/PRODUCTION_BUILD_STATUS_2026-10-28.md`, which records a verified feature candidate at `f7372b8e3fb29aa1fb6b4e3f12b9eec0194ed26b` with successful push run 40741772438 and PR run 40741778393. A separate later conversation checkpoint mentions `32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969`; its exact current branch-head status and workflows must be re-read before treating it as the current verified head. Do not infer that a previous green run verifies a later SHA.
+
+## Implemented code areas (partial, not full end-to-end completion)
+- FastAPI, SQLAlchemy persistence/migrations, workspace-scoped APIs, authentication/role gates and audit logging.
+- Next.js/TypeScript operator interface, Docker/Compose and CI workflows.
+- S1 research: offer directory/adapters, evidence-aware scoring, traffic screening, offer terms snapshots and source-fetch/review safeguards.
+- S2–S3 content/SEO: source-grounded draft helpers, LLM abstraction, SEO helpers, content decay/moat planning and RAG paths.
+- S4 lead/funnel: landing/lead capture, consent records, opt-in controls, webinar registration, email queue and double-opt-in flow.
+- S5 distribution: provider boundaries, draft/dry-run defaults, human review and guarded side effects.
+- Paid ads: persisted plans/creative variants, KPI evidence separation, sample/freshness gates and recommendation-only budget/stop-loss logic.
+- S6 analytics/finance: signed/deduplicated conversion intake, append-only commission ledger, reversals, summaries and reconciliation candidates.
+- S7 automation: durable workflow leases/checkpoints, HITL pauses, recovery/cancellation handling, cost reservations and partial operations view.
+- S8 learning: review-gated aggregate dataset snapshots and RAG/learning data paths.
+- Skill Studio: bounded allowlisted deterministic handlers; the 53-skill matrix remains partial, not full skill parity.
+- Recent persisted feature evidence includes workspace-scoped OpenAffiliate sync status and source/terms evidence controls. These do not prove native provider authentication or source attestation.
+
+## Remaining production work — prioritized
+1. **Re-establish exact checkpoint:** fetch current branch head, latest commits, open PR state, exact-SHA push/PR Actions runs and failed-step logs. Fix any failures before claiming the checkpoint green.
+2. **Provider integration and authorization:** implement and contract-test official/permitted APIs for selected affiliate networks and ad/social/CMS providers; real OAuth, approved scopes, sandbox/live account verification, pagination, rate limits, retries, revocation, idempotency and remote result IDs. A catalogue or generic adapter is not a live connection; 100+ is a long-term extensibility target.
+3. **S1–S8 end-to-end acceptance:** map every requirement/subfeature to code, tests and evidence. Close the 53-skill parity matrix; validate research provenance, content claim grounding, SEO/crawl, authorized publishing, lead/CRM flows, attribution maturity, commission statements, learning quality and rollback/promotion.
+4. **Security and tenant isolation:** audit every API/worker/queue/cache/export for workspace isolation; test roles, secrets, SSRF/egress, webhooks, abuse/rate limits, privacy deletion/export and concurrency against production-like PostgreSQL.
+5. **Reliability and operational readiness:** queue/dead-letter handling, worker crash/lease recovery, load/soak tests, monitoring/alerts/SLOs, incident and kill-switch procedures, secrets rotation, backup/restore rehearsal, migration rollback and deployment smoke.
+6. **UI and user acceptance:** accessibility, cross-browser flows and real provider sandbox UAT. Existing mocked browser tests do not establish live provider behavior.
+7. **Legal/release gates:** resolve outstanding build-only license inventory notices before their recorded expiry, confirm repository visibility/IP policy, and obtain jurisdiction-specific disclosures/policy review. Compliance evidence tooling is not legal advice.
+8. **Staging and release:** deploy to controlled staging; verify health, migrations, proxy/egress boundaries, restore/rollback, real authorized provider contracts and all required exact-candidate checks. Only then make a release decision.
+
+## Requirement/source inventory
+The Library audit records 35 items at its 27 October checkpoint, representing 21 unique content identities after exact duplicate grouping. Important source material includes `Pasted text.txt`, `Pasted text(1–6).txt`, `Pasted markdown (2).md`, the v3 blueprint, the v4 requirements corpus, `OmniAffiliateOS_build.zip`, and the affiliate-skills archive. Duplicate files should not be double-counted. The affiliate-skills archive is a skill library, not a deployable application. The separately described newer ZIP of an already-live app was not present in the inspected inventory; do not claim its code was ported or reviewed until it is available.
+
+## Verification rules
+- Keep work on the existing branch; do not create a branch, reset, force-push, or overwrite unrelated code.
+- Add focused regression tests with every feature and preserve safety/approval boundaries.
+- Run the applicable checks and inspect logs for the exact resulting SHA. Never mark queued/running/failed/unobserved workflows green.
+- Separate implemented code, automated-test verified, provider verified, staging verified and production live.
+- Never fabricate metrics, commissions, approvals, source evidence, provider access or production readiness.
+
+## Next action
+Verify the actual remote branch head and exact-SHA workflow state first. Then choose the highest-priority unblocked code gap from the current traceability matrix, implement it additively with regression tests, and update this document only with evidence from that resulting SHA.

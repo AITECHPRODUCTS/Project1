@@ -522,3 +522,9 @@ Implementation captures a bounded public-page snapshot through the pinned outbou
 - Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909269285 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909278592 passed: Python 812 passed/9 skipped/5 warnings; browser UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard passed; push lockfile-sync passed.
 - This is a capture-time gate only; it does not prove product fact accuracy, source publication date, freshness of prices/terms, provider eligibility, legal compliance or authorization to publish. No-source drafts remain editorially reviewable but explicitly unverified.
 - Next priority: continue P0 tenant/platform authorization and provider-write idempotency review, then provider sandbox/account UAT, 53-skill acceptance, licensed runtime disposition and production staging/backup/restore gates. Overall status remains NOT PRODUCTION READY.
+
+## P0 — fail-closed compliance evidence parser and stored-source validation — verified 29 October 2026
+
+- Code c31459af067540eb35b033ca5fb4d8532962be21: runtime revalidates stored evidence source URLs, rejects invalid/local/private/credential-bearing URLs, and no longer treats timezone-naive persisted evidence reviewed_at as UTC. Naive assessment evaluation time is rejected; future-dated evidence is not valid.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911398073 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911408321 passed: Python 819 passed/9 skipped/5 warnings; browser UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile sync passed.
+- This is a fail-closed validation improvement, not a substitute for a current authoritative source, independent legal review or a complete jurisdiction-law database. Continue with remaining platform/admin authorization and provider-side UAT.

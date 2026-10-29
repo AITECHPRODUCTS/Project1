@@ -130,3 +130,10 @@ Regression suite results: Python 796 passed, 8 skipped, 5 warnings; browser UAT 
 ## Current summary pointer — 29 October 2026
 
 Use docs/PRODUCTION_BUILD_SUMMARY_CURRENT.md as the concise built-versus-pending status document. Latest exact-SHA evidence is code 662a72a7398849bd5ed463ead4824502f3a3d7f6: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909269285, PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909278592. Python 812 passed/9 skipped/5 warnings; browser UAT 29 passed; all required checks passed, with PR lockfile-sync skipped by configured event condition. Production remains NOT READY.
+
+## Current summary pointer and license-scope correction — 29 October 2026
+
+- Current built/pending snapshot: docs/PRODUCTION_BUILD_SUMMARY_CURRENT.md.
+- Verified code SHA c31459af067540eb35b033ca5fb4d8532962be21; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911398073 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911408321 passed. Python 819 passed/9 skipped/5 warnings; Chromium UAT 29 passed on each.
+- License wording correction: do not describe sharp/libvips as present in the shipped runtime. The runtime dependency guard and final Docker smoke are green and the production runtime excludes sharp/@img/sharp-*. The full npm install/build inventory still has two exact LGPL build-only items under frontend-build-only exceptions with release_approved=false; legal/distribution scope still matters for any build environment that actually ships them.
+- Product overall is still NOT PRODUCTION READY.

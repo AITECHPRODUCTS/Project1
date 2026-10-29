@@ -31,6 +31,22 @@ class WorkspaceCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=160)
 
 
+class WorkspaceLifecycleActionRequest(BaseModel):
+    """Human reason required for an audited workspace suspend/reinstate action."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("reason must contain at least ten non-whitespace characters")
+        return value
+
+
 class WorkflowStartRequest(BaseModel):
     workflow_name: str = Field(default="full_flywheel", max_length=180)
     execution_mode: Literal["FULL_AUTONOMOUS", "SEMI_AUTONOMOUS", "MANUAL_OVERRIDE"] | None = None

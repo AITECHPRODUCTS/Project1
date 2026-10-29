@@ -129,3 +129,72 @@ async def test_threshold_worker_queries_each_workspace_under_scope(monkeypatch):
                     assert row is not None and row.threshold_reached is True
     finally:
         await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_suspended_workspaces_are_excluded_from_scheduled_worker_enumeration(monkeypatch):
+    engine, sessions = await _database(monkeypatch)
+    try:
+        active_id, suspended_id = await _workspaces(sessions)
+        async with sessions() as db:
+            suspended = await db.get(Workspace, suspended_id)
+            assert suspended is not None
+            suspended.lifecycle_state = "suspended"
+            suspended.suspended_at = main.utcnow()
+            suspended.suspended_by = "platform-admin"
+            suspended.suspension_reason = "test suspension"
+            await db.commit()
+
+        ids = await main._background_workspace_ids()
+        assert active_id in ids
+        assert suspended_id not in ids
+    finally:
+        await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_campaign_health_worker_rechecks_suspension_after_scheduler_snapshot(monkeypatch):
+    engine, sessions = await _database(monkeypatch)
+    try:
+        active_id, suspended_id = await _workspaces(sessions)
+        for workspace_id, destination in (
+            (active_id, "https://active-tenant.example"),
+            (suspended_id, "https://suspended-tenant.example"),
+        ):
+            with workspace_scope(workspace_id):
+                async with sessions() as db:
+                    db.add(Campaign(
+                        workspace_id=workspace_id,
+                        name=f"Lifecycle {workspace_id[:6]}",
+                        niche="testing",
+                        primary_destination=destination,
+                        is_active=True,
+                    ))
+                    await db.commit()
+        with workspace_scope(suspended_id):
+            async with sessions() as db:
+                workspace = await db.get(Workspace, suspended_id)
+                assert workspace is not None
+                workspace.lifecycle_state = "suspended"
+                await db.commit()
+
+        async def stale_snapshot():
+            # Simulate a suspension that happens after the scheduler's initial
+            # active-workspace enumeration.
+            return [active_id, suspended_id]
+
+        checked = []
+        async def healthy(url: str):
+            checked.append((get_workspace_id(), url))
+            return True, 200, None
+
+        monkeypatch.setattr(main, "_background_workspace_ids", stale_snapshot)
+        monkeypatch.setattr(main, "destination_healthy", healthy)
+        await main.campaign_health_job()
+
+        assert checked == [(active_id, "https://active-tenant.example")]
+    finally:
+        await engine.dispose()
+

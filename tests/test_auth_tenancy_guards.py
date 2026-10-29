@@ -10,14 +10,17 @@ from backend import main
 
 
 class _AuthDatabase:
-    def __init__(self, *, account=None, membership=None):
+    def __init__(self, *, account=None, membership=None, workspace=None):
         self.account = account
         self.membership = membership
+        self.workspace = workspace
         self.membership_queries = 0
 
     async def get(self, model, identity):
         if model is main.UserAccount:
             return self.account
+        if model is main.Workspace:
+            return self.workspace or SimpleNamespace(id=identity, lifecycle_state="active")
         return None
 
     async def scalar(self, statement):
@@ -229,4 +232,39 @@ async def test_new_platform_admin_grant_is_reflected_without_relogin(monkeypatch
     assert user["is_admin"] is True
     assert request.session["user"]["is_admin"] is True
     assert await main.require_platform_admin(user) is user
+
+
+
+@pytest.mark.asyncio
+async def test_suspended_workspace_invalidates_existing_session_before_membership_lookup(monkeypatch):
+    monkeypatch.setattr(main.settings, "initial_admin_email", "bootstrap@example.test")
+    monkeypatch.setattr(main.settings, "api_access_token", "")
+    session = {
+        "user": {
+            "user_id": "suspended-tenant-user",
+            "workspace_id": "suspended-workspace",
+            "is_admin": False,
+            "workspace_role": "owner",
+        },
+        "csrf_token": "existing-csrf-token",
+    }
+    request = _request(session=session)
+    db = _AuthDatabase(
+        account=SimpleNamespace(
+            id="suspended-tenant-user",
+            email="user@example.invalid",
+            is_active=True,
+            is_admin=False,
+        ),
+        membership=SimpleNamespace(role="owner", is_active=True),
+        workspace=SimpleNamespace(id="suspended-workspace", lifecycle_state="suspended"),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await main.require_auth(request, db)
+
+    assert error.value.status_code == 403
+    assert "Workspace is suspended or unavailable" in error.value.detail
+    assert request.session == {}
+    assert db.membership_queries == 0
 

@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceLifecycleActionRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -136,36 +136,45 @@ async def ensure_workspace_membership(
 ) -> WorkspaceMembership:
     membership = await db.scalar(
         select(WorkspaceMembership)
-        .where(WorkspaceMembership.user_id == account.id, WorkspaceMembership.is_active.is_(True))
+        .join(Workspace, Workspace.id == WorkspaceMembership.workspace_id)
+        .where(
+            WorkspaceMembership.user_id == account.id,
+            WorkspaceMembership.is_active.is_(True),
+            Workspace.lifecycle_state == "active",
+        )
         .order_by(WorkspaceMembership.created_at.asc())
     )
     if membership is not None:
         return membership
+
+    # Do not silently provision a replacement workspace to bypass a suspended
+    # or revoked tenant membership. Only a genuinely new account is auto-created.
+    existing_membership_id = await db.scalar(
+        select(WorkspaceMembership.id).where(WorkspaceMembership.user_id == account.id).limit(1)
+    )
+    if existing_membership_id is not None:
+        raise HTTPException(403, "No active workspace is available for this account; contact a Platform Super Admin.")
+
     base_name = preferred_name or f"{account.email.split('@', 1)[0][:100]} workspace"
     workspace = Workspace(
         name=base_name[:160],
         slug=f"{_slugify(base_name)}-{secrets.token_hex(4)}",
         owner_user_id=account.id,
+        lifecycle_state="active",
     )
     db.add(workspace)
     await db.flush()
-    membership = WorkspaceMembership(
-        workspace_id=workspace.id,
-        user_id=account.id,
-        role="owner",
-        is_active=True,
-    )
+    membership = WorkspaceMembership(workspace_id=workspace.id, user_id=account.id, role="owner", is_active=True)
     db.add(membership)
     await db.flush()
     return membership
-
 
 async def bootstrap_admin():
     if not settings.initial_admin_email or not settings.initial_admin_password:
         if settings.app_env == "production":
             raise RuntimeError("Production requires initial admin credentials")
         async with SessionLocal() as db:
-            dev_workspace = await db.scalar(select(Workspace).where(Workspace.slug == "local-development"))
+            dev_workspace = await db.scalar(select(Workspace).where(Workspace.slug == "local-development", Workspace.lifecycle_state == "active"))
             if dev_workspace is None:
                 db.add(Workspace(name="Local development", slug="local-development", owner_user_id=None))
                 await db.commit()
@@ -185,7 +194,12 @@ async def bootstrap_admin():
         else:
             account.is_admin = True
             account.is_active = True
-        await ensure_workspace_membership(db, account, "Platform administrator workspace")
+        try:
+            await ensure_workspace_membership(db, account, "Platform administrator workspace")
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                raise
+            logger.warning("Bootstrap admin has no active workspace; platform-admin restoration is required")
         await db.commit()
 async def _background_workspace_ids() -> list[str]:
  # This is the only intentionally unscoped tenant enumeration in the scheduler.
@@ -195,14 +209,25 @@ async def _background_workspace_ids() -> list[str]:
    return list(
     (await db.scalars(
      select(Workspace.id)
-     .where(Workspace.slug != "legacy-quarantine")
+     .where(Workspace.slug != "legacy-quarantine", Workspace.lifecycle_state == "active")
      .order_by(Workspace.created_at.asc())
     )).all()
    )
 
 
+async def _workspace_is_active(workspace_id: str) -> bool:
+ # Recheck at the point of work because an admin can suspend a tenant after
+ # the scheduler took its initial snapshot of active workspace IDs.
+ with workspace_scope(None):
+  async with SessionLocal() as db:
+   workspace = await db.get(Workspace, workspace_id)
+   return workspace is not None and workspace.lifecycle_state == "active"
+
+
 async def campaign_health_job():
  for workspace_id in await _background_workspace_ids():
+  if not await _workspace_is_active(workspace_id):
+   continue
   try:
    with workspace_scope(workspace_id):
     async with SessionLocal() as db:
@@ -224,6 +249,8 @@ async def campaign_health_job():
 async def learning_job():
  try:
   for workspace_id in await _background_workspace_ids():
+   if not await _workspace_is_active(workspace_id):
+    continue
    with workspace_scope(workspace_id):
     async with SessionLocal() as db:
      result=await self_improver_loop(db,lookback_days=30,workspace_id=workspace_id)
@@ -234,6 +261,8 @@ async def learning_job():
 
 async def email_job():
  for workspace_id in await _background_workspace_ids():
+  if not await _workspace_is_active(workspace_id):
+   continue
   try:
    with workspace_scope(workspace_id):
     async with SessionLocal() as db:
@@ -248,6 +277,8 @@ async def email_job():
 
 async def threshold_job():
  for workspace_id in await _background_workspace_ids():
+  if not await _workspace_is_active(workspace_id):
+   continue
   try:
    with workspace_scope(workspace_id):
     async with SessionLocal() as db:
@@ -268,6 +299,8 @@ async def ad_guardrail_monitor_job() -> dict[str, int]:
  """Periodically evaluate non-latched guardrails; this job never calls ad providers."""
  summary = {"workspaces_processed": 0, "guardrails_evaluated": 0, "guardrails_latched": 0, "guardrails_failed": 0}
  for workspace_id in await _background_workspace_ids():
+  if not await _workspace_is_active(workspace_id):
+   continue
   try:
    with workspace_scope(workspace_id):
     async with SessionLocal() as db:
@@ -383,7 +416,7 @@ async def require_auth(
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     if settings.app_env != "production" and not settings.initial_admin_email and not settings.api_access_token:
-        workspace = await db.scalar(select(Workspace).where(Workspace.slug == "local-development"))
+        workspace = await db.scalar(select(Workspace).where(Workspace.slug == "local-development", Workspace.lifecycle_state == "active"))
         user = {
             "email": "local-development",
             "is_admin": True,
@@ -412,6 +445,11 @@ async def require_auth(
                 raise HTTPException(403, "Account is inactive or no longer available")
             user["email"] = account.email
             user["is_admin"] = bool(account.is_admin)
+
+            workspace = await db.get(Workspace, str(workspace_id))
+            if workspace is None or getattr(workspace, "lifecycle_state", "active") != "active":
+                request.session.clear()
+                raise HTTPException(403, "Workspace is suspended or unavailable; contact a Platform Super Admin.")
 
             membership = await db.scalar(
                 select(WorkspaceMembership).where(
@@ -588,7 +626,9 @@ async def list_workspaces(user: dict[str, Any] = Depends(require_auth), db: Asyn
     return {
         "active_workspace_id": user.get("workspace_id"),
         "data": [{"id": workspace.id, "name": workspace.name, "slug": workspace.slug, "role": membership.role,
-                  "is_active": membership.is_active, "created_at": workspace.created_at.isoformat() if workspace.created_at else None}
+                  "is_active": membership.is_active, "lifecycle_state": workspace.lifecycle_state,
+                  "suspended_at": workspace.suspended_at.isoformat() if workspace.suspended_at else None,
+                  "created_at": workspace.created_at.isoformat() if workspace.created_at else None}
                  for workspace, membership in rows],
     }
 
@@ -600,6 +640,7 @@ async def current_workspace(user: dict[str, Any] = Depends(require_auth), db: As
     if workspace is None:
         raise HTTPException(404, "No active workspace")
     return {"id": workspace.id, "name": workspace.name, "slug": workspace.slug, "role": user.get("workspace_role"),
+            "lifecycle_state": workspace.lifecycle_state,
             "is_platform_admin": bool(user.get("is_admin"))}
 
 
@@ -613,6 +654,7 @@ async def create_workspace(payload: WorkspaceCreateRequest, request: Request,
         name=payload.name.strip(),
         slug=f"{_slugify(payload.name)}-{secrets.token_hex(4)}",
         owner_user_id=user_id,
+        lifecycle_state="active",
     )
     db.add(workspace)
     await db.flush()
@@ -646,6 +688,8 @@ async def switch_workspace(workspace_id: str, request: Request,
     workspace = await db.get(Workspace, workspace_id)
     if workspace is None:
         raise HTTPException(404, "Workspace not found")
+    if workspace.lifecycle_state != "active":
+        raise HTTPException(409, "Workspace is suspended and cannot be selected")
     updated_user = dict(user)
     updated_user["workspace_id"] = workspace.id
     updated_user["workspace_role"] = membership.role
@@ -9281,6 +9325,76 @@ async def platform_admin_overview(
     }
 
 
+async def _apply_workspace_lifecycle(
+    workspace_id: str,
+    payload: WorkspaceLifecycleActionRequest,
+    user: dict[str, Any],
+    db: AsyncSession,
+    *,
+    suspend: bool,
+) -> dict[str, Any]:
+    actor = str(user.get("email") or user.get("user_id") or "platform-admin")[:320]
+    if suspend and str(user.get("workspace_id") or "") == workspace_id:
+        raise HTTPException(409, "Switch to a different active workspace before suspending this administrative workspace.")
+
+    now = utcnow()
+    action = "suspended" if suspend else "reinstated"
+    with workspace_scope(None):
+        workspace = await db.scalar(select(Workspace).where(Workspace.id == workspace_id).with_for_update())
+        if workspace is None:
+            raise HTTPException(404, "Workspace not found")
+        expected_state = "active" if suspend else "suspended"
+        if workspace.lifecycle_state != expected_state:
+            if suspend and workspace.lifecycle_state == "suspended":
+                raise HTTPException(409, "Workspace is already suspended")
+            if not suspend and workspace.lifecycle_state == "active":
+                raise HTTPException(409, "Workspace is already active")
+            raise HTTPException(409, "Workspace lifecycle state is invalid; manual review is required")
+
+        previous_reason = workspace.suspension_reason
+        workspace.lifecycle_state = "suspended" if suspend else "active"
+        if suspend:
+            workspace.suspended_at = now
+            workspace.suspended_by = actor
+            workspace.suspension_reason = payload.reason
+        else:
+            workspace.suspended_at = None
+            workspace.suspended_by = None
+            workspace.suspension_reason = None
+        await db.flush()
+
+    with workspace_scope(workspace_id):
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=actor,
+            action="workspace.lifecycle.suspended" if suspend else "workspace.lifecycle.reinstated",
+            resource_type="workspace",
+            resource_id=workspace_id,
+            outcome=action,
+            details_json={
+                "reason": payload.reason,
+                "previous_state": expected_state,
+                "new_state": workspace.lifecycle_state,
+                "previous_suspension_reason": previous_reason if not suspend else None,
+                "scheduled_jobs_excluded_while_suspended": True,
+                "workflow_runner_boundary": "no new stage begins after suspension is observed",
+                "in_flight_external_action_rolled_back": False,
+            },
+        ))
+        await db.commit()
+
+    return {
+        "id": workspace.id,
+        "name": workspace.name,
+        "slug": workspace.slug,
+        "lifecycle_state": workspace.lifecycle_state,
+        "suspended_at": workspace.suspended_at.isoformat() if workspace.suspended_at else None,
+        "suspended_by": workspace.suspended_by,
+        "suspension_reason": workspace.suspension_reason,
+        "active_workspace_id": user.get("workspace_id"),
+    }
+
+
 @api.get("/admin/tenants")
 async def platform_admin_tenants(
     limit: int = Query(100, ge=1, le=500),
@@ -9299,7 +9413,8 @@ async def platform_admin_tenants(
         "count": len(rows),
         "limit": limit,
         "read_only": True,
-        "lifecycle_mutations_available": False,
+        "lifecycle_mutations_available": True,
+        "active_workspace_id": user.get("workspace_id"),
         "data": [
             {
                 "id": row.id,
@@ -9308,11 +9423,34 @@ async def platform_admin_tenants(
                 "owner_user_id": row.owner_user_id,
                 "active_memberships": member_counts.get(str(row.id), 0),
                 "created_at": row.created_at.isoformat() if row.created_at else None,
-                "lifecycle_state": "not_modeled",
+                "lifecycle_state": row.lifecycle_state,
+                "suspended_at": row.suspended_at.isoformat() if row.suspended_at else None,
+                "suspended_by": row.suspended_by,
+                "suspension_reason": row.suspension_reason,
             }
             for row in rows
         ],
     }
+
+
+@api.post("/admin/tenants/{workspace_id}/suspend")
+async def suspend_workspace(
+    workspace_id: str,
+    payload: WorkspaceLifecycleActionRequest,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    return await _apply_workspace_lifecycle(workspace_id, payload, user, db, suspend=True)
+
+
+@api.post("/admin/tenants/{workspace_id}/reinstate")
+async def reinstate_workspace(
+    workspace_id: str,
+    payload: WorkspaceLifecycleActionRequest,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    return await _apply_workspace_lifecycle(workspace_id, payload, user, db, suspend=False)
 
 
 @api.get("/admin/workflows")

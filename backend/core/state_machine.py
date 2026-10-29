@@ -9,7 +9,7 @@ from backend.config import get_settings
 from backend.core.errors import VerificationRequiredError
 from backend.core.events import hub
 from backend.database import SessionLocal
-from backend.models import AuditLog,PausedSession,WorkflowRun
+from backend.models import AuditLog,PausedSession,WorkflowRun,Workspace
 from backend.tenancy import get_workspace_id,workspace_scope
 logger=logging.getLogger(__name__)
 WORKFLOW_LEASE_SECONDS=60
@@ -70,6 +70,9 @@ class WorkflowRunner:
   state.setdefault("metadata",{}).update({"workflow":name,"execution_mode":mode,"started_at":now.isoformat(),"workspace_id":workspace_id})
   with workspace_scope(workspace_id):
    async with SessionLocal() as db:
+    workspace = await db.get(Workspace, workspace_id)
+    if workspace is None or workspace.lifecycle_state != "active":
+     raise ValueError("Cannot start a workflow in a suspended or unavailable workspace")
     db.add(WorkflowRun(
      id=sid,workspace_id=workspace_id,workflow_name=name,status="queued",execution_mode=mode,
      state_json=state,lease_owner=self.worker_id,
@@ -259,6 +262,16 @@ class WorkflowRunner:
    async with SessionLocal() as db:
     row=await db.get(WorkflowRun,sid)
     if row is None or row.workspace_id!=workspace_id:return False
+    workspace = await db.get(Workspace, workspace_id)
+    if workspace is None or workspace.lifecycle_state != "active":
+     control = state.setdefault("control", {}) if isinstance(state, dict) else {}
+     if isinstance(control, dict):
+      control["cancel_requested"] = True
+      control["cancel_reason"] = "workspace_suspended" if workspace is not None else "workspace_unavailable"
+      control["cancel_requested_by"] = "system:workspace-lifecycle"
+      control.setdefault("cancel_requested_at", datetime.now(timezone.utc).isoformat())
+      state["control"] = control
+     return True
     stored_state=row.state_json if isinstance(row.state_json,dict) else {}
     control=stored_state.get("control") if isinstance(stored_state.get("control"),dict) else {}
     return row.status=="cancelled" or control.get("cancel_requested") is True
@@ -353,7 +366,14 @@ class WorkflowRunner:
     actor=str(control.get("cancel_requested_by") or actor)[:320]
     safe["control"]=control
     row.status="cancelled";row.current_step=index;row.state_json=safe;row.result_json=safe
-    row.error_message="Workflow cancelled by operator at a safe checkpoint."
+    cancel_reason = str(control.get("cancel_reason") or "operator_requested")
+    row.error_message = (
+     "Workflow stopped because its workspace was suspended at a safe checkpoint."
+     if cancel_reason == "workspace_suspended"
+     else "Workflow cancelled because its workspace is unavailable."
+     if cancel_reason == "workspace_unavailable"
+     else "Workflow cancelled by operator at a safe checkpoint."
+    )
     row.finished_at=row.finished_at or now
     paused=await db.get(PausedSession,sid)
     if paused is not None and paused.workspace_id==workspace_id:
@@ -370,6 +390,7 @@ class WorkflowRunner:
       details_json={
        "current_step":index,
        "safe_boundary":True,
+       "reason":cancel_reason,
        "in_flight_external_action_rolled_back":False,
       },
      ))

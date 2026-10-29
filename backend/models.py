@@ -340,8 +340,16 @@ class Workspace(Base):
     name: Mapped[str] = mapped_column(String(160))
     slug: Mapped[str] = mapped_column(String(140), unique=True, index=True)
     owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("user_accounts.id"), nullable=True, index=True)
+    lifecycle_state: Mapped[str] = mapped_column(String(20), default="active", server_default="active", nullable=False, index=True)
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspended_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    suspension_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("lifecycle_state", "active")
+        super().__init__(**kwargs)
 
 
 class WorkspaceMembership(Base):

@@ -112,6 +112,10 @@ def test_affiliate_offer_catalog_searches_filters_sorts_and_paginates_without_cl
         }
 
     def handle_catalog(route):
+        path = urlparse(route.request.url).path
+        if path == "/api/offers/shortlists" and route.request.method == "GET":
+            _fulfill_json(route, {"count": 0, "limit": 100, "data": []})
+            return
         query = parse_qs(urlparse(route.request.url).query)
         requests.append(query)
         offset = int(query.get("offset", ["0"])[0])
@@ -995,5 +999,94 @@ def test_commission_calculator_shows_and_reloads_workspace_saved_projection_hist
             page.get_by_role("button", name="View saved results").click()
             assert page.get_by_text("Loaded saved projection. It remains a draft requiring review.").count() == 1
             assert page.get_by_text("USD 120.000000").count() >= 1
+        finally:
+            browser.close()
+
+
+def test_offer_shortlist_ui_creates_saves_compares_and_removes_persisted_catalog_items():
+    import json
+
+    lists: list[dict] = []
+    saved: list[dict] = []
+    offer = {
+        "id": "offer-shortlist-1", "network": "openaffiliate", "external_id": "creator-suite",
+        "name": "Creator Suite", "url": "https://merchant.example/creator-suite", "category": "creator",
+        "description": "Email and analytics tools", "reward_type": "recurring_percentage", "reward_value": "20",
+        "cookie_days": 45, "traffic_score": None, "gravity_score": None, "normalized_gravity": None,
+        "epc": None, "conversion_rate": None, "recurring_commission": True, "source_stars": None,
+        "verified": False, "verification_basis": "provider_not_verified_or_unknown",
+        "source_url": None, "updated_at": None,
+    }
+
+    def summary(item):
+        return {"id": item["id"], "name": item["name"], "description": "", "item_count": len(saved),
+                "created_at": None, "updated_at": None}
+
+    def detail():
+        return {"id": "shortlist-1", "name": "Creator research", "description": "", "count": len(saved),
+                "items": [{"item_id": "saved-item-1", "note": "", "added_at": None, "offer": offer} for _ in saved]}
+
+    def handle_api(route):
+        path = urlparse(route.request.url).path
+        method = route.request.method
+        if path == "/api/auth/me":
+            _fulfill_json(route, {"authenticated": True, "user": {"email": "owner@example.invalid", "is_admin": False,
+                "workspace_id": "browser-workspace", "workspace_role": "owner"}, "csrf_token": "browser-csrf-token"})
+            return
+        if path == "/api/offers/shortlists":
+            if method == "GET":
+                _fulfill_json(route, {"count": len(lists), "limit": 100, "data": [summary(item) for item in lists]})
+            elif method == "POST":
+                body = json.loads(route.request.post_data or "{}")
+                item = {"id": "shortlist-1", "name": body["name"]}
+                lists[:] = [item]
+                _fulfill_json(route, {**summary(item), "item_count": 0}, status=201)
+            else:
+                _fulfill_json(route, {"detail": "unsupported"}, status=405)
+            return
+        if path == "/api/offers/shortlists/shortlist-1":
+            if method == "GET":
+                _fulfill_json(route, detail())
+            elif method == "DELETE":
+                lists.clear(); saved.clear()
+                _fulfill_json(route, {"deleted": True, "id": "shortlist-1"})
+            else:
+                _fulfill_json(route, {"detail": "unsupported"}, status=405)
+            return
+        if path == "/api/offers/shortlists/shortlist-1/items":
+            if method == "POST":
+                saved.append({"offer_id": offer["id"]})
+                _fulfill_json(route, {"id": "saved-item-1", "shortlist_id": "shortlist-1", "offer_id": offer["id"], "note": ""}, status=201)
+            else:
+                _fulfill_json(route, {"detail": "unsupported"}, status=405)
+            return
+        if path == "/api/offers/shortlists/shortlist-1/items/offer-shortlist-1" and method == "DELETE":
+            saved.clear()
+            _fulfill_json(route, {"deleted": True, "shortlist_id": "shortlist-1", "offer_id": offer["id"]})
+            return
+        if path == "/api/offers" or path.startswith("/api/offers?"):
+            _fulfill_json(route, {"count": 1, "total_count": 1, "offset": 0, "limit": 20, "data": [offer]})
+            return
+        _fulfill_json(route, {"detail": "unexpected request"}, status=404)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/api/**", handle_api)
+            page.goto(f"{BASE_URL}/offers", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Affiliate offer catalog").wait_for(state="visible")
+            page.get_by_label("Create a saved list").fill("Creator research")
+            page.get_by_role("button", name="Create list").click()
+            page.get_by_role("status", name="").filter(has_text="Saved offer list created").wait_for(state="visible")
+            page.get_by_label("Choose list to manage").select_option("shortlist-1")
+            page.get_by_role("button", name="Save to selected list").click()
+            page.get_by_test_id("selected-shortlist-items").get_by_text("Creator Suite").wait_for(state="visible")
+            assert "EPC Unknown" in page.get_by_test_id("selected-shortlist-items").inner_text()
+            page.get_by_role("button", name="Remove").click()
+            page.get_by_text("This list is empty.", exact=False).wait_for(state="visible")
+            page.get_by_role("button", name="Delete list").click()
+            page.get_by_text("No saved lists yet.", exact=False).wait_for(state="visible")
+            assert page.locator("main [role='alert']").count() == 0
         finally:
             browser.close()

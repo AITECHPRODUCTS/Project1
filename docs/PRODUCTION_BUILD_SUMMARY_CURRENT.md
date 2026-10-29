@@ -3,9 +3,18 @@
 **As of:** 29 October 2026  
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
 **Existing implementation branch:** build/omni-affiliate-os-production  
-**Latest verified code SHA:** c31459af067540eb35b033ca5fb4d8532962be21  
+**Latest verified code SHA:** b576807c9a6bea9a6f1d1ab1c6654d443f06641b  
 **PR #1:** open, draft, unmerged  
 **Release status:** **NOT PRODUCTION READY**
+
+## Latest verified P0 fix — account/session privilege revalidation (29 October 2026)
+
+- Code SHA: b576807c9a6bea9a6f1d1ab1c6654d443f06641b on the existing build/omni-affiliate-os-production branch.
+- Authentication now reloads the authoritative UserAccount row for a session-backed workspace user on each request. Missing/inactive accounts invalidate the session, and the session's email and is_admin flag are refreshed from the database before workspace role checks. Revoking Platform Super Admin in the database therefore takes effect without waiting for the signed session cookie to expire.
+- Added four regression tests covering a revoked platform-admin grant, a suspended account, a missing account row and a newly granted admin permission. The checks do not grant workspace owners/admins platform-admin rights.
+- Exact-SHA push [40914232006](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40914232006) and PR [40914245417](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40914245417) passed. Python: **823 passed, 9 skipped, 5 warnings**; Chromium browser UAT: **29 passed**; PostgreSQL migration/integration, frontend typecheck/build/final Docker smoke, AI/RAG profile, security/SBOM audit, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- The runtime authorization fix does not complete the separate Platform Super Admin console lifecycle, provider/account authorization, production staging or release gates. Product remains **NOT PRODUCTION READY**.
+
 
 ## What is built in the current branch
 

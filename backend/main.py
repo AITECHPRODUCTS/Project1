@@ -3827,9 +3827,12 @@ async def create_comparison_post(
                 "word_count": result["word_count"],
                 "minimum_word_target": result["minimum_word_target"],
                 "minimum_word_target_met": result["minimum_word_target_met"],
-                "evidence_status": "operator_supplied_unverified",
+                "evidence_status": result.get("evidence_status", "operator_supplied_unverified"),
                 "product_facts_independently_verified": False,
-                "external_product_sources_fetched": False,
+                "external_product_sources_fetched": bool(result.get("external_product_sources_fetched", False)),
+                "source_snapshots": result.get("source_snapshots", [])[:10],
+                "fact_evidence": result.get("fact_evidence", [])[:60],
+                "evidence_summary": result.get("evidence_summary", {}),
                 "requires_review": True,
                 "publishing_started": False,
                 "model_provider": result["provider"],
@@ -3848,7 +3851,10 @@ async def create_comparison_post(
                 "product_count": result["product_count"],
                 "decision_criteria_count": len(result["decision_criteria"]),
                 "unknown_fact_count": result["unknown_fact_count"],
-                "evidence_status": "operator_supplied_unverified",
+                "evidence_status": result.get("evidence_status", "operator_supplied_unverified"),
+                "source_snapshots_fetched": (result.get("evidence_summary") or {}).get("source_snapshots_fetched", 0),
+                "exact_text_match_count": (result.get("evidence_summary") or {}).get("exact_text_match_count", 0),
+                "exact_text_not_found_count": (result.get("evidence_summary") or {}).get("exact_text_not_found_count", 0),
                 "product_facts_independently_verified": False,
                 "publishing_started": False,
             },
@@ -3858,8 +3864,8 @@ async def create_comparison_post(
     result["asset_id"] = asset.id
     result["asset_status"] = asset.status
     result["execution_boundary"] = (
-        "Workspace-owned review draft. Facts and HTTPS source references are operator supplied and are not fetched, "
-        "independently verified, approved for compliance, or published. Missing comparison values remain unknown."
+        "Workspace-owned review draft. Public sources are fetched through the pinned transport into bounded snapshots. "
+        "Exact text matches establish text presence only, not factual truth, currentness, eligibility, compliance approval or publication readiness."
     )
     return result
 

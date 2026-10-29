@@ -254,6 +254,9 @@ class ComparisonPostRequest(BaseModel):
         names = [product.name.casefold() for product in self.products]
         if len(set(names)) != len(names):
             raise ValueError("product names must be unique, ignoring case")
+        source_urls = {url for product in self.products for url in product.source_urls}
+        if len(source_urls) > 10:
+            raise ValueError("a comparison can contain no more than ten unique source URLs total")
         return self
 
 

@@ -46,8 +46,11 @@ def test_comparison_writer_saves_review_draft_and_displays_unknown_facts():
             ],
         }],
         "unknown_fact_count": 1,
-        "source_urls": [],
-        "evidence_status": "operator_supplied_unverified",
+        "source_urls": ["https://vendor.example/alpha"],
+        "source_snapshots": [{"source_id": "S01", "url": "https://vendor.example/alpha", "product_names": ["Product Alpha"], "title": "Alpha evidence", "status": "fetched", "http_status": 200, "content_type": "text/html", "fetched_at": "2026-10-29T00:00:00+00:00", "excerpt": "Price $20 appears in the captured page.", "excerpt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "error_type": None, "detail": None}],
+        "fact_evidence": [{"product": "Product Alpha", "fact_name": "Price", "supplied_value": "Not supplied — verify", "source_id": None, "source_url": None, "excerpt_sha256": None, "exact_text_match": False, "evidence_status": "not_supplied", "editorial_review_required": True}],
+        "evidence_summary": {"source_count": 1, "source_snapshots_fetched": 1, "source_snapshots_failed": 0, "fact_count": 1, "exact_text_match_count": 0, "exact_text_not_found_count": 0, "facts_not_compared": 1, "interpretation": "A text match is not fact verification."},
+        "evidence_status": "public_snapshot_captured_not_fact_verified",
         "product_facts_independently_verified": False,
         "external_product_sources_fetched": False,
         "requires_review": True,
@@ -79,6 +82,8 @@ def test_comparison_writer_saves_review_draft_and_displays_unknown_facts():
             ]))
             page.get_by_role("button", name="Generate comparison draft").click()
             page.get_by_text("Unknown table cells", exact=True).wait_for(state="visible")
+            page.get_by_text("Fetched snapshots", exact=True).wait_for(state="visible")
+            page.get_by_text("S01 · Alpha evidence · fetched", exact=True).wait_for(state="visible")
             page.get_by_text("Not supplied — verify", exact=True).wait_for(state="visible")
             page.get_by_text("operator supplied unverified", exact=False).wait_for(state="visible")
             page.get_by_title("Comparison article preview").wait_for(state="visible")

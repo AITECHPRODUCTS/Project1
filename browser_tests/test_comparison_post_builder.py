@@ -251,7 +251,7 @@ def test_saved_comparison_draft_can_be_reopened_after_page_reload():
             assert page.get_by_label("Affiliate disclosure").input_value() == stored["affiliate_disclosure"]
             page.get_by_label("Topic").fill("Revised analytics products")
             page.get_by_role("button", name="Save new revision").click()
-            page.get_by_role("heading", name="Revised analytics products — Product Comparison").wait_for(state="visible")
+            page.get_by_role("heading", name="Revised analytics products — Product Comparison", exact=True).last.wait_for(state="visible")
             page.get_by_text("Saved a new draft revision. The original remains unchanged.", exact=True).wait_for(state="visible")
             assert revision_posts and revision_posts[0]["revision_of_asset_id"] == "saved-comparison-77"
             assert revision_posts[0]["topic"] == "Revised analytics products"

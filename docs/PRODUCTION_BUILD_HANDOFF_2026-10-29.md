@@ -34,6 +34,14 @@ This is a status/handoff document, not evidence that new application code or dep
 ## Requirement/source inventory
 The Library audit records 35 items at its 27 October checkpoint, representing 21 unique content identities after exact duplicate grouping. Important source material includes `Pasted text.txt`, `Pasted text(1–6).txt`, `Pasted markdown (2).md`, the v3 blueprint, the v4 requirements corpus, `OmniAffiliateOS_build.zip`, and the affiliate-skills archive. Duplicate files should not be double-counted. The affiliate-skills archive is a skill library, not a deployable application. The separately described newer ZIP of an already-live app was not present in the inspected inventory; do not claim its code was ported or reviewed until it is available.
 
+## 2026-10-29 additive code checkpoint (verification pending)
+
+- Current feature commits: `541bbed505dc41b831dfce28747420dc313dd03f` (service hardening) and `5283e4049f1b7a9aebae0998b31f6790aa279a5a` (regression tests). The working branch head was re-read as `5283e4049f1b7a9aebae0998b31f6790aa279a5a` before this note was prepared.
+- Changed `backend/services/content_decay_detector.py`: direct service calls now reject malformed freshness dates, future publish/update dates, and last-updated dates preceding publication instead of silently treating invalid freshness evidence as absent. Numeric validation remains in place. This protects the content-decay review queue from misleading age signals.
+- Changed `tests/test_content_decay_detector.py`: added parameterized regressions for malformed/future dates, chronology inversion, and a valid old page still being placed in the needs-more-data freshness-review path. These tests have been committed but have **not yet been verified by a completed run on the final code SHA**.
+- The CI runs started for the intermediate service commit were superseded/cancelled by branch concurrency before all jobs completed. Do not treat those runs as verification of the final tests commit. A fresh exact-SHA run is required.
+- Existing verified baseline immediately before this code change: commit `4885c01deb0e4d4cbfc7b7af17d3ab1d9e435289`, push run [40815420346](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40815420346) and PR run [40815426572](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40815426572), both completed successfully across configured jobs.
+
 ## Verification rules
 - Keep work on the existing branch; do not create a branch, reset, force-push, or overwrite unrelated code.
 - Add focused regression tests with every feature and preserve safety/approval boundaries.

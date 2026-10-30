@@ -124,6 +124,27 @@ def test_clickbank_workspace_isolation_permissions_test_and_disconnect(monkeypat
                 params={"start_date":"2026-10-01","end_date":"2026-10-30","account":"not-linked"},
             )
             assert unknown.status_code==404
+            async def order_counts(_key, *, account, start_date, end_date):
+                assert account=="creator-main"
+                assert start_date.isoformat()=="2026-10-01"
+                assert end_date.isoformat()=="2026-10-30"
+                return {"account":account,"transaction_types":{"SALE":5,"RFND":1,"CGBK":0},
+                        "counts":{"sales":5,"refunds":1,"chargebacks":0}}
+            monkeypatch.setattr(main,"fetch_clickbank_order_counts",order_counts)
+            count_report=client.get(
+                f"/api/provider-connections/{connection_id}/order-counts",
+                params={"start_date":"2026-10-01","end_date":"2026-10-30","account":"creator-main"},
+            )
+            assert count_report.status_code==200,count_report.text
+            assert count_report.json()["evidence_type"]=="provider_reported_transaction_counts"
+            assert count_report.json()["metric_scope"]=="affiliate_sale_refund_chargeback_counts_not_commission_or_payout_amounts"
+            assert count_report.json()["counts"]=={"sales":5,"refunds":1,"chargebacks":0}
+            unlinked_count=client.get(
+                f"/api/provider-connections/{connection_id}/order-counts",
+                params={"start_date":"2026-10-01","end_date":"2026-10-30","account":"not-linked"},
+            )
+            assert unlinked_count.status_code==404
+
 
             removed=client.delete(f"/api/provider-connections/{connection_id}")
             assert removed.status_code==200,removed.text

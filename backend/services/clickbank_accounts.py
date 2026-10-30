@@ -230,3 +230,79 @@ async def fetch_clickbank_quickstats(
             values = [Decimal(row[metric]) for row in result["daily"] if row[metric] is not None]
             result["totals"][metric] = format(sum(values, Decimal(0)), "f") if values else None
     return result
+
+
+
+CLICKBANK_ORDERS_COUNT_URL = "https://api.clickbank.com/rest/1.3/orders2/count"
+CLICKBANK_AFFILIATE_TRANSACTION_TYPES = ("SALE", "RFND", "CGBK")
+
+
+def _normalize_order_count(payload: Any) -> int:
+    value: Any = payload
+    if isinstance(payload, dict):
+        if "count" not in payload:
+            raise ClickBankProviderUnavailable("ClickBank returned an unsupported Orders count response.")
+        value = payload["count"]
+    if isinstance(value, bool):
+        raise ClickBankProviderUnavailable("ClickBank returned an invalid order count.")
+    if isinstance(value, str):
+        if not re.fullmatch(r"\d{1,10}", value.strip()):
+            raise ClickBankProviderUnavailable("ClickBank returned an invalid order count.")
+        value = int(value.strip())
+    if not isinstance(value, int) or value < 0 or value > 2_147_483_647:
+        raise ClickBankProviderUnavailable("ClickBank returned an invalid order count.")
+    return value
+
+
+async def fetch_clickbank_order_counts(
+    api_key: str,
+    *,
+    account: str,
+    start_date: date,
+    end_date: date,
+) -> dict[str, Any]:
+    """Read aggregate affiliate transaction counts only; never fetch customer order rows."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", account):
+        raise ClickBankAccessError("The selected ClickBank affiliate nickname is invalid.")
+
+    counts: dict[str, int] = {}
+    for transaction_type in CLICKBANK_AFFILIATE_TRANSACTION_TYPES:
+        try:
+            payload = await request_public_json(
+                CLICKBANK_ORDERS_COUNT_URL,
+                method="GET",
+                params={
+                    "affiliate": account,
+                    "role": "AFFILIATE",
+                    "startDate": start_date.isoformat(),
+                    "endDate": end_date.isoformat(),
+                    "type": transaction_type,
+                },
+                headers={"Authorization": api_key, "Accept": "application/json"},
+                timeout=8.0,
+                max_bytes=16_000,
+            )
+        except httpx.HTTPStatusError as exc:
+            status = int(exc.response.status_code)
+            if status in {401, 403}:
+                raise ClickBankAccessError(
+                    "ClickBank rejected affiliate Orders count access. Confirm API Order Read permission for the selected account nickname."
+                ) from None
+            if status == 429:
+                raise ClickBankProviderUnavailable("ClickBank rate-limited the Orders count request. Try again later.") from None
+            raise ClickBankProviderUnavailable(f"ClickBank returned HTTP {status} while retrieving Orders counts.") from None
+        except (httpx.RequestError, TimeoutError):
+            raise ClickBankProviderUnavailable("Could not reach ClickBank's Orders count endpoint.") from None
+        except ValueError:
+            raise ClickBankProviderUnavailable("ClickBank returned invalid Orders count JSON.") from None
+        counts[transaction_type] = _normalize_order_count(payload)
+
+    return {
+        "account": account,
+        "transaction_types": counts,
+        "counts": {
+            "sales": counts["SALE"],
+            "refunds": counts["RFND"],
+            "chargebacks": counts["CGBK"],
+        },
+    }

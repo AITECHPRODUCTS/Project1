@@ -78,3 +78,34 @@ async def test_quickstats_rejects_unparseable_money(monkeypatch):
     with pytest.raises(clickbank.ClickBankProviderUnavailable,match="invalid sales amount"):
         await clickbank.fetch_clickbank_quickstats(
             "API-"+"x"*40,start_date=date(2026,10,1),end_date=date(2026,10,1),account="creator-main")
+
+
+
+@pytest.mark.asyncio
+async def test_orders_count_calls_are_affiliate_scoped_and_date_bounded(monkeypatch):
+    calls=[]
+    async def fake_request(url,**kwargs):
+        calls.append((url,kwargs))
+        return {"count":{"SALE":7,"RFND":2,"CGBK":1}[kwargs["params"]["type"]]}
+    monkeypatch.setattr(clickbank,"request_public_json",fake_request)
+    from datetime import date
+    result=await clickbank.fetch_clickbank_order_counts(
+        "API-"+"x"*40,account="creator-main",
+        start_date=date(2026,10,1),end_date=date(2026,10,30))
+    assert len(calls)==3
+    assert all(url=="https://api.clickbank.com/rest/1.3/orders2/count" for url,_ in calls)
+    assert all(kwargs["params"]["affiliate"]=="creator-main" for _,kwargs in calls)
+    assert all(kwargs["params"]["role"]=="AFFILIATE" for _,kwargs in calls)
+    assert all(kwargs["params"]["startDate"]=="2026-10-01" and kwargs["params"]["endDate"]=="2026-10-30" for _,kwargs in calls)
+    assert result["counts"]=={"sales":7,"refunds":2,"chargebacks":1}
+
+
+@pytest.mark.asyncio
+async def test_orders_count_rejects_malformed_counts(monkeypatch):
+    async def fake_request(url,**kwargs): return {"count":"-1"}
+    monkeypatch.setattr(clickbank,"request_public_json",fake_request)
+    from datetime import date
+    with pytest.raises(clickbank.ClickBankProviderUnavailable,match="invalid order count"):
+        await clickbank.fetch_clickbank_order_counts(
+            "API-"+"x"*40,account="creator-main",
+            start_date=date(2026,10,1),end_date=date(2026,10,1))

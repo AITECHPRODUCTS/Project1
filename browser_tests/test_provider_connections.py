@@ -32,6 +32,12 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
                         "period":{"start_date":"2026-10-01","end_date":"2026-10-30"},
                         "accounts":["creator-main"],"daily":[{"account":"creator-main","date":"2026-10-01","sales":"10","refunds":"1","chargebacks":"0"}],
                         "totals":{"sales":"10","refunds":"1","chargebacks":"0"}})
+                elif request.method=="GET" and "/api/provider-connections/cb-1/order-counts?" in request.url:
+                    _fulfill(route,{"provider_id":"clickbank","evidence_type":"provider_reported_transaction_counts",
+                        "metric_scope":"affiliate_sale_refund_chargeback_counts_not_commission_or_payout_amounts",
+                        "period":{"start_date":"2026-10-01","end_date":"2026-10-30"},"account":"creator-main",
+                        "transaction_types":{"SALE":4,"RFND":1,"CGBK":0},
+                        "counts":{"sales":4,"refunds":1,"chargebacks":0}})
                 elif request.method=="POST" and request.url.endswith("/api/provider-connections/cb-1/test"):
                     _fulfill(route,connections[0])
                 elif request.method=="DELETE" and request.url.endswith("/api/provider-connections/cb-1"):
@@ -49,6 +55,9 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
             page.get_by_role("button",name="Load last 30 days").click()
             page.get_by_text("Provider-reported aggregate",exact=False).wait_for(state="visible")
             assert page.get_by_text("sales/refund/chargeback aggregates",exact=False).is_visible()
+            page.get_by_role("button",name="Load 30-day order counts").click()
+            page.get_by_text("Provider-reported affiliate transaction counts",exact=false).wait_for(state="visible")
+            assert page.get_by_text("Counts only.",exact=false).is_visible()
             page.get_by_role("button",name="Test connection").click()
             page.get_by_text("ClickBank read-only account verification passed.").wait_for(state="visible")
             page.get_by_role("button",name="Disconnect").click()

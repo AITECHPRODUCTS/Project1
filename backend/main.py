@@ -73,7 +73,7 @@ from backend.services.integration_registry import build_network_registry
 from backend.services.clickbank_accounts import (
     ClickBankAccessError, ClickBankProviderUnavailable, StoredCredentialError,
     decrypt_clickbank_api_key, encrypt_clickbank_api_key,
-    fingerprint_clickbank_api_key, verify_clickbank_api_key, fetch_clickbank_quickstats,
+    fingerprint_clickbank_api_key, verify_clickbank_api_key, fetch_clickbank_quickstats, fetch_clickbank_order_counts,
 )
 from backend.services.capability_matrix import build_capability_matrix
 from backend.services.offer_intelligence import compute_offer_metrics
@@ -1163,6 +1163,114 @@ async def clickbank_provider_quickstats(
         "provider_id":"clickbank",
         "evidence_type":"provider_reported_aggregate",
         "metric_scope":"sales_refunds_chargebacks_not_affiliate_commission_or_payout",
+        "period":{"start_date":start_date.isoformat(),"end_date":end_date.isoformat()},
+        **report,
+    }
+
+
+@api.get("/provider-connections/{connection_id}/order-counts")
+async def clickbank_provider_order_counts(
+    connection_id: str,
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    account: str = Query(..., min_length=1, max_length=100),
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    if start_date > end_date:
+        raise HTTPException(422, "start_date must be on or before end_date.")
+    if end_date > date.today():
+        raise HTTPException(422, "end_date cannot be in the future.")
+    if (end_date - start_date).days > 365:
+        raise HTTPException(422, "Orders count date ranges are limited to 366 inclusive days.")
+
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id,
+            ProviderAccountConnection.workspace_id == workspace_id,
+        ))
+    if row is None:
+        raise HTTPException(404, "Provider connection not found in the active workspace.")
+    if row.provider_id != "clickbank" or row.status == "disconnected" or not row.credential_ciphertext:
+        raise HTTPException(409, "An active ClickBank read-only connection is required.")
+    if account.casefold() not in {name.casefold() for name in (row.account_nicknames_json or [])}:
+        raise HTTPException(404, "The selected affiliate nickname is not linked to this provider connection.")
+
+    try:
+        api_key = decrypt_clickbank_api_key(row.credential_ciphertext, row.credential_key_version)
+        report = await fetch_clickbank_order_counts(
+            api_key, account=account, start_date=start_date, end_date=end_date,
+        )
+    except StoredCredentialError:
+        with workspace_scope(workspace_id):
+            row.status = "degraded"
+            row.last_error_code = "credential_decryption_failed"
+            row.last_checked_at = utcnow()
+            await db.commit()
+        raise HTTPException(503, "Stored ClickBank credentials cannot be decrypted. Reconnect the account.") from None
+    except ClickBankAccessError as exc:
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_order_counts_read",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="permission_rejected",
+                details_json={
+                    "provider_id":"clickbank",
+                    "account":account,
+                    "start_date":start_date.isoformat(),
+                    "end_date":end_date.isoformat(),
+                },
+            ))
+            await db.commit()
+        raise HTTPException(422, str(exc)) from None
+    except ClickBankProviderUnavailable as exc:
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_order_counts_read",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="provider_unavailable",
+                details_json={
+                    "provider_id":"clickbank",
+                    "account":account,
+                    "start_date":start_date.isoformat(),
+                    "end_date":end_date.isoformat(),
+                },
+            ))
+            await db.commit()
+        raise HTTPException(502, str(exc)) from None
+
+    with workspace_scope(workspace_id):
+        row.last_checked_at = utcnow()
+        row.last_error_code = None
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_order_counts_read",
+            resource_type="provider_account_connection",
+            resource_id=row.id,
+            outcome="provider_reported",
+            details_json={
+                "provider_id":"clickbank",
+                "account":account,
+                "start_date":start_date.isoformat(),
+                "end_date":end_date.isoformat(),
+                "evidence_type":"provider_reported_transaction_counts",
+            },
+        ))
+        await db.commit()
+    return {
+        "provider_id":"clickbank",
+        "evidence_type":"provider_reported_transaction_counts",
+        "metric_scope":"affiliate_sale_refund_chargeback_counts_not_commission_or_payout_amounts",
         "period":{"start_date":start_date.isoformat(),"end_date":end_date.isoformat()},
         **report,
     }

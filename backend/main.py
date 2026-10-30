@@ -2880,7 +2880,11 @@ async def capture_offer_evidence_snapshots(
                 "source_id": row.id,
                 "url": row.source_url,
                 "status": row.fetch_status,
-                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+                "fetched_at": (
+                    row.fetched_at.replace(tzinfo=timezone.utc)
+                    if row.fetched_at and row.fetched_at.tzinfo is None
+                    else row.fetched_at
+                ).isoformat() if row.fetched_at else None,
             }
             for row in rows
         ],
@@ -2941,7 +2945,11 @@ async def list_offer_evidence_snapshots(
                 "source_id": row.id,
                 "url": row.source_url,
                 "status": row.fetch_status,
-                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+                "fetched_at": (
+                    row.fetched_at.replace(tzinfo=timezone.utc)
+                    if row.fetched_at and row.fetched_at.tzinfo is None
+                    else row.fetched_at
+                ).isoformat() if row.fetched_at else None,
             }
             for row in latest
         ],

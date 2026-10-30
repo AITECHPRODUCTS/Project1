@@ -209,7 +209,7 @@ def test_flipkart_connect_search_products_load_offers_and_disconnect():
             page.get_by_test_id("flipkart-product-results").wait_for(state="visible")
             assert seen["product_search"] == {"query": "mobile phone", "result_count": 10}
             assert page.get_by_text("Sample Android Phone", exact=True).is_visible()
-            assert page.get_by_text("INR 12999", exact=True).is_visible()
+            assert page.get_by_test_id("flipkart-product-price").inner_text().startswith("INR 12999")
             assert page.get_by_text("Commission rate, cookie duration", exact=False).is_visible()
 
             page.get_by_role("button", name="Load active offers").click()

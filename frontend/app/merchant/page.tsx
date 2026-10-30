@@ -118,7 +118,7 @@ export default function MerchantDashboardPage() {
 
         {!loading && snapshot && (
           <>
-            <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Merchant workspace summary">
+            <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-6" aria-label="Merchant workspace summary">
               <article className={statCard}>
                 <p className="text-sm font-semibold text-slate-500">Offer records loaded</p>
                 <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-offers">{snapshot.offerCount}</p>
@@ -138,6 +138,11 @@ export default function MerchantDashboardPage() {
                 <p className="text-sm font-semibold text-slate-500">Affiliate applications pending</p>
                 <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-applications">{snapshot.pendingApplications}</p>
                 <p className="mt-1 text-xs text-slate-500">Total pending review for this merchant workspace.</p>
+              </article>
+              <article className={statCard}>
+                <p className="text-sm font-semibold text-slate-500">Approved internally</p>
+                <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-internal-approved">{internallyApproved}</p>
+                <p className="mt-1 text-xs text-slate-500">Merchant workspace approval only; it does not imply affiliate-network approval.</p>
               </article>
               <article className={statCard}>
                 <p className="text-sm font-semibold text-slate-500">Marked network-approved</p>

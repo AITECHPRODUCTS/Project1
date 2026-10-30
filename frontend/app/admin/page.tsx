@@ -35,6 +35,16 @@ type WorkspaceTenantResponse = {
   data:WorkspaceTenant[];
 };
 
+type PlatformOverview = {
+  counts:{users:number;workspaces:number;active_workspace_memberships:number;workflow_runs_persisted:number;audit_events_persisted:number};
+  runtime:{environment:string;scheduler_running:boolean;publishing_dry_run:boolean;ad_automation_execute:boolean;durable_queue_status:string};
+  release:{deployment_verification:string;note:string};
+};
+type AdminWorkflow = {id:string;workspace_id:string;workflow_name:string;status:string;current_step:string|null;execution_mode:string;has_error:boolean;created_at:string|null};
+type AdminAuditEvent = {id:number;workspace_id:string|null;actor:string;action:string;resource_type:string;resource_id:string;outcome:string;created_at:string|null};
+type ProviderReadiness = {provider_id:string;display_name:string;status:string;write_access_verified:boolean;reason:string};
+
+
 const inputClass="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
 const buttonClass="rounded-xl px-4 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -49,6 +59,13 @@ export default function TenantLifecyclePage(){
   const [busyId,setBusyId]=useState("");
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [overview,setOverview]=useState<PlatformOverview|null>(null);
+  const [workflows,setWorkflows]=useState<AdminWorkflow[]>([]);
+  const [providers,setProviders]=useState<ProviderReadiness[]>([]);
+  const [auditEvents,setAuditEvents]=useState<AdminAuditEvent[]>([]);
+  const [operationsLoading,setOperationsLoading]=useState(false);
+  const [operationsError,setOperationsError]=useState("");
+
 
   const loadTenants=useCallback(async()=>{
     setLoading(true);
@@ -104,8 +121,30 @@ export default function TenantLifecyclePage(){
     }
   };
 
+  const loadOperations=useCallback(async()=>{
+    setOperationsLoading(true);
+    setOperationsError("");
+    try{
+      const [overviewData,workflowData,registryData,auditData]=await Promise.all([
+        apiFetch<PlatformOverview>("/api/admin/overview"),
+        apiFetch<{data:AdminWorkflow[]}>("/api/admin/workflows?limit=20"),
+        apiFetch<{items:ProviderReadiness[]}>("/api/integrations"),
+        apiFetch<{data:AdminAuditEvent[]}>("/api/admin/audit?limit=20"),
+      ]);
+      setOverview(overviewData);
+      setWorkflows(workflowData.data||[]);
+      setProviders(registryData.items||[]);
+      setAuditEvents(auditData.data||[]);
+    }catch(err){
+      setOperationsError(err instanceof Error?err.message:"Could not load platform operations evidence.");
+    }finally{
+      setOperationsLoading(false);
+    }
+  },[]);
+
   useEffect(()=>{void loadTenants();},[loadTenants]);
   useEffect(()=>{void loadExecutionControl();},[loadExecutionControl]);
+  useEffect(()=>{void loadOperations();},[loadOperations]);
 
   const transition=async(tenant:WorkspaceTenant)=>{
     const reason=(reasons[tenant.id]||"").trim();
@@ -189,6 +228,77 @@ export default function TenantLifecyclePage(){
 
       {error&&<div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
       {notice&&<div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
+
+      <section aria-labelledby="platform-operations-title" className="mt-6 space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[.16em] text-indigo-600">Persisted platform evidence · read only</p>
+            <h2 id="platform-operations-title" className="mt-1 text-2xl font-black">Platform operations overview</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Protected API observations for platform operations. These do not certify deployment, queue health or provider connectivity.</p>
+          </div>
+          <button type="button" onClick={()=>void loadOperations()} disabled={operationsLoading} className={buttonClass+" border border-slate-200 bg-white text-slate-700"}>{operationsLoading?"Refreshing operations…":"Refresh operations"}</button>
+        </div>
+        {operationsError&&<div role="alert" data-testid="platform-operations-error" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{operationsError}</div>}
+        {operationsLoading&&!overview&&<p className="text-sm text-slate-500">Loading platform operations evidence…</p>}
+        {overview&&<>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <article className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-500">Users</p><p data-testid="platform-metric-users" className="mt-1 text-2xl font-black">{overview.counts.users.toLocaleString()}</p></article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-500">Workspaces</p><p data-testid="platform-metric-workspaces" className="mt-1 text-2xl font-black">{overview.counts.workspaces.toLocaleString()}</p></article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-500">Memberships</p><p data-testid="platform-metric-memberships" className="mt-1 text-2xl font-black">{overview.counts.active_workspace_memberships.toLocaleString()}</p></article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-500">Workflow runs</p><p data-testid="platform-metric-workflows" className="mt-1 text-2xl font-black">{overview.counts.workflow_runs_persisted.toLocaleString()}</p></article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-500">Audit events</p><p data-testid="platform-metric-audits" className="mt-1 text-2xl font-black">{overview.counts.audit_events_persisted.toLocaleString()}</p></article>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-lg font-black">Runtime and release observations · {overview.runtime.environment}</h3>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div><dt className="text-xs text-slate-500">Scheduler process</dt><dd data-testid="platform-scheduler-state" className="text-sm font-bold">{overview.runtime.scheduler_running?"Running":"Not running"}</dd></div>
+                <div><dt className="text-xs text-slate-500">Publishing dry-run</dt><dd className="text-sm font-bold">{overview.runtime.publishing_dry_run?"Enabled":"Disabled"}</dd></div>
+                <div><dt className="text-xs text-slate-500">Ad automation execution</dt><dd className="text-sm font-bold">{overview.runtime.ad_automation_execute?"Enabled":"Disabled"}</dd></div>
+                <div><dt className="text-xs text-slate-500">Durable queue status</dt><dd data-testid="platform-queue-state" className="break-words text-sm font-bold">{overview.runtime.durable_queue_status.replace(/_/g," ")}</dd></div>
+                <div><dt className="text-xs text-slate-500">Deployment verification</dt><dd className="text-sm font-bold">{overview.release.deployment_verification.replace(/_/g," ")}</dd></div>
+              </dl>
+              <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">Runtime flags are observations, not proof of durable queue health or production deployment. {overview.release.note}</p>
+            </section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-lg font-black">Affiliate provider readiness · {providers.length} entries</h3>
+              <div className="mt-3 space-y-2">
+                {providers.slice(0,8).map(provider=><article key={provider.provider_id} data-testid={"provider-readiness-"+provider.provider_id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{provider.display_name}</strong><span className="text-xs font-bold">{provider.status.replace(/_/g," ")}</span></div>
+                  <p className="mt-1 text-xs text-slate-600">{provider.reason}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Write access: {provider.write_access_verified?"verified":"not verified"}</p>
+                </article>)}
+                {providers.length===0&&<p className="text-sm text-slate-500">No provider registry entries.</p>}
+              </div>
+            </section>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-lg font-black">Recent workflow runs · read only</h3>
+              <div className="mt-3 space-y-2">
+                {workflows.map(run=><article key={run.id} data-testid={"platform-workflow-"+run.id} className="rounded-xl border border-slate-100 p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{run.workflow_name}</strong><span className="text-xs font-bold">{run.status.replace(/_/g," ")}</span></div>
+                  <p className="mt-1 text-xs text-slate-600">Mode: {run.execution_mode.replace(/_/g," ")} · Stage: {run.current_step||"not recorded"}</p>
+                  <p className="mt-1 break-all text-[11px] text-slate-500">Workspace: {run.workspace_id}</p>
+                  {run.has_error&&<p className="mt-1 text-xs font-bold text-rose-700">Recorded workflow error; inspect using an authorized support process.</p>}
+                </article>)}
+                {workflows.length===0&&<p className="text-sm text-slate-500">No persisted workflow runs.</p>}
+              </div>
+            </section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-lg font-black">Recent platform audit events · read only</h3>
+              <div className="mt-3 space-y-2">
+                {auditEvents.map(event=><article key={event.id} data-testid={"platform-audit-"+event.id} className="rounded-xl border border-slate-100 p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{event.action}</strong><span className="text-xs font-bold">{event.outcome}</span></div>
+                  <p className="mt-1 text-xs text-slate-600">{event.actor} · {event.resource_type} · {event.resource_id}</p>
+                  <p className="mt-1 break-all text-[11px] text-slate-500">Workspace: {event.workspace_id||"platform scope"}</p>
+                </article>)}
+                {auditEvents.length===0&&<p className="text-sm text-slate-500">No recent audit events.</p>}
+              </div>
+            </section>
+          </div>
+        </>}
+      </section>
 
       <section className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Returned tenants</p><p className="mt-1 text-2xl font-black">{tenantResponse?.count??"—"}</p></div>

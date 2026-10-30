@@ -1,5 +1,12 @@
 # Implementation status — Project1 / OmniAffiliateOS
-Updated: 2026-10-29
+Updated: 2026-10-30
+
+## Platform Super Admin operations overview — candidate; exact-head CI pending
+
+- Extended `frontend/app/admin/page.tsx` to consume the existing protected read-only platform APIs for overview, recent workflow runs, provider readiness and audit events.
+- Added persisted user/workspace/membership/workflow/audit count cards, workflow mode/status rows, provider configuration states, runtime/release caveats and recent audit evidence. The interface explicitly displays unverified queue and deployment states rather than implying production health.
+- Existing tenant lifecycle and global outbound-write pause controls remain intact. No external provider writes, account mutations, ad spend, publishing or payout behavior was enabled.
+- Added `browser_tests/test_platform_admin_operations.py` for the operations panels and API wiring. Exact candidate SHA and hosted verification are pending; do not mark this slice verified until push and PR Actions complete on the same SHA.
 
 ## Paid-ad ROAS numeric input validation — verified on b538a03718d7e912925ee08aaf9ea249445c9220
 

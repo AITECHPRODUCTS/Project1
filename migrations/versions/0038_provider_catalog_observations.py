@@ -47,6 +47,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_provider_catalog_observations_workspace_id", "provider_catalog_observations", ["workspace_id"])
+    op.create_index("ix_provider_catalog_observations_connection_id", "provider_catalog_observations", ["connection_id"])
     op.create_index("ix_provider_catalog_observations_provider_id", "provider_catalog_observations", ["provider_id"])
     op.create_index(
         "ix_provider_catalog_observations_workspace_connection_seen",
@@ -62,5 +63,6 @@ def downgrade() -> None:
     op.drop_index("ix_provider_catalog_observations_workspace_category", table_name="provider_catalog_observations")
     op.drop_index("ix_provider_catalog_observations_workspace_connection_seen", table_name="provider_catalog_observations")
     op.drop_index("ix_provider_catalog_observations_provider_id", table_name="provider_catalog_observations")
+    op.drop_index("ix_provider_catalog_observations_connection_id", table_name="provider_catalog_observations")
     op.drop_index("ix_provider_catalog_observations_workspace_id", table_name="provider_catalog_observations")
     op.drop_table("provider_catalog_observations")

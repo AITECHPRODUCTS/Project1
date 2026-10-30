@@ -2,7 +2,7 @@
 **Snapshot:** 30 October 2026 (Asia/Kolkata)
 **Repository:** https://github.com/AITECHPRODUCTS/Project1
 **Working branch:** `build/omni-affiliate-os-production`
-**Verified feature commit:** `6519c00e6188cc20473069e76722972fa3245c76`
+**Latest verified code commit:** `d905ab59b3721d7ee31a87cf1b81a3a4ce44bb84`
 **Current release decision:** NOT PRODUCTION READY / NOT DEPLOYED
 
 ## Implemented foundations
@@ -22,6 +22,15 @@
 - Exact code/test SHA: `6519c00e6188cc20473069e76722972fa3245c76`.
 - Push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/41038731067 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/41038737403 both completed successfully. Both Python runs: 843 passed, 9 skipped, 5 warnings. Both browser UAT runs: 36 passed. PostgreSQL migration/concurrency, frontend production build and Docker smoke, security/SBOM, AI/RAG, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
 - Verification is limited to this dashboard slice and the configured CI matrix; the overall product remains NOT PRODUCTION READY.
+
+## Additional verified implementation — capability gate accuracy
+
+- Added `partially_available` to the backend capability status contract. Configured-but-unverified provider adapters and offer discovery are no longer mislabeled as not configured.
+- Corrected the Super Admin capability classification to reflect existing foundations (tenant suspend/reinstate, registry-gated global provider-write pause, read-only platform overview/workflow/provider/audit), while naming still-missing queue/dead-letter, retention, incident and full platform RBAC/health/release operations.
+- Added the protected read-only `/api/capabilities` view to the Admin console, including status counts, reasons, prerequisites and external-side-effect gate indicators; its errors are isolated from the other Admin operational panels.
+- Added backend unit tests and browser acceptance for the new status semantics and UI.
+- Exact code SHA: `d905ab59b3721d7ee31a87cf1b81a3a4ce44bb84`. Push https://github.com/AITECHPRODUCTS/Project1/actions/runs/41040130228 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/41040137164 both passed. Python 845 passed/9 skipped/5 warnings; Chromium UAT 36 passed on each; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM/license/dependency, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by its configured condition.
+- This is capability reporting/status accuracy, not account-connection implementation or production release certification.
 
 ## Remaining before production live
 1. Independently verify official affiliate-network OAuth/account connections, scopes, token lifecycle, offer terms/eligibility, provider sandbox tests and provider-attested evidence. The 100+ provider goal is not 100+ connected integrations today.

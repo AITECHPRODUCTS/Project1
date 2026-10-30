@@ -1,6 +1,18 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-30
 
+
+## Automation capability gates and readiness corrections — verified 30 October 2026
+
+- Updated `backend/services/capability_matrix.py`: added `partially_available` as a first-class capability status. Providers marked `configured_not_health_checked` and offer discovery backed by an unverified configured adapter are now reported as partially available, not misleadingly as not configured.
+- Corrected `super_admin_operations`: the matrix now records the implemented foundation (audited tenant suspend/reinstate, registry-gated provider-write pause, read-only platform overview/workflow/provider/audit views) while explicitly listing incomplete worker/queue heartbeats, dead-letter recovery, retention/deletion, incident, full platform RBAC, health and release controls.
+- Extended `frontend/app/admin/page.tsx` with a protected, read-only Automation capability gates panel backed by `GET /api/capabilities`. It displays status counts, capability reasons/prerequisites, external-side-effect gates and provider classifications. Capability-fetch errors are isolated from the other operations panels.
+- Added four backend unit tests and extended Chromium Admin UAT to cover partial Super Admin/offer-discovery classification and provider capability visibility. No external account connection, publication, campaign spend, payout or tenant mutation was enabled by this slice.
+- Exact feature/test SHA: `d905ab59b3721d7ee31a87cf1b81a3a4ce44bb84`. Push CI [41040130228](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41040130228) and PR CI [41040137164](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41040137164) both completed successfully on this SHA.
+- Both Python runs: **845 passed, 9 skipped, 5 warnings**. Both Chromium UAT runs: **36 passed**. PostgreSQL integration, frontend typecheck/build/final container smoke, AI/RAG, security/SBOM/license/dependency audits, secret scan, repository guard and push lockfile-sync passed. PR lockfile-sync was skipped by its configured push-only condition.
+- Verification applies to this change and the configured CI matrix. It does not establish official affiliate-provider OAuth/account connectivity, live commissions, production deployment, queue/dead-letter recovery or total S1–S8 completion.
+
+
 ## Platform Super Admin operations overview — verified on 30 October 2026
 
 - Extended `frontend/app/admin/page.tsx` to consume the existing protected read-only platform APIs for overview, recent workflow runs, provider readiness and audit events.

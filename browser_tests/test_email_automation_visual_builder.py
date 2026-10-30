@@ -252,7 +252,7 @@ def test_visual_email_automation_builder_adds_connects_persists_and_simulates_br
                 "consent_granted": True,
                 "unsubscribed": False,
             }
-            page.get_by_test_id("simulation-result").get_by_text("email-1").wait_for()
+            page.get_by_test_id("simulation-result").get_by_text("email-1", exact=True).wait_for()
             page.get_by_text("provider calls: 0; messages scheduled: 0").wait_for()
             assert stored_graph is not None
         finally:

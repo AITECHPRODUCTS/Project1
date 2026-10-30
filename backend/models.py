@@ -260,6 +260,62 @@ class AuditLog(TenantScopedMixin, Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+class ProviderCatalogObservation(TenantScopedMixin, Base):
+    """Workspace-owned snapshot of provider-reported affiliate products and offers."""
+
+    __tablename__ = "provider_catalog_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "provider_id", "observation_type", "external_id",
+            name="uq_provider_catalog_observation_workspace_source",
+        ),
+        Index(
+            "ix_provider_catalog_observations_workspace_provider_seen",
+            "workspace_id", "provider_id", "observed_at",
+        ),
+        Index(
+            "ix_provider_catalog_observations_workspace_category",
+            "workspace_id", "category",
+        ),
+        CheckConstraint(
+            "observation_type IN ('product', 'offer')",
+            name="ck_provider_catalog_observations_type",
+        ),
+        CheckConstraint("workspace_id IS NOT NULL", name="ck_provider_catalog_observations_workspace_required"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    provider_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    observation_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    category: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    provider_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    mrp_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    is_available: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    availability_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    discount_percentage: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_endpoint: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class ProviderAccountConnection(TenantScopedMixin, Base):
     """Workspace-owned provider credential encrypted at rest."""
     __tablename__ = "provider_account_connections"

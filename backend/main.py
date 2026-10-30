@@ -1949,6 +1949,83 @@ async def list_flipkart_provider_offers(
     }
 
 
+
+
+@api.get("/provider-connections/{connection_id}/flipkart/catalog")
+async def list_saved_flipkart_catalog_observations(
+    connection_id: str,
+    kind: str = Query(default="product", pattern="^(product|offer)$"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    row = await _load_flipkart_connection(connection_id, workspace_id=workspace_id, db=db)
+    with workspace_scope(workspace_id):
+        count = await db.scalar(select(func.count(ProviderCatalogObservation.id)).where(
+            ProviderCatalogObservation.workspace_id == workspace_id,
+            ProviderCatalogObservation.connection_id == row.id,
+            ProviderCatalogObservation.provider_id == "flipkart",
+            ProviderCatalogObservation.observation_type == kind,
+        )) or 0
+        observations = (await db.scalars(select(ProviderCatalogObservation).where(
+            ProviderCatalogObservation.workspace_id == workspace_id,
+            ProviderCatalogObservation.connection_id == row.id,
+            ProviderCatalogObservation.provider_id == "flipkart",
+            ProviderCatalogObservation.observation_type == kind,
+        ).order_by(
+            ProviderCatalogObservation.observed_at.desc(),
+            ProviderCatalogObservation.external_id.asc(),
+        ).limit(limit).offset(offset))).all()
+
+    records = []
+    for observation in observations:
+        snapshot = dict(observation.snapshot_json or {})
+        snapshot.update({
+            "external_id": observation.external_id,
+            "observed_at": observation.observed_at.isoformat() if observation.observed_at else None,
+            "source_endpoint": observation.source_endpoint,
+            "source_fingerprint": observation.source_fingerprint,
+        })
+        if kind == "product":
+            snapshot.setdefault("price_amount", str(observation.price_amount) if observation.price_amount is not None else None)
+            snapshot.setdefault("mrp_amount", str(observation.mrp_amount) if observation.mrp_amount is not None else None)
+            snapshot.setdefault("currency", observation.currency)
+            snapshot.setdefault("in_stock", observation.is_available)
+        else:
+            snapshot.setdefault("offer_url", observation.provider_url)
+            snapshot.setdefault("availability_status", observation.availability_status)
+            snapshot.setdefault("is_available", observation.is_available)
+        records.append(snapshot)
+
+    latest = max(
+        (observation.observed_at for observation in observations if observation.observed_at is not None),
+        default=None,
+    )
+    return {
+        "provider_id": "flipkart",
+        "evidence_type": "persisted_provider_catalog_observations",
+        "kind": kind,
+        "count": count,
+        "limit": limit,
+        "offset": offset,
+        "result_count": len(records),
+        "has_more": offset + len(records) < count,
+        "source_checked_at": latest.isoformat() if latest else None,
+        "commission_terms_status": (
+            "not_exposed_by_product_search_endpoint" if kind == "product"
+            else "not_exposed_by_offer_feed"
+        ),
+        "products" if kind == "product" else "offers": records,
+        "note": (
+            "Saved provider-reported product snapshots. Commission rate, cookie duration, payout terms, account eligibility and promotion approval are not supplied by this feed."
+            if kind == "product"
+            else "Saved provider-reported active-offer snapshots. Commission rate, cookie duration, payout terms, account eligibility and promotion approval are not supplied by this feed."
+        ),
+    }
+
+
 @api.delete("/provider-connections/{connection_id}")
 async def disconnect_provider_account(connection_id: str, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
     workspace_id = _provider_connection_workspace(user)

@@ -87,3 +87,18 @@ A safety gap was closed in the existing workflow engine. At a required human-ver
 Code/test commit: [b23281e](https://github.com/AITECHPRODUCTS/Project1/commit/b23281efdc8aae946f05b4282dcd6cf0cf36b31a). Both exact-commit workflows passed: [push 41077056337](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41077056337) and [PR 41077069100](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41077069100). Evidence: Python 847 passed / 9 skipped / 5 warnings; PostgreSQL integration 9 passed; browser UAT 40 passed; frontend, AI/RAG, security, secret-scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by workflow condition.
 
 This does not change the production go/no-go: PR #1 is still a draft and unmerged. Live network account authorization, real provider contract UAT, verified commission/reversal/reconciliation, paid-ad operations, production staging/deployment, monitoring, backup/restore/rollback and legal/license sign-off remain incomplete or owner-dependent.
+
+
+## Verified continuation — ClickBank read-only account connection (30 October 2026)
+
+Added the first workspace-owned affiliate-provider connection path.
+
+**Implemented:** ClickBank account-list verification against its fixed Quickstats endpoint; exact API-key header; API Order Read capability only; encrypted workspace-scoped credential storage; duplicate-key detection; safe list/re-test/disconnect APIs; audit events; publisher-facing integrations UI; Alembic migration 0035; backend/service/browser tests. The existing deployment-wide `GET /api/integrations` provider registry remains unchanged and still does not infer connection state from environment configuration.
+
+**Exact commit:** [cf62cc8](https://github.com/AITECHPRODUCTS/Project1/commit/cf62cc8a7e1b1bd226c6e56b179dfc4c52039a20). Both [push CI 41083490768](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41083490768) and [PR CI 41083499544](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41083499544) passed. Each run: Python **855 passed / 9 skipped / 5 warnings**; PostgreSQL integration passed; frontend production/typecheck/Docker checks passed; AI/RAG, security audit, secret scan and repository guard passed; Chromium browser UAT **41 passed**. Push lockfile-sync passed; PR lockfile-sync skipped by configured event condition.
+
+**What this verifies:** an account-level read-only API-key check that identifies readable ClickBank account nicknames and persists the key encrypted within the active workspace. No provider write action is available in this increment.
+
+**Still not implemented/verified:** ClickBank offer/product marketplace search, current offer economics/terms retrieval, order/commission events, conversion attribution, commission reconciliation, refund/reversal handling and payouts. No owner key was provided during this build, so this is hosted-CI verified code, not a live account connection or production provider UAT. Disconnect removes the stored key in OmniAffiliateOS but does not revoke the key at ClickBank. Rotating `APP_SESSION_SECRET` invalidates this encrypted credential; a dedicated credential-key rotation design is needed before broad SaaS rollout.
+
+Other marketplace providers, OAuth/account linking, AI ad-platform reporting/actions, social/CMS/email live publishing, remaining skill acceptance, staging, production deployment, monitoring, backup/restore/rollback and legal/license release decisions remain outstanding.

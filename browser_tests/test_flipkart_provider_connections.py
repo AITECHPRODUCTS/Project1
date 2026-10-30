@@ -117,6 +117,66 @@ def test_flipkart_connect_search_products_load_offers_and_disconnect():
                             "end_at": "2026-11-02T23:59:59+00:00",
                         }],
                     })
+                elif request.method == "GET" and "/api/provider-connections/fk-1/flipkart/catalog?kind=product" in request.url:
+                    _fulfill(route, {
+                        "provider_id": "flipkart",
+                        "evidence_type": "persisted_provider_catalog_observations",
+                        "kind": "product",
+                        "count": 1,
+                        "limit": 100,
+                        "offset": 0,
+                        "result_count": 1,
+                        "has_more": False,
+                        "source_checked_at": "2026-10-30T12:00:00+00:00",
+                        "commission_terms_status": "not_exposed_by_product_search_endpoint",
+                        "note": "Saved provider-reported product snapshots. Commission rate, cookie duration and payout terms remain unknown.",
+                        "products": [{
+                            "external_id": "MOBABC123",
+                            "title": "Saved Android Phone",
+                            "description": "Persisted provider product snapshot",
+                            "brand": "ExampleBrand",
+                            "category": "Mobiles",
+                            "product_url": "https://www.flipkart.com/saved-phone",
+                            "image_url": None,
+                            "price_amount": "12999",
+                            "mrp_amount": "15999",
+                            "currency": "INR",
+                            "in_stock": True,
+                            "discount_percentage": "18",
+                            "observed_at": "2026-10-30T12:00:00+00:00",
+                            "source_endpoint": "affiliate/1.0/search.json",
+                            "source_fingerprint": "saved-fingerprint",
+                        }],
+                    })
+                elif request.method == "GET" and "/api/provider-connections/fk-1/flipkart/catalog?kind=offer" in request.url:
+                    _fulfill(route, {
+                        "provider_id": "flipkart",
+                        "evidence_type": "persisted_provider_catalog_observations",
+                        "kind": "offer",
+                        "count": 1,
+                        "limit": 100,
+                        "offset": 0,
+                        "result_count": 1,
+                        "has_more": False,
+                        "source_checked_at": "2026-10-30T12:01:00+00:00",
+                        "commission_terms_status": "not_exposed_by_offer_feed",
+                        "note": "Saved provider-reported offer snapshots. Commission terms remain unknown.",
+                        "offers": [{
+                            "external_id": "offer-1",
+                            "title": "Saved electronics offer",
+                            "description": "Persisted offer snapshot",
+                            "category": "Electronics",
+                            "offer_url": "https://www.flipkart.com/saved-offer",
+                            "image_url": None,
+                            "availability_status": "LIVE",
+                            "is_available": True,
+                            "start_at": "2026-10-29T00:00:00+00:00",
+                            "end_at": "2026-11-02T23:59:59+00:00",
+                            "observed_at": "2026-10-30T12:01:00+00:00",
+                            "source_endpoint": "affiliate/offers/v1/all/json",
+                            "source_fingerprint": "saved-offer-fingerprint",
+                        }],
+                    })
                 elif request.method == "DELETE" and request.url.endswith("/api/provider-connections/fk-1"):
                     seen["disconnect"] += 1
                     connections[0]["status"] = "disconnected"
@@ -156,6 +216,14 @@ def test_flipkart_connect_search_products_load_offers_and_disconnect():
             page.get_by_test_id("flipkart-active-offers").wait_for(state="visible")
             assert page.get_by_text("Weekend electronics offer", exact=True).is_visible()
             assert seen["offers"] == 1
+
+            page.get_by_role("button", name="Load saved products").click()
+            page.get_by_test_id("flipkart-product-results").wait_for(state="visible")
+            assert page.get_by_text("Saved Android Phone", exact=True).is_visible()
+
+            page.get_by_role("button", name="Load saved offers").click()
+            page.get_by_test_id("flipkart-active-offers").wait_for(state="visible")
+            assert page.get_by_text("Saved electronics offer", exact=True).is_visible()
 
             page.get_by_role("button", name="Test connection").click()
             page.get_by_text("Flipkart affiliate API directory verification passed.", exact=True).wait_for(state="visible")

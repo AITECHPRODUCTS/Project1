@@ -218,12 +218,12 @@ def test_flipkart_connect_search_products_load_offers_and_disconnect():
             assert seen["offers"] == 1
 
             page.get_by_role("button", name="Load saved products").click()
-            page.get_by_test_id("flipkart-product-results").wait_for(state="visible")
-            assert page.get_by_text("Saved Android Phone", exact=True).is_visible()
+            page.get_by_text("Saved Android Phone", exact=True).wait_for(state="visible", timeout=10000)
+            assert page.get_by_test_id("flipkart-product-results").is_visible()
 
             page.get_by_role("button", name="Load saved offers").click()
-            page.get_by_test_id("flipkart-active-offers").wait_for(state="visible")
-            assert page.get_by_text("Saved electronics offer", exact=True).is_visible()
+            page.get_by_text("Saved electronics offer", exact=True).wait_for(state="visible", timeout=10000)
+            assert page.get_by_test_id("flipkart-active-offers").is_visible()
 
             page.get_by_role("button", name="Test connection").click()
             page.get_by_text("Flipkart affiliate API directory verification passed.", exact=True).wait_for(state="visible")

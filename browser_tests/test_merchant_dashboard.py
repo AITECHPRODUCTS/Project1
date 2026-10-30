@@ -99,6 +99,7 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
             pending_network_status = page.get_by_text("Affiliate-network status: pending", exact=True)
             assert pending_network_status.count() == 2
             assert pending_network_status.first.is_visible()
+            assert page.get_by_role("link", name="Merchant dashboard").is_visible()
             assert page.get_by_role("link", name="Manage offers").is_visible()
             assert page.get_by_role("link", name="Review applications").is_visible()
             assert any("/api/merchant/offers?" in url for url in requests)

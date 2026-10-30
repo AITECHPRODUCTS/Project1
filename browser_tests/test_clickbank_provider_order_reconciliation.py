@@ -109,17 +109,23 @@ def test_clickbank_provider_order_reconciliation_accepts_exact_signed_ledger_can
             assert queue_response.status==200,(
                 f"Reconciliation API returned {queue_response.status}: {queue_response.text()}"
             )
+            queue_payload=queue_response.json()
+            assert queue_payload["count"]==1
+            assert queue_payload["data"][0]["observation_id"]=="observation-1"
+            assert queue_payload["data"][0]["product_title"]=="Sample product"
             page.get_by_role("heading",name="ClickBank order evidence reconciliation").wait_for(state="visible")
+            row=page.get_by_test_id("provider-order-observation-1")
             try:
-                page.get_by_text("Sample product",exact=True).wait_for(state="visible",timeout=10000)
+                row.wait_for(state="visible",timeout=10000)
             except Exception as error:
                 raise AssertionError(
-                    "Reconciliation response succeeded but its provider row did not render. "
-                    f"Page errors: {page_errors}; failed requests: {failed_requests}; "
-                    f"queue response URL: {queue_response.url}"
+                    "Reconciliation API returned a valid observation but the matching card did not render. "
+                    f"API payload: {queue_payload}; Page errors: {page_errors}; "
+                    f"failed requests: {failed_requests}; URL: {queue_response.url}"
                 ) from error
-            page.get_by_text("USD 12.500000",exact=True).wait_for(state="visible")
-            assert page.get_by_label("Ledger candidate for CB-RECEIPT-1").input_value()=="ledger-1"
+            assert "Sample product" in row.locator("h3").inner_text()
+            assert "USD 12.500000" in row.inner_text()
+            assert row.get_by_label("Ledger candidate for CB-RECEIPT-1").input_value()=="ledger-1"
             page.get_by_role("button",name="Accept exact ledger match").click()
             page.get_by_text("matched to conversion",exact=False).wait_for(state="visible")
             assert len(review_calls)==1

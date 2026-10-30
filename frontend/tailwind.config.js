@@ -1,2 +1,0 @@
-/** @type {import('tailwindcss').Config} */
-module.exports = { darkMode: "class", content: ["./app/**/*.{js,ts,jsx,tsx,mdx}", "./components/**/*.{js,ts,jsx,tsx,mdx}"], theme: { extend: { colors: { canvas:"#f8fafc",surface:"#ffffff",ink:"#1e293b",royal:"#6366f1",cool:"#e2e8f0" }, boxShadow: { "3d-light":"8px 8px 16px #d1d9e6, -8px -8px 16px #ffffff", "royal-glow":"0 12px 30px rgba(99,102,241,.22)" }, backdropBlur: { glass:"16px" }, borderRadius: { "4xl":"2rem" } } }, plugins: [] };

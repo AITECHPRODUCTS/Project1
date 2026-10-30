@@ -11,9 +11,10 @@ permissions:
   contents: read
 
 concurrency:
-  # Push and PR events for the same working branch share a group; keep only one run active.
+  # Keep one active run per event/branch and queue the next candidate instead of cancelling in-flight checks.
+  # GitHub may replace an older pending run when a newer run enters the same concurrency group.
   group: affiliate-os-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   repo-guard:

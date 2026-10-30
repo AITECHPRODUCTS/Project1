@@ -99,12 +99,45 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
             pending_network_status = page.get_by_text("Affiliate-network status: pending", exact=True)
             assert pending_network_status.count() == 2
             assert pending_network_status.first.is_visible()
-            assert page.get_by_role("link", name="Merchant dashboard").is_visible()
             assert page.get_by_role("link", name="Manage offers").is_visible()
             assert page.get_by_role("link", name="Review applications").is_visible()
             assert any("/api/merchant/offers?" in url for url in requests)
             assert any("/api/merchant/applications?" in url for url in requests)
             assert "does not infer network approval" in page.locator("main").inner_text()
+        finally:
+            browser.close()
+
+
+def test_merchant_subpages_link_back_to_dashboard():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                url = route.request.url
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test"}})
+                elif "/api/merchant/offers" in url:
+                    _fulfill_json(route, {"count": 0, "data": []})
+                elif "/api/merchant/applications" in url:
+                    _fulfill_json(route, {
+                        "count": 0, "total_count": 0, "limit": 25, "offset": 0,
+                        "status_filter": "all", "data": [],
+                    })
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
+
+            page.route("**/api/**", handle_api)
+            for path, heading in (
+                ("/merchant/offers", "Merchant offers"),
+                ("/merchant/applications", "Publisher applications"),
+            ):
+                page.goto(BASE_URL + path, wait_until="domcontentloaded")
+                page.get_by_role("heading", name=heading).wait_for(state="visible")
+                dashboard_link = page.get_by_role("link", name="Merchant dashboard")
+                assert dashboard_link.is_visible()
+                assert dashboard_link.get_attribute("href") == "/merchant"
         finally:
             browser.close()
 

@@ -259,6 +259,23 @@ def test_flipkart_search_and_offers_persist_workspace_snapshots_and_upsert(monke
             assert offer_response.json()["offers"][0]["title"] == "Weekend electronics offer"
             assert offer_response.json()["commission_terms_status"] == "not_exposed_by_offer_feed"
 
+            saved_products = client.get(
+                f"/api/provider-connections/{connection_id}/flipkart/catalog",
+                params={"kind": "product", "limit": 100, "offset": 0},
+            )
+            assert saved_products.status_code == 200, saved_products.text
+            assert saved_products.json()["count"] == 1
+            assert saved_products.json()["products"][0]["price_amount"] == "11999"
+            assert saved_products.json()["commission_terms_status"] == "not_exposed_by_product_search_endpoint"
+
+            saved_offers = client.get(
+                f"/api/provider-connections/{connection_id}/flipkart/catalog",
+                params={"kind": "offer", "limit": 100, "offset": 0},
+            )
+            assert saved_offers.status_code == 200, saved_offers.text
+            assert saved_offers.json()["count"] == 1
+            assert saved_offers.json()["offers"][0]["title"] == "Weekend electronics offer"
+
             # Connections and catalog observations are scoped to the workspace that owns the token.
             user["workspace_id"] = workspace_b
             assert client.get("/api/provider-connections").json()["data"] == []
@@ -279,6 +296,14 @@ def test_flipkart_search_and_offers_persist_workspace_snapshots_and_upsert(monke
             assert disconnected.status_code == 200, disconnected.text
             assert disconnected.json()["provider_key_revoked_remotely"] is False
             assert "Flipkart Affiliate API settings" in disconnected.json()["detail"]
+            # Saved provider observations remain readable locally after disconnect;
+            # this endpoint must not need or reuse the removed remote credential.
+            saved_after_disconnect = client.get(
+                f"/api/provider-connections/{connection_id}/flipkart/catalog",
+                params={"kind": "product", "limit": 100, "offset": 0},
+            )
+            assert saved_after_disconnect.status_code == 200
+            assert saved_after_disconnect.json()["count"] == 1
 
         async def inspect():
             with workspace_scope(workspace_a):

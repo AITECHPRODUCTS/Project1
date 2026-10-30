@@ -78,3 +78,12 @@ The commission-earner publisher application now provides a visual email journey 
 Latest code/test SHA: 8572f1260476bd57e7af2af3fd950e49468c51b7. Exact push [41069212593](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41069212593) and PR [41069224474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41069224474) passed. Each run: Python 845 passed / 9 skipped / 5 warnings; PostgreSQL 9 passed; browser UAT 40 passed; frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile sync passed; PR lockfile sync skipped by its configured push-only condition.
 
 The email automation skill remains partial because native provider/account connectivity, account-level UAT, event ingestion for clicks/opens/purchases, deliverability/reputation monitoring and end-to-end production evidence remain open.
+
+
+## Verified continuation — full-autonomous verification audit (30 October 2026)
+
+A safety gap was closed in the existing workflow engine. At a required human-verification boundary, `FULL_AUTONOMOUS` still stops rather than bypassing the gate; it now also persists a tenant-scoped audit record and emits the terminal workflow-status event. A new regression test asserts that the next stage is never run and that no semi-autonomous paused session is created. A second test asserts that manual mode accepts exactly one stage.
+
+Code/test commit: [b23281e](https://github.com/AITECHPRODUCTS/Project1/commit/b23281efdc8aae946f05b4282dcd6cf0cf36b31a). Both exact-commit workflows passed: [push 41077056337](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41077056337) and [PR 41077069100](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41077069100). Evidence: Python 847 passed / 9 skipped / 5 warnings; PostgreSQL integration 9 passed; browser UAT 40 passed; frontend, AI/RAG, security, secret-scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by workflow condition.
+
+This does not change the production go/no-go: PR #1 is still a draft and unmerged. Live network account authorization, real provider contract UAT, verified commission/reversal/reconciliation, paid-ad operations, production staging/deployment, monitoring, backup/restore/rollback and legal/license sign-off remain incomplete or owner-dependent.

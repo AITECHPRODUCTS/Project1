@@ -70,3 +70,11 @@ This is CI evidence for the tested code on the named commit. It is not productio
 Recommended next engineering order: (1) finish one native provider integration end to end in sandbox, including credentials/webhooks and account status; (2) complete the highest-priority S1 offer-research and qualification skills with real sources; (3) validate attribution-to-commission reconciliation and reversal paths; (4) complete S5 publishing/ad adapters and their guardrails; (5) close admin operational controls and production release rehearsals.
 
 No software can honestly be guaranteed 100% failproof, and affiliate earnings cannot be guaranteed. Results depend on network eligibility and approval, terms, traffic, conversion, refunds, attribution and compliance.
+
+## Verified continuation — visual email automation builder (30 October 2026)
+
+The commission-earner publisher application now provides a visual email journey editor instead of requiring raw graph JSON. Users can add email/decision nodes, edit content and delay, connect true/false and next-step routes, include node-level affiliate disclosures, simulate a saved branch and load an existing graph as a new semantic version. A Chromium browser test verifies the actual request payload and that simulation causes zero provider calls or scheduled sends.
+
+Latest code/test SHA: 8572f1260476bd57e7af2af3fd950e49468c51b7. Exact push [41069212593](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41069212593) and PR [41069224474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41069224474) passed. Each run: Python 845 passed / 9 skipped / 5 warnings; PostgreSQL 9 passed; browser UAT 40 passed; frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile sync passed; PR lockfile sync skipped by its configured push-only condition.
+
+The email automation skill remains partial because native provider/account connectivity, account-level UAT, event ingestion for clicks/opens/purchases, deliverability/reputation monitoring and end-to-end production evidence remain open.

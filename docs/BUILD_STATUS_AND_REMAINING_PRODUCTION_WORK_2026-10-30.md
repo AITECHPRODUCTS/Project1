@@ -101,3 +101,11 @@ The affiliate program application evidence form and the webinar agenda form both
 Code/test SHA: c313521f0f818533aea5473d5e6bce73d086b571. Exact push 41064823079 and PR 41064833717 completed successfully: Python 845 passed / 9 skipped / 5 warnings; PostgreSQL 9 passed; browser UAT 39 passed; frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured condition.
 
 These are narrow UI/data-contract corrections. They do not add live provider account submission, webinar-room provisioning, or confirmation-email delivery. The broader product remains not production-live.
+
+## 2026-10-30 verified engineering increment — visual email automation builder
+
+A raw JSON-only editor was replaced with a visual branch graph editor in the existing publisher application. Email/branch/stop nodes are shown as editable cards, connected through explicit next-step and true/false destinations. The form can add nodes into existing paths, validates affiliate disclosures at the node, prevents deletion of referenced nodes, and loads saved graphs as new semantic versions rather than mutating reviewed versions. A browser test captures the real create payload and exercises branch simulation.
+
+Code/test SHA: 8572f1260476bd57e7af2af3fd950e49468c51b7. Exact push [41069212593](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41069212593) and PR [41069224474](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41069224474) passed: Python 845 passed/9 skipped/5 warnings; PostgreSQL 9 passed; Chromium UAT 40 passed on both; frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile sync passed; PR lockfile sync was skipped by its configured condition.
+
+The visual editor does not introduce a new delivery mechanism. Approved graphs still pass through the existing scheduled email pipeline with double opt-in, consent, unsubscribe/suppression, graph-checksum validation, per-send jurisdiction compliance and provider configuration. Native ESP connectivity, account-level UAT, event-based click/open/purchase triggers, deliverability monitoring and production operational evidence remain pending.

@@ -29,6 +29,47 @@ class ClickBankConnectionCreateRequest(BaseModel):
         return SecretStr(raw)
 
 
+class FlipkartConnectionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tracking_id: str = Field(min_length=2, max_length=100)
+    api_token: SecretStr
+
+    @field_validator("tracking_id")
+    @classmethod
+    def validate_tracking_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,99}", normalized):
+            raise ValueError("Enter the Flipkart affiliate tracking ID shown in API settings.")
+        return normalized
+
+    @field_validator("api_token")
+    @classmethod
+    def validate_api_token(cls, value: SecretStr) -> SecretStr:
+        raw = value.get_secret_value().strip()
+        if not 20 <= len(raw) <= 4096 or any(ord(char) < 33 or ord(char) > 126 for char in raw):
+            raise ValueError("Enter the private Flipkart Affiliate API token.")
+        return SecretStr(raw)
+
+
+class FlipkartProductSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=2, max_length=200)
+    result_count: int = Field(default=10, ge=1, le=10)
+
+    @field_validator("query")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Enter at least two characters for product search.")
+        return normalized
+
+
+class FlipkartOffersRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["all", "dotd"] = "all"
+
+
 class ClickBankOrderImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account: str = Field(min_length=1, max_length=100)

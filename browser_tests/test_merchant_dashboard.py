@@ -109,15 +109,15 @@ def test_merchant_dashboard_surfaces_workspace_authorization_errors():
                     _fulfill_json(route, {"count": 0, "data": []})
                     return
                 if "/api/merchant/applications?" in url:
-                    _fulfill_json(route, {"detail": "403: Merchant owner/admin access required"}, status=403)
+                    _fulfill_json(route, {"detail": "Merchant owner/admin access required"}, status=403)
                     return
                 _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Merchant workspace").wait_for(state="visible")
-            page.get_by_role("alert").wait_for(state="visible")
-            assert "403" in page.get_by_role("alert").inner_text()
+            page.locator("main [role=alert]").wait_for(state="visible")
+            assert "403" in page.locator("main [role=alert]").inner_text()
             assert page.get_by_role("button", name="Retry").is_visible()
         finally:
             browser.close()

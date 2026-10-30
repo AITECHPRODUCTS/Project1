@@ -1961,7 +1961,15 @@ async def list_saved_flipkart_catalog_observations(
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
-    row = await _load_flipkart_connection(connection_id, workspace_id=workspace_id, db=db)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id,
+            ProviderAccountConnection.workspace_id == workspace_id,
+            ProviderAccountConnection.provider_id == "flipkart",
+        ))
+    if row is None:
+        raise HTTPException(404, "Flipkart provider connection not found in the active workspace.")
+    # Local snapshots remain readable after disconnect; this endpoint makes no provider call.
     with workspace_scope(workspace_id):
         count = await db.scalar(select(func.count(ProviderCatalogObservation.id)).where(
             ProviderCatalogObservation.workspace_id == workspace_id,

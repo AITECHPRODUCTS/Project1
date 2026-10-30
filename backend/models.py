@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from sqlalchemy import event, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, false, func
+from sqlalchemy import event, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, false, func, text
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from backend.database import Base
 from backend.tenancy import TenantScopedMixin
@@ -100,13 +100,13 @@ class OfferEvidenceSnapshot(TenantScopedMixin, Base):
     )
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     source_host: Mapped[str] = mapped_column(String(253), nullable=False)
-    title: Mapped[str] = mapped_column(String(500), default="", server_default="", nullable=False)
-    description: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
-    excerpt: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    title: Mapped[str] = mapped_column(String(500), default="", server_default=text("''"), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", server_default=text("''"), nullable=False)
+    excerpt: Mapped[str] = mapped_column(Text, default="", server_default=text("''"), nullable=False)
     response_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     excerpt_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    content_type: Mapped[str] = mapped_column(String(120), default="", server_default="", nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), default="", server_default=text("''"), nullable=False)
     fetch_status: Mapped[str] = mapped_column(String(20), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

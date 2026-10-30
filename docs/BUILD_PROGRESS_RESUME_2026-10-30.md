@@ -64,3 +64,16 @@ The separately mentioned newer ZIP of an already-live application was not found 
 **Not claimed:** guaranteed commissions, 100% failproof operation, all-platform compatibility, external affiliate approval, live provider connectivity, live campaign spend, payout execution or production deployment.
 
 Next priority is to close one selected affiliate-network integration end-to-end using official authorization and real contract/sandbox evidence, then repeat the same acceptance pattern for advertising, publishing and analytics providers while continuing the S1–S8 backlog. Credentials must be entered through an owner-controlled secret manager, never committed to the repository or pasted into chat.
+
+## 2026-10-30 continuation — merchant dashboard navigation and resumed repository status
+
+- Resumed from the existing implementation branch `build/omni-affiliate-os-production`; no branch was created and no existing source was reset.
+- Added a visible `Merchant dashboard` link from the Growth cockpit, merchant offer management and merchant application review pages. Added a Chromium assertion for the Growth cockpit entry point.
+- Feature/test candidate SHA: `1ae202b50d8eca2b51a75695cdb8b82bcb846598`; subsequent status document commit: `99510b04555241f45308a9cd589e0e45af1cd507`.
+- Added `docs/BUILD_STATUS_AND_REMAINING_PRODUCTION_WORK_2026-10-30.md` with the verified dashboard/mode coverage, current implementation, production gaps, repo/PR boundaries and source ZIP limitation.
+- Exact preceding code/doc head `8d3fa80c0cf4a82c52b6ac4e9524cf45183ebde9` passed PR run [41047464052](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41047464052): Python 845 passed/9 skipped/5 warnings; Chromium UAT 36 passed; frontend typecheck/build/container smoke, PostgreSQL migration/concurrency, AI/RAG, security/SBOM/dependency, secret scan and repository guard passed. PR lockfile-sync was skipped by its push-only condition.
+- The UI navigation changes were committed after that CI run. Their exact-head CI result must be checked independently; preceding green CI is not proof for those newer changes.
+- Live code inspection confirms `/` (commission-earner cockpit), `/merchant` (product-publisher dashboard), `/admin` (Platform Super Admin), and workflow modes `FULL_AUTONOMOUS`, `SEMI_AUTONOMOUS`, `MANUAL_OVERRIDE`. Full Auto remains bounded by required approvals and policy boundaries; manual mode runs one stage only.
+- Current `docs/skill-parity-matrix.csv` has 53 rows, all `partial`. Official account OAuth/provider UAT, complete publishing/paid-ad mutation and provider-attested reporting, commission reconciliation, remaining merchant/admin operations, all-skill acceptance and production deployment remain release blockers.
+- Repository inspection found two branches (`main` and the existing build branch) and an open draft PR #1. The application code remains on the build branch; `main` remains bootstrap-only. No merge/deployment or public-visibility change was made.
+- The separately mentioned newer live-application ZIP is not present in the inspected Library inventory. Do not claim it has been inspected or ported.

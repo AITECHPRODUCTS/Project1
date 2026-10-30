@@ -368,7 +368,7 @@ def _normalize_offer(item: Any) -> dict[str, Any] | None:
     start_at = _provider_datetime(item.get("startTime"))
     end_at = _provider_datetime(item.get("endTime"))
     availability = item.get("availability")
-    availability_status = availability if availability in {"LIVE", "OOS"} else None
+    availability_status = availability if isinstance(availability, str) and availability in {"LIVE", "OOS"} else None
     image = _image_url(item.get("imageUrls"))
     external_id = hashlib.sha256(
         (title.strip() + "\x00" + offer_url).encode("utf-8")

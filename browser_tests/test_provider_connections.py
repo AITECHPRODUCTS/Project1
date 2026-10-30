@@ -26,6 +26,12 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
                     assert json.loads(request.post_data or "{}")=={"api_key":API_KEY}
                     row={"id":"cb-1","provider_id":"clickbank","status":"connected_read_only","account_nicknames":["creator-main"],"capabilities":["quickstats.accounts.read"],"permissions_verified":["API Order Read"],"credential_present":True,"last_checked_at":"2026-10-30T12:00:00+00:00","last_error_code":None,"created_at":None}
                     connections[:]=[row];_fulfill(route,row,201)
+                elif request.method=="GET" and "/api/provider-connections/cb-1/quickstats?" in request.url:
+                    _fulfill(route,{"provider_id":"clickbank","evidence_type":"provider_reported_aggregate",
+                        "metric_scope":"sales_refunds_chargebacks_not_affiliate_commission_or_payout",
+                        "period":{"start_date":"2026-10-01","end_date":"2026-10-30"},
+                        "accounts":["creator-main"],"daily":[{"account":"creator-main","date":"2026-10-01","sales":"10","refunds":"1","chargebacks":"0"}],
+                        "totals":{"sales":"10","refunds":"1","chargebacks":"0"}})
                 elif request.method=="POST" and request.url.endswith("/api/provider-connections/cb-1/test"):
                     _fulfill(route,connections[0])
                 elif request.method=="DELETE" and request.url.endswith("/api/provider-connections/cb-1"):
@@ -40,6 +46,9 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
             page.get_by_text("creator-main",exact=True).wait_for(state="visible")
             assert page.get_by_label("ClickBank API key").input_value()==""
             assert API_KEY not in page.locator("main").inner_text()
+            page.get_by_role("button",name="Load last 30 days").click()
+            page.get_by_text("Provider-reported aggregate",exact=False).wait_for(state="visible")
+            assert page.get_by_text("sales/refund/chargeback aggregates",exact=False).is_visible()
             page.get_by_role("button",name="Test connection").click()
             page.get_by_text("ClickBank read-only account verification passed.").wait_for(state="visible")
             page.get_by_role("button",name="Disconnect").click()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 import base64, hashlib, hmac, re
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -110,3 +112,121 @@ async def verify_clickbank_api_key(api_key: str) -> list[str]:
     if not accounts:
         raise ClickBankAccessError("ClickBank authorized the request but returned no readable account nicknames. Check API Order Read permission and selected account nicknames.")
     return accounts
+
+
+
+CLICKBANK_QUICKSTATS_LIST_URL = "https://api.clickbank.com/rest/1.3/quickstats/list"
+
+
+def _quickstats_amount(value: Any, field: str) -> str | None:
+    if value is None:
+        return None
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ClickBankProviderUnavailable(f"ClickBank returned an invalid {field} amount.") from None
+    if not amount.is_finite() or abs(amount) > Decimal("999999999999999999"):
+        raise ClickBankProviderUnavailable(f"ClickBank returned an invalid {field} amount.")
+    return format(amount, "f")
+
+
+def _normalize_quickstats(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict) or "accountData" not in payload:
+        raise ClickBankProviderUnavailable("ClickBank returned an unsupported Quickstats response.")
+    account_data = payload.get("accountData")
+    if isinstance(account_data, dict):
+        account_rows = [account_data]
+    elif isinstance(account_data, list):
+        account_rows = account_data[:500]
+    else:
+        raise ClickBankProviderUnavailable("ClickBank returned an unsupported Quickstats account list.")
+
+    daily: list[dict[str, Any]] = []
+    account_names: list[str] = []
+    for account_row in account_rows:
+        if not isinstance(account_row, dict):
+            continue
+        nickname = account_row.get("nickName")
+        if not isinstance(nickname, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", nickname):
+            continue
+        account_names.append(nickname)
+        raw_stats = account_row.get("quickStats")
+        if raw_stats is None:
+            stats = []
+        elif isinstance(raw_stats, dict):
+            stats = [raw_stats]
+        elif isinstance(raw_stats, list):
+            stats = raw_stats[:400]
+        else:
+            raise ClickBankProviderUnavailable("ClickBank returned an unsupported daily Quickstats structure.")
+
+        for item in stats:
+            if not isinstance(item, dict):
+                continue
+            raw_day = item.get("quickStatDate")
+            if not isinstance(raw_day, str) or len(raw_day) < 10:
+                raise ClickBankProviderUnavailable("ClickBank returned a daily Quickstats record without a valid date.")
+            try:
+                normalized_day = date.fromisoformat(raw_day[:10]).isoformat()
+            except ValueError:
+                raise ClickBankProviderUnavailable("ClickBank returned a daily Quickstats record with an invalid date.") from None
+            daily.append({
+                "account": nickname,
+                "date": normalized_day,
+                "sales": _quickstats_amount(item.get("sale"), "sales"),
+                "refunds": _quickstats_amount(item.get("refund"), "refunds"),
+                "chargebacks": _quickstats_amount(item.get("chargeback"), "chargebacks"),
+            })
+
+    if not account_names:
+        raise ClickBankProviderUnavailable("ClickBank returned no account-level Quickstats data.")
+    daily.sort(key=lambda row: (row["account"].casefold(), row["date"]))
+    totals: dict[str, str | None] = {}
+    for metric in ("sales", "refunds", "chargebacks"):
+        values = [Decimal(row[metric]) for row in daily if row[metric] is not None]
+        totals[metric] = format(sum(values, Decimal(0)), "f") if values else None
+    return {"accounts": list(dict.fromkeys(account_names)), "daily": daily, "totals": totals}
+
+
+async def fetch_clickbank_quickstats(
+    api_key: str,
+    *,
+    start_date: date,
+    end_date: date,
+    account: str | None = None,
+) -> dict[str, Any]:
+    """Retrieve aggregate daily sales/refunds/chargebacks; these are not commissions or payouts."""
+    params = {"startDate": start_date.isoformat(), "endDate": end_date.isoformat()}
+    if account:
+        params["account"] = account
+    try:
+        payload = await request_public_json(
+            CLICKBANK_QUICKSTATS_LIST_URL,
+            method="GET",
+            params=params,
+            headers={"Authorization": api_key, "Accept": "application/json"},
+            timeout=10.0,
+            max_bytes=512_000,
+        )
+    except httpx.HTTPStatusError as exc:
+        status = int(exc.response.status_code)
+        if status in {401, 403}:
+            raise ClickBankAccessError("ClickBank rejected Quickstats data access. Confirm API Order Read permission for the selected account.") from None
+        if status == 429:
+            raise ClickBankProviderUnavailable("ClickBank rate-limited the Quickstats request. Try again later.") from None
+        raise ClickBankProviderUnavailable(f"ClickBank returned HTTP {status} while retrieving Quickstats.") from None
+    except (httpx.RequestError, TimeoutError):
+        raise ClickBankProviderUnavailable("Could not reach ClickBank's Quickstats endpoint.") from None
+    except ValueError:
+        raise ClickBankProviderUnavailable("ClickBank returned invalid Quickstats JSON.") from None
+
+    result = _normalize_quickstats(payload)
+    if account and account.casefold() not in {name.casefold() for name in result["accounts"]}:
+        raise ClickBankAccessError("ClickBank did not return Quickstats for the selected account nickname.")
+    if account:
+        result["daily"] = [row for row in result["daily"] if row["account"].casefold() == account.casefold()]
+        result["accounts"] = [name for name in result["accounts"] if name.casefold() == account.casefold()]
+        for metric in ("sales", "refunds", "chargebacks"):
+            values = [Decimal(row[metric]) for row in result["daily"] if row[metric] is not None]
+            result["totals"][metric] = format(sum(values, Decimal(0)), "f") if values else None
+    return result

@@ -101,6 +101,30 @@ def test_clickbank_workspace_isolation_permissions_test_and_disconnect(monkeypat
             tested=client.post(f"/api/provider-connections/{connection_id}/test")
             assert tested.status_code==200,tested.text
             assert tested.json()["account_nicknames"]==["creator-main","creator-updated"]
+            async def quickstats(_key, *, start_date, end_date, account=None):
+                assert start_date.isoformat()=="2026-10-01"
+                assert end_date.isoformat()=="2026-10-30"
+                assert account=="creator-main"
+                return {
+                    "accounts":["creator-main"],
+                    "daily":[{"account":"creator-main","date":"2026-10-01","sales":"10","refunds":"1","chargebacks":"0"}],
+                    "totals":{"sales":"10","refunds":"1","chargebacks":"0"},
+                }
+            monkeypatch.setattr(main,"fetch_clickbank_quickstats",quickstats)
+            report=client.get(
+                f"/api/provider-connections/{connection_id}/quickstats",
+                params={"start_date":"2026-10-01","end_date":"2026-10-30","account":"creator-main"},
+            )
+            assert report.status_code==200,report.text
+            assert report.json()["evidence_type"]=="provider_reported_aggregate"
+            assert report.json()["metric_scope"]=="sales_refunds_chargebacks_not_affiliate_commission_or_payout"
+            assert report.json()["totals"]["sales"]=="10"
+            unknown=client.get(
+                f"/api/provider-connections/{connection_id}/quickstats",
+                params={"start_date":"2026-10-01","end_date":"2026-10-30","account":"not-linked"},
+            )
+            assert unknown.status_code==404
+
             removed=client.delete(f"/api/provider-connections/{connection_id}")
             assert removed.status_code==200,removed.text
             assert removed.json()["provider_key_revoked_remotely"] is False

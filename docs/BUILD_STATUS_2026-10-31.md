@@ -1,21 +1,33 @@
 # OmniAffiliateOS build status — 31 October 2026
 
 **Repository:** https://github.com/AITECHPRODUCTS/Project1  
-**Active implementation branch:** \`build/omni-affiliate-os-production\` (existing branch only)  
+**Active implementation branch:** `build/omni-affiliate-os-production` (existing branch only)  
 **Pull request:** [#1 — draft, open, unmerged](https://github.com/AITECHPRODUCTS/Project1/pull/1)  
 **Release decision:** **NOT PRODUCTION READY / NOT DEPLOYED**
 
 ## Applications and execution modes
 
-The codebase contains the three application foundations: affiliate / commission earner (\`/\`), merchant / product publisher (\`/merchant\`, \`/merchant/offers\`, \`/merchant/applications\`) and platform admin / Super Admin (\`/admin\`). It also contains the workflow mode identifiers \`FULL_AUTONOMOUS\`, \`SEMI_AUTONOMOUS\` and \`MANUAL_OVERRIDE\`. These are real foundations, not proof that the commercial product is complete or that external providers/accounts are connected.
+The codebase contains the three application foundations: affiliate / commission earner (`/`), merchant / product publisher (`/merchant`, `/merchant/offers`, `/merchant/applications`) and platform admin / Super Admin (`/admin`). It also contains the workflow mode identifiers `FULL_AUTONOMOUS`, `SEMI_AUTONOMOUS` and `MANUAL_OVERRIDE`. These are real foundations, not proof that the commercial product is complete or that external providers/accounts are connected.
 
 ## Source-state recovery
 
 - A prior CI-only commit accidentally produced a two-entry Git tree and removed most application/configuration files from the branch tree. The cause was Git tree creation without inheriting the previous tree.
 - The source tree was restored as a normal forward commit; no force-push, reset or branch creation was used. The restored tree contains backend, frontend, migrations, tests, docs and workflows.
-- The Gitleaks finding generated on the restore commit was reviewed against its artifact: the \`linkedin-client-id\` rule matched the natural-language word “LinkedIn” in a vendored MIT skill instruction, not a credential. The existing exact-fingerprint allowlist and its test were updated for the new restore-commit fingerprint. No wildcard or broad path suppression was added.
-- PR CI on exact commit \`a1639fd735ce2d3d086099bebb94e6123068a8e7\` passed. Its corresponding push run was still in progress at the last check; exact current-head push verification must be completed separately.
+- The Gitleaks finding generated on the restore commit was reviewed against its artifact: the `linkedin-client-id` rule matched the natural-language word “LinkedIn” in a vendored MIT skill instruction, not a credential. The existing exact-fingerprint allowlist and its test were updated for the new restore-commit fingerprint. No wildcard or broad path suppression was added.
 
+## Exact-SHA verification — offer evidence increment
+
+The implementation commit `6447e27f9ddd1ad87cf0f670f2cb772768851256` passed both GitHub Actions workflows:
+
+- [Push workflow 41115207514](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41115207514) — completed successfully.
+- [Pull-request workflow 41115218879](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41115218879) — completed successfully.
+- Python suite: **895 passed, 9 skipped, 5 warnings**.
+- Chromium browser UAT: **44 passed**.
+- PostgreSQL migration upgrade/downgrade/schema-drift and concurrency integration checks passed.
+- Frontend typecheck, production build, runtime dependency pruning, final Docker image build and production-container smoke test passed.
+- Security/SBOM/license/dependency audit, AI/RAG profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped under its configured push-only condition.
+
+These are CI results for the exact implementation commit above. The later documentation-only checkpoint commit does not change the tested application code. Provider account authorization/UAT and production deployment remain unverified.
 ## New S1 work in this increment
 
 - Offer qualification now supports bounded public HTTPS source-page capture/history. It reuses the existing pinned SSRF-safe HTTP transport, refuses redirects and credential-like query parameters, allows at most 10 unique URLs per capture, limits each response to 1 MB and caps concurrent fetches.

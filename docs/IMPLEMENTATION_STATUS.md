@@ -6,7 +6,9 @@ Updated: 2026-10-31
 - Added bounded public HTTPS source capture to the workspace offer-qualification path. Requests use the pinned SSRF-safe transport, do not follow redirects, reject credential-like query parameters, cap each capture at 10 unique sources and 1 MB per response, and limit concurrency.
 - Captures persist sanitized title/description/text excerpts, response and excerpt SHA-256 hashes, HTTP/content type, timestamps and exception-class-only failed-fetch records. They are workspace owned, query-isolated, audit logged and exposed through authenticated POST/GET APIs.
 - The qualification screen can capture and reload snapshots. Freshness measures capture age only; it does not establish truth, legal validity, eligibility or affiliate-network approval. Operator qualification remains separate.
-- Tests cover sanitization, hashing, failure minimization, URL restrictions, persistence, audit, owner/admin authorization and cross-workspace isolation. Exact-SHA hosted verification is pending for the commit that adds this slice.
+- Tests cover sanitization, hashing, failure minimization, URL restrictions, persistence, audit, owner/admin authorization and cross-workspace isolation.
+- Exact-SHA verification: implementation commit `6447e27f9ddd1ad87cf0f670f2cb772768851256`; [push run 41115207514](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41115207514) and [PR run 41115218879](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41115218879) both completed successfully. Python: 895 passed, 9 skipped, 5 warnings; Chromium browser UAT: 44 passed; PostgreSQL, frontend production/Docker smoke and security gates passed.
+- Live affiliate-provider account UAT and production deployment remain open.
 
 
 

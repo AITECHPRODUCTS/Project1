@@ -73,7 +73,8 @@ export default function MerchantApplicationsPage(){
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Publisher applications</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">Review applications only for merchant offers owned by the active workspace. Decisions are internal to OmniAffiliateOS and do not submit an external network application or confirm network approval.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <a href="/merchant" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant dashboard</a>
           <button onClick={()=>void load(statusFilter,queue?.offset??0)} disabled={!!busy||loading} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">{loading?"Refreshing…":"Refresh"}</button>
           <a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher marketplace</a>
         </div>

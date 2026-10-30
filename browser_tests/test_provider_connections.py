@@ -77,7 +77,7 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
             page.get_by_role("button",name="Import last 30 days orders").click()
             page.get_by_test_id("clickbank-order-import").wait_for(state="visible")
             assert page.get_by_text("Sample product",exact=True).is_visible()
-            assert page.get_by_text("12.50",exact=True).is_visible()
+            assert page.get_by_text("USD 12.50",exact=True).is_visible()
             assert page.get_by_text("Customer names, emails, contact details and postal data are not stored.",exact=False).is_visible()
             page.get_by_role("button",name="Test connection").click()
             page.get_by_text("ClickBank read-only account verification passed.").wait_for(state="visible")

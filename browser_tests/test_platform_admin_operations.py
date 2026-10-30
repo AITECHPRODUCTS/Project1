@@ -37,6 +37,38 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
         "action": "platform.outbound_actions.paused", "resource_type": "platform_execution_control",
         "resource_id": "1", "outcome": "paused",
     }]}
+    capabilities = {
+        "statuses": ["automatic", "automatic_after_one_time_authorization", "approval_required", "partially_available", "manual_provider_flow", "not_supported", "not_configured"],
+        "counts": {"automatic": 2, "approval_required": 3, "partially_available": 2, "not_configured": 5},
+        "items": [
+            {
+                "id": "super_admin_operations",
+                "title": "Platform-wide Super Admin and tenant operations",
+                "status": "partially_available",
+                "reason": "Implemented foundations include audited tenant suspend/reinstate and read-only operational views; dead-letter recovery remains incomplete.",
+                "prerequisites": ["Separate platform-admin identity", "Worker/queue and dead-letter operations"],
+                "external_side_effect": False,
+            },
+            {
+                "id": "offer_discovery",
+                "title": "Affiliate offer discovery",
+                "status": "partially_available",
+                "reason": "A directory adapter is configured but live health and contract verification have not passed.",
+                "prerequisites": ["Provider terms review", "Live read-only contract test"],
+                "external_side_effect": False,
+            },
+        ],
+        "provider_items": [{
+            "provider_id": "openaffiliate",
+            "display_name": "OpenAffiliate",
+            "status": "partially_available",
+            "registry_status": "configured_not_health_checked",
+            "adapter": "openaffiliate",
+            "reason": "Configured, not health checked",
+            "external_side_effect": False,
+        }],
+        "global_policy": "No integration is considered connected from configuration alone.",
+    }
     tenants = {"count": 0, "limit": 100, "read_only": True, "lifecycle_mutations_available": True, "active_workspace_id": "workspace-admin", "data": []}
     control = {
         "id": 1, "outbound_actions_paused": True, "reason": "Security incident investigation",
@@ -62,6 +94,8 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
                     _fulfill_json(route, integrations)
                 elif "/api/admin/audit?" in url:
                     _fulfill_json(route, audits)
+                elif url.endswith("/api/capabilities"):
+                    _fulfill_json(route, capabilities)
                 elif url.endswith("/api/admin/execution-control"):
                     _fulfill_json(route, control)
                 elif "/api/admin/tenants?" in url:
@@ -80,6 +114,14 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
             assert page.get_by_test_id("provider-readiness-openaffiliate").get_by_text("not configured").is_visible()
             assert page.get_by_test_id("provider-readiness-openaffiliate").get_by_text("Write access: not verified").is_visible()
             assert page.get_by_test_id("platform-audit-109").is_visible()
+            admin_capability = page.get_by_test_id("platform-capability-super_admin_operations")
+            assert admin_capability.is_visible()
+            assert admin_capability.get_by_text("partially available").is_visible()
+            assert admin_capability.get_by_text("dead-letter recovery remains incomplete").is_visible()
+            offer_capability = page.get_by_test_id("platform-capability-offer_discovery")
+            assert offer_capability.get_by_text("partially available").is_visible()
+            assert page.get_by_test_id("provider-capability-openaffiliate").get_by_text("partially available").is_visible()
+            assert any("/api/capabilities" in url for url in seen)
             assert any("/api/admin/overview" in url for url in seen)
             assert any("/api/admin/workflows?limit=20" in url for url in seen)
             assert any("/api/integrations" in url for url in seen)

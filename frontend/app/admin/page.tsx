@@ -42,6 +42,14 @@ type PlatformOverview = {
 };
 type AdminWorkflow = {id:string;workspace_id:string;workflow_name:string;status:string;current_step:string|null;execution_mode:string;has_error:boolean;created_at:string|null};
 type AdminAuditEvent = {id:number;workspace_id:string|null;actor:string;action:string;resource_type:string;resource_id:string;outcome:string;created_at:string|null};
+type CapabilityRow = {id:string;title:string;status:string;reason:string;prerequisites:string[];external_side_effect:boolean};
+type CapabilityMatrix = {
+  statuses:string[];
+  counts:Record<string,number>;
+  items:CapabilityRow[];
+  provider_items:{provider_id?:string;display_name?:string;status:string;registry_status?:string;adapter?:string;reason?:string;external_side_effect:boolean}[];
+  global_policy:string;
+};
 type ProviderReadiness = {provider_id:string;display_name:string;status:string;write_access_verified:boolean;reason:string};
 
 
@@ -65,6 +73,9 @@ export default function TenantLifecyclePage(){
   const [auditEvents,setAuditEvents]=useState<AdminAuditEvent[]>([]);
   const [operationsLoading,setOperationsLoading]=useState(false);
   const [operationsError,setOperationsError]=useState("");
+  const [capabilityMatrix,setCapabilityMatrix]=useState<CapabilityMatrix|null>(null);
+  const [capabilityLoading,setCapabilityLoading]=useState(false);
+  const [capabilityError,setCapabilityError]=useState("");
 
 
   const loadTenants=useCallback(async()=>{
@@ -124,6 +135,12 @@ export default function TenantLifecyclePage(){
   const loadOperations=useCallback(async()=>{
     setOperationsLoading(true);
     setOperationsError("");
+    setCapabilityError("");
+    setCapabilityLoading(true);
+    void apiFetch<CapabilityMatrix>("/api/capabilities")
+      .then(data=>{setCapabilityMatrix(data);setCapabilityError("");})
+      .catch(err=>{setCapabilityError(err instanceof Error?err.message:"Capability details are unavailable for the active platform-admin workspace.");})
+      .finally(()=>setCapabilityLoading(false));
     try{
       const [overviewData,workflowData,registryData,auditData]=await Promise.all([
         apiFetch<PlatformOverview>("/api/admin/overview"),
@@ -298,6 +315,44 @@ export default function TenantLifecyclePage(){
             </section>
           </div>
         </>}
+        <section aria-labelledby="platform-capability-title" className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[.16em] text-indigo-600">Protected capability registry · read only</p>
+              <h3 id="platform-capability-title" className="mt-1 text-xl font-black">Automation capability gates</h3>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Shows which product capabilities are implemented, partially available, approval-gated or unavailable. A configured credential or catalogue entry is not proof of account authorization or successful provider access.</p>
+            </div>
+            <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600">{capabilityMatrix?.items.length??0} capability rows</span>
+          </div>
+          {capabilityLoading&&!capabilityMatrix&&<p role="status" className="mt-4 text-sm text-slate-500">Loading capability gates…</p>}
+          {capabilityError&&<p role="alert" data-testid="platform-capability-error" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{capabilityError}</p>}
+          {capabilityMatrix&&<>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {Object.entries(capabilityMatrix.counts).filter(([,count])=>count>0).map(([status,count])=><span key={status} data-testid={"capability-count-"+status} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700">{status.replace(/_/g," ")}: {count}</span>)}
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {capabilityMatrix.items.map(capability=><article key={capability.id} data-testid={"platform-capability-"+capability.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <strong className="text-sm">{capability.title}</strong>
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700">{capability.status.replace(/_/g," ")}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-600">{capability.reason}</p>
+                <p className="mt-2 text-[11px] font-bold text-slate-500">{capability.external_side_effect?"External side effect — authorization, policy and approval gates apply":"Internal / read-only capability"}</p>
+                {capability.prerequisites.length>0&&<p className="mt-1 text-[11px] leading-5 text-slate-500">Prerequisites: {capability.prerequisites.join(" · ")}</p>}
+              </article>)}
+            </div>
+            {capabilityMatrix.provider_items.length>0&&<div className="mt-5 border-t border-slate-100 pt-4">
+              <h4 className="text-sm font-black">Provider capability classifications</h4>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {capabilityMatrix.provider_items.slice(0,12).map((provider,index)=><div key={provider.provider_id||provider.display_name||index} data-testid={"provider-capability-"+(provider.provider_id||index)} className="rounded-lg border border-slate-100 p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><strong className="text-xs">{provider.display_name||provider.provider_id||"Provider"}</strong><span className="text-xs font-bold">{provider.status.replace(/_/g," ")}</span></div>
+                  {provider.reason&&<p className="mt-1 text-[11px] leading-5 text-slate-500">{provider.reason}</p>}
+                </div>)}
+              </div>
+            </div>}
+            <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">{capabilityMatrix.global_policy}</p>
+          </>}
+        </section>
       </section>
 
       <section className="mt-5 grid gap-3 sm:grid-cols-3">

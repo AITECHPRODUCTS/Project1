@@ -9,6 +9,7 @@ CAPABILITY_STATUSES = {
     "automatic",
     "automatic_after_one_time_authorization",
     "approval_required",
+    "partially_available",
     "manual_provider_flow",
     "not_supported",
     "not_configured",
@@ -59,8 +60,8 @@ def build_capability_matrix(settings: Settings, registry: dict[str, Any]) -> dic
         offer_state = "automatic_after_one_time_authorization"
         offer_reason = "Offer lookup can run through a provider verified for this environment."
     elif offer_status == "configured_not_health_checked":
-        offer_state = "not_configured"
-        offer_reason = "Directory adapter exists, but a live health/contract check has not passed."
+        offer_state = "partially_available"
+        offer_reason = "A directory adapter is configured, but this environment has not passed a live health/contract check; current offer data and account access are not verified."
     else:
         offer_state = "not_configured"
         offer_reason = "No verified offer discovery provider is available in this environment."
@@ -205,9 +206,9 @@ def build_capability_matrix(settings: Settings, registry: dict[str, Any]) -> dic
         _item(
             "super_admin_operations",
             "Platform-wide Super Admin and tenant operations",
-            "not_supported",
-            "The full global operations console, tenant lifecycle, retention/deletion, incident controls and platform-wide RBAC are not yet implemented end-to-end.",
-            prerequisites=["Separate platform-admin identity", "Audited least-privilege controls", "Tenant isolation tests"],
+            "partially_available",
+            "Implemented foundations include audited tenant suspend/reinstate, a global pause for registry-gated provider writes, and read-only platform overview, workflow, provider-readiness and audit views. Worker/queue heartbeats, dead-letter recovery, retention/deletion, incident operations, and complete platform RBAC, health and release controls remain incomplete.",
+            prerequisites=["Separate platform-admin identity", "Audited least-privilege controls", "Tenant isolation tests", "Worker/queue and dead-letter operations", "Retention and incident runbooks"],
         ),
     ]
     provider_items = []
@@ -217,6 +218,8 @@ def build_capability_matrix(settings: Settings, registry: dict[str, Any]) -> dic
             capability_status = "automatic_after_one_time_authorization"
         elif status == "contract_tested":
             capability_status = "approval_required"
+        elif status == "configured_not_health_checked":
+            capability_status = "partially_available"
         elif row.get("adapter") in {"catalog_only", "unknown"} or status == "not_implemented":
             capability_status = "manual_provider_flow"
         else:

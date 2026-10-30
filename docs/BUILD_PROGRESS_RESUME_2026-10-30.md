@@ -3,7 +3,7 @@
 **Snapshot:** 30 October 2026  
 **Repository:** [AITECHPRODUCTS/Project1](https://github.com/AITECHPRODUCTS/Project1)  
 **Implementation branch:** `build/omni-affiliate-os-production` (the existing branch; no new branch created)  
-**Verified code/test SHA:** `9e199232e41d1a1be3e19128fe365bf169cc20a9`  
+**Verified code/test SHA:** `5e4044336df95561c4d3e953ace8929db75435c2`  
 **Pull request:** [#1 — draft, open, not merged](https://github.com/AITECHPRODUCTS/Project1/pull/1)  
 **Release decision:** **Not production-ready; no production deployment is claimed.**
 
@@ -77,3 +77,18 @@ Next priority is to close one selected affiliate-network integration end-to-end 
 - Current `docs/skill-parity-matrix.csv` has 53 rows, all `partial`. Official account OAuth/provider UAT, complete publishing/paid-ad mutation and provider-attested reporting, commission reconciliation, remaining merchant/admin operations, all-skill acceptance and production deployment remain release blockers.
 - Repository inspection found two branches (`main` and the existing build branch) and an open draft PR #1. The application code remains on the build branch; `main` remains bootstrap-only. No merge/deployment or public-visibility change was made.
 - The separately mentioned newer live-application ZIP is not present in the inspected Library inventory. Do not claim it has been inspected or ported.
+
+
+## 2026-10-30 continuation — corrected merchant navigation acceptance and exact-head CI
+
+- Continued on the existing `build/omni-affiliate-os-production` branch only. No branch created, no history rewrite, no reset, no PR merge and no deployment.
+- Added the Growth cockpit `Merchant dashboard` entry point and return navigation from `/merchant/offers` and `/merchant/applications`.
+- Corrected the browser test placement: removed an assertion that expected a link to itself on `/merchant`, and added a dedicated test which opens both merchant subpages and verifies the visible `Merchant dashboard` link targets `/merchant`.
+- Latest verified code/test SHA: `5e4044336df95561c4d3e953ace8929db75435c2`.
+- Exact push workflow [41049558369](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41049558369) completed successfully; all configured jobs passed, including lockfile-sync.
+- Exact PR workflow [41049567637](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41049567637) completed successfully; all required jobs passed and PR lockfile-sync was skipped by the push-only workflow condition.
+- Exact-SHA test counts: Python 845 passed / 9 skipped / 5 warnings; PostgreSQL integration 9 passed; Chromium browser UAT 37 passed on both runs. Frontend typecheck/production build/dependency-pruned Docker smoke, AI/RAG profile, security/SBOM/dependency audit, secret scan and repo guard passed.
+- CI migration checks verify a single Alembic head `0034_workspace_invitations`, a 34-revision chain, fresh SQLite/PostgreSQL upgrades, downgrade/re-upgrade and schema-drift checks. Production-like existing-data migration, backup/restore and rollback rehearsal remain unverified.
+- The two temporary `sharp-libvips` LGPL exceptions relate to the full build/install inventory and expire 2 November 2026; the production frontend dependency-policy check passed without those exceptions. Legal/build-inventory resolution is still required.
+- The current skill parity register remains 53 partial / 0 complete. No live affiliate-account OAuth, universal provider support, live campaign spending or guaranteed commission capability is claimed.
+- PR #1 remains open/draft/unmerged; `main` remains bootstrap-only. The newer separately mentioned live-application ZIP remains unavailable in the inspected Library inventory.

@@ -127,7 +127,7 @@ def test_clickbank_provider_order_reconciliation_accepts_exact_signed_ledger_can
             assert "USD 12.500000" in row.inner_text()
             assert row.get_by_label("Ledger candidate for CB-RECEIPT-1").input_value()=="ledger-1"
             page.get_by_role("button",name="Accept exact ledger match").click()
-            page.get_by_text("matched to conversion",exact=False).wait_for(state="visible")
+            page.get_by_role("status").filter(has_text="Review saved: matched to conversion").wait_for(state="visible")
             assert len(review_calls)==1
             assert page.get_by_text("Payout confirmed: no",exact=False).is_visible()
         finally:

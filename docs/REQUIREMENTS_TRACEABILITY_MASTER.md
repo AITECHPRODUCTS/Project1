@@ -658,3 +658,11 @@
 - backend/services/jurisdiction_compliance.py now fails closed on persisted evidence whose reviewed_at timestamp is missing, malformed, timezone-naive or future-dated; evaluation time must include a timezone. Stored evidence URL strings are revalidated at action time for absolute HTTPS, no credentials, no local/private/reserved IP literals and no localhost/local/internal/test hosts.
 - Added direct service-level regression tests. Exact push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911398073 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911408321 passed at code SHA c31459af067540eb35b033ca5fb4d8532962be21: Python 819 passed/9 skipped/5 warnings; browser UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard passed. Push lockfile-sync passed.
 - Boundary: this is fail-closed evidence validation, not a jurisdiction-wide legal database or independent legal opinion. Human review, source authority, actual program/platform terms and account/provider acceptance remain separate.
+
+
+## 2026-10-30 — Merchant dashboard internal vs affiliate-network approval
+
+- Code: `frontend/app/merchant/page.tsx`; browser acceptance: `browser_tests/test_merchant_dashboard.py`.
+- Status: **Verified** at exact code/test SHA `9e199232e41d1a1be3e19128fe365bf169cc20a9`; push run [41046673153](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41046673153) and PR run [41046682202](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41046682202) both passed.
+- Acceptance: merchant-internal approval summary is rendered separately from affiliate-network-approved summary; browser fixture covers an internally approved offer whose affiliate-network status remains pending (2 internal / 1 network-approved).
+- Remaining: live network-side approval must be read from the authorized provider/account; internal merchant status must never be substituted for affiliate-network approval. This slice is not proof of provider connectivity or general production readiness.

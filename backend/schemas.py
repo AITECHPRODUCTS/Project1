@@ -218,6 +218,45 @@ class OfferQualificationReviewRequest(BaseModel):
             raise ValueError("rejected, deferred and needs_evidence decisions require reviewer notes")
         return self
 
+
+class OfferEvidenceCaptureRequest(BaseModel):
+    """Bounded public HTTPS source capture; credentials are never accepted with URLs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_urls: list[Annotated[str, Field(min_length=8, max_length=2048)]] = Field(min_length=1, max_length=10)
+
+    @field_validator("source_urls")
+    @classmethod
+    def validate_source_urls(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        sensitive = re.compile(
+            r"(?:access[_-]?token|api[_-]?key|auth(?:orization)?|client[_-]?secret|"
+            r"credential|password|secret|signature|session|token|code)",
+            re.IGNORECASE,
+        )
+        for raw in values:
+            value = raw.strip()
+            parsed = urlparse(value)
+            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError("Evidence source URLs must be absolute HTTPS URLs without credentials")
+            if parsed.port is not None and parsed.port != 443:
+                raise ValueError("Evidence source URLs must use the standard HTTPS port")
+            try:
+                address = ipaddress.ip_address(parsed.hostname)
+            except ValueError:
+                address = None
+            if address is not None and not address.is_global:
+                raise ValueError("Evidence source URLs must not use private or non-public IP addresses")
+            if any(sensitive.search(key) for key, _ in parse_qsl(parsed.query, keep_blank_values=True)):
+                raise ValueError("Evidence source URLs must not contain credential-like query parameters")
+            if value not in normalized:
+                normalized.append(value)
+        if not normalized:
+            raise ValueError("At least one unique HTTPS evidence source is required")
+        return normalized
+
+
 class OfferShortlistCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     description: str = Field(default="", max_length=1000)

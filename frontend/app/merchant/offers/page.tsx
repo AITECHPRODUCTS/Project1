@@ -222,7 +222,7 @@ export default function MerchantOffersPage(){
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Merchant offers</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">Create an offer packet, submit it for a second-person review, and record explicit evidence checks before internal activation. Saving URLs is not independent verification and does not connect the offer to an affiliate network.</p>
         </div>
-        <div className="flex flex-wrap gap-2"><a href="/merchant/applications" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher applications</a><a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Browse marketplace</a><button onClick={()=>void load()} disabled={!!busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh offers</button></div>
+        <div className="flex flex-wrap gap-2"><a href="/merchant" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant dashboard</a><a href="/merchant/applications" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher applications</a><a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Browse marketplace</a><button onClick={()=>void load()} disabled={!!busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh offers</button></div>
       </header>
 
       {error&&<div role="alert" className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>}

@@ -337,3 +337,66 @@ def test_rejected_flipkart_credentials_are_not_persisted_or_echoed(monkeypatch, 
         assert asyncio.run(inspect()) == []
     finally:
         _cleanup(engine, client)
+
+
+def test_two_flipkart_accounts_keep_same_product_snapshots_isolated(monkeypatch, tmp_path):
+    engine, sessions, _, workspace_a, _, client = _client(tmp_path)
+    second_tracking_id = "creator456"
+    second_token = "second-private-token-" + "y" * 32
+
+    async def verify(tracking_id, token):
+        return _verified(tracking_id=tracking_id)
+
+    async def search(tracking_id, token, *, query, result_count):
+        value = "12999" if tracking_id == TRACKING_ID else "11999"
+        result = _products()
+        result["products"][0]["price_amount"] = value
+        result["products"][0]["product_url"] = "https://www.flipkart.com/" + tracking_id + "/same-product"
+        return result
+
+    monkeypatch.setattr(main, "verify_flipkart_credentials", verify)
+    monkeypatch.setattr(main, "search_flipkart_products", search)
+    try:
+        with client:
+            first = client.post(
+                "/api/provider-connections/flipkart",
+                json={"tracking_id": TRACKING_ID, "api_token": API_TOKEN},
+            )
+            second = client.post(
+                "/api/provider-connections/flipkart",
+                json={"tracking_id": second_tracking_id, "api_token": second_token},
+            )
+            assert first.status_code == 201, first.text
+            assert second.status_code == 201, second.text
+            first_id, second_id = first.json()["id"], second.json()["id"]
+            assert first_id != second_id
+
+            first_result = client.post(
+                f"/api/provider-connections/{first_id}/flipkart/products/search",
+                json={"query": "android phone", "result_count": 10},
+            )
+            second_result = client.post(
+                f"/api/provider-connections/{second_id}/flipkart/products/search",
+                json={"query": "android phone", "result_count": 10},
+            )
+            assert first_result.status_code == 200, first_result.text
+            assert second_result.status_code == 200, second_result.text
+
+        async def inspect():
+            with workspace_scope(workspace_a):
+                async with sessions() as db:
+                    return list((await db.scalars(select(ProviderCatalogObservation).where(
+                        ProviderCatalogObservation.workspace_id == workspace_a,
+                        ProviderCatalogObservation.observation_type == "product",
+                        ProviderCatalogObservation.external_id == "MOBABC123",
+                    ))).all())
+
+        rows = asyncio.run(inspect())
+        assert len(rows) == 2
+        by_connection = {row.connection_id: row for row in rows}
+        assert by_connection[first_id].price_amount == Decimal("12999.0000")
+        assert by_connection[second_id].price_amount == Decimal("11999.0000")
+        assert by_connection[first_id].provider_url.endswith("/" + TRACKING_ID + "/same-product")
+        assert by_connection[second_id].provider_url.endswith("/" + second_tracking_id + "/same-product")
+    finally:
+        _cleanup(engine, client)

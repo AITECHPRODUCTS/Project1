@@ -311,6 +311,7 @@ class ProviderOrderObservation(TenantScopedMixin, Base):
         CheckConstraint("workspace_id IS NOT NULL", name="ck_provider_order_observations_workspace_required"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
     connection_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("provider_account_connections.id", ondelete="RESTRICT"), nullable=False, index=True
     )

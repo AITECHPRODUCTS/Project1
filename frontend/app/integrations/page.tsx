@@ -40,7 +40,8 @@ export default function IntegrationsPage(){
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
  const [quickstats,setQuickstats]=useState<Record<string,QuickstatsReport>>({});
- const [orderCounts,setOrderCounts]=useState<Record<string,OrderCountReport>>({});\n const [orderImports,setOrderImports]=useState<Record<string,OrderImportReport>>({});
+ const [orderCounts,setOrderCounts]=useState<Record<string,OrderCountReport>>({});
+ const [orderImports,setOrderImports]=useState<Record<string,OrderImportReport>>({});
  const load=useCallback(async()=>{setLoading(true);setError("");try{const result=await apiFetch<ConnectionList>("/api/provider-connections");setConnections(result.data||[]);}catch(exc){setError(exc instanceof Error?exc.message:"Unable to load provider connections.");}finally{setLoading(false);}},[]);
  useEffect(()=>{void load();},[load]);
  const connect=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const submittedKey=apiKey;setApiKey("");setBusy("connect");setError("");setNotice("");try{const row=await apiFetch<Connection>("/api/provider-connections/clickbank",{method:"POST",body:JSON.stringify({api_key:submittedKey})});setConnections(current=>[row,...current.filter(item=>item.id!==row.id)]);setNotice("ClickBank account access verified. The credential was encrypted and stored for this workspace.");}catch(exc){setError(exc instanceof Error?exc.message:"ClickBank connection could not be verified.");}finally{setApiKey("");setBusy("");}};

@@ -41,6 +41,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("workspace_id", "provider_id", "event_key", "source_fingerprint", name="uq_provider_order_observation_workspace_source"),
     )
+    op.create_index("ix_provider_order_observations_workspace_id", "provider_order_observations", ["workspace_id"])
     op.create_index("ix_provider_order_observations_workspace_connection_observed", "provider_order_observations", ["workspace_id", "connection_id", "observed_at"])
     op.create_index("ix_provider_order_observations_workspace_account_time", "provider_order_observations", ["workspace_id", "account_nickname", "transaction_time"])
     op.create_index("ix_provider_order_observations_connection_id", "provider_order_observations", ["connection_id"])

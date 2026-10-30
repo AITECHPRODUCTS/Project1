@@ -5,9 +5,9 @@ import {apiFetch} from "@/lib/api";
 type Connection={id:string;provider_id:string;status:"connected_read_only"|"degraded"|"disconnected";account_nicknames:string[];capabilities:string[];permissions_verified:string[];credential_present:boolean;last_checked_at:string|null;last_error_code:string|null;created_at:string|null};
 type ConnectionList={data:Connection[]};
 type FlipkartProduct={external_id:string;title:string;description:string;brand:string|null;category:string|null;product_url:string|null;image_url:string|null;price_amount:string|null;mrp_amount:string|null;currency:string|null;in_stock:boolean|null;discount_percentage:string|null};
-type FlipkartProductSearchReport={provider_id:string;evidence_type:string;source_endpoint:string;query:string;requested_count:number;result_count:number;persisted_count:number;source_checked_at:string;commission_terms_status:string;note:string;products:FlipkartProduct[]};
+type FlipkartProductSearchReport={provider_id:string;evidence_type:string;source_endpoint?:string;query?:string;requested_count?:number;result_count:number;persisted_count?:number;count?:number;limit?:number;offset?:number;has_more?:boolean;source_checked_at:string|null;commission_terms_status:string;note:string;products:FlipkartProduct[]};
 type FlipkartOffer={external_id:string;title:string;description:string;category:string|null;offer_url:string;image_url:string|null;availability_status:string|null;is_available:boolean|null;start_at:string|null;end_at:string|null};
-type FlipkartOfferReport={provider_id:string;evidence_type:string;source_endpoint:string;offer_kind:string;result_count:number;persisted_count:number;source_checked_at:string;commission_terms_status:string;note:string;offers:FlipkartOffer[]};
+type FlipkartOfferReport={provider_id:string;evidence_type:string;source_endpoint?:string;offer_kind?:string;result_count:number;persisted_count?:number;count?:number;limit?:number;offset?:number;has_more?:boolean;source_checked_at:string|null;commission_terms_status:string;note:string;offers:FlipkartOffer[]};
 type ProviderOrderTransaction={
   event_key:string;source_fingerprint:string;receipt:string;transaction_time:string;
   transaction_type:string;role:"AFFILIATE";account_nickname:string;vendor_nickname:string|null;
@@ -92,6 +92,24 @@ export default function IntegrationsPage(){
    setFlipkartProducts(current=>({...current,[id]:report}));
    setNotice("Flipkart returned provider-reported product results. Commission and cookie terms remain unknown until verified separately.");
   }catch(exc){setError(exc instanceof Error?exc.message:"Flipkart product search failed.");}
+  finally{setBusy("");}
+ };
+ const loadSavedFlipkartProducts=async(id:string)=>{
+  setBusy(id+":flipkart-saved-products");setError("");setNotice("");
+  try{
+   const report=await apiFetch<FlipkartProductSearchReport>("/api/provider-connections/"+id+"/flipkart/catalog?kind=product&limit=100&offset=0");
+   setFlipkartProducts(current=>({...current,[id]:report}));
+   setNotice("Saved Flipkart product observations loaded from this workspace. Their original provider capture times are preserved.");
+  }catch(exc){setError(exc instanceof Error?exc.message:"Saved Flipkart products could not be loaded.");}
+  finally{setBusy("");}
+ };
+ const loadSavedFlipkartOffers=async(id:string)=>{
+  setBusy(id+":flipkart-saved-offers");setError("");setNotice("");
+  try{
+   const report=await apiFetch<FlipkartOfferReport>("/api/provider-connections/"+id+"/flipkart/catalog?kind=offer&limit=100&offset=0");
+   setFlipkartOffers(current=>({...current,[id]:report}));
+   setNotice("Saved Flipkart offer observations loaded from this workspace.");
+  }catch(exc){setError(exc instanceof Error?exc.message:"Saved Flipkart offers could not be loaded.");}
   finally{setBusy("");}
  };
  const loadFlipkartOffers=async(id:string)=>{
@@ -196,7 +214,7 @@ export default function IntegrationsPage(){
        <label className="block text-xs font-bold text-slate-700" htmlFor={"flipkart-query-"+connection.id}>Search products by keyword<input id={"flipkart-query-"+connection.id} value={flipkartSearchText} onChange={event=>setFlipkartSearchText(event.target.value)} minLength={2} maxLength={200} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal" placeholder="e.g. wireless earbuds"/></label>
        <button type="submit" disabled={busy!==""} className="self-end rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40">{busy===connection.id+":flipkart-search"?"Searching…":"Search Flipkart products"}</button>
       </form>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-slate-500">Search returns up to 10 provider results and saves the latest observation per product in this workspace.</p><button type="button" onClick={()=>void loadFlipkartOffers(connection.id)} disabled={busy!==""} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-40">{busy===connection.id+":flipkart-offers"?"Loading…":"Load active offers"}</button></div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-slate-500">Search returns up to 10 provider results and saves the latest observation per product in this workspace.</p><div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void loadSavedFlipkartProducts(connection.id)} disabled={busy!==""} className="rounded-lg border border-indigo-200 px-3 py-2 text-xs font-bold disabled:opacity-40">{busy===connection.id+":flipkart-saved-products"?"Loading…":"Load saved products"}</button><button type="button" onClick={()=>void loadFlipkartOffers(connection.id)} disabled={busy!==""} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-40">{busy===connection.id+":flipkart-offers"?"Loading…":"Load active offers"}</button><button type="button" onClick={()=>void loadSavedFlipkartOffers(connection.id)} disabled={busy!==""} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-40">{busy===connection.id+":flipkart-saved-offers"?"Loading…":"Load saved offers"}</button></div></div>
       {flipkartProducts[connection.id]&&<div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3" data-testid="flipkart-product-results"><p className="text-xs font-bold text-slate-700">Provider-reported products · {flipkartProducts[connection.id].result_count} result(s) · checked {new Date(flipkartProducts[connection.id].source_checked_at).toLocaleString()}</p><div className="mt-2 grid gap-3 sm:grid-cols-2">{flipkartProducts[connection.id].products.map(product=><article key={product.external_id} className="rounded-lg border border-slate-200 bg-white p-3"><div className="flex gap-3">{product.image_url&&<img src={product.image_url} alt="" className="h-16 w-16 rounded-lg object-contain"/>}<div className="min-w-0"><p className="text-sm font-bold">{product.title}</p><p className="mt-1 text-xs text-slate-500">{product.brand||"Brand unknown"} · {product.category||"Category unknown"}</p><p className="mt-1 text-xs font-bold">{product.currency||""} {product.price_amount??"Price unknown"}{product.mrp_amount?" · MRP "+(product.currency||"")+" "+product.mrp_amount:""}</p><p className="mt-1 text-xs text-slate-500">{product.in_stock===true?"In stock":product.in_stock===false?"Out of stock":"Stock unknown"}{product.discount_percentage?" · "+product.discount_percentage+"% discount":""}</p>{product.product_url&&<a href={product.product_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-indigo-700 underline">Open product</a>}</div></div></article>)}</div><p className="mt-3 text-[11px] leading-5 text-amber-900">{flipkartProducts[connection.id].note}</p></div>}
       {flipkartOffers[connection.id]&&<div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/50 p-3" data-testid="flipkart-active-offers"><p className="text-xs font-bold text-slate-700">Active offers · {flipkartOffers[connection.id].result_count} result(s) · checked {new Date(flipkartOffers[connection.id].source_checked_at).toLocaleString()}</p><div className="mt-2 grid gap-2">{flipkartOffers[connection.id].offers.map(offer=><article key={offer.external_id} className="rounded-lg bg-white p-3"><p className="text-sm font-bold">{offer.title}</p><p className="mt-1 text-xs text-slate-500">{offer.category||"Category unknown"} · {offer.availability_status||"Availability unknown"}</p>{offer.offer_url&&<a href={offer.offer_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-indigo-700 underline">Open offer</a>}</article>)}</div><p className="mt-3 text-[11px] leading-5 text-amber-900">{flipkartOffers[connection.id].note}</p></div>}
      </div>

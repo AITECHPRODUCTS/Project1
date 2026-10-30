@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from html import escape as html_escape
 from html.parser import HTMLParser
 from datetime import date,datetime,timedelta,timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import parse_qsl,urlencode,urlparse,urlunparse
 from typing import Any, Literal
@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ProviderOrderObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -7971,6 +7971,262 @@ async def conversion_ledger(
             }
             for entry in rows
         ],
+    }
+
+
+@api.get("/finance/provider-orders/reconciliation")
+async def provider_order_reconciliation_queue(
+    limit: int = Query(default=100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Read-only candidate queue; imported provider observations never create ledger money."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing provider order reconciliation")
+
+    with workspace_scope(str(workspace_id)):
+        observations = list((await db.scalars(
+            select(ProviderOrderObservation)
+            .where(ProviderOrderObservation.workspace_id == str(workspace_id))
+            .order_by(ProviderOrderObservation.observed_at.desc())
+            .limit(limit)
+        )).all())
+        observation_ids = [row.id for row in observations]
+        review_rows = list((await db.scalars(
+            select(ProviderOrderReconciliationReview).where(
+                ProviderOrderReconciliationReview.workspace_id == str(workspace_id),
+                ProviderOrderReconciliationReview.observation_id.in_(observation_ids),
+            )
+        )).all()) if observation_ids else []
+        click_ids = sorted({
+            row.click_id for row in observations
+            if row.click_id and row.attribution_status == "matched_clickbank_tid"
+        })
+        ledger_rows = list((await db.scalars(
+            select(ConversionLedgerEntry).where(
+                ConversionLedgerEntry.workspace_id == str(workspace_id),
+                ConversionLedgerEntry.click_id.in_(click_ids),
+                ConversionLedgerEntry.evidence_status == "signed_webhook_verified",
+                ConversionLedgerEntry.entry_type == "conversion",
+            )
+        )).all()) if click_ids else []
+
+    reviews_by_observation = {row.observation_id: row for row in review_rows}
+    ledger_by_click: dict[str, list[ConversionLedgerEntry]] = {}
+    for entry in ledger_rows:
+        if entry.click_id:
+            ledger_by_click.setdefault(entry.click_id, []).append(entry)
+
+    output = []
+    counts: dict[str, int] = {}
+    for observation in observations:
+        review = reviews_by_observation.get(observation.id)
+        candidates: list[dict[str, Any]] = []
+        reason = None
+        try:
+            provider_amount = Decimal(str(observation.account_amount)) if observation.account_amount is not None else None
+        except (InvalidOperation, TypeError, ValueError):
+            provider_amount = None
+
+        if review is not None:
+            reason = "already_reviewed"
+        elif str(observation.transaction_type or "").upper() != "SALE":
+            reason = "non_sale_transaction"
+        elif observation.attribution_status != "matched_clickbank_tid" or not observation.click_id:
+            reason = "click_not_attributed"
+        elif provider_amount is None or not provider_amount.is_finite() or provider_amount <= 0:
+            reason = "missing_positive_account_amount"
+        elif not observation.currency or not re.fullmatch(r"[A-Z]{3}", str(observation.currency).upper()):
+            reason = "missing_or_invalid_currency"
+        else:
+            for entry in ledger_by_click.get(observation.click_id, []):
+                try:
+                    ledger_amount = Decimal(str(entry.commission_amount))
+                except (InvalidOperation, TypeError, ValueError):
+                    continue
+                if (
+                    str(entry.network or "").strip().casefold() == str(observation.provider_id or "").strip().casefold()
+                    and str(entry.currency or "").strip().upper() == str(observation.currency).strip().upper()
+                    and ledger_amount.is_finite()
+                    and ledger_amount == provider_amount
+                    and ledger_amount > 0
+                    and str(entry.status or "").casefold() not in {
+                        "reversed", "partially_reversed", "reversal", "reversal_unmatched",
+                        "refunded", "chargeback", "charged_back",
+                    }
+                ):
+                    candidates.append({
+                        "ledger_entry_id": entry.id,
+                        "network": entry.network,
+                        "external_event_id": entry.external_event_id,
+                        "commission_amount": format(ledger_amount, ".6f"),
+                        "currency": entry.currency,
+                        "status": entry.status,
+                        "evidence_status": entry.evidence_status,
+                    })
+            if not candidates:
+                reason = "no_exact_signed_ledger_match"
+
+        review_status = review.decision if review else "not_reviewed"
+        counts[review_status] = counts.get(review_status, 0) + 1
+        output.append({
+            "observation_id": observation.id,
+            "provider_id": observation.provider_id,
+            "account_nickname": observation.account_nickname,
+            "receipt": observation.receipt,
+            "transaction_time": observation.transaction_time,
+            "transaction_type": observation.transaction_type,
+            "product_title": observation.product_title,
+            "line_item_status": observation.line_item_status,
+            "account_amount": format(provider_amount, ".6f") if provider_amount is not None else None,
+            "currency": observation.currency,
+            "click_id": observation.click_id,
+            "attribution_status": observation.attribution_status,
+            "evidence_status": observation.evidence_status,
+            "observed_at": observation.observed_at.isoformat() if observation.observed_at else None,
+            "review_status": review_status,
+            "reviewed_by": review.reviewer_email if review else None,
+            "reviewed_at": review.reviewed_at.isoformat() if review and review.reviewed_at else None,
+            "review_note": review.note if review else None,
+            "candidate_count": len(candidates),
+            "candidates": candidates[:20],
+            "match_block_reason": reason,
+        })
+
+    return {
+        "count": len(output),
+        "limit": limit,
+        "read_only": True,
+        "commission_ledger_mutated": False,
+        "payout_confirmed": False,
+        "counts": counts,
+        "data": output,
+        "policy": (
+            "A candidate requires the same workspace, exact ClickBank TID click ID, provider/network, "
+            "currency and six-decimal account/commission amount, plus a signed-webhook-verified conversion "
+            "ledger entry. Human review is still required. This action never changes a conversion, ledger "
+            "entry, payout threshold or funds-received state."
+        ),
+    }
+
+
+@api.patch("/finance/provider-orders/{observation_id}/review", dependencies=[Depends(require_admin)])
+async def review_provider_order_reconciliation(
+    observation_id: str,
+    payload: ProviderOrderReconciliationReviewRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Append a human review decision without mutating the source or commission ledger."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before reviewing provider orders")
+
+    with workspace_scope(str(workspace_id)):
+        observation = await db.scalar(select(ProviderOrderObservation).where(
+            ProviderOrderObservation.id == observation_id,
+            ProviderOrderObservation.workspace_id == str(workspace_id),
+        ))
+        if observation is None:
+            raise HTTPException(404, "Provider order observation not found in the active workspace")
+        prior_review = await db.scalar(select(ProviderOrderReconciliationReview).where(
+            ProviderOrderReconciliationReview.workspace_id == str(workspace_id),
+            ProviderOrderReconciliationReview.observation_id == observation.id,
+        ))
+        if prior_review is not None:
+            raise HTTPException(409, "Provider order observation has already received a final review")
+
+        candidate_id = payload.candidate_ledger_entry_id
+        ledger_entry = None
+        if payload.decision == "matched_to_conversion":
+            if not candidate_id:
+                raise HTTPException(422, "Choose an exact signed conversion-ledger candidate before accepting a match")
+            if (
+                str(observation.transaction_type or "").upper() != "SALE"
+                or observation.role != "AFFILIATE"
+                or observation.attribution_status != "matched_clickbank_tid"
+                or not observation.click_id
+                or observation.account_amount is None
+                or Decimal(str(observation.account_amount)) <= 0
+                or not observation.currency
+            ):
+                raise HTTPException(422, "This provider observation is not eligible for exact sale-to-click reconciliation")
+            ledger_entry = await db.scalar(select(ConversionLedgerEntry).where(
+                ConversionLedgerEntry.id == candidate_id,
+                ConversionLedgerEntry.workspace_id == str(workspace_id),
+            ))
+            if ledger_entry is None:
+                raise HTTPException(404, "Candidate ledger entry not found in the active workspace")
+            exact_match = (
+                ledger_entry.evidence_status == "signed_webhook_verified"
+                and ledger_entry.entry_type == "conversion"
+                and ledger_entry.click_id == observation.click_id
+                and str(ledger_entry.network or "").strip().casefold() == str(observation.provider_id or "").strip().casefold()
+                and str(ledger_entry.currency or "").strip().upper() == str(observation.currency).strip().upper()
+                and Decimal(str(ledger_entry.commission_amount)) == Decimal(str(observation.account_amount))
+                and Decimal(str(ledger_entry.commission_amount)) > 0
+                and str(ledger_entry.status or "").casefold() not in {
+                    "reversed", "partially_reversed", "reversal", "reversal_unmatched",
+                    "refunded", "chargeback", "charged_back",
+                }
+            )
+            if not exact_match:
+                raise HTTPException(
+                    422,
+                    "Candidate must be a signed ClickBank conversion with the same workspace, click ID, currency and exact six-decimal amount",
+                )
+            used = await db.scalar(select(ProviderOrderReconciliationReview.id).where(
+                ProviderOrderReconciliationReview.workspace_id == str(workspace_id),
+                ProviderOrderReconciliationReview.ledger_entry_id == ledger_entry.id,
+            ))
+            if used:
+                raise HTTPException(409, "This signed conversion-ledger entry has already been reconciled to provider order evidence")
+        elif candidate_id:
+            raise HTTPException(422, "A candidate ledger entry is only valid when accepting an exact match")
+
+        now = utcnow()
+        review = ProviderOrderReconciliationReview(
+            workspace_id=str(workspace_id),
+            observation_id=observation.id,
+            ledger_entry_id=ledger_entry.id if ledger_entry else None,
+            decision=payload.decision,
+            note=payload.note.strip(),
+            reviewer_user_id=str(user.get("user_id") or "")[:36] or None,
+            reviewer_email=str(user.get("email") or "unknown")[:320],
+            reviewed_at=now,
+        )
+        db.add(review)
+        db.add(AuditLog(
+            workspace_id=str(workspace_id),
+            actor=str(user.get("email") or "unknown")[:320],
+            action="finance.provider_order_reconciliation.reviewed",
+            resource_type="provider_order_observation",
+            resource_id=observation.id,
+            outcome=payload.decision,
+            details_json={
+                "candidate_ledger_entry_id": ledger_entry.id if ledger_entry else None,
+                "payout_confirmed": False,
+                "commission_ledger_mutated": False,
+                "note": payload.note.strip(),
+            },
+        ))
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "Provider order evidence or candidate conversion was reviewed concurrently") from None
+
+    return {
+        "observation_id": observation.id,
+        "review_id": review.id,
+        "decision": review.decision,
+        "candidate_ledger_entry_id": review.ledger_entry_id,
+        "reviewed_by": review.reviewer_email,
+        "reviewed_at": now.isoformat(),
+        "commission_ledger_mutated": False,
+        "payout_confirmed": False,
+        "transfers_initiated": False,
     }
 
 

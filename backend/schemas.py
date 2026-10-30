@@ -774,6 +774,20 @@ class CommissionEvidenceReviewRequest(BaseModel):
 
 
 
+class ProviderOrderReconciliationReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal[
+        "matched_to_conversion",
+        "not_a_match",
+        "rejected_as_unreliable",
+    ]
+    candidate_ledger_entry_id: str | None = Field(default=None, min_length=1, max_length=36)
+    note: str = Field(default="", max_length=4000)
+
+
+
+
 class CommissionProjectionProgramRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

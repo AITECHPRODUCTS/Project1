@@ -209,6 +209,8 @@ def _guard_conversion_ledger_append_only(session: Session, flush_context, instan
             raise ValueError("Conversion ledger entries are append-only")
         if isinstance(entity, LeadConsentEvent):
             raise ValueError("Lead consent events are append-only")
+        if isinstance(entity, ProviderOrderReconciliationReview):
+            raise ValueError("Provider order reconciliation reviews are append-only")
 
 
 class WorkflowRun(TenantScopedMixin, Base):
@@ -345,6 +347,53 @@ class ProviderOrderObservation(TenantScopedMixin, Base):
     shippable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     evidence_status: Mapped[str] = mapped_column(String(40), nullable=False, default="provider_reported_unreconciled")
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ProviderOrderReconciliationReview(TenantScopedMixin, Base):
+    """Immutable human decision linking provider order evidence to a signed conversion event."""
+
+    __tablename__ = "provider_order_reconciliation_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "observation_id",
+            name="uq_provider_order_review_workspace_observation",
+        ),
+        UniqueConstraint(
+            "workspace_id", "ledger_entry_id",
+            name="uq_provider_order_review_workspace_ledger_entry",
+        ),
+        CheckConstraint(
+            "decision IN ('matched_to_conversion', 'not_a_match', 'rejected_as_unreliable')",
+            name="ck_provider_order_review_decision",
+        ),
+        CheckConstraint(
+            "(decision = 'matched_to_conversion' AND ledger_entry_id IS NOT NULL) OR "
+            "(decision IN ('not_a_match', 'rejected_as_unreliable') AND ledger_entry_id IS NULL)",
+            name="ck_provider_order_review_candidate",
+        ),
+        Index(
+            "ix_provider_order_reviews_workspace_decision_time",
+            "workspace_id", "decision", "reviewed_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    observation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("provider_order_observations.id", ondelete="RESTRICT"), nullable=False
+    )
+    ledger_entry_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("conversion_ledger_entries.id", ondelete="RESTRICT"), nullable=True
+    )
+    decision: Mapped[str] = mapped_column(String(40), nullable=False)
+    note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    reviewer_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewer_email: Mapped[str] = mapped_column(String(320), default="unknown", nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class ExternalAction(TenantScopedMixin, Base):

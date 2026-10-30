@@ -65,6 +65,12 @@ def test_clickbank_provider_order_reconciliation_accepts_exact_signed_ledger_can
         browser=playwright.chromium.launch(headless=True)
         try:
             page=browser.new_page()
+            page_errors=[]
+            failed_requests=[]
+            page.on("pageerror",lambda error:page_errors.append(str(error)))
+            page.on("requestfailed",lambda request:failed_requests.append({
+                "method":request.method,"url":request.url,"failure":request.failure
+            }))
             def handle(route):
                 request=route.request
                 if request.url.endswith("/api/auth/me"):
@@ -95,9 +101,23 @@ def test_clickbank_provider_order_reconciliation_accepts_exact_signed_ledger_can
                 else:
                     _fulfill(route,{"detail":"Unexpected reconciliation request"},404)
             page.route("**/api/**",handle)
-            page.goto(BASE_URL+"/finance/provider-orders",wait_until="domcontentloaded")
+            with page.expect_response(
+                lambda response:"/api/finance/provider-orders/reconciliation" in response.url
+            ) as queue_response_info:
+                page.goto(BASE_URL+"/finance/provider-orders",wait_until="domcontentloaded")
+            queue_response=queue_response_info.value
+            assert queue_response.status==200,(
+                f"Reconciliation API returned {queue_response.status}: {queue_response.text()}"
+            )
             page.get_by_role("heading",name="ClickBank order evidence reconciliation").wait_for(state="visible")
-            page.get_by_text("Sample product",exact=True).wait_for(state="visible")
+            try:
+                page.get_by_text("Sample product",exact=True).wait_for(state="visible",timeout=10000)
+            except Exception as error:
+                raise AssertionError(
+                    "Reconciliation response succeeded but its provider row did not render. "
+                    f"Page errors: {page_errors}; failed requests: {failed_requests}; "
+                    f"queue response URL: {queue_response.url}"
+                ) from error
             page.get_by_text("USD 12.500000",exact=True).wait_for(state="visible")
             assert page.get_by_label("Ledger candidate for CB-RECEIPT-1").input_value()=="ledger-1"
             page.get_by_role("button",name="Accept exact ledger match").click()

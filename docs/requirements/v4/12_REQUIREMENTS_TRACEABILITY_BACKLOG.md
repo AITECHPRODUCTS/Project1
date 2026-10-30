@@ -552,3 +552,12 @@ Implementation captures a bounded public-page snapshot through the pinned outbou
 - New regressions confirm the paused scheduled worker makes no provider call and leaves the current item unclaimed; missing control returns 503 and leaves the item unclaimed; double-opt-in is blocked before lead/confirmation/consent mutation. Workspace-scoped, minimized audit evidence records each block.
 - Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925318303 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925331019 passed: Python 838 passed/9 skipped/5 warnings; browser UAT 30 passed; PostgreSQL integration 9 passed; frontend/Docker, AI/RAG (10 imports), security/SBOM/license, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped under its configured push-only condition.
 - Boundary: the pause now covers central registry claims and these two direct Resend send paths; other provider mutation/background paths need individual enforcement. In-flight operations are not rolled back. Real provider account and staged emergency-pause UAT remain open. Product remains NOT PRODUCTION READY.
+
+
+## R-30 — Workspace-scoped offer source capture and evidence history
+
+- Added bounded public HTTPS page capture for S1 offer qualification using the existing pinned SSRF-safe transport, no redirect following, credential-like query rejection, a 10-source cap, 1 MB response cap and limited concurrency.
+- Stores sanitized page metadata/excerpts, response and excerpt SHA-256 hashes, HTTP/content type, capture timestamps and bounded failed-fetch records in workspace-owned rows. Owner/admin capture, workspace-scoped read history and audit events are included.
+- API/service tests cover HTML sanitization, hashing, failure minimization, URL restrictions, authorization and cross-workspace isolation; the qualification UI supports capture, reload and review.
+- Boundary: capture age measures only when a page was fetched. It does not prove factual truth, legal validity, current terms, publisher eligibility or external network approval. Human qualification remains a separate decision.
+- Exact-SHA hosted verification is pending for this increment; live provider UAT remains open.

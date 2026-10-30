@@ -1,5 +1,13 @@
 # Implementation status — Project1 / OmniAffiliateOS
-Updated: 2026-10-30
+Updated: 2026-10-31
+
+## S1 offer qualification — public source evidence capture (implementation candidate 31 October 2026)
+
+- Added bounded public HTTPS source capture to the workspace offer-qualification path. Requests use the pinned SSRF-safe transport, do not follow redirects, reject credential-like query parameters, cap each capture at 10 unique sources and 1 MB per response, and limit concurrency.
+- Captures persist sanitized title/description/text excerpts, response and excerpt SHA-256 hashes, HTTP/content type, timestamps and exception-class-only failed-fetch records. They are workspace owned, query-isolated, audit logged and exposed through authenticated POST/GET APIs.
+- The qualification screen can capture and reload snapshots. Freshness measures capture age only; it does not establish truth, legal validity, eligibility or affiliate-network approval. Operator qualification remains separate.
+- Tests cover sanitization, hashing, failure minimization, URL restrictions, persistence, audit, owner/admin authorization and cross-workspace isolation. Exact-SHA hosted verification is pending for the commit that adds this slice.
+
 
 
 ## Automation capability gates and readiness corrections — verified 30 October 2026

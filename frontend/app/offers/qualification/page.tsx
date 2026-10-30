@@ -20,6 +20,18 @@ type QueueItem = {
   qualification: Qualification;
 };
 type QueueResponse = { count: number; total_count: number; offset: number; limit: number; status_filter: string; data: QueueItem[]; note: string };
+
+type EvidenceSnapshot = {
+  id: string; source_url: string; source_host: string; title: string; description: string; excerpt: string;
+  response_sha256: string | null; excerpt_sha256: string | null; http_status: number | null;
+  content_type: string; fetch_status: "fetched" | "fetch_failed"; error_code: string | null; fetched_at: string | null;
+};
+type EvidenceSnapshotResponse = {
+  count: number; data: EvidenceSnapshot[];
+  freshness: { status: string; approval_allowed: boolean; max_age_hours: number; message: string };
+  note: string; evidence_basis: string;
+};
+
 const checks: { key: CheckKey; label: string }[] = [
   { key: "account_eligibility", label: "Publisher account eligibility" }, { key: "geography_fit", label: "Target geography allowed" },
   { key: "traffic_source_fit", label: "Traffic sources allowed" }, { key: "terms_review", label: "Program terms reviewed" },
@@ -44,8 +56,45 @@ function QualificationCard({ item, onSaved }: { item: QueueItem; onSaved: (messa
   const [evidence, setEvidence] = useState(item.qualification.evidence_urls.join("\n"));
   const [notes, setNotes] = useState(item.qualification.notes);
   const [policyVersion, setPolicyVersion] = useState(item.qualification.policy_version || "manual-review-v1");
+
+  const [evidenceSnapshots, setEvidenceSnapshots] = useState<EvidenceSnapshot[]>([]);
+  const [evidenceFreshness, setEvidenceFreshness] = useState<string>("");
+  const [evidenceMessage, setEvidenceMessage] = useState("");
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  const evidenceEndpoint = "/api/offers/" + encodeURIComponent(item.offer.id) + "/evidence-snapshots";
+  const loadEvidenceSnapshots = async () => {
+    setEvidenceBusy(true); setEvidenceMessage("");
+    try {
+      const result = await apiFetch<EvidenceSnapshotResponse>(evidenceEndpoint);
+      setEvidenceSnapshots(result.data || []);
+      setEvidenceFreshness(result.freshness?.status || "unknown");
+      setEvidenceMessage(result.count + " saved snapshot(s) loaded. " + result.note);
+    } catch (cause) {
+      setEvidenceMessage(cause instanceof Error ? cause.message : "Saved source snapshots could not be loaded.");
+    } finally { setEvidenceBusy(false); }
+  };
+  const captureEvidenceSnapshots = async () => {
+    const sourceUrls = [...new Set(evidence.split("\n").map(value => value.trim()).filter(Boolean))];
+    if (sourceUrls.length === 0) { setEvidenceMessage("Enter at least one HTTPS evidence URL before capturing."); return; }
+    if (sourceUrls.length > 10) { setEvidenceMessage("Capture is limited to 10 unique public HTTPS sources at a time."); return; }
+    setEvidenceBusy(true); setEvidenceMessage("");
+    try {
+      const result = await apiFetch<EvidenceSnapshotResponse>(evidenceEndpoint, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_urls: sourceUrls }),
+      });
+      setEvidenceSnapshots(result.data || []);
+      setEvidenceFreshness(result.freshness?.status || "unknown");
+      setEvidenceMessage(result.data.filter(row => row.fetch_status === "fetched").length + " of " + result.count + " source(s) captured. " + result.note);
+    } catch (cause) {
+      setEvidenceMessage(cause instanceof Error ? cause.message : "Public source capture failed.");
+    } finally { setEvidenceBusy(false); }
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setError("");
     const urls = evidence.split("\n").map(value => value.trim()).filter(Boolean);
@@ -81,6 +130,25 @@ function QualificationCard({ item, onSaved }: { item: QueueItem; onSaved: (messa
         <div><label className={labelClass} htmlFor={item.offer.id + "-policy-version"}>Policy/checklist version</label><input id={item.offer.id + "-policy-version"} className={inputClass} maxLength={80} value={policyVersion} onChange={event => setPolicyVersion(event.target.value)} required/></div>
       </div>
       <div><label className={labelClass} htmlFor={item.offer.id + "-evidence"}>Evidence URLs (one HTTPS URL per line)</label><textarea id={item.offer.id + "-evidence"} className={inputClass + " min-h-24"} maxLength={12000} value={evidence} onChange={event => setEvidence(event.target.value)} placeholder="https://merchant.example/affiliate-terms"/></div>
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void captureEvidenceSnapshots()} disabled={evidenceBusy} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{evidenceBusy ? "Capturing…" : "Capture public evidence"}</button>
+          <button type="button" onClick={() => void loadEvidenceSnapshots()} disabled={evidenceBusy} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">Load saved snapshots</button>
+          {evidenceFreshness && <span className="self-center text-xs font-bold text-slate-600">Capture window: {evidenceFreshness.replaceAll("_", " ")}</span>}
+        </div>
+        <p className="mt-2 text-xs leading-5 text-slate-600">Captures bounded public HTTPS page text without following redirects or using supplied credentials. A captured page is not proof that its claims are true, current, legally valid, or approved by the affiliate network.</p>
+        {evidenceMessage && <p role="status" className="mt-2 text-xs leading-5 text-slate-700">{evidenceMessage}</p>}
+        {evidenceSnapshots.length > 0 && <div className="mt-3 space-y-2">
+          {evidenceSnapshots.map(snapshot => <article key={snapshot.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs text-slate-800">{snapshot.title || snapshot.source_host}</strong><span className={"text-xs font-bold " + (snapshot.fetch_status === "fetched" ? "text-emerald-700" : "text-rose-700")}>{snapshot.fetch_status.replaceAll("_", " ")}</span></div>
+            <p className="mt-1 break-all text-[11px] text-slate-500">{snapshot.source_url}</p>
+            {snapshot.fetched_at && <p className="mt-1 text-[11px] text-slate-500">Captured {new Date(snapshot.fetched_at).toLocaleString()} · HTTP {snapshot.http_status ?? "unknown"}</p>}
+            {snapshot.excerpt && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{snapshot.excerpt}</p>}
+            {snapshot.response_sha256 && <p className="mt-2 break-all font-mono text-[10px] text-slate-400">SHA-256 {snapshot.response_sha256}</p>}
+            {snapshot.error_code && <p className="mt-1 text-xs text-rose-700">Capture error: {snapshot.error_code}</p>}
+          </article>)}
+        </div>}
+      </div>
       <div><label className={labelClass} htmlFor={item.offer.id + "-review-notes"}>Reviewer notes</label><textarea id={item.offer.id + "-review-notes"} className={inputClass + " min-h-20"} maxLength={2000} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Record what was checked, unknowns, and follow-up required."/></div>
       {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
       <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save size={15}/>{busy ? "Saving review…" : "Save qualification review"}</button>

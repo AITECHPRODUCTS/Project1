@@ -144,3 +144,10 @@ Exact verified code checkpoint: 3badf73a5c6eb25d8cdd06fd8e1d49ae7734e324; push 4
 - Implementation paths: `backend/services/flipkart_accounts.py`; provider connection/search/offer routes in `backend/main.py`; validation in `backend/schemas.py`; `ProviderCatalogObservation` in `backend/models.py`; Alembic `0038_provider_catalog_observations`; UI `frontend/app/integrations/page.tsx`; tests `tests/test_flipkart_accounts.py`, `tests/test_flipkart_provider_api.py`, `browser_tests/test_flipkart_provider_connections.py`.
 - Only read-only product/offer data is requested. Commission rates, cookie duration, payout terms, account eligibility and provider approval are not included in these API feeds and must remain unknown rather than inferred.
 - Source/contract review does not prove a provider-side live account acceptance. Latest candidate test evidence must be taken from exact-head GitHub Actions runs, not a code commit or a mocked API fixture.
+
+
+## 2026-10-31 — captured S1 offer evidence
+
+- Public evidence capture reuses the existing pinned, SSRF-safe URL transport. Captured content is untrusted source material; hashes establish captured-text identity only, not factual truth or independent verification.
+- This route makes no affiliate-provider request and does not use account credentials. Provider-side eligibility, current terms, account acceptance and live account UAT remain separate gates.
+

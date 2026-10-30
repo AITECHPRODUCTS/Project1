@@ -113,3 +113,22 @@ Extended the ClickBank connection with a real read-only Quickstats data path. Th
 Feature code/test SHA: [cda552c](https://github.com/AITECHPRODUCTS/Project1/commit/cda552c4b6f7c0a9c52b950fea33e692b6e3854d). A frontend TypeScript invalid-character error from the generated newline was caught by CI and corrected in [e37d53f](https://github.com/AITECHPRODUCTS/Project1/commit/e37d53fe173cbc19c984cc33ae97a7aa4aa5f484). Both corrected exact-SHA workflows passed: [push 41085234431](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41085234431) and [PR 41085243305](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41085243305). Evidence on each run: Python **857 passed / 9 skipped / 5 warnings**, PostgreSQL integration passed, frontend production/typecheck/Docker checks passed, AI/RAG and security audit passed, secret scan and repository guard passed, and browser UAT **41 passed**. Push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
 
 No real ClickBank API key was provided, so no live provider account was connected during this work. Runtime live authorization and data retrieval still need UAT with an owner-controlled key in a controlled environment. The existing encrypted key depends on `APP_SESSION_SECRET`; rotation requires affected workspaces to reconnect. Other networks, marketplace offer discovery, order-level commission/reversal ingestion, paid ads, live publishing, full skill acceptance and production release operations remain outstanding.
+
+
+## Verified continuation — ClickBank affiliate order observations (30 October 2026)
+
+Extended the previously connected ClickBank read-only account into a bounded order-observation import path.
+
+**Built:** official `orders2/list` read adapter with affiliate-role/account/date filters; Page-header pagination supporting 200/206 and a bounded next-page cursor; normalization of line-item transaction data; PII-minimized output; a tenant-scoped, fingerprinted `provider_order_observations` table and Alembic migration 0036; workspace-admin import API; audit event; browser UI import of the last 30 days and subsequent pages; API/service/browser acceptance tests.
+
+**Privacy:** customer name/contact/email/phone/postal fields from the provider's Orders response are not persisted or returned. Stored fields are limited to the affiliate account, receipt reference, transaction date/type, product line metadata, currency and provider-reported amounts.
+
+**Finance semantics:** provider account/customer amounts are recorded as `provider_reported_unreconciled` evidence only. They are not classified as confirmed affiliate commission, net earnings or payout. The import does not mutate the existing commission ledger and does not create a payout. Click attribution, transaction/reversal matching, statement reconciliation and payout evidence remain unfinished.
+
+**Exact verified code checkpoint:** [3ff6f87](https://github.com/AITECHPRODUCTS/Project1/commit/3ff6f87507ccb0629a7ec18ba0dbc277e3c6b840). Both [push CI 41090218086](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41090218086) and [PR CI 41090228669](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41090228669) passed. Each run: Python **864 passed / 9 skipped / 6 warnings**; PostgreSQL integration **9 passed**; Chromium browser UAT **41 passed**; frontend typecheck/production/Docker checks, AI/RAG, security audit, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
+
+No live ClickBank key was supplied; this is hosted-CI verified code, not live provider account certification. The credential still derives from `APP_SESSION_SECRET`, so rotation requires reconnection. PR #1 remains draft/unmerged and the application has not been deployed to production.
+
+## Updated production blockers
+
+The next ClickBank increments still required are provider-side verification of account/order semantics, safe commission attribution and reversal/refund/chargeback reconciliation, and payout evidence. This integration does not yet provide marketplace offer search or affiliate program submission. Other networks, ad-platform reporting/actions, social/CMS/email publishing, CRM synchronization, full 53-skill acceptance, complete merchant lifecycle and full Super Admin operations remain outstanding. The release work still includes staging, live-provider UAT, managed secret/key rotation, monitoring/on-call, backups/restore, rollback/DR, legal/privacy/license review and launch approval.

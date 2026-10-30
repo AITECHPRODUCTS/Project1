@@ -102,3 +102,13 @@ PR #1 remains draft and unmerged; the application has not been shown deployed to
 No software can honestly be promised as “100% failproof,” and no application can guarantee users will earn commissions. Earnings depend on offer eligibility, audience, traffic, conversion, merchant/network decisions, policy compliance and actual provider-confirmed transactions. The product must display verified facts, operator inputs, estimates and unknowns separately.
 
 **Next build sequence:** first verify the ClickBank test-mock correction on its exact SHA; then continue the highest-priority unblocked S1/provider/commission vertical slice and its end-to-end tests on this same branch. Keep the release decision NO-GO until all applicable release gates have evidence.
+
+## Incremental build update — Flipkart marketplace product discovery (30 October 2026)
+
+A real read-only Flipkart Affiliate API connector has been added on the existing implementation branch. It verifies a registered tracking ID/token using the provider's feed directory, searches up to 10 products by keyword, reads the provider's active-offer feed, persists workspace/account-specific snapshots and exposes those results on the affiliate Integrations screen. Product and offer observations have source fingerprints and capture timestamps. Provider tokens are encrypted and never shown again.
+
+The snapshot storage key includes the exact provider connection, preventing two affiliate accounts in the same workspace from overwriting their account-specific provider URLs when the same product ID is returned. API/service tests cover credential validation, fixed endpoints/auth headers, malformed provider data, provider errors/rate limits, tenant isolation, duplicate imports and two-account isolation; a Chromium browser journey covers connect, search, offer retrieval, token masking and local disconnect.
+
+**Candidate code/test SHA:** `d8887fe205e70668dc0b2f89bc21fd44a835b0d9`. Push [41103590694](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41103590694) and PR [41103601744](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41103601744) were queued when the progress record was updated; verification is pending.
+
+This is an S1 provider product/offer discovery increment, not complete affiliate-program search. Flipkart's product/offer feeds do not supply affiliate commission rates, cookie/attribution windows, payout rules, publisher eligibility or network approvals. Those values remain unknown and the skill stays partial until official evidence and provider-specific acceptance cover them. No live credentials were available; CI mocks do not establish account connection or production UAT.

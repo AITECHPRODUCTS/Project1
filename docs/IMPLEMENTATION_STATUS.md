@@ -1,12 +1,14 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-30
 
-## Platform Super Admin operations overview — candidate; exact-head CI pending
+## Platform Super Admin operations overview — verified on 30 October 2026
 
 - Extended `frontend/app/admin/page.tsx` to consume the existing protected read-only platform APIs for overview, recent workflow runs, provider readiness and audit events.
 - Added persisted user/workspace/membership/workflow/audit count cards, workflow mode/status rows, provider configuration states, runtime/release caveats and recent audit evidence. The interface explicitly displays unverified queue and deployment states rather than implying production health.
 - Existing tenant lifecycle and global outbound-write pause controls remain intact. No external provider writes, account mutations, ad spend, publishing or payout behavior was enabled.
-- Added `browser_tests/test_platform_admin_operations.py` for the operations panels and API wiring. Exact candidate SHA and hosted verification are pending; do not mark this slice verified until push and PR Actions complete on the same SHA.
+- Added `browser_tests/test_platform_admin_operations.py` for the operations panels and API wiring.
+- Exact feature/test SHA: `6519c00e6188cc20473069e76722972fa3245c76`. Push CI [41038731067](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41038731067) and PR CI [41038737403](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41038737403) both completed successfully on this SHA. Both Python runs: **843 passed, 9 skipped, 5 warnings**; both Chromium browser UAT runs: **36 passed**. PostgreSQL migration/concurrency, frontend typecheck/build and final Docker smoke, security/SBOM, AI/RAG, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its push-only condition.
+- Verification scope is limited to this read-only Super Admin dashboard slice and the configured CI matrix. It does not certify real external provider connections, queue/dead-letter recovery, deployment, backups or overall production readiness.
 
 ## Paid-ad ROAS numeric input validation — verified on b538a03718d7e912925ee08aaf9ea249445c9220
 

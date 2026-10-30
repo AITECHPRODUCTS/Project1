@@ -203,7 +203,7 @@ def test_flipkart_connect_search_products_load_offers_and_disconnect():
             assert page.get_by_label("Private Affiliate API token").input_value() == ""
             assert API_TOKEN not in page.locator("main").inner_text()
             assert page.get_by_text(TRACKING_ID, exact=True).is_visible()
-            assert page.get_by_text("Product Search", exact=False).is_visible()
+            page.get_by_test_id("flipkart-provider-tools").get_by_text("Product Search", exact=True).first.wait_for(state="visible")
 
             page.get_by_role("button", name="Search Flipkart products").click()
             page.get_by_test_id("flipkart-product-results").wait_for(state="visible")

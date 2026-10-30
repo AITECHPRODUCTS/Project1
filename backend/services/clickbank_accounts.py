@@ -398,6 +398,13 @@ def _normalize_clickbank_order_rows(
             parsed_time = parsed_time.replace(tzinfo=timezone.utc)
         normalized_time = parsed_time.isoformat()
 
+        tracking_click_id_candidate = None
+        for tracking_field in ("trackingId", "tracking_id", "promo"):
+            tracking_value = _safe_order_text(order.get(tracking_field), 100)
+            if tracking_value and re.fullmatch(r"[0-9a-f]{32}", tracking_value):
+                tracking_click_id_candidate = tracking_value
+                break
+
         currency_raw = (_safe_order_text(order.get("currency"), 3) or "").upper()
         currency = currency_raw if re.fullmatch(r"[A-Z]{3}", currency_raw) else None
         vendor = _safe_order_text(order.get("vendor"), 100)
@@ -447,9 +454,13 @@ def _normalize_clickbank_order_rows(
             event_material = "|".join((
                 account.casefold(), receipt, normalized_time, transaction_type, line_item_key,
             ))
-            source_material = json.dumps(safe_record, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+            source_material = json.dumps(
+                {**safe_record, "tracking_click_id_candidate": tracking_click_id_candidate},
+                sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+            )
             safe_record["event_key"] = hashlib.sha256(event_material.encode("utf-8")).hexdigest()
             safe_record["source_fingerprint"] = hashlib.sha256(source_material.encode("utf-8")).hexdigest()
+            safe_record["tracking_click_id_candidate"] = tracking_click_id_candidate
             normalized.append(safe_record)
 
     # A page can contain repeated line-item records; keep one normalized observation per source identity.

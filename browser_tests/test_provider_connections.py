@@ -46,13 +46,13 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
                         "pii_stored":False,"period":{"start_date":"2026-10-01","end_date":"2026-10-30"},
                         "account":"creator-main","pages_retrieved":1,"source_order_count":1,
                         "skipped_unidentified_count":0,"skipped_scope_count":0,"imported_count":1,
-                        "duplicate_count":0,"has_more":False,"next_page":None,
+                        "duplicate_count":0,"matched_click_count":1,"unmatched_tracking_id_count":0,"has_more":False,"next_page":None,
                         "transactions":[{"event_key":"event-1","source_fingerprint":"hash-1","receipt":"RECEIPT123",
                             "transaction_time":"2026-10-20T12:00:00+00:00","transaction_type":"SALE","role":"AFFILIATE",
                             "account_nickname":"creator-main","vendor_nickname":"vendor-main","affiliate_nickname":"creator-main",
                             "currency":"USD","item_number":"PROD-1","line_item_type":"STANDARD","product_title":"Sample product",
                             "account_amount":"12.50","customer_amount":"49.00","line_item_status":"ACTIVE",
-                            "recurring":False,"shippable":False,"evidence_status":"provider_reported_unreconciled"}],
+                            "recurring":False,"shippable":False,"evidence_status":"provider_reported_unreconciled","click_id":"a"*32,"attribution_status":"matched_clickbank_tid"}],
                         "note":"PII-minimized evidence only."},201)
                 elif request.method=="POST" and request.url.endswith("/api/provider-connections/cb-1/test"):
                     _fulfill(route,connections[0])

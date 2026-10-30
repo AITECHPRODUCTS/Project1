@@ -1361,6 +1361,44 @@ async def import_clickbank_order_transactions(
         raise HTTPException(502, str(exc)) from None
 
     transactions = report["transactions"]
+    # A match requires the exact app-generated click ID, same workspace and TID campaign.
+    click_id_candidates = sorted({
+        item["tracking_click_id_candidate"] for item in transactions
+        if isinstance(item.get("tracking_click_id_candidate"), str)
+        and re.fullmatch(r"[0-9a-f]{32}", item["tracking_click_id_candidate"])
+    })
+    click_created_at: dict[str, datetime] = {}
+    if click_id_candidates:
+        with workspace_scope(workspace_id):
+            click_rows = (await db.execute(
+                select(ClickEvent.click_id, ClickEvent.created_at)
+                .join(Campaign, Campaign.id == ClickEvent.campaign_id)
+                .where(
+                    ClickEvent.workspace_id == workspace_id,
+                    Campaign.workspace_id == workspace_id,
+                    Campaign.tracking_parameter == "tid",
+                    ClickEvent.click_id.in_(click_id_candidates),
+                    ClickEvent.chosen_destination != "",
+                )
+            )).all()
+        click_created_at = {row[0]: row[1] for row in click_rows}
+
+    for item in transactions:
+        candidate = item.get("tracking_click_id_candidate")
+        matched_click_id = None
+        clicked_at = click_created_at.get(candidate) if isinstance(candidate, str) else None
+        if clicked_at is not None:
+            try:
+                transaction_at = datetime.fromisoformat(str(item["transaction_time"]).replace("Z", "+00:00"))
+                transaction_at = transaction_at.replace(tzinfo=timezone.utc) if transaction_at.tzinfo is None else transaction_at.astimezone(timezone.utc)
+                clicked_at = clicked_at.replace(tzinfo=timezone.utc) if clicked_at.tzinfo is None else clicked_at.astimezone(timezone.utc)
+                if clicked_at <= transaction_at <= clicked_at + timedelta(days=60):
+                    matched_click_id = candidate
+            except (KeyError, TypeError, ValueError, OverflowError):
+                matched_click_id = None
+        item["click_id"] = matched_click_id
+        item["attribution_status"] = "matched_clickbank_tid" if matched_click_id else "not_matched"
+
     event_keys = list({item["event_key"] for item in transactions})
     existing_pairs: set[tuple[str, str]] = set()
     if event_keys:
@@ -1388,6 +1426,8 @@ async def import_clickbank_order_transactions(
             provider_id="clickbank",
             event_key=item["event_key"],
             source_fingerprint=item["source_fingerprint"],
+            click_id=item.get("click_id"),
+            attribution_status=item.get("attribution_status", "not_matched"),
             account_nickname=item["account_nickname"],
             receipt=item["receipt"],
             transaction_time=item["transaction_time"],
@@ -1434,6 +1474,10 @@ async def import_clickbank_order_transactions(
                 "normalized_line_item_count":len(transactions),
                 "imported_count":len(imported),
                 "duplicate_count":duplicate_count,
+                "tracking_id_candidate_count":len(click_id_candidates),
+                "matched_click_count":sum(item.get("attribution_status") == "matched_clickbank_tid" for item in imported),
+                "unmatched_tracking_id_count":sum(bool(item.get("tracking_click_id_candidate")) and item.get("attribution_status") != "matched_clickbank_tid" for item in imported),
+                "attribution_window_days":60,
                 "transaction_counts":transaction_counts,
                 "skipped_unidentified_count":report["skipped_unidentified_count"],
                 "skipped_scope_count":report["skipped_scope_count"],
@@ -1447,7 +1491,7 @@ async def import_clickbank_order_transactions(
             raise HTTPException(409, "A matching order observation was imported concurrently. Retry the same date range to reconcile duplicates.") from None
 
     records = [{
-        **item,
+        **{key: value for key, value in item.items() if key != "tracking_click_id_candidate"},
         "evidence_status":"provider_reported_unreconciled",
     } for item in imported]
     return {
@@ -1463,10 +1507,12 @@ async def import_clickbank_order_transactions(
         "skipped_scope_count":report["skipped_scope_count"],
         "imported_count":len(imported),
         "duplicate_count":duplicate_count,
+        "matched_click_count":sum(item.get("attribution_status") == "matched_clickbank_tid" for item in imported),
+        "unmatched_tracking_id_count":sum(bool(item.get("tracking_click_id_candidate")) and item.get("attribution_status") != "matched_clickbank_tid" for item in imported),
         "has_more":report["has_more"],
         "next_page":report["next_page"],
         "transactions":records,
-        "note":"These are PII-minimized provider-reported affiliate transaction observations. Account amounts remain unreconciled evidence; they are not confirmed commissions, net earnings or paid-out funds.",
+        "note":"These are PII-minimized provider-reported affiliate transaction observations. A ClickBank TID match links an order to a local click only; it is not commission reconciliation, confirmed earnings or payout evidence. Account amounts remain unreconciled.",
     }
 
 
@@ -7741,6 +7787,8 @@ async def campaigns(
         "data": [
             {
                 "id": row.id, "name": row.name, "niche": row.niche,
+                "tracking_parameter": row.tracking_parameter,
+                "tracking_url": f"{settings.app_public_url.rstrip('/')}/r/{row.id}",
                 "primary_destination": row.primary_destination,
                 "fallback_destination": row.fallback_destination,
                 "is_active": row.is_active, "primary_healthy": row.primary_healthy,
@@ -7776,7 +7824,7 @@ async def campaign_create(
         db.add(row)
         await db.commit()
         return {
-            "id": row.id, "name": row.name,
+            "id": row.id, "name": row.name, "tracking_parameter": row.tracking_parameter,
             "tracking_url": f"{settings.app_public_url.rstrip('/')}/r/{row.id}",
             "status": "created",
         }

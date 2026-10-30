@@ -303,6 +303,11 @@ class ProviderOrderObservation(TenantScopedMixin, Base):
             "ix_provider_order_observations_workspace_account_time",
             "workspace_id", "account_nickname", "transaction_time",
         ),
+        Index("ix_provider_order_observations_workspace_click", "workspace_id", "click_id"),
+        CheckConstraint(
+            "attribution_status IN ('not_matched', 'matched_clickbank_tid')",
+            name="ck_provider_order_observations_attribution_status",
+        ),
         CheckConstraint("role = 'AFFILIATE'", name="ck_provider_order_observations_affiliate_role"),
         CheckConstraint(
             "evidence_status IN ('provider_reported_unreconciled')",
@@ -318,6 +323,10 @@ class ProviderOrderObservation(TenantScopedMixin, Base):
     provider_id: Mapped[str] = mapped_column(String(80), nullable=False, default="clickbank", index=True)
     event_key: Mapped[str] = mapped_column(String(64), nullable=False)
     source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    click_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    attribution_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="not_matched", server_default="not_matched"
+    )
     account_nickname: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     receipt: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     transaction_time: Mapped[str] = mapped_column(String(80), nullable=False, index=True)

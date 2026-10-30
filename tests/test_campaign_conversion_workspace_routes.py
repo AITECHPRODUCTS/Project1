@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+from urllib.parse import parse_qs, urlparse
 
 from backend import main
 from backend.database import Base, get_session
@@ -153,3 +154,32 @@ async def test_campaign_and_conversion_routes_are_bound_to_selected_workspace(mo
         assert own_ledger is not None and own_ledger.workspace_id == a_id
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_tid_campaign_redirect_overwrites_existing_tid_with_local_click_id(monkeypatch):
+    engine,sessions=await _database(monkeypatch)
+    try:
+        async with sessions() as db:
+            workspace=Workspace(name="ClickBank TID route",slug="clickbank-tid-route")
+            db.add(workspace);await db.flush()
+            campaign=Campaign(workspace_id=workspace.id,name="ClickBank TID",niche="software",
+                primary_destination="https://hop.clickbank.net/?affiliate=creator&vendor=merchant&tid=old_value",
+                tracking_parameter="tid")
+            db.add(campaign);await db.commit();campaign_id=campaign.id
+        expected="d"*32
+        async def fake_record(session,campaign,*,user_agent="",utm=None):
+            assert campaign.tracking_parameter=="tid"
+            assert utm=={"utm_source":"newsletter"}
+            return {"destination":campaign.primary_destination,"route":"primary","status_code":200,
+                "primary_healthy":True,"fallback_healthy":None,"health_error":None,
+                "click_id":expected,"campaign_id":campaign.id}
+        monkeypatch.setattr(main,"record_click_and_resolve",fake_record)
+        client=TestClient(main.app)
+        with client:
+            response=client.get(f"/r/{campaign_id}?utm_source=newsletter",follow_redirects=False)
+        assert response.status_code==302
+        assert parse_qs(urlparse(response.headers["location"]).query)["tid"]==[expected]
+    finally:
+        await engine.dispose()
+

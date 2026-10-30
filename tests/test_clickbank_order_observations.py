@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend import main
 from backend.database import Base, get_session
-from backend.models import ProviderAccountConnection, ProviderOrderObservation, Workspace
+from backend.models import Campaign, ClickEvent, ConversionLedgerEntry, ProviderAccountConnection, ProviderOrderObservation, Workspace
 from backend.services import clickbank_accounts as clickbank
 from backend.tenancy import workspace_scope
 
@@ -121,6 +121,23 @@ async def test_orders_list_uses_fixed_endpoint_authorization_and_page_header(mon
     }
     assert captured["headers"]["Authorization"]=="API-"+"x"*40
     assert captured["headers"]["Page"]=="9"
+
+
+
+@pytest.mark.asyncio
+async def test_orders_list_extracts_only_exact_local_tid_click_ids():
+    valid_order=_provider_order(receipt="CB-TID-1")
+    valid_order["trackingId"]="a"*32
+    malformed_order=_provider_order(receipt="CB-TID-2")
+    malformed_order["trackingId"]="a"*31+"-"
+    records,skipped_unidentified,skipped_scope=clickbank._normalize_clickbank_order_rows(
+        {"orderData":[valid_order,malformed_order]},account="creator-main"
+    )
+    by_receipt={row["receipt"]:row for row in records}
+    assert skipped_unidentified==0 and skipped_scope==0
+    assert by_receipt["CB-TID-1"]["tracking_click_id_candidate"]=="a"*32
+    assert by_receipt["CB-TID-2"]["tracking_click_id_candidate"] is None
+    assert "trackingId" not in by_receipt["CB-TID-1"]
 
 
 def _api_client(tmp_path):
@@ -234,3 +251,72 @@ def test_order_import_is_workspace_scoped_and_admin_gated(monkeypatch,tmp_path):
             assert denied.status_code==403
     finally:
         _api_cleanup(engine,client)
+
+
+def test_order_import_matches_only_same_workspace_tid_click_inside_60_days(monkeypatch,tmp_path):
+    engine,sessions,user,workspace_id,connection_id,client=_api_client(tmp_path)
+    valid_id="a"*32
+    expired_id="b"*32
+    subid_id="c"*32
+    async def seed():
+        async with sessions() as db:
+            with workspace_scope(workspace_id):
+                rows=[
+                    Campaign(workspace_id=workspace_id,name="Valid TID",niche="software",primary_destination="https://hop.clickbank.net/offer",tracking_parameter="tid"),
+                    Campaign(workspace_id=workspace_id,name="Expired TID",niche="software",primary_destination="https://hop.clickbank.net/offer",tracking_parameter="tid"),
+                    Campaign(workspace_id=workspace_id,name="Sub-ID",niche="software",primary_destination="https://example.com/offer",tracking_parameter="subid"),
+                ]
+                db.add_all(rows);await db.flush()
+                db.add_all([
+                    ClickEvent(workspace_id=workspace_id,campaign_id=rows[0].id,click_id=valid_id,destination_url=rows[0].primary_destination,chosen_destination=rows[0].primary_destination,created_at=datetime(2026,10,1,12,0,tzinfo=timezone.utc)),
+                    ClickEvent(workspace_id=workspace_id,campaign_id=rows[1].id,click_id=expired_id,destination_url=rows[1].primary_destination,chosen_destination=rows[1].primary_destination,created_at=datetime(2026,7,1,12,0,tzinfo=timezone.utc)),
+                    ClickEvent(workspace_id=workspace_id,campaign_id=rows[2].id,click_id=subid_id,destination_url=rows[2].primary_destination,chosen_destination=rows[2].primary_destination,created_at=datetime(2026,10,1,12,0,tzinfo=timezone.utc)),
+                ])
+                await db.commit()
+    asyncio.run(seed())
+    async def decrypt(*args,**kwargs):return "API-"+"x"*40
+    tx=[]
+    for receipt,cid in (("CB-ATTR-1",valid_id),("CB-ATTR-2",expired_id),("CB-ATTR-3",subid_id)):
+        tx.append({
+            "receipt":receipt,"transaction_time":"2026-10-20T12:00:00+00:00","transaction_type":"SALE",
+            "role":"AFFILIATE","account_nickname":"creator-main","vendor_nickname":"vendor-main",
+            "affiliate_nickname":"creator-main","currency":"USD","item_number":"ITEM-1","line_item_type":"STANDARD",
+            "product_title":"Sample product","account_amount":"12.50","customer_amount":"49.00",
+            "line_item_status":"ACTIVE","recurring":False,"shippable":False,
+            "event_key":receipt.lower().replace("-","0").ljust(64,"e")[:64],
+            "source_fingerprint":receipt.lower().replace("-","1").ljust(64,"f")[:64],
+            "tracking_click_id_candidate":cid,
+        })
+    report={"account":"creator-main","transactions":tx,"pages_retrieved":1,"source_order_count":3,
+            "skipped_unidentified_count":0,"skipped_scope_count":0,"has_more":False,"next_page":None}
+    async def fetch_orders(*args,**kwargs):return report
+    monkeypatch.setattr(main,"decrypt_clickbank_api_key",decrypt)
+    monkeypatch.setattr(main,"fetch_clickbank_order_transactions",fetch_orders)
+    body={"account":"creator-main","start_date":"2026-10-01","end_date":"2026-10-30","max_pages":5}
+    try:
+        with client:
+            response=client.post(f"/api/provider-connections/{connection_id}/orders/import",json=body)
+            assert response.status_code==200,response.text
+            result=response.json()
+            assert result["matched_click_count"]==1 and result["unmatched_tracking_id_count"]==2
+            by_receipt={row["receipt"]:row for row in result["transactions"]}
+            assert by_receipt["CB-ATTR-1"]["click_id"]==valid_id
+            assert by_receipt["CB-ATTR-1"]["attribution_status"]=="matched_clickbank_tid"
+            assert by_receipt["CB-ATTR-2"]["click_id"] is None
+            assert by_receipt["CB-ATTR-3"]["attribution_status"]=="not_matched"
+            assert "tracking_click_id_candidate" not in response.text
+        async def persisted():
+            with workspace_scope(workspace_id):
+                async with sessions() as db:
+                    obs=list((await db.scalars(select(ProviderOrderObservation))).all())
+                    ledger=list((await db.scalars(select(ConversionLedgerEntry))).all())
+                    return obs,ledger
+        rows,ledger=asyncio.run(persisted())
+        by_receipt={row.receipt:row for row in rows}
+        assert by_receipt["CB-ATTR-1"].click_id==valid_id
+        assert by_receipt["CB-ATTR-2"].click_id is None
+        assert by_receipt["CB-ATTR-3"].attribution_status=="not_matched"
+        assert ledger==[]
+    finally:
+        _api_cleanup(engine,client)
+

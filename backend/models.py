@@ -266,12 +266,12 @@ class ProviderCatalogObservation(TenantScopedMixin, Base):
     __tablename__ = "provider_catalog_observations"
     __table_args__ = (
         UniqueConstraint(
-            "workspace_id", "provider_id", "observation_type", "external_id",
+            "workspace_id", "connection_id", "provider_id", "observation_type", "external_id",
             name="uq_provider_catalog_observation_workspace_source",
         ),
         Index(
-            "ix_provider_catalog_observations_workspace_provider_seen",
-            "workspace_id", "provider_id", "observed_at",
+            "ix_provider_catalog_observations_workspace_connection_seen",
+            "workspace_id", "connection_id", "observed_at",
         ),
         Index(
             "ix_provider_catalog_observations_workspace_category",
@@ -286,6 +286,9 @@ class ProviderCatalogObservation(TenantScopedMixin, Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     workspace_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    connection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("provider_account_connections.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     provider_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     observation_type: Mapped[str] = mapped_column(String(16), nullable=False)

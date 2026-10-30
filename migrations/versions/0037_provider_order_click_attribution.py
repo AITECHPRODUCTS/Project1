@@ -22,6 +22,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_provider_order_observations_workspace_click", table_name="provider_order_observations")
-    op.drop_constraint("ck_provider_order_observations_attribution_status", "provider_order_observations", type_="check")
-    op.drop_column("provider_order_observations", "attribution_status")
-    op.drop_column("provider_order_observations", "click_id")
+    with op.batch_alter_table("provider_order_observations") as batch_op:
+        batch_op.drop_constraint("ck_provider_order_observations_attribution_status", type_="check")
+        batch_op.drop_column("attribution_status")
+        batch_op.drop_column("click_id")

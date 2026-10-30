@@ -101,6 +101,12 @@ from backend.tools.affiliate_api import client as openaffiliate_client
 from backend.workflows import LABELS,resolve_steps
 from ai_memory.ingester import ingest as ingest_doctrine
 
+from backend.models import OfferEvidenceSnapshot
+
+from backend.schemas import OfferEvidenceCaptureRequest
+
+from backend.services.offer_evidence import capture_offer_source_snapshots
+
 logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger=logging.getLogger("affiliate_os");settings=get_settings();password_hash=PasswordHash.recommended();scheduler=AsyncIOScheduler(timezone="UTC")
 
@@ -2809,6 +2815,162 @@ async def save_offer_qualification(
         "reviewed_at": review.reviewed_at.isoformat() if review.reviewed_at else None,
         "evidence_basis": "operator_supplied_unverified", "affiliate_network_approval_implied": False,
         "activation_allowed": False}
+
+
+
+@api.post("/offers/{offer_id}/evidence-snapshots")
+async def capture_offer_evidence_snapshots(
+    offer_id: str,
+    payload: OfferEvidenceCaptureRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Capture public source pages for an offer without asserting source truth or network approval."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before capturing offer evidence")
+    if str(user.get("workspace_role") or "").lower() not in {"owner", "admin"}:
+        raise HTTPException(403, "Only workspace owners and admins may capture offer evidence")
+    offer = await db.scalar(select(Offer).where(Offer.id == offer_id))
+    if offer is None:
+        raise HTTPException(404, "Catalog offer not found")
+
+    captured = await capture_offer_source_snapshots(payload.source_urls)
+    rows = [
+        OfferEvidenceSnapshot(
+            workspace_id=str(workspace_id),
+            offer_id=offer.id,
+            source_url=item["source_url"],
+            source_host=item["source_host"],
+            title=item["title"],
+            description=item["description"],
+            excerpt=item["excerpt"],
+            response_sha256=item["response_sha256"],
+            excerpt_sha256=item["excerpt_sha256"],
+            http_status=item["http_status"],
+            content_type=item["content_type"],
+            fetch_status=item["fetch_status"],
+            error_code=item["error_code"],
+            fetched_at=item["fetched_at"],
+        )
+        for item in captured
+    ]
+    fetched_count = sum(1 for row in rows if row.fetch_status == "fetched")
+    db.add_all(rows)
+    db.add(AuditLog(
+        workspace_id=str(workspace_id),
+        actor=str(user.get("email") or user.get("user_id") or "workspace-operator")[:320],
+        action="offer_evidence_snapshot_capture",
+        resource_type="offer",
+        resource_id=offer.id,
+        outcome="ok" if fetched_count == len(rows) else ("partial" if fetched_count else "failed"),
+        details_json={
+            "snapshot_count": len(rows),
+            "fetched_count": fetched_count,
+            "failed_count": len(rows) - fetched_count,
+        },
+    ))
+    await db.commit()
+    for row in rows:
+        await db.refresh(row)
+
+    freshness = evaluate_source_freshness(
+        [
+            {
+                "source_id": row.id,
+                "url": row.source_url,
+                "status": row.fetch_status,
+                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+            }
+            for row in rows
+        ],
+        [row.source_url for row in rows],
+    )
+    return {
+        "count": len(rows),
+        "data": [
+            {
+                "id": row.id,
+                "source_url": row.source_url,
+                "source_host": row.source_host,
+                "title": row.title,
+                "description": row.description,
+                "excerpt": row.excerpt,
+                "response_sha256": row.response_sha256,
+                "excerpt_sha256": row.excerpt_sha256,
+                "http_status": row.http_status,
+                "content_type": row.content_type,
+                "fetch_status": row.fetch_status,
+                "error_code": row.error_code,
+                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+            }
+            for row in rows
+        ],
+        "freshness": freshness,
+        "evidence_basis": "captured_public_page_text_unverified",
+        "note": "A snapshot records bounded public-page content at capture time. It does not establish factual truth, legal validity, publisher eligibility, current terms or affiliate-network approval.",
+    }
+
+
+@api.get("/offers/{offer_id}/evidence-snapshots")
+async def list_offer_evidence_snapshots(
+    offer_id: str,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return only the active workspace's offer evidence history."""
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before viewing offer evidence")
+    offer = await db.scalar(select(Offer).where(Offer.id == offer_id))
+    if offer is None:
+        raise HTTPException(404, "Catalog offer not found")
+    rows = list((await db.scalars(
+        select(OfferEvidenceSnapshot).where(
+            OfferEvidenceSnapshot.workspace_id == str(workspace_id),
+            OfferEvidenceSnapshot.offer_id == offer.id,
+        ).order_by(OfferEvidenceSnapshot.created_at.desc(), OfferEvidenceSnapshot.id.desc()).limit(50)
+    )).all())
+    latest_by_url: dict[str, OfferEvidenceSnapshot] = {}
+    for row in rows:
+        latest_by_url.setdefault(row.source_url, row)
+    latest = list(latest_by_url.values())
+    freshness = evaluate_source_freshness(
+        [
+            {
+                "source_id": row.id,
+                "url": row.source_url,
+                "status": row.fetch_status,
+                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+            }
+            for row in latest
+        ],
+        list(latest_by_url.keys()),
+    )
+    return {
+        "count": len(rows),
+        "data": [
+            {
+                "id": row.id,
+                "source_url": row.source_url,
+                "source_host": row.source_host,
+                "title": row.title,
+                "description": row.description,
+                "excerpt": row.excerpt,
+                "response_sha256": row.response_sha256,
+                "excerpt_sha256": row.excerpt_sha256,
+                "http_status": row.http_status,
+                "content_type": row.content_type,
+                "fetch_status": row.fetch_status,
+                "error_code": row.error_code,
+                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+            }
+            for row in rows
+        ],
+        "freshness": freshness,
+        "evidence_basis": "captured_public_page_text_unverified",
+        "note": "Captured content is a review aid, not independent verification of facts, eligibility, current terms or network approval.",
+    }
 
 
 @api.get("/offers/shortlists")

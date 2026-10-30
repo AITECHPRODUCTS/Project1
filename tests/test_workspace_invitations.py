@@ -68,7 +68,7 @@ def test_owner_can_create_list_revoke_invitation_and_token_is_not_listed(monkeyp
             assert listing.status_code == 200, listing.text
             row = listing.json()["data"][0]
             assert row["status"] == "pending" and "token" not in row and "token_hash" not in row
-            assert "no email was sent" in listing.json()["note"]
+            assert "no email was sent" in listing.json()["note"].lower()
             revoked = client.post(f"/api/workspaces/invitations/{payload['id']}/revoke")
             assert revoked.status_code == 200, revoked.text
             assert revoked.json()["status"] == "revoked"
@@ -109,7 +109,11 @@ def test_acceptance_requires_matching_email_creates_membership_and_rejects_repla
             assert accepted.json()["role"] == "viewer" and accepted.json()["csrf_token"]
             current = client.get("/api/workspaces/current")
             assert current.status_code == 200 and current.json()["id"] == WORKSPACE_ID
-            replay = client.post("/api/workspaces/invitations/accept", json={"token": token})
+            replay = client.post(
+                "/api/workspaces/invitations/accept",
+                json={"token": token},
+                headers={"X-CSRF-Token": accepted.json()["csrf_token"]},
+            )
             assert replay.status_code == 409, replay.text
         async def verify_db():
             async with sessions() as db:

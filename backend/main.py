@@ -1547,6 +1547,7 @@ async def _upsert_flipkart_catalog_observations(
     db: AsyncSession,
     *,
     workspace_id: str,
+    connection_id: str,
     observation_type: str,
     source_endpoint: str,
     items: list[dict[str, Any]],
@@ -1559,6 +1560,7 @@ async def _upsert_flipkart_catalog_observations(
         with workspace_scope(workspace_id):
             row = await db.scalar(select(ProviderCatalogObservation).where(
                 ProviderCatalogObservation.workspace_id == workspace_id,
+                ProviderCatalogObservation.connection_id == connection_id,
                 ProviderCatalogObservation.provider_id == "flipkart",
                 ProviderCatalogObservation.observation_type == observation_type,
                 ProviderCatalogObservation.external_id == external_id,
@@ -1607,6 +1609,7 @@ async def _upsert_flipkart_catalog_observations(
             if row is None:
                 db.add(ProviderCatalogObservation(
                     workspace_id=workspace_id,
+                    connection_id=connection_id,
                     provider_id="flipkart",
                     observation_type=observation_type,
                     external_id=external_id,
@@ -1820,6 +1823,7 @@ async def search_flipkart_provider_products(
         persisted_count = await _upsert_flipkart_catalog_observations(
             db,
             workspace_id=workspace_id,
+            connection_id=row.id,
             observation_type="product",
             source_endpoint=report["source_endpoint"],
             items=items,
@@ -1910,6 +1914,7 @@ async def list_flipkart_provider_offers(
         persisted_count = await _upsert_flipkart_catalog_observations(
             db,
             workspace_id=workspace_id,
+            connection_id=row.id,
             observation_type="offer",
             source_endpoint=report["source_endpoint"],
             items=items,

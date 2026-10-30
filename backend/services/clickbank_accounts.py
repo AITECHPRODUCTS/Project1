@@ -1,12 +1,13 @@
 from __future__ import annotations
-import base64, hashlib, hmac, re
+import base64, hashlib, hmac, json, re
+from datetime import date, datetime, timezone
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from backend.config import get_settings
-from backend.services.url_safety import request_public_json
+from backend.services.url_safety import open_public_http_response, read_limited_response, request_public_json
 
 CLICKBANK_ACCOUNTS_URL = "https://api.clickbank.com/rest/1.3/quickstats/accounts"
 CREDENTIAL_KEY_VERSION = 1
@@ -305,4 +306,273 @@ async def fetch_clickbank_order_counts(
             "refunds": counts["RFND"],
             "chargebacks": counts["CGBK"],
         },
+    }
+
+
+
+CLICKBANK_ORDERS_LIST_URL = "https://api.clickbank.com/rest/1.3/orders2/list"
+
+
+def _safe_order_amount(value: Any, field: str) -> str | None:
+    if value is None:
+        return None
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ClickBankProviderUnavailable(f"ClickBank returned an invalid {field} amount.") from None
+    if not amount.is_finite() or abs(amount) > Decimal("999999999999"):
+        raise ClickBankProviderUnavailable(f"ClickBank returned an invalid {field} amount.")
+    if max(0, -amount.as_tuple().exponent) > 6:
+        raise ClickBankProviderUnavailable(f"ClickBank returned an unsupported precision for {field}.")
+    return format(amount, "f")
+
+
+def _safe_order_text(value: Any, limit: int = 500) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, (str, int)):
+        return None
+    result = str(value).strip()
+    return result[:limit] if result else None
+
+
+def _clickbank_order_rows(payload: Any) -> list[dict[str, Any]]:
+    value: Any = payload
+    if isinstance(payload, dict):
+        for key in ("orderData", "orders", "data"):
+            if key in payload:
+                value = payload[key]
+                break
+        else:
+            if "receipt" in payload:
+                value = [payload]
+            else:
+                raise ClickBankProviderUnavailable("ClickBank returned an unsupported Orders list response.")
+    if isinstance(value, dict):
+        value = [value]
+    if not isinstance(value, list):
+        raise ClickBankProviderUnavailable("ClickBank returned an unsupported Orders list structure.")
+    if len(value) > 100:
+        raise ClickBankProviderUnavailable("ClickBank returned more than 100 orders in one page.")
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _normalize_clickbank_order_rows(
+    payload: Any,
+    *,
+    account: str,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Return PII-minimized affiliate transaction line items and safe skip counts."""
+    rows = _clickbank_order_rows(payload)
+    normalized: list[dict[str, Any]] = []
+    skipped_unidentified = 0
+    skipped_scope = 0
+
+    for order in rows:
+        role = _safe_order_text(order.get("role"), 20)
+        if role is not None and role.upper() != "AFFILIATE":
+            skipped_scope += 1
+            continue
+        affiliate = _safe_order_text(order.get("affiliate"), 100)
+        if affiliate is not None and affiliate.casefold() != account.casefold():
+            skipped_scope += 1
+            continue
+
+        receipt = _safe_order_text(order.get("receipt"), 80)
+        transaction_time = _safe_order_text(order.get("transactionTime"), 80)
+        transaction_type = (_safe_order_text(order.get("transactionType"), 32) or "").upper()
+        if (
+            not receipt
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", receipt)
+            or not transaction_time
+            or not re.fullmatch(r"[A-Z0-9_]{2,32}", transaction_type)
+        ):
+            skipped_unidentified += 1
+            continue
+        try:
+            parsed_time = datetime.fromisoformat(transaction_time.replace("Z", "+00:00"))
+        except ValueError:
+            skipped_unidentified += 1
+            continue
+        if parsed_time.tzinfo is None:
+            parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+        normalized_time = parsed_time.isoformat()
+
+        currency_raw = (_safe_order_text(order.get("currency"), 3) or "").upper()
+        currency = currency_raw if re.fullmatch(r"[A-Z]{3}", currency_raw) else None
+        vendor = _safe_order_text(order.get("vendor"), 100)
+        affiliate_name = affiliate or account
+
+        line_items = order.get("lineItemData")
+        if line_items is None:
+            line_items = [{}]
+        elif isinstance(line_items, dict):
+            line_items = [line_items]
+        if not isinstance(line_items, list):
+            raise ClickBankProviderUnavailable("ClickBank returned an unsupported line-item structure.")
+        if len(line_items) > 100:
+            raise ClickBankProviderUnavailable("ClickBank returned too many line items for one transaction.")
+
+        for line_item in line_items:
+            if not isinstance(line_item, dict):
+                continue
+            item_number = _safe_order_text(line_item.get("itemNo"), 100)
+            line_item_type = _safe_order_text(line_item.get("lineItemType"), 80)
+            product_title = _safe_order_text(line_item.get("productTitle"), 500)
+            account_amount = _safe_order_amount(line_item.get("accountAmount"), "account")
+            customer_amount = _safe_order_amount(line_item.get("customerAmount"), "customer")
+            item_status = _safe_order_text(line_item.get("status"), 80)
+            recurring = line_item.get("recurring") if isinstance(line_item.get("recurring"), bool) else None
+            shippable = line_item.get("shippable") if isinstance(line_item.get("shippable"), bool) else None
+            line_item_key = item_number or "__order__"
+
+            safe_record = {
+                "receipt": receipt,
+                "transaction_time": normalized_time,
+                "transaction_type": transaction_type,
+                "role": "AFFILIATE",
+                "account_nickname": account,
+                "vendor_nickname": vendor,
+                "affiliate_nickname": affiliate_name,
+                "currency": currency,
+                "item_number": item_number,
+                "line_item_type": line_item_type,
+                "product_title": product_title,
+                "account_amount": account_amount,
+                "customer_amount": customer_amount,
+                "line_item_status": item_status,
+                "recurring": recurring,
+                "shippable": shippable,
+            }
+            event_material = "|".join((
+                account.casefold(), receipt, normalized_time, transaction_type, line_item_key,
+            ))
+            source_material = json.dumps(safe_record, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+            safe_record["event_key"] = hashlib.sha256(event_material.encode("utf-8")).hexdigest()
+            safe_record["source_fingerprint"] = hashlib.sha256(source_material.encode("utf-8")).hexdigest()
+            normalized.append(safe_record)
+
+    # A page can contain repeated line-item records; keep one normalized observation per source identity.
+    deduplicated: dict[tuple[str, str], dict[str, Any]] = {}
+    for record in normalized:
+        deduplicated[(record["event_key"], record["source_fingerprint"])] = record
+    return list(deduplicated.values()), skipped_unidentified, skipped_scope
+
+
+async def _request_clickbank_orders_page(
+    api_key: str,
+    *,
+    account: str,
+    start_date: date,
+    end_date: date,
+    page: int,
+) -> tuple[Any, int]:
+    params = {
+        "affiliate": account,
+        "role": "AFFILIATE",
+        "startDate": start_date.isoformat(),
+        "endDate": end_date.isoformat(),
+    }
+    headers = {
+        "Authorization": api_key,
+        "Accept": "application/json",
+        "Page": str(page),
+    }
+    async with open_public_http_response(
+        CLICKBANK_ORDERS_LIST_URL,
+        method="GET",
+        params=params,
+        headers=headers,
+        timeout=12.0,
+    ) as response:
+        status = int(response.status_code)
+        if 300 <= status < 400:
+            raise ClickBankProviderUnavailable("ClickBank Orders API redirects are not followed.")
+        if status not in {200, 206}:
+            response.raise_for_status()
+            raise ClickBankProviderUnavailable(f"ClickBank returned unsupported Orders status {status}.")
+        content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if content_type not in {"application/json", "application/problem+json"}:
+            raise ClickBankProviderUnavailable("ClickBank returned an unsupported Orders response content type.")
+        body = await read_limited_response(response, max_bytes=512_000)
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise ClickBankProviderUnavailable("ClickBank returned invalid Orders JSON.") from None
+    if not isinstance(payload, (dict, list)):
+        raise ClickBankProviderUnavailable("ClickBank returned an unexpected Orders response.")
+    return payload, status
+
+
+async def fetch_clickbank_order_transactions(
+    api_key: str,
+    *,
+    account: str,
+    start_date: date,
+    end_date: date,
+    start_page: int = 1,
+    max_pages: int = 5,
+) -> dict[str, Any]:
+    """Read affiliate-scoped Orders rows with bounded pagination and PII minimization."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", account):
+        raise ClickBankAccessError("The selected ClickBank affiliate nickname is invalid.")
+    if start_page < 1 or start_page > 1000 or max_pages < 1 or max_pages > 10:
+        raise ValueError("ClickBank Orders pagination is outside the allowed range.")
+
+    transactions: list[dict[str, Any]] = []
+    skipped_unidentified = 0
+    skipped_scope = 0
+    source_order_count = 0
+    pages_retrieved = 0
+    has_more = False
+
+    for page in range(start_page, start_page + max_pages):
+        try:
+            payload, status = await _request_clickbank_orders_page(
+                api_key,
+                account=account,
+                start_date=start_date,
+                end_date=end_date,
+                page=page,
+            )
+        except httpx.HTTPStatusError as exc:
+            status_code = int(exc.response.status_code)
+            if status_code in {401, 403}:
+                raise ClickBankAccessError(
+                    "ClickBank rejected affiliate Orders access. Confirm API Order Read permission for the selected account nickname."
+                ) from None
+            if status_code == 429:
+                raise ClickBankProviderUnavailable("ClickBank rate-limited the Orders request. Try again later.") from None
+            raise ClickBankProviderUnavailable(f"ClickBank returned HTTP {status_code} while retrieving Orders.") from None
+        except (httpx.RequestError, TimeoutError):
+            raise ClickBankProviderUnavailable("Could not reach ClickBank's Orders endpoint.") from None
+        except ValueError as exc:
+            raise ClickBankProviderUnavailable(str(exc)) from None
+
+        page_rows = _clickbank_order_rows(payload)
+        source_order_count += len(page_rows)
+        records, page_skipped, page_scope_skipped = _normalize_clickbank_order_rows(payload, account=account)
+        transactions.extend(records)
+        skipped_unidentified += page_skipped
+        skipped_scope += page_scope_skipped
+        pages_retrieved += 1
+
+        if status == 200:
+            has_more = False
+            break
+        has_more = page == start_page + max_pages - 1
+
+    unique: dict[tuple[str, str], dict[str, Any]] = {}
+    for transaction in transactions:
+        unique[(transaction["event_key"], transaction["source_fingerprint"])] = transaction
+
+    return {
+        "account": account,
+        "transactions": list(unique.values()),
+        "pages_retrieved": pages_retrieved,
+        "source_order_count": source_order_count,
+        "skipped_unidentified_count": skipped_unidentified,
+        "skipped_scope_count": skipped_scope,
+        "has_more": has_more,
+        "next_page": start_page + pages_retrieved if has_more else None,
     }

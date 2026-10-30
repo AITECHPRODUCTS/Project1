@@ -38,6 +38,22 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
                         "period":{"start_date":"2026-10-01","end_date":"2026-10-30"},"account":"creator-main",
                         "transaction_types":{"SALE":4,"RFND":1,"CGBK":0},
                         "counts":{"sales":4,"refunds":1,"chargebacks":0}})
+                elif request.method=="POST" and request.url.endswith("/api/provider-connections/cb-1/orders/import"):
+                    payload=json.loads(request.post_data or "{}")
+                    assert payload["account"]=="creator-main"
+                    _fulfill(route,{"provider_id":"clickbank","evidence_type":"provider_reported_order_observations",
+                        "financial_semantics":"provider_account_amount_is_unreconciled_evidence_not_confirmed_commission_or_payout",
+                        "pii_stored":False,"period":{"start_date":"2026-10-01","end_date":"2026-10-30"},
+                        "account":"creator-main","pages_retrieved":1,"source_order_count":1,
+                        "skipped_unidentified_count":0,"skipped_scope_count":0,"imported_count":1,
+                        "duplicate_count":0,"has_more":False,"next_page":None,
+                        "transactions":[{"event_key":"event-1","source_fingerprint":"hash-1","receipt":"RECEIPT123",
+                            "transaction_time":"2026-10-20T12:00:00+00:00","transaction_type":"SALE","role":"AFFILIATE",
+                            "account_nickname":"creator-main","vendor_nickname":"vendor-main","affiliate_nickname":"creator-main",
+                            "currency":"USD","item_number":"PROD-1","line_item_type":"STANDARD","product_title":"Sample product",
+                            "account_amount":"12.50","customer_amount":"49.00","line_item_status":"ACTIVE",
+                            "recurring":False,"shippable":False,"evidence_status":"provider_reported_unreconciled"}],
+                        "note":"PII-minimized evidence only."},201)
                 elif request.method=="POST" and request.url.endswith("/api/provider-connections/cb-1/test"):
                     _fulfill(route,connections[0])
                 elif request.method=="DELETE" and request.url.endswith("/api/provider-connections/cb-1"):
@@ -58,6 +74,11 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
             page.get_by_role("button",name="Load 30-day order counts").click()
             page.get_by_text("Provider-reported affiliate transaction counts",exact=False).wait_for(state="visible")
             assert page.get_by_text("Counts only.",exact=False).is_visible()
+            page.get_by_role("button",name="Import last 30 days orders").click()
+            page.get_by_test_id("clickbank-order-import").wait_for(state="visible")
+            assert page.get_by_text("Sample product",exact=True).is_visible()
+            assert page.get_by_text("12.50",exact=True).is_visible()
+            assert page.get_by_text("Customer names, emails, contact details and postal data are not stored.",exact=False).is_visible()
             page.get_by_role("button",name="Test connection").click()
             page.get_by_text("ClickBank read-only account verification passed.").wait_for(state="visible")
             page.get_by_role("button",name="Disconnect").click()

@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ProviderOrderObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -73,7 +73,7 @@ from backend.services.integration_registry import build_network_registry
 from backend.services.clickbank_accounts import (
     ClickBankAccessError, ClickBankProviderUnavailable, StoredCredentialError,
     decrypt_clickbank_api_key, encrypt_clickbank_api_key,
-    fingerprint_clickbank_api_key, verify_clickbank_api_key, fetch_clickbank_quickstats, fetch_clickbank_order_counts,
+    fingerprint_clickbank_api_key, verify_clickbank_api_key, fetch_clickbank_quickstats, fetch_clickbank_order_counts, fetch_clickbank_order_transactions,
 )
 from backend.services.capability_matrix import build_capability_matrix
 from backend.services.offer_intelligence import compute_offer_metrics
@@ -1273,6 +1273,200 @@ async def clickbank_provider_order_counts(
         "metric_scope":"affiliate_sale_refund_chargeback_counts_not_commission_or_payout_amounts",
         "period":{"start_date":start_date.isoformat(),"end_date":end_date.isoformat()},
         **report,
+    }
+
+
+
+@api.post("/provider-connections/{connection_id}/orders/import")
+async def import_clickbank_order_transactions(
+    connection_id: str,
+    payload: ClickBankOrderImportRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    if payload.start_date > payload.end_date:
+        raise HTTPException(422, "start_date must be on or before end_date.")
+    if payload.end_date > date.today():
+        raise HTTPException(422, "end_date cannot be in the future.")
+    if (payload.end_date - payload.start_date).days > 365:
+        raise HTTPException(422, "Orders date ranges are limited to 366 inclusive days.")
+
+    with workspace_scope(workspace_id):
+        connection = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id,
+            ProviderAccountConnection.workspace_id == workspace_id,
+        ))
+    if connection is None:
+        raise HTTPException(404, "Provider connection not found in the active workspace.")
+    if connection.provider_id != "clickbank" or connection.status == "disconnected" or not connection.credential_ciphertext:
+        raise HTTPException(409, "An active ClickBank read-only connection is required.")
+    if payload.account.casefold() not in {name.casefold() for name in (connection.account_nicknames_json or [])}:
+        raise HTTPException(404, "The selected affiliate nickname is not linked to this provider connection.")
+
+    try:
+        api_key = decrypt_clickbank_api_key(connection.credential_ciphertext, connection.credential_key_version)
+        report = await fetch_clickbank_order_transactions(
+            api_key,
+            account=payload.account,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            start_page=payload.start_page,
+            max_pages=payload.max_pages,
+        )
+    except StoredCredentialError:
+        with workspace_scope(workspace_id):
+            connection.status = "degraded"
+            connection.last_error_code = "credential_decryption_failed"
+            connection.last_checked_at = utcnow()
+            await db.commit()
+        raise HTTPException(503, "Stored ClickBank credentials cannot be decrypted. Reconnect the account.") from None
+    except ClickBankAccessError as exc:
+        with workspace_scope(workspace_id):
+            connection.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_order_transactions_read",
+                resource_type="provider_account_connection",
+                resource_id=connection.id,
+                outcome="permission_rejected",
+                details_json={
+                    "provider_id":"clickbank",
+                    "account":payload.account,
+                    "start_date":payload.start_date.isoformat(),
+                    "end_date":payload.end_date.isoformat(),
+                },
+            ))
+            await db.commit()
+        raise HTTPException(422, str(exc)) from None
+    except ClickBankProviderUnavailable as exc:
+        with workspace_scope(workspace_id):
+            connection.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_order_transactions_read",
+                resource_type="provider_account_connection",
+                resource_id=connection.id,
+                outcome="provider_unavailable",
+                details_json={
+                    "provider_id":"clickbank",
+                    "account":payload.account,
+                    "start_date":payload.start_date.isoformat(),
+                    "end_date":payload.end_date.isoformat(),
+                },
+            ))
+            await db.commit()
+        raise HTTPException(502, str(exc)) from None
+
+    transactions = report["transactions"]
+    event_keys = list({item["event_key"] for item in transactions})
+    existing_pairs: set[tuple[str, str]] = set()
+    if event_keys:
+        with workspace_scope(workspace_id):
+            existing_rows = (await db.execute(
+                select(ProviderOrderObservation.event_key, ProviderOrderObservation.source_fingerprint).where(
+                    ProviderOrderObservation.workspace_id == workspace_id,
+                    ProviderOrderObservation.connection_id == connection.id,
+                    ProviderOrderObservation.event_key.in_(event_keys),
+                )
+            )).all()
+            existing_pairs = {(item[0], item[1]) for item in existing_rows}
+
+    imported: list[dict[str, Any]] = []
+    duplicate_count = 0
+    for item in transactions:
+        identity = (item["event_key"], item["source_fingerprint"])
+        if identity in existing_pairs:
+            duplicate_count += 1
+            continue
+        existing_pairs.add(identity)
+        observation = ProviderOrderObservation(
+            workspace_id=workspace_id,
+            connection_id=connection.id,
+            provider_id="clickbank",
+            event_key=item["event_key"],
+            source_fingerprint=item["source_fingerprint"],
+            account_nickname=item["account_nickname"],
+            receipt=item["receipt"],
+            transaction_time=item["transaction_time"],
+            transaction_type=item["transaction_type"],
+            role="AFFILIATE",
+            vendor_nickname=item.get("vendor_nickname"),
+            affiliate_nickname=item.get("affiliate_nickname"),
+            currency=item.get("currency"),
+            item_number=item.get("item_number"),
+            line_item_type=item.get("line_item_type"),
+            product_title=item.get("product_title"),
+            account_amount=Decimal(item["account_amount"]) if item.get("account_amount") is not None else None,
+            customer_amount=Decimal(item["customer_amount"]) if item.get("customer_amount") is not None else None,
+            line_item_status=item.get("line_item_status"),
+            recurring=item.get("recurring"),
+            shippable=item.get("shippable"),
+            evidence_status="provider_reported_unreconciled",
+        )
+        db.add(observation)
+        imported.append(item)
+
+    transaction_counts: dict[str, int] = {}
+    for item in imported:
+        transaction_counts[item["transaction_type"]] = transaction_counts.get(item["transaction_type"], 0) + 1
+
+    with workspace_scope(workspace_id):
+        connection.last_checked_at = utcnow()
+        connection.last_error_code = None
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_order_transactions_imported",
+            resource_type="provider_account_connection",
+            resource_id=connection.id,
+            outcome="provider_reported_unreconciled",
+            details_json={
+                "provider_id":"clickbank",
+                "account":payload.account,
+                "start_date":payload.start_date.isoformat(),
+                "end_date":payload.end_date.isoformat(),
+                "pages_retrieved":report["pages_retrieved"],
+                "has_more":report["has_more"],
+                "source_order_count":report["source_order_count"],
+                "normalized_line_item_count":len(transactions),
+                "imported_count":len(imported),
+                "duplicate_count":duplicate_count,
+                "transaction_counts":transaction_counts,
+                "skipped_unidentified_count":report["skipped_unidentified_count"],
+                "skipped_scope_count":report["skipped_scope_count"],
+                "pii_stored":False,
+            },
+        ))
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "A matching order observation was imported concurrently. Retry the same date range to reconcile duplicates.") from None
+
+    records = [{
+        **item,
+        "evidence_status":"provider_reported_unreconciled",
+    } for item in imported]
+    return {
+        "provider_id":"clickbank",
+        "evidence_type":"provider_reported_order_observations",
+        "financial_semantics":"provider_account_amount_is_unreconciled_evidence_not_confirmed_commission_or_payout",
+        "pii_stored":False,
+        "period":{"start_date":payload.start_date.isoformat(),"end_date":payload.end_date.isoformat()},
+        "account":payload.account,
+        "pages_retrieved":report["pages_retrieved"],
+        "source_order_count":report["source_order_count"],
+        "skipped_unidentified_count":report["skipped_unidentified_count"],
+        "skipped_scope_count":report["skipped_scope_count"],
+        "imported_count":len(imported),
+        "duplicate_count":duplicate_count,
+        "has_more":report["has_more"],
+        "next_page":report["next_page"],
+        "transactions":records,
+        "note":"These are PII-minimized provider-reported affiliate transaction observations. Account amounts remain unreconciled evidence; they are not confirmed commissions, net earnings or paid-out funds.",
     }
 
 

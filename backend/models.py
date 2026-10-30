@@ -286,6 +286,57 @@ class ProviderAccountConnection(TenantScopedMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class ProviderOrderObservation(TenantScopedMixin, Base):
+    """Append-only, PII-minimized snapshot of provider-reported affiliate order data."""
+
+    __tablename__ = "provider_order_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "provider_id", "event_key", "source_fingerprint",
+            name="uq_provider_order_observation_workspace_source",
+        ),
+        Index(
+            "ix_provider_order_observations_workspace_connection_observed",
+            "workspace_id", "connection_id", "observed_at",
+        ),
+        Index(
+            "ix_provider_order_observations_workspace_account_time",
+            "workspace_id", "account_nickname", "transaction_time",
+        ),
+        CheckConstraint("role = 'AFFILIATE'", name="ck_provider_order_observations_affiliate_role"),
+        CheckConstraint(
+            "evidence_status IN ('provider_reported_unreconciled')",
+            name="ck_provider_order_observations_evidence_status",
+        ),
+        CheckConstraint("workspace_id IS NOT NULL", name="ck_provider_order_observations_workspace_required"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    connection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("provider_account_connections.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    provider_id: Mapped[str] = mapped_column(String(80), nullable=False, default="clickbank", index=True)
+    event_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_nickname: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    receipt: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    transaction_time: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    transaction_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="AFFILIATE")
+    vendor_nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    affiliate_nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    item_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    line_item_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    product_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    account_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    customer_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    line_item_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    recurring: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    shippable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    evidence_status: Mapped[str] = mapped_column(String(40), nullable=False, default="provider_reported_unreconciled")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class ExternalAction(TenantScopedMixin, Base):
     """Durable idempotency registry for provider writes made with global credentials."""
 

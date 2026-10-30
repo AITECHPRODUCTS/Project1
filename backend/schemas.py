@@ -29,6 +29,23 @@ class ClickBankConnectionCreateRequest(BaseModel):
         return SecretStr(raw)
 
 
+class ClickBankOrderImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account: str = Field(min_length=1, max_length=100)
+    start_date: date
+    end_date: date
+    start_page: int = Field(default=1, ge=1, le=1000)
+    max_pages: int = Field(default=5, ge=1, le=10)
+
+    @field_validator("account")
+    @classmethod
+    def validate_account_nickname(cls, value: str) -> str:
+        normalized = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", normalized):
+            raise ValueError("Enter a valid linked ClickBank account nickname.")
+        return normalized
+
+
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1024)

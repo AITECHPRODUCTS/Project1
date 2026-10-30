@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderCatalogObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -76,6 +76,11 @@ from backend.services.clickbank_accounts import (
     fingerprint_clickbank_api_key, verify_clickbank_api_key, fetch_clickbank_quickstats, fetch_clickbank_order_counts, fetch_clickbank_order_transactions,
 )
 from backend.services.capability_matrix import build_capability_matrix
+from backend.services.flipkart_accounts import (
+    FlipkartAccessError, FlipkartProviderUnavailable, StoredFlipkartCredentialError,
+    decrypt_flipkart_api_token, encrypt_flipkart_api_token, fingerprint_flipkart_credentials,
+    verify_flipkart_credentials, search_flipkart_products, fetch_flipkart_offers,
+)
 from backend.services.offer_intelligence import compute_offer_metrics
 from backend.services.offer_term_snapshots import compare_offer_terms
 from backend.services.resource_budget import status as budget_status
@@ -949,7 +954,12 @@ def _provider_connection_payload(row: ProviderAccountConnection) -> dict[str, An
         "id": row.id, "provider_id": row.provider_id, "status": row.status,
         "account_nicknames": list(row.account_nicknames_json or []),
         "capabilities": list(row.capabilities_json or []),
-        "permissions_verified": ["API Order Read"] if "quickstats.accounts.read" in (row.capabilities_json or []) else [],
+        "permissions_verified": (
+            (["API Order Read"] if "quickstats.accounts.read" in (row.capabilities_json or []) else [])
+            + (["Product Feed Directory"] if "product_feed.directory.read" in (row.capabilities_json or []) else [])
+            + (["Product Search"] if "products.search" in (row.capabilities_json or []) else [])
+            + (["Active Offers"] if "offers.list" in (row.capabilities_json or []) else [])
+        ),
         "credential_present": bool(row.credential_ciphertext),
         "last_checked_at": row.last_checked_at.isoformat() if row.last_checked_at else None,
         "last_error_code": row.last_error_code,
@@ -1516,6 +1526,424 @@ async def import_clickbank_order_transactions(
     }
 
 
+
+
+def _flipkart_observation_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _flipkart_observation_snapshot(item: dict[str, Any]) -> tuple[str, str]:
+    encoded = json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest(), encoded
+
+
+async def _upsert_flipkart_catalog_observations(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    observation_type: str,
+    source_endpoint: str,
+    items: list[dict[str, Any]],
+) -> int:
+    now = utcnow()
+    count = 0
+    for item in items:
+        fingerprint, encoded = _flipkart_observation_snapshot(item)
+        external_id = str(item["external_id"])
+        with workspace_scope(workspace_id):
+            row = await db.scalar(select(ProviderCatalogObservation).where(
+                ProviderCatalogObservation.workspace_id == workspace_id,
+                ProviderCatalogObservation.provider_id == "flipkart",
+                ProviderCatalogObservation.observation_type == observation_type,
+                ProviderCatalogObservation.external_id == external_id,
+            ))
+        if observation_type == "product":
+            price_amount = Decimal(item["price_amount"]) if item.get("price_amount") is not None else None
+            mrp_amount = Decimal(item["mrp_amount"]) if item.get("mrp_amount") is not None else None
+            discount = Decimal(item["discount_percentage"]) if item.get("discount_percentage") is not None else None
+            availability = item.get("in_stock")
+            availability_status = "IN_STOCK" if availability is True else "OUT_OF_STOCK" if availability is False else "UNKNOWN"
+            provider_url = item.get("product_url")
+            brand = item.get("brand")
+            starts_at = ends_at = None
+            is_available = availability
+            status = availability_status
+        else:
+            price_amount = mrp_amount = discount = None
+            provider_url = item.get("offer_url")
+            brand = None
+            starts_at = _flipkart_observation_datetime(item.get("start_at"))
+            ends_at = _flipkart_observation_datetime(item.get("end_at"))
+            is_available = item.get("is_available")
+            status = item.get("availability_status")
+        values = {
+            "title": str(item["title"])[:500],
+            "description": str(item.get("description") or "")[:4000],
+            "category": str(item["category"])[:200] if item.get("category") else None,
+            "brand": str(brand)[:200] if brand else None,
+            "provider_url": provider_url,
+            "image_url": item.get("image_url"),
+            "price_amount": price_amount,
+            "mrp_amount": mrp_amount,
+            "currency": item.get("currency") if observation_type == "product" else None,
+            "is_available": is_available,
+            "availability_status": status,
+            "discount_percentage": discount,
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+            "source_endpoint": source_endpoint,
+            "source_fingerprint": fingerprint,
+            "snapshot_json": json.loads(encoded),
+            "observed_at": now,
+            "updated_at": now,
+        }
+        with workspace_scope(workspace_id):
+            if row is None:
+                db.add(ProviderCatalogObservation(
+                    workspace_id=workspace_id,
+                    provider_id="flipkart",
+                    observation_type=observation_type,
+                    external_id=external_id,
+                    created_at=now,
+                    **values,
+                ))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        count += 1
+    return count
+
+
+async def _load_flipkart_connection(
+    connection_id: str,
+    *,
+    workspace_id: str,
+    db: AsyncSession,
+) -> ProviderAccountConnection:
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id,
+            ProviderAccountConnection.workspace_id == workspace_id,
+        ))
+    if row is None:
+        raise HTTPException(404, "Provider connection not found in the active workspace.")
+    if row.provider_id != "flipkart" or row.status == "disconnected" or not row.credential_ciphertext:
+        raise HTTPException(409, "An active Flipkart read-only connection is required.")
+    if not row.account_nicknames_json:
+        raise HTTPException(409, "The Flipkart connection has no verified tracking ID. Reconnect the account.")
+    tracking_id = str(row.account_nicknames_json[0])
+    return row
+
+
+@api.post("/provider-connections/flipkart", status_code=201)
+async def connect_flipkart_account(
+    payload: FlipkartConnectionCreateRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    tracking_id = payload.tracking_id
+    api_token = payload.api_token.get_secret_value()
+    try:
+        fingerprint = fingerprint_flipkart_credentials(tracking_id, api_token)
+    except StoredFlipkartCredentialError:
+        raise HTTPException(503, "Provider credential encryption is not configured. Contact the platform operator.") from None
+    with workspace_scope(workspace_id):
+        existing = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.workspace_id == workspace_id,
+            ProviderAccountConnection.provider_id == "flipkart",
+            ProviderAccountConnection.credential_fingerprint == fingerprint,
+            ProviderAccountConnection.status != "disconnected",
+        ))
+    if existing is not None:
+        raise HTTPException(409, "These Flipkart credentials are already connected to the active workspace.")
+    try:
+        verified = await verify_flipkart_credentials(tracking_id, api_token)
+        encrypted = encrypt_flipkart_api_token(api_token)
+    except FlipkartAccessError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except FlipkartProviderUnavailable as exc:
+        raise HTTPException(502, str(exc)) from None
+    except StoredFlipkartCredentialError:
+        raise HTTPException(503, "Provider credential encryption is not configured. Contact the platform operator.") from None
+
+    row = ProviderAccountConnection(
+        workspace_id=workspace_id,
+        provider_id="flipkart",
+        status="connected_read_only",
+        credential_ciphertext=encrypted,
+        credential_fingerprint=fingerprint,
+        credential_key_version=1,
+        account_nicknames_json=[verified["tracking_id"]],
+        capabilities_json=list(verified["capabilities"]),
+        created_by_user_id=str(user.get("user_id") or "")[:36] or None,
+        last_checked_at=utcnow(),
+    )
+    with workspace_scope(workspace_id):
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_account_connected",
+            resource_type="provider_account_connection",
+            resource_id=row.id,
+            outcome="connected_read_only",
+            details_json={
+                "provider_id": "flipkart",
+                "verified_endpoint": "affiliate/api/{tracking_id}.json",
+                "capabilities": list(verified["capabilities"]),
+                "category_count": len(verified["categories"]),
+                "credential_encrypted": True,
+            },
+        ))
+        try:
+            await db.commit()
+            await db.refresh(row)
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "These Flipkart credentials are already connected to the active workspace.") from None
+    response = _provider_connection_payload(row)
+    response["categories"] = verified["categories"]
+    return response
+
+
+@api.post("/provider-connections/{connection_id}/flipkart/test")
+async def test_flipkart_provider_connection(
+    connection_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    row = await _load_flipkart_connection(connection_id, workspace_id=workspace_id, db=db)
+    tracking_id = str(row.account_nicknames_json[0])
+    try:
+        api_token = decrypt_flipkart_api_token(row.credential_ciphertext, row.credential_key_version)
+        verified = await verify_flipkart_credentials(tracking_id, api_token)
+    except StoredFlipkartCredentialError:
+        outcome, status_code, detail = "credential_decryption_failed", 503, "Stored Flipkart credentials cannot be decrypted. Reconnect the account."
+    except FlipkartAccessError:
+        outcome, status_code, detail = "credential_or_permission_rejected", 422, "Flipkart rejected the affiliate tracking ID/token. Verify the account and token."
+    except FlipkartProviderUnavailable:
+        outcome, status_code, detail = "provider_unavailable", 502, "Flipkart could not complete the account verification request. Try again later."
+    else:
+        outcome, status_code, detail = "connected_read_only", 200, ""
+    with workspace_scope(workspace_id):
+        row.last_checked_at = utcnow()
+        row.last_error_code = None if outcome == "connected_read_only" else outcome
+        row.status = "connected_read_only" if outcome == "connected_read_only" else "degraded"
+        if outcome == "connected_read_only":
+            row.capabilities_json = list(verified["capabilities"])
+            row.account_nicknames_json = [verified["tracking_id"]]
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_account_tested",
+            resource_type="provider_account_connection",
+            resource_id=row.id,
+            outcome=outcome,
+            details_json={"provider_id": "flipkart"},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    if status_code != 200:
+        raise HTTPException(status_code=status_code, detail=detail)
+    response = _provider_connection_payload(row)
+    response["categories"] = verified["categories"]
+    return response
+
+
+@api.post("/provider-connections/{connection_id}/flipkart/products/search")
+async def search_flipkart_provider_products(
+    connection_id: str,
+    payload: FlipkartProductSearchRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    row = await _load_flipkart_connection(connection_id, workspace_id=workspace_id, db=db)
+    tracking_id = str(row.account_nicknames_json[0])
+    try:
+        api_token = decrypt_flipkart_api_token(row.credential_ciphertext, row.credential_key_version)
+        report = await search_flipkart_products(
+            tracking_id,
+            api_token,
+            query=payload.query,
+            result_count=payload.result_count,
+        )
+    except StoredFlipkartCredentialError:
+        with workspace_scope(workspace_id):
+            row.status = "degraded"
+            row.last_error_code = "credential_decryption_failed"
+            row.last_checked_at = utcnow()
+            await db.commit()
+        raise HTTPException(503, "Stored Flipkart credentials cannot be decrypted. Reconnect the account.") from None
+    except FlipkartAccessError as exc:
+        with workspace_scope(workspace_id):
+            row.status = "degraded"
+            row.last_error_code = "credential_or_permission_rejected"
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_product_search",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="permission_rejected",
+                details_json={"provider_id": "flipkart"},
+            ))
+            await db.commit()
+        raise HTTPException(422, str(exc)) from None
+    except FlipkartProviderUnavailable as exc:
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_product_search",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="provider_unavailable",
+                details_json={"provider_id": "flipkart"},
+            ))
+            await db.commit()
+        raise HTTPException(502, str(exc)) from None
+
+    items = report["products"]
+    try:
+        persisted_count = await _upsert_flipkart_catalog_observations(
+            db,
+            workspace_id=workspace_id,
+            observation_type="product",
+            source_endpoint=report["source_endpoint"],
+            items=items,
+        )
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            row.last_error_code = None
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_product_search",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="provider_reported",
+                details_json={
+                    "provider_id": "flipkart",
+                    "result_count": len(items),
+                    "persisted_count": persisted_count,
+                    "query_present": True,
+                    "evidence_type": report["evidence_type"],
+                },
+            ))
+            await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "A matching Flipkart product snapshot was updated concurrently. Retry the search.") from None
+    return {
+        **report,
+        "tracking_id": tracking_id,
+        "source_checked_at": utcnow().isoformat(),
+        "persisted_count": persisted_count,
+    }
+
+
+@api.get("/provider-connections/{connection_id}/flipkart/offers")
+async def list_flipkart_provider_offers(
+    connection_id: str,
+    kind: str = Query(default="all", pattern="^(all|dotd)$"),
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    row = await _load_flipkart_connection(connection_id, workspace_id=workspace_id, db=db)
+    tracking_id = str(row.account_nicknames_json[0])
+    try:
+        api_token = decrypt_flipkart_api_token(row.credential_ciphertext, row.credential_key_version)
+        report = await fetch_flipkart_offers(tracking_id, api_token, kind=kind)
+    except StoredFlipkartCredentialError:
+        with workspace_scope(workspace_id):
+            row.status = "degraded"
+            row.last_error_code = "credential_decryption_failed"
+            row.last_checked_at = utcnow()
+            await db.commit()
+        raise HTTPException(503, "Stored Flipkart credentials cannot be decrypted. Reconnect the account.") from None
+    except FlipkartAccessError as exc:
+        with workspace_scope(workspace_id):
+            row.status = "degraded"
+            row.last_error_code = "credential_or_permission_rejected"
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_offers_read",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="permission_rejected",
+                details_json={"provider_id": "flipkart", "offer_kind": kind},
+            ))
+            await db.commit()
+        raise HTTPException(422, str(exc)) from None
+    except FlipkartProviderUnavailable as exc:
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_offers_read",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="provider_unavailable",
+                details_json={"provider_id": "flipkart", "offer_kind": kind},
+            ))
+            await db.commit()
+        raise HTTPException(502, str(exc)) from None
+
+    items = report["offers"]
+    try:
+        persisted_count = await _upsert_flipkart_catalog_observations(
+            db,
+            workspace_id=workspace_id,
+            observation_type="offer",
+            source_endpoint=report["source_endpoint"],
+            items=items,
+        )
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            row.last_error_code = None
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_offers_read",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="provider_reported",
+                details_json={
+                    "provider_id": "flipkart",
+                    "offer_kind": kind,
+                    "result_count": len(items),
+                    "persisted_count": persisted_count,
+                    "evidence_type": report["evidence_type"],
+                },
+            ))
+            await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "A matching Flipkart offer snapshot was updated concurrently. Retry the request.") from None
+    return {
+        **report,
+        "tracking_id": tracking_id,
+        "source_checked_at": utcnow().isoformat(),
+        "persisted_count": persisted_count,
+    }
+
+
 @api.delete("/provider-connections/{connection_id}")
 async def disconnect_provider_account(connection_id: str, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
     workspace_id = _provider_connection_workspace(user)
@@ -1537,7 +1965,13 @@ async def disconnect_provider_account(connection_id: str, user: dict[str, Any] =
         await db.commit()
     return {"id":row.id,"provider_id":row.provider_id,"status":"disconnected","credential_present":False,
             "provider_key_revoked_remotely":False,
-            "detail":"The saved credential was removed from OmniAffiliateOS. Revoke the API key separately in ClickBank API Management."}
+            "detail":(
+                "The saved credential was removed from OmniAffiliateOS. Revoke the ClickBank API key separately in ClickBank API Management."
+                if row.provider_id == "clickbank"
+                else "The saved credential was removed from OmniAffiliateOS. Revoke or regenerate the token in Flipkart Affiliate API settings separately."
+                if row.provider_id == "flipkart"
+                else "The saved credential was removed from OmniAffiliateOS. Revoke it with the provider separately."
+            )}
 
 
 @api.get("/integrations")

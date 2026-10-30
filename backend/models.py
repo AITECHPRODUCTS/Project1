@@ -258,6 +258,34 @@ class AuditLog(TenantScopedMixin, Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+class ProviderAccountConnection(TenantScopedMixin, Base):
+    """Workspace-owned provider credential encrypted at rest."""
+    __tablename__ = "provider_account_connections"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "provider_id", "credential_fingerprint", name="uq_provider_connections_workspace_provider_fingerprint"),
+        Index("ix_provider_connections_workspace_provider_status", "workspace_id", "provider_id", "status"),
+        CheckConstraint("status IN ('connected_read_only', 'degraded', 'disconnected')", name="ck_provider_connections_status"),
+        CheckConstraint(
+            "(status = 'disconnected' AND credential_ciphertext IS NULL AND credential_fingerprint IS NULL) OR "
+            "(status IN ('connected_read_only', 'degraded') AND credential_ciphertext IS NOT NULL AND credential_fingerprint IS NOT NULL)",
+            name="ck_provider_connections_credential_state",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    provider_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="connected_read_only", index=True)
+    credential_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credential_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    credential_key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    account_nicknames_json: Mapped[list[str]] = mapped_column(JSON_VALUE, nullable=False, default=list)
+    capabilities_json: Mapped[list[str]] = mapped_column(JSON_VALUE, nullable=False, default=list)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class ExternalAction(TenantScopedMixin, Base):
     """Durable idempotency registry for provider writes made with global credentials."""
 

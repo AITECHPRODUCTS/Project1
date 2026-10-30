@@ -8,12 +8,25 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, urlparse
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from backend.services.consent_ledger import (
     EMAIL_MARKETING_CONSENT_PURPOSE,
     EMAIL_MARKETING_CONSENT_TEXT,
     EMAIL_MARKETING_CONSENT_VERSION,
 )
+
+
+class ClickBankConnectionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    api_key: SecretStr
+
+    @field_validator("api_key")
+    @classmethod
+    def validate_api_key(cls, value: SecretStr) -> SecretStr:
+        raw = value.get_secret_value().strip()
+        if not 20 <= len(raw) <= 512 or any(ord(char) < 33 or ord(char) > 126 for char in raw):
+            raise ValueError("Enter an active ClickBank API key created in API Management.")
+        return SecretStr(raw)
 
 
 class LoginRequest(BaseModel):

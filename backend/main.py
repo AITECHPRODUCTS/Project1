@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -70,6 +70,11 @@ from backend.services.external_action_registry import EXTERNAL_IDEMPOTENCY_KEY_R
 from backend.services.email_delivery import ConsentConfirmationDeliveryUnavailable,capture_lead_and_schedule,confirm_email_consent,resend_email_consent_confirmation,send_due_emails,unsubscribe_lead
 from backend.services.email_automation_builder import build_email_automation,simulate_email_automation
 from backend.services.integration_registry import build_network_registry
+from backend.services.clickbank_accounts import (
+    ClickBankAccessError, ClickBankProviderUnavailable, StoredCredentialError,
+    decrypt_clickbank_api_key, encrypt_clickbank_api_key,
+    fingerprint_clickbank_api_key, verify_clickbank_api_key,
+)
 from backend.services.capability_matrix import build_capability_matrix
 from backend.services.offer_intelligence import compute_offer_metrics
 from backend.services.offer_term_snapshots import compare_offer_terms
@@ -935,6 +940,155 @@ async def accept_workspace_invitation(
         "workspace_name": workspace.name, "role": membership.role,
         "csrf_token": request.session["csrf_token"],
     }
+
+
+
+
+def _provider_connection_payload(row: ProviderAccountConnection) -> dict[str, Any]:
+    return {
+        "id": row.id, "provider_id": row.provider_id, "status": row.status,
+        "account_nicknames": list(row.account_nicknames_json or []),
+        "capabilities": list(row.capabilities_json or []),
+        "permissions_verified": ["API Order Read"] if "quickstats.accounts.read" in (row.capabilities_json or []) else [],
+        "credential_present": bool(row.credential_ciphertext),
+        "last_checked_at": row.last_checked_at.isoformat() if row.last_checked_at else None,
+        "last_error_code": row.last_error_code,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _provider_connection_workspace(user: dict[str, Any]) -> str:
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before managing provider accounts.")
+    return workspace_id
+
+
+@api.get("/provider-connections")
+async def list_provider_connections(user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+    workspace_id = _provider_connection_workspace(user)
+    with workspace_scope(workspace_id):
+        rows = (await db.scalars(select(ProviderAccountConnection)
+            .where(ProviderAccountConnection.workspace_id == workspace_id)
+            .order_by(ProviderAccountConnection.created_at.desc(), ProviderAccountConnection.id.desc()))).all()
+    return {"data": [_provider_connection_payload(row) for row in rows]}
+
+
+@api.post("/provider-connections/clickbank", status_code=201)
+async def connect_clickbank_account(payload: ClickBankConnectionCreateRequest, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+    workspace_id = _provider_connection_workspace(user)
+    api_key = payload.api_key.get_secret_value()
+    try:
+        fingerprint = fingerprint_clickbank_api_key(api_key)
+    except StoredCredentialError:
+        raise HTTPException(503, "Provider credential encryption is not configured. Contact the platform operator.") from None
+    with workspace_scope(workspace_id):
+        existing = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.workspace_id == workspace_id,
+            ProviderAccountConnection.provider_id == "clickbank",
+            ProviderAccountConnection.credential_fingerprint == fingerprint,
+            ProviderAccountConnection.status != "disconnected",
+        ))
+    if existing is not None:
+        raise HTTPException(409, "This ClickBank API key is already connected to the active workspace.")
+    try:
+        accounts = await verify_clickbank_api_key(api_key)
+        encrypted = encrypt_clickbank_api_key(api_key)
+    except ClickBankAccessError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except ClickBankProviderUnavailable as exc:
+        raise HTTPException(502, str(exc)) from None
+    except StoredCredentialError:
+        raise HTTPException(503, "Provider credential encryption is not configured. Contact the platform operator.") from None
+
+    row = ProviderAccountConnection(
+        workspace_id=workspace_id, provider_id="clickbank", status="connected_read_only",
+        credential_ciphertext=encrypted, credential_fingerprint=fingerprint, credential_key_version=1,
+        account_nicknames_json=accounts, capabilities_json=["quickstats.accounts.read"],
+        created_by_user_id=str(user.get("user_id") or "")[:36] or None, last_checked_at=utcnow(),
+    )
+    with workspace_scope(workspace_id):
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_account_connected", resource_type="provider_account_connection",
+            resource_id=row.id, outcome="connected_read_only",
+            details_json={"provider_id":"clickbank","verified_endpoint":"quickstats/accounts",
+                          "verified_permission":"API Order Read","account_count":len(accounts),"credential_encrypted":True},
+        ))
+        try:
+            await db.commit()
+            await db.refresh(row)
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "This ClickBank API key is already connected to the active workspace.") from None
+    return _provider_connection_payload(row)
+
+
+@api.post("/provider-connections/{connection_id}/test")
+async def test_provider_account_connection(connection_id: str, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+    workspace_id = _provider_connection_workspace(user)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id, ProviderAccountConnection.workspace_id == workspace_id))
+    if row is None:
+        raise HTTPException(404, "Provider connection not found in the active workspace.")
+    if row.status == "disconnected" or not row.credential_ciphertext:
+        raise HTTPException(409, "This provider connection is disconnected. Connect it again to restore access.")
+    try:
+        api_key = decrypt_clickbank_api_key(row.credential_ciphertext, row.credential_key_version)
+    except StoredCredentialError:
+        outcome, status_code, detail = "credential_decryption_failed", 503, "Stored ClickBank credentials cannot be decrypted. Reconnect the account."
+    else:
+        try:
+            accounts = await verify_clickbank_api_key(api_key)
+            outcome, status_code, detail = "connected_read_only", 200, ""
+        except ClickBankAccessError:
+            outcome, status_code, detail = "credential_or_permission_rejected", 422, "ClickBank rejected the read-only account check. Verify the API key and API Order Read permission."
+        except ClickBankProviderUnavailable:
+            outcome, status_code, detail = "provider_unavailable", 502, "ClickBank could not complete the account verification request. Try again later."
+    with workspace_scope(workspace_id):
+        row.last_checked_at = utcnow()
+        row.last_error_code = None if outcome == "connected_read_only" else outcome
+        row.status = "connected_read_only" if outcome == "connected_read_only" else "degraded"
+        if outcome == "connected_read_only":
+            row.account_nicknames_json = accounts
+            row.capabilities_json = ["quickstats.accounts.read"]
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_account_tested", resource_type="provider_account_connection",
+            resource_id=row.id, outcome=outcome, details_json={"provider_id":row.provider_id},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    if status_code != 200:
+        raise HTTPException(status_code=status_code, detail=detail)
+    return _provider_connection_payload(row)
+
+
+@api.delete("/provider-connections/{connection_id}")
+async def disconnect_provider_account(connection_id: str, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+    workspace_id = _provider_connection_workspace(user)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id, ProviderAccountConnection.workspace_id == workspace_id))
+        if row is None:
+            raise HTTPException(404, "Provider connection not found in the active workspace.")
+        row.status = "disconnected"
+        row.credential_ciphertext = None
+        row.credential_fingerprint = None
+        row.last_error_code = None
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_account_disconnected", resource_type="provider_account_connection",
+            resource_id=row.id, outcome="disconnected",
+            details_json={"provider_id":row.provider_id,"stored_credential_removed":True,"provider_key_revoked_remotely":False},
+        ))
+        await db.commit()
+    return {"id":row.id,"provider_id":row.provider_id,"status":"disconnected","credential_present":False,
+            "provider_key_revoked_remotely":False,
+            "detail":"The saved credential was removed from OmniAffiliateOS. Revoke the API key separately in ClickBank API Management."}
 
 
 @api.get("/integrations")

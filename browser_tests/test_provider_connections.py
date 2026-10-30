@@ -64,7 +64,7 @@ def test_clickbank_connection_ui_masks_secret_and_removes_saved_credential():
             page.goto(BASE_URL+"/integrations",wait_until="domcontentloaded")
             page.get_by_role("heading",name="Affiliate account connections").wait_for(state="visible")
             page.get_by_label("ClickBank API key").fill(API_KEY)
-            page.get_by_role("button",name="Verify & connect").click()
+            page.get_by_role("button",name="Verify & connect",exact=True).click()
             page.get_by_text("creator-main",exact=True).wait_for(state="visible")
             assert page.get_by_label("ClickBank API key").input_value()==""
             assert API_KEY not in page.locator("main").inner_text()

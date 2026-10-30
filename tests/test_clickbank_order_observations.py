@@ -180,7 +180,7 @@ def _api_cleanup(engine,client):
 
 def test_order_import_persists_idempotent_pii_minimized_observations(monkeypatch,tmp_path):
     engine,sessions,user,workspace_id,connection_id,client=_api_client(tmp_path)
-    async def decrypt(*args,**kwargs):
+    def decrypt(*args,**kwargs):
         return "API-"+"x"*40
     report={
         "account":"creator-main",
@@ -240,7 +240,7 @@ def test_order_import_persists_idempotent_pii_minimized_observations(monkeypatch
 def test_order_import_is_workspace_scoped_and_admin_gated(monkeypatch,tmp_path):
     engine,sessions,user,workspace_id,connection_id,client=_api_client(tmp_path)
     body={"account":"creator-main","start_date":"2026-10-01","end_date":"2026-10-30"}
-    async def decrypt(*args,**kwargs): return "API-"+"x"*40
+    def decrypt(*args,**kwargs): return "API-"+"x"*40
     async def fetch(*args,**kwargs): return {"account":"creator-main","transactions":[],"pages_retrieved":1,"source_order_count":0,"skipped_unidentified_count":0,"skipped_scope_count":0,"has_more":False,"next_page":None}
     monkeypatch.setattr(main,"decrypt_clickbank_api_key",decrypt)
     monkeypatch.setattr(main,"fetch_clickbank_order_transactions",fetch)
@@ -274,7 +274,7 @@ def test_order_import_matches_only_same_workspace_tid_click_inside_60_days(monke
                 ])
                 await db.commit()
     asyncio.run(seed())
-    async def decrypt(*args,**kwargs):return "API-"+"x"*40
+    def decrypt(*args,**kwargs):return "API-"+"x"*40
     tx=[]
     for receipt,cid in (("CB-ATTR-1",valid_id),("CB-ATTR-2",expired_id),("CB-ATTR-3",subid_id)):
         tx.append({

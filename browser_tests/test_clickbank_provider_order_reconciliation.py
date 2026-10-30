@@ -97,8 +97,8 @@ def test_clickbank_provider_order_reconciliation_accepts_exact_signed_ledger_can
             page.route("**/api/**",handle)
             page.goto(BASE_URL+"/finance/provider-orders",wait_until="domcontentloaded")
             page.get_by_role("heading",name="ClickBank order evidence reconciliation").wait_for(state="visible")
-            assert page.get_by_text("Sample product",exact=True).is_visible()
-            assert page.get_by_text("USD 12.500000",exact=True).is_visible()
+            page.get_by_text("Sample product",exact=True).wait_for(state="visible")
+            page.get_by_text("USD 12.500000",exact=True).wait_for(state="visible")
             assert page.get_by_label("Ledger candidate for CB-RECEIPT-1").input_value()=="ledger-1"
             page.get_by_role("button",name="Accept exact ledger match").click()
             page.get_by_text("matched to conversion",exact=False).wait_for(state="visible")

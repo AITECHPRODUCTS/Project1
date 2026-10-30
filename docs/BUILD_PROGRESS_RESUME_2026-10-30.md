@@ -92,3 +92,14 @@ Next priority is to close one selected affiliate-network integration end-to-end 
 - The two temporary `sharp-libvips` LGPL exceptions relate to the full build/install inventory and expire 2 November 2026; the production frontend dependency-policy check passed without those exceptions. Legal/build-inventory resolution is still required.
 - The current skill parity register remains 53 partial / 0 complete. No live affiliate-account OAuth, universal provider support, live campaign spending or guaranteed commission capability is claimed.
 - PR #1 remains open/draft/unmerged; `main` remains bootstrap-only. The newer separately mentioned live-application ZIP remains unavailable in the inspected Library inventory.
+
+## 2026-10-30 continuation — affiliate evidence and webinar agenda newline handling (verified)
+
+- Continued from the existing build/omni-affiliate-os-production branch. No branch created, no rebase/reset/force-push, no PR merge and no deployment.
+- Corrected the publisher cockpit's affiliate-program application evidence parser in frontend/app/page.tsx: LF and CRLF-separated evidence URLs now become distinct, de-duplicated URL entries. Added browser_tests/test_program_application_evidence.py, which captures the actual POST body to /api/research/program-applications and asserts two URLs remain separate. Provider submission remains not_configured; the workflow still only creates/reviews a manual-handoff packet.
+- Corrected the same over-escaped newline pattern in the webinar agenda parser. The agenda form now turns each LF/CRLF-separated line into a distinct agenda_items object. The browser regression captures the actual POST body to /api/webinars and asserts both structured items.
+- Code/test checkpoint: c313521f0f818533aea5473d5e6bce73d086b571.
+- Exact push workflow 41064823079 passed all jobs. Exact PR workflow 41064833717 completed successfully; PR lockfile-sync was skipped by the configured push-only condition.
+- Both exact-SHA runs: Python 845 passed / 9 skipped / 5 warnings; PostgreSQL integration 9 passed; Chromium browser UAT 39 passed. Frontend typecheck/production build/Docker smoke, AI/RAG profile, security/SBOM/dependency audit, secret scan and repository guard passed. Push lockfile-sync passed.
+- A source scan of frontend/app/page.tsx found no remaining double-escaped newline sequences after these two corrections.
+- Overall scope is unchanged: the application has three surfaces and three execution modes, but the 53-skill matrix remains partial; external marketplace account connectivity, provider approvals, end-to-end production integrations and release/restore gates remain open.

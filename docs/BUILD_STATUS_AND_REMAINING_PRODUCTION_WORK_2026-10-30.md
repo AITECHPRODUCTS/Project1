@@ -93,3 +93,11 @@ The repository currently has two branches: `main` and the existing implementatio
 Keep external account mutations, live publishing, paid spend and financial actions disabled, dry-run or approval-gated until the relevant authorization, policy, provider contract, audit and recovery tests pass.
 
 **Overall:** substantial real implementation exists, including the requested application surfaces and three operating modes. The full commercial-grade autopilot is **not complete or production-live**. Affiliate commissions depend on offer terms, approvals, traffic, conversions and compliance; the product cannot promise earnings or be described as 100% failproof.
+
+## 2026-10-30 verified continuation — two form parsing defects fixed
+
+The affiliate program application evidence form and the webinar agenda form both had over-escaped newline regexes that contradicted their one-per-line UI instructions. Both parsers now split LF/CRLF input correctly. Two browser regressions capture and inspect the actual request bodies, proving that evidence URLs remain separate and webinar agenda lines are stored as structured items.
+
+Code/test SHA: c313521f0f818533aea5473d5e6bce73d086b571. Exact push 41064823079 and PR 41064833717 completed successfully: Python 845 passed / 9 skipped / 5 warnings; PostgreSQL 9 passed; browser UAT 39 passed; frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured condition.
+
+These are narrow UI/data-contract corrections. They do not add live provider account submission, webinar-room provisioning, or confirmation-email delivery. The broader product remains not production-live.

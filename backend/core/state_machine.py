@@ -182,7 +182,32 @@ class WorkflowRunner:
       if await self._has_cancel_request(sid,state):
        await self._finish_cancelled(sid,i,state,worker_id=worker_id);return
       if mode=="FULL_AUTONOMOUS":
-       await self._save(sid,"failed",i,state,f"Human verification required in FULL_AUTONOMOUS mode: {exc}",True,worker_id=worker_id);return
+       message=f"Human verification required in FULL_AUTONOMOUS mode: {exc}"
+       await self._save(sid,"failed",i,state,message,True,worker_id=worker_id)
+       metadata=state.get("metadata",{}) if isinstance(state,dict) else {}
+       workspace_id=str(metadata.get("workspace_id") or "").strip() if isinstance(metadata,dict) else ""
+       if workspace_id:
+        try:
+         with workspace_scope(workspace_id):
+          async with SessionLocal() as db:
+           db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor="system",
+            action="workflow.full_autonomous_blocked_for_verification",
+            resource_type="workflow",
+            resource_id=sid,
+            outcome="blocked",
+            details_json={
+             "stage":step.key,
+             "required_action":str(exc.action)[:120],
+             "execution_mode":"FULL_AUTONOMOUS",
+            },
+           ))
+           await db.commit()
+        except Exception:
+         logger.exception("Unable to audit full-autonomous verification block for workflow %s",sid)
+       await self._emit(state, {"event":"WORKFLOW_STATUS","session_id":sid,"workflow_name":name,"status":"failed","stage":step.key,"message":message[:300]})
+       return
       await self._pause(sid,name,i,state,exc,worker_id=worker_id)
       if await self._has_cancel_request(sid,state):
        await self._finish_cancelled(sid,i,state,worker_id=worker_id);return

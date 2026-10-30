@@ -88,13 +88,62 @@ def test_program_application_splits_multiple_evidence_urls_before_saving():
                     )
                     return
 
-                if path in {
-                    "/api/status",
-                    "/api/resource-budget",
-                    "/api/integrations",
-                    "/api/capabilities",
-                }:
-                    _fulfill_json(route, {})
+                if path == "/api/status":
+                    _fulfill_json(
+                        route,
+                        {
+                            "app_name": "OmniAffiliateOS",
+                            "environment": "test",
+                            "execution_mode": "SEMI_AUTONOMOUS",
+                            "knowledge_index_available": False,
+                            "api_model_configured": False,
+                            "email_delivery_configured": False,
+                            "video_rendering_available": False,
+                            "publishing_dry_run": True,
+                            "ad_automation_execute": False,
+                            "clicks": 0,
+                            "conversion_events": 0,
+                            "commission_recorded": 0,
+                        },
+                    )
+                    return
+
+                if path == "/api/resource-budget":
+                    _fulfill_json(
+                        route,
+                        {
+                            "daily_budget_usd": 10,
+                            "daily_estimated_used_usd": 0,
+                            "daily_estimated_remaining_usd": 10,
+                            "niche_budget_usd": 10,
+                            "note": "Browser-test budget fixture",
+                        },
+                    )
+                    return
+
+                if path == "/api/integrations":
+                    _fulfill_json(
+                        route,
+                        {
+                            "total": 0,
+                            "counts": {"enabled": 0, "configured": 0},
+                            "items": [],
+                            "verification_policy": "Browser-test fixture only",
+                        },
+                    )
+                    return
+
+                if path == "/api/capabilities":
+                    _fulfill_json(
+                        route,
+                        {
+                            "statuses": [],
+                            "counts": {},
+                            "items": [],
+                            "provider_items": [],
+                            "global_policy": "Browser-test fixture only",
+                        },
+                    )
                     return
 
                 if path == "/api/research/program-applications" and request.method == "POST":

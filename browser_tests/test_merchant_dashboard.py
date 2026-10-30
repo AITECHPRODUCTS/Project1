@@ -23,7 +23,7 @@ def _fulfill_json(route, payload: dict, status: int = 200) -> None:
 
 def test_merchant_dashboard_uses_workspace_offer_and_application_data():
     offers = {
-        "count": 3,
+        "count": 4,
         "data": [
             {
                 "id": "offer-draft-1",
@@ -48,6 +48,14 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
                 "affiliate_network_approval_status": "approved",
                 "affiliate_network_approved": True,
                 "created_at": "2026-10-28T08:00:00+00:00",
+            },
+            {
+                "id": "offer-internal-only",
+                "name": "Merchant-approved course",
+                "status": "approved",
+                "affiliate_network_approval_status": "pending",
+                "affiliate_network_approved": False,
+                "created_at": "2026-10-27T08:00:00+00:00",
             },
         ],
     }
@@ -81,10 +89,11 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Merchant workspace").wait_for(state="visible")
 
-            assert page.get_by_test_id("merchant-stat-offers").inner_text() == "3"
+            assert page.get_by_test_id("merchant-stat-offers").inner_text() == "4"
             assert page.get_by_test_id("merchant-stat-drafts").inner_text() == "1"
             assert page.get_by_test_id("merchant-stat-review").inner_text() == "1"
             assert page.get_by_test_id("merchant-stat-applications").inner_text() == "4"
+            assert page.get_by_test_id("merchant-stat-internal-approved").inner_text() == "2"
             assert page.get_by_test_id("merchant-stat-network-approved").inner_text() == "1"
             assert page.get_by_text("Internal merchant status: submitted for review").is_visible()
             assert page.get_by_text("Affiliate-network status: pending").is_visible()

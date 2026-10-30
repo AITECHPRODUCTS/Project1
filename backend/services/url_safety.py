@@ -1,0 +1,400 @@
+
+from __future__ import annotations
+
+import asyncio
+import ipaddress
+import json
+import socket
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from contextlib import asynccontextmanager, contextmanager
+from collections.abc import AsyncIterator
+from typing import Any
+
+import httpx
+
+DNS_TIMEOUT_SECONDS = 3.0
+_DNS_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="pinned-public-dns")
+
+
+async def _resolve_public_target(url: str) -> tuple[httpx.URL, str, str]:
+    try:
+        target = httpx.URL(url)
+    except Exception as exc:
+        raise ValueError("Only absolute HTTP(S) URLs are allowed") from exc
+    if target.scheme not in {"http", "https"} or not target.host:
+        raise ValueError("Only absolute HTTP(S) URLs are allowed")
+    if target.username or target.password:
+        raise ValueError("URLs containing credentials are not allowed")
+
+    hostname = target.host.lower().rstrip(".")
+    if (
+        hostname in {"localhost", "localhost.localdomain"}
+        or hostname.endswith((".localhost", ".local", ".internal", ".test", ".home", ".lan", ".corp"))
+    ):
+        raise ValueError("Local/private hostname blocked")
+    port = target.port or (443 if target.scheme == "https" else 80)
+
+    try:
+        literal = ipaddress.ip_address(hostname)
+        addresses = [literal]
+    except ValueError:
+        try:
+            async with asyncio.timeout(DNS_TIMEOUT_SECONDS):
+                answers = await asyncio.to_thread(
+                    socket.getaddrinfo,
+                    hostname,
+                    port,
+                    0,
+                    socket.SOCK_STREAM,
+                )
+        except TimeoutError as exc:
+            raise ValueError("Public hostname DNS lookup timed out") from exc
+        except OSError as exc:
+            raise ValueError("Public hostname DNS lookup failed") from exc
+        addresses = []
+        for answer in answers:
+            try:
+                addresses.append(ipaddress.ip_address(answer[4][0].split("%", 1)[0]))
+            except (ValueError, IndexError, TypeError) as exc:
+                raise ValueError("Hostname returned an invalid IP address") from exc
+
+    if not addresses:
+        raise ValueError("Hostname has no addresses")
+    if any(not address.is_global for address in addresses):
+        raise ValueError(
+            "Private, loopback, link-local, multicast or reserved destinations are blocked"
+        )
+    return target, hostname, str(addresses[0])
+
+
+def _resolve_public_target_sync(url: str) -> tuple[httpx.URL, str, str]:
+    """Synchronous sibling of the bounded async resolver for sync SDK calls."""
+    try:
+        target = httpx.URL(url)
+    except Exception as exc:
+        raise ValueError("Only absolute HTTP(S) URLs are allowed") from exc
+    if target.scheme not in {"http", "https"} or not target.host:
+        raise ValueError("Only absolute HTTP(S) URLs are allowed")
+    if target.username or target.password:
+        raise ValueError("URLs containing credentials are not allowed")
+
+    hostname = target.host.lower().rstrip(".")
+    if (
+        hostname in {"localhost", "localhost.localdomain"}
+        or hostname.endswith((".localhost", ".local", ".internal", ".test", ".home", ".lan", ".corp"))
+    ):
+        raise ValueError("Local/private hostname blocked")
+    port = target.port or (443 if target.scheme == "https" else 80)
+
+    try:
+        literal = ipaddress.ip_address(hostname)
+        addresses = [literal]
+    except ValueError:
+        future = _DNS_EXECUTOR.submit(
+            socket.getaddrinfo, hostname, port, 0, socket.SOCK_STREAM
+        )
+        try:
+            answers = future.result(timeout=DNS_TIMEOUT_SECONDS)
+        except FutureTimeoutError as exc:
+            future.cancel()
+            raise ValueError("Public hostname DNS lookup timed out") from exc
+        except OSError as exc:
+            raise ValueError("Public hostname DNS lookup failed") from exc
+        addresses = []
+        for answer in answers:
+            try:
+                addresses.append(ipaddress.ip_address(answer[4][0].split("%", 1)[0]))
+            except (ValueError, IndexError, TypeError) as exc:
+                raise ValueError("Hostname returned an invalid IP address") from exc
+
+    if not addresses:
+        raise ValueError("Hostname has no addresses")
+    if any(not address.is_global for address in addresses):
+        raise ValueError("Private, loopback, link-local, multicast or reserved destinations are blocked")
+    return target, hostname, str(addresses[0])
+
+
+class PinnedPublicSyncTransport(httpx.BaseTransport):
+    """Synchronous HTTPX transport pinned to a DNS-validated public destination."""
+
+    def __init__(self, inner_transport: httpx.BaseTransport | None = None):
+        self._transport = inner_transport or httpx.HTTPTransport(retries=0)
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        original_url = request.url
+        if original_url.scheme != "https":
+            raise ValueError("Provider SDK outbound requests require HTTPS")
+
+        target, hostname, connect_ip = _resolve_public_target_sync(str(original_url))
+        host_header = f"[{hostname}]" if ":" in hostname else hostname
+        if target.port and target.port != 443:
+            host_header = f"{host_header}:{target.port}"
+
+        original_host = request.headers.get("host")
+        allowed_host_headers = {host_header.lower()}
+        if target.port == 443:
+            allowed_host_headers.add(f"{host_header}:443".lower())
+        if original_host and original_host.lower() not in allowed_host_headers:
+            raise ValueError("Provider SDK Host header must match the configured endpoint")
+
+        had_sni = "sni_hostname" in request.extensions
+        original_sni = request.extensions.get("sni_hostname")
+        request.url = request.url.copy_with(host=connect_ip)
+        request.headers["Host"] = host_header
+        request.extensions["sni_hostname"] = hostname
+        try:
+            return self._transport.handle_request(request)
+        finally:
+            request.url = original_url
+            if original_host is None:
+                request.headers.pop("Host", None)
+            else:
+                request.headers["Host"] = original_host
+            if had_sni:
+                request.extensions["sni_hostname"] = original_sni
+            else:
+                request.extensions.pop("sni_hostname", None)
+
+    def close(self) -> None:
+        self._transport.close()
+
+
+def create_pinned_public_client(*, timeout: float = 45.0) -> httpx.Client:
+    """Create a sync provider SDK client using the pinned public transport."""
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
+    client_timeout = httpx.Timeout(timeout, connect=min(4.0, timeout))
+    return httpx.Client(
+        transport=PinnedPublicSyncTransport(),
+        timeout=client_timeout,
+        follow_redirects=False,
+        trust_env=False,
+    )
+
+
+def create_pinned_public_async_client(*, timeout: float = 45.0) -> httpx.AsyncClient:
+    """Create an async provider SDK client using the pinned public transport."""
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
+    client_timeout = httpx.Timeout(timeout, connect=min(4.0, timeout))
+    return httpx.AsyncClient(
+        transport=PinnedPublicAsyncTransport(),
+        timeout=client_timeout,
+        follow_redirects=False,
+        trust_env=False,
+    )
+
+
+@contextmanager
+def pinned_public_client(*, timeout: float = 45.0):
+    """Context-managed sync provider SDK client with DNS/IP pinning."""
+    with create_pinned_public_client(timeout=timeout) as client:
+        yield client
+
+
+class PinnedPublicAsyncTransport(httpx.AsyncBaseTransport):
+    """HTTPX transport for provider SDKs; resolves, validates and pins every request.
+
+    This prevents an SDK-managed HTTP client from bypassing the same DNS-rebinding,
+    private-address, redirect and ambient-proxy boundary used by direct provider calls.
+    Provider requests require HTTPS because they can carry API credentials.
+    """
+
+    def __init__(self, inner_transport: httpx.AsyncBaseTransport | None = None):
+        self._transport = inner_transport or httpx.AsyncHTTPTransport(retries=0)
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        original_url = request.url
+        if original_url.scheme != "https":
+            raise ValueError("Provider SDK outbound requests require HTTPS")
+
+        target, hostname, connect_ip = await _resolve_public_target(str(original_url))
+        default_port = 443
+        host_header = f"[{hostname}]" if ":" in hostname else hostname
+        if target.port and target.port != default_port:
+            host_header = f"{host_header}:{target.port}"
+
+        original_host = request.headers.get("host")
+        allowed_host_headers = {host_header.lower()}
+        if target.port == default_port:
+            allowed_host_headers.add(f"{host_header}:443".lower())
+        if original_host and original_host.lower() not in allowed_host_headers:
+            raise ValueError("Provider SDK Host header must match the configured endpoint")
+
+        had_sni = "sni_hostname" in request.extensions
+        original_sni = request.extensions.get("sni_hostname")
+        request.url = request.url.copy_with(host=connect_ip)
+        request.headers["Host"] = host_header
+        request.extensions["sni_hostname"] = hostname
+        try:
+            return await self._transport.handle_async_request(request)
+        finally:
+            # Restore the logical URL after the connection has been established so that
+            # SDK diagnostics and response.request retain the configured hostname.
+            request.url = original_url
+            if original_host is None:
+                request.headers.pop("Host", None)
+            else:
+                request.headers["Host"] = original_host
+            if had_sni:
+                request.extensions["sni_hostname"] = original_sni
+            else:
+                request.extensions.pop("sni_hostname", None)
+
+    async def aclose(self) -> None:
+        await self._transport.aclose()
+
+
+@asynccontextmanager
+async def pinned_public_async_client(
+    *, timeout: float = 45.0
+) -> AsyncIterator[httpx.AsyncClient]:
+    """Context-managed async SDK client with DNS/IP pinning."""
+    async with create_pinned_public_async_client(timeout=timeout) as client:
+        yield client
+
+
+async def validate_public_http_url(url: str) -> str:
+    """Admission-time validation; actual fetches must use the pinned helper too."""
+    await _resolve_public_target(url)
+    return url
+
+
+@asynccontextmanager
+async def open_public_http_response(
+    url: str,
+    *,
+    method: str = "GET",
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    json_body: Any | None = None,
+    data_body: dict[str, Any] | None = None,
+    timeout: float = 12.0,
+) -> AsyncIterator[httpx.Response]:
+    """Open a request pinned to a vetted public IP, preserving Host and TLS SNI.
+
+    GET/HEAD are for public reads; POST is for fixed authenticated provider
+    integrations. Redirects and ambient proxy configuration remain disabled.
+    """
+    method = method.upper()
+    if method not in {"GET", "HEAD", "POST"}:
+        raise ValueError("Public fetch helper only supports GET, HEAD and POST")
+    if method != "POST" and (json_body is not None or data_body is not None):
+        raise ValueError("Request bodies are only supported for POST")
+    if json_body is not None and data_body is not None:
+        raise ValueError("Choose JSON or form-encoded data, not both")
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
+
+    target, hostname, connect_ip = await _resolve_public_target(url)
+    default_port = 443 if target.scheme == "https" else 80
+    host_header = f"[{hostname}]" if ":" in hostname else hostname
+    if target.port and target.port != default_port:
+        host_header = f"{host_header}:{target.port}"
+
+    client_timeout = httpx.Timeout(timeout, connect=min(4.0, timeout))
+    transport = httpx.AsyncHTTPTransport(retries=0)
+    async with asyncio.timeout(timeout):
+        async with httpx.AsyncClient(
+            transport=transport,
+            timeout=client_timeout,
+            follow_redirects=False,
+            trust_env=False,
+        ) as client:
+            request = client.build_request(
+                method, str(target), params=params, headers=headers, json=json_body, data=data_body
+            )
+            request.url = request.url.copy_with(host=connect_ip)
+            request.headers["Host"] = host_header
+            if target.scheme == "https":
+                request.extensions["sni_hostname"] = hostname
+            response = await client.send(request, stream=True)
+            try:
+                yield response
+            finally:
+                await response.aclose()
+
+
+def declared_content_length(response: httpx.Response, max_bytes: int) -> int | None:
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+    raw = response.headers.get("content-length")
+    if raw is None:
+        return None
+    try:
+        length = int(raw)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Invalid response Content-Length") from exc
+    if length < 0:
+        raise ValueError("Invalid response Content-Length")
+    if length > max_bytes:
+        raise ValueError("Response exceeds byte limit")
+    return length
+
+
+async def read_limited_response(
+    response: httpx.Response, *, max_bytes: int, raw: bool = False
+) -> bytes:
+    declared_content_length(response, max_bytes)
+    chunks: list[bytes] = []
+    size = 0
+    stream = response.aiter_raw() if raw else response.aiter_bytes()
+    async for chunk in stream:
+        size += len(chunk)
+        if size > max_bytes:
+            raise ValueError("Response exceeds byte limit")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def request_public_json(
+    url: str,
+    *,
+    method: str = "GET",
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    json_body: Any | None = None,
+    data_body: dict[str, Any] | None = None,
+    timeout: float = 12.0,
+    max_bytes: int = 2_000_000,
+) -> dict[str, Any] | list[Any]:
+    """Request JSON from a fixed/configured public provider via the pinned transport."""
+    async with open_public_http_response(
+        url, method=method, params=params, headers=headers,
+        json_body=json_body, data_body=data_body, timeout=timeout,
+    ) as response:
+        if 300 <= response.status_code < 400:
+            raise ValueError("Public provider redirects are not followed")
+        response.raise_for_status()
+        content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if content_type and content_type not in {"application/json", "application/problem+json"}:
+            raise ValueError(f"Unsupported provider response content type: {content_type}")
+        body = await read_limited_response(response, max_bytes=max_bytes)
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Public provider returned invalid JSON") from exc
+    if not isinstance(payload, (dict, list)):
+        raise ValueError("Public provider returned an unexpected JSON response")
+    return payload
+
+
+async def fetch_public_page(
+    url: str, *, max_bytes: int = 2_000_000, timeout: float = 12.0
+) -> tuple[str, str, int]:
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+    headers = {
+        "User-Agent": "AffiliateOSResearch/0.1",
+        "Accept": "text/html,text/plain,application/xhtml+xml",
+    }
+    async with open_public_http_response(url, headers=headers, timeout=timeout) as response:
+        if 300 <= response.status_code < 400:
+            raise ValueError("Redirect not followed; validate the redirected URL separately")
+        response.raise_for_status()
+        content_type = response.headers.get("content-type", "")
+        media_type = content_type.split(";", 1)[0].strip().lower()
+        if media_type not in {"text/html", "text/plain", "application/xhtml+xml"}:
+            raise ValueError(f"Unsupported content type: {content_type}")
+        body = await read_limited_response(response, max_bytes=max_bytes)
+        return body.decode("utf-8", errors="replace"), content_type, response.status_code

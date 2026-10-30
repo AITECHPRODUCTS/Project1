@@ -324,7 +324,7 @@ def test_flipkart_search_and_offers_persist_workspace_snapshots_and_upsert(monke
         assert by_type["product"].price_amount == Decimal("11999.0000")
         assert by_type["product"].currency == "INR"
         assert by_type["product"].is_available is True
-        assert by_type["product"].snapshot_json["commission_terms_status"] is None or "commission_terms_status" not in by_type["product"].snapshot_json
+        assert "commission_terms_status" not in by_type["product"].snapshot_json
         assert by_type["offer"].title == "Weekend electronics offer"
         assert by_type["offer"].is_available is True
         assert by_type["offer"].starts_at is not None and by_type["offer"].ends_at is not None

@@ -14,6 +14,7 @@ def upgrade() -> None:
         "provider_catalog_observations",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("workspace_id", sa.String(length=36), sa.ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("connection_id", sa.String(length=36), sa.ForeignKey("provider_account_connections.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("provider_id", sa.String(length=80), nullable=False),
         sa.Column("observation_type", sa.String(length=16), nullable=False),
         sa.Column("external_id", sa.String(length=160), nullable=False),
@@ -41,15 +42,15 @@ def upgrade() -> None:
         sa.CheckConstraint("workspace_id IS NOT NULL", name="ck_provider_catalog_observations_workspace_required"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "workspace_id", "provider_id", "observation_type", "external_id",
+            "workspace_id", "connection_id", "provider_id", "observation_type", "external_id",
             name="uq_provider_catalog_observation_workspace_source",
         ),
     )
     op.create_index("ix_provider_catalog_observations_workspace_id", "provider_catalog_observations", ["workspace_id"])
     op.create_index("ix_provider_catalog_observations_provider_id", "provider_catalog_observations", ["provider_id"])
     op.create_index(
-        "ix_provider_catalog_observations_workspace_provider_seen",
-        "provider_catalog_observations", ["workspace_id", "provider_id", "observed_at"],
+        "ix_provider_catalog_observations_workspace_connection_seen",
+        "provider_catalog_observations", ["workspace_id", "connection_id", "observed_at"],
     )
     op.create_index(
         "ix_provider_catalog_observations_workspace_category",
@@ -59,7 +60,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_provider_catalog_observations_workspace_category", table_name="provider_catalog_observations")
-    op.drop_index("ix_provider_catalog_observations_workspace_provider_seen", table_name="provider_catalog_observations")
+    op.drop_index("ix_provider_catalog_observations_workspace_connection_seen", table_name="provider_catalog_observations")
     op.drop_index("ix_provider_catalog_observations_provider_id", table_name="provider_catalog_observations")
     op.drop_index("ix_provider_catalog_observations_workspace_id", table_name="provider_catalog_observations")
     op.drop_table("provider_catalog_observations")

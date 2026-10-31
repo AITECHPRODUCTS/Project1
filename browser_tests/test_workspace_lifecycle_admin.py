@@ -56,7 +56,18 @@ def test_platform_admin_tenant_lifecycle_suspends_and_reinstates_with_reason():
                 request = route.request
                 url = request.url
                 if url.endswith("/api/auth/me"):
-                    _fulfill_json(route, {"authenticated": True, "csrf_token": "tenant-admin-csrf"})
+                    _fulfill_json(route, {
+                        "authenticated": True,
+                        "csrf_token": "tenant-admin-csrf",
+                        "user": {
+                            "user_id": "admin-user",
+                            "email": "platform.operator@example.invalid",
+                            "account_type": "platform_admin",
+                            "is_admin": True,
+                            "workspace_id": ADMIN_WORKSPACE,
+                            "workspace_role": "owner",
+                        },
+                    })
                     return
                 if url.endswith("/api/admin/execution-control") and request.method == "POST":
                     body = json.loads(request.post_data or "{}")

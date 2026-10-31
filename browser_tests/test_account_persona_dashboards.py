@@ -311,8 +311,9 @@ def test_platform_admin_identity_cannot_open_business_persona_dashboards():
             page.goto(BASE_URL + "/publisher", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Publisher access required").wait_for(state="visible")
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
-            page.get_by_role("alert").wait_for(state="visible")
-            assert "only available to Merchant / Product Owner accounts" in page.get_by_role("alert").inner_text()
+            merchant_error = page.locator("main p[role='alert']")
+            merchant_error.wait_for(state="visible")
+            assert "only available to Merchant / Product Owner accounts" in merchant_error.inner_text()
             assert sum(url.endswith("/api/auth/me") for url in requests) == 2
             assert not any("/api/merchant/" in url for url in requests)
             assert not any("/api/status" in url for url in requests)

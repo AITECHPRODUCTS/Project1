@@ -69,8 +69,8 @@ export default function PublisherDashboardPage(){
         {[
           ["Tracked clicks",status?String(status.clicks??0):"—","First-party records in this workspace"],
           ["Conversion events",status?String(status.conversion_events??0):"—","Recorded provider events; not all are confirmed"],
-          ["Commission recorded",status?"$"+Number(status.commission_recorded??0).toFixed(2):"—","Observations, not verified payout"],
-          ["Active campaigns",campaignCount===null?"—":String(campaignCount),"Persisted campaign records"]
+          ["Commission recorded",status?Number(status.commission_recorded??0).toFixed(2):"—","Recorded amount; currency is not normalized or verified as payout"],
+          ["Campaigns",campaignCount===null?"—":String(campaignCount),"Persisted campaign records in this workspace"]
         ].map(([title,value,note])=><article key={title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p><p className="mt-3 text-3xl font-black">{value}</p><p className="mt-1 text-xs leading-5 text-slate-500">{note}</p>
         </article>)}

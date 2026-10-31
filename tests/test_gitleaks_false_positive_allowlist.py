@@ -18,6 +18,7 @@ EXPECTED_REVIEWED_FALSE_POSITIVES = [
     # exact historical fingerprints remain ignored because this job scans full history.
     "a726658f0e0a94d3fb84857b3040ffa73c241d8f:tests/test_distribution_queue.py:generic-api-key:138",
     "a726658f0e0a94d3fb84857b3040ffa73c241d8f:tests/test_distribution_queue.py:generic-api-key:179",
+    "d4d095ee13e576ee33747a0f64ae9b4a78237260:tests/test_affiliate_research_search.py:generic-api-key:83",
 ]
 
 

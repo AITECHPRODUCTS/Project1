@@ -2319,7 +2319,7 @@ async def search_connected_affiliate_marketplaces(
         raise HTTPException(403, "Select an authorized workspace before searching affiliate marketplaces.")
     supported = ("digistore24", "flipkart")
     with workspace_scope(workspace_id):
-        connections = list((await db.scalars(
+        connection_rows = list((await db.scalars(
             select(ProviderAccountConnection).where(
                 ProviderAccountConnection.workspace_id == workspace_id,
                 ProviderAccountConnection.provider_id.in_(supported),
@@ -2327,6 +2327,20 @@ async def search_connected_affiliate_marketplaces(
                 ProviderAccountConnection.credential_ciphertext.is_not(None),
             ).order_by(ProviderAccountConnection.created_at.asc()).limit(25)
         )).all())
+    # Copy values before a provider failure can roll back and expire all ORM rows.
+    connections = [
+        {
+            "id": str(row.id),
+            "provider_id": str(row.provider_id),
+            "credential_ciphertext": str(row.credential_ciphertext),
+            "credential_key_version": int(row.credential_key_version),
+            "account_reference": (
+                str((row.account_nicknames_json or [""])[0])[:100]
+                if row.account_nicknames_json else None
+            ),
+        }
+        for row in connection_rows
+    ]
 
     summaries = {provider: {"provider_id": provider, "status": "not_configured",
         "connected_accounts_found": 0, "accounts_searched": 0, "result_count": 0,
@@ -2362,15 +2376,15 @@ async def search_connected_affiliate_marketplaces(
             await db.commit()
 
     for connection in connections:
-        provider = connection.provider_id
-        connection_id = str(connection.id)
+        provider = connection["provider_id"]
+        connection_id = connection["id"]
         summary = summaries[provider]
         summary["connected_accounts_found"] += 1
-        account_ref = str((connection.account_nicknames_json or [""])[0])[:100] if connection.account_nicknames_json else None
+        account_ref = connection["account_reference"]
         checked_at = utcnow()
         try:
             if provider == "digistore24":
-                secret = decrypt_digistore24_api_key(connection.credential_ciphertext, connection.credential_key_version)
+                secret = decrypt_digistore24_api_key(connection["credential_ciphertext"], connection["credential_key_version"])
                 report = await search_digistore24_marketplace(secret, query=payload.query, limit=payload.limit)
                 items = report.get("entries") or []
                 persisted = await _upsert_digistore24_marketplace_observations(
@@ -2400,7 +2414,7 @@ async def search_connected_affiliate_marketplaces(
             else:
                 if not account_ref:
                     raise StoredFlipkartCredentialError("Tracking ID missing.")
-                secret = decrypt_flipkart_api_token(connection.credential_ciphertext, connection.credential_key_version)
+                secret = decrypt_flipkart_api_token(connection["credential_ciphertext"], connection["credential_key_version"])
                 report = await search_flipkart_products(account_ref, secret, query=payload.query, result_count=payload.limit)
                 items = report.get("products") or []
                 persisted = await _upsert_flipkart_catalog_observations(
@@ -2422,8 +2436,15 @@ async def search_connected_affiliate_marketplaces(
                 } for item in items]
                 terms_status = "not_exposed_by_product_search_endpoint"
 
-            connection.last_checked_at = checked_at
-            connection.last_error_code = None
+            with workspace_scope(workspace_id):
+                current_connection = await db.scalar(select(ProviderAccountConnection).where(
+                    ProviderAccountConnection.id == connection_id,
+                    ProviderAccountConnection.workspace_id == workspace_id,
+                    ProviderAccountConnection.provider_id == provider,
+                ))
+                if current_connection is not None:
+                    current_connection.last_checked_at = checked_at
+                    current_connection.last_error_code = None
             with workspace_scope(workspace_id):
                 db.add(AuditLog(workspace_id=workspace_id, actor=actor,
                     action="affiliate_research.marketplace_search",

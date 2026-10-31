@@ -80,10 +80,10 @@ def _seed_connections(sessions, workspace_a, workspace_b):
         async with sessions() as db:
             db.add_all([
                 ProviderAccountConnection(workspace_id=workspace_a, provider_id="digistore24", status="connected_read_only",
-                    credential_ciphertext="encrypted-ds24-placeholder", credential_fingerprint="a" * 64,
+                    credential_ciphertext="x", credential_fingerprint="a" * 64,
                     account_nicknames_json=["ds-account-1"], capabilities_json=["marketplace.entries.read"]),
                 ProviderAccountConnection(workspace_id=workspace_a, provider_id="flipkart", status="connected_read_only",
-                    credential_ciphertext="encrypted-flipkart-placeholder", credential_fingerprint="b" * 64,
+                    credential_ciphertext="y", credential_fingerprint="b" * 64,
                     account_nicknames_json=["tracking-123"], capabilities_json=["products.search.read"]),
                 ProviderAccountConnection(workspace_id=workspace_b, provider_id="digistore24", status="connected_read_only",
                     credential_ciphertext="encrypted-other-workspace", credential_fingerprint="c" * 64,
@@ -95,12 +95,12 @@ def _seed_connections(sessions, workspace_a, workspace_b):
 
 def _patch_providers(monkeypatch):
     def decrypt_ds24(ciphertext, key_version=1):
-        if ciphertext == "encrypted-ds24-placeholder":
+        if ciphertext == "x":
             return DS24_KEY
         raise AssertionError("A connection outside the active workspace was accessed")
 
     def decrypt_flipkart(ciphertext, key_version=1):
-        if ciphertext == "encrypted-flipkart-placeholder":
+        if ciphertext == "y":
             return FLIPKART_TOKEN
         raise AssertionError("A connection outside the active workspace was accessed")
 

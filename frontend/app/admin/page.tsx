@@ -76,6 +76,27 @@ export default function TenantLifecyclePage(){
   const [capabilityMatrix,setCapabilityMatrix]=useState<CapabilityMatrix|null>(null);
   const [capabilityLoading,setCapabilityLoading]=useState(false);
   const [capabilityError,setCapabilityError]=useState("");
+  const [accessStatus,setAccessStatus]=useState<"checking"|"allowed"|"denied">("checking");
+  const [accessError,setAccessError]=useState("");
+
+  const checkPlatformAccess=useCallback(async()=>{
+    try{
+      const identity=await apiFetch<{user?:{is_admin?:boolean;account_type?:string}}>("/api/auth/me");
+      if(identity.user?.is_admin!==true){
+        setAccessError("This console is only available to Platform Super Admin accounts.");
+        setAccessStatus("denied");
+        return;
+      }
+      setAccessError("");
+      setAccessStatus("allowed");
+    }catch(err){
+      const message=err instanceof Error?err.message:"Could not verify the signed-in account.";
+      setAccessError(message.includes("401")
+        ?"Sign in with your Platform Super Admin account to continue."
+        :"Platform administrator access could not be verified. "+message);
+      setAccessStatus("denied");
+    }
+  },[]);
 
 
   const loadTenants=useCallback(async()=>{
@@ -159,9 +180,10 @@ export default function TenantLifecyclePage(){
     }
   },[]);
 
-  useEffect(()=>{void loadTenants();},[loadTenants]);
-  useEffect(()=>{void loadExecutionControl();},[loadExecutionControl]);
-  useEffect(()=>{void loadOperations();},[loadOperations]);
+  useEffect(()=>{void checkPlatformAccess();},[checkPlatformAccess]);
+  useEffect(()=>{if(accessStatus!=="allowed")return;void loadTenants();},[accessStatus,loadTenants]);
+  useEffect(()=>{if(accessStatus!=="allowed")return;void loadExecutionControl();},[accessStatus,loadExecutionControl]);
+  useEffect(()=>{if(accessStatus!=="allowed")return;void loadOperations();},[accessStatus,loadOperations]);
 
   const transition=async(tenant:WorkspaceTenant)=>{
     const reason=(reasons[tenant.id]||"").trim();
@@ -198,6 +220,23 @@ export default function TenantLifecyclePage(){
   const tenants=tenantResponse?.data||[];
   const activeCount=tenants.filter(t=>t.lifecycle_state==="active").length;
   const suspendedCount=tenants.filter(t=>t.lifecycle_state==="suspended").length;
+
+  if(accessStatus==="checking")return <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
+    <section className="max-w-lg rounded-2xl border border-slate-200 bg-white p-7 text-center">
+      <p className="text-xs font-black uppercase tracking-[.2em] text-indigo-600">OmniAffiliateOS · Security</p>
+      <h1 className="mt-3 text-xl font-black">Verifying Platform Super Admin access</h1>
+      <p className="mt-2 text-sm text-slate-600" role="status">Checking the authenticated account before loading platform operations.</p>
+    </section>
+  </main>;
+
+  if(accessStatus==="denied")return <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
+    <section className="max-w-lg rounded-2xl border border-slate-200 bg-white p-7 text-center">
+      <p className="text-xs font-black uppercase tracking-[.2em] text-rose-600">OmniAffiliateOS · Restricted area</p>
+      <h1 className="mt-3 text-xl font-black">Platform administrator access required</h1>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{accessError||"This console is only available to Platform Super Admin accounts."}</p>
+      <a href="/" className="mt-5 inline-flex rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">Return to sign in</a>
+    </section>
+  </main>;
 
   return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10">
     <div className="mx-auto max-w-6xl">

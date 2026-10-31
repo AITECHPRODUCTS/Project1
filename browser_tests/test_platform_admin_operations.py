@@ -86,7 +86,16 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
             def handle_api(route):
                 url = route.request.url
                 seen.append(url)
-                if "/api/admin/overview" in url:
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {
+                        "authenticated": True,
+                        "user": {
+                            "email": "operator@example.invalid",
+                            "account_type": "platform_admin",
+                            "is_admin": True,
+                        },
+                    })
+                elif "/api/admin/overview" in url:
                     _fulfill_json(route, overview)
                 elif "/api/admin/workflows?" in url:
                     _fulfill_json(route, workflows)
@@ -126,5 +135,37 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
             assert any("/api/admin/workflows?limit=20" in url for url in seen)
             assert any("/api/integrations" in url for url in seen)
             assert any("/api/admin/audit?limit=20" in url for url in seen)
+        finally:
+            browser.close()
+
+def test_business_persona_cannot_load_platform_admin_console_data():
+    seen: list[str] = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                url = route.request.url
+                seen.append(url)
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {
+                        "authenticated": True,
+                        "user": {
+                            "email": "merchant@example.test",
+                            "account_type": "merchant_product_owner",
+                            "is_admin": False,
+                        },
+                    })
+                else:
+                    _fulfill_json(route, {"detail": "Forbidden"}, status=403)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/admin", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Platform administrator access required").wait_for()
+            assert not any("/api/admin/" in url for url in seen)
+            assert not any("/api/capabilities" in url for url in seen)
+            assert not any("/api/integrations" in url for url in seen)
         finally:
             browser.close()

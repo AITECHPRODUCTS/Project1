@@ -237,3 +237,40 @@ def test_publisher_registration_redirects_to_publisher_dashboard():
             assert any(path.endswith("/api/marketplace/offers") for _, path in calls)
         finally:
             browser.close()
+
+def test_publisher_cannot_open_legacy_operations_dashboard_with_view_query():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                path = route.request.url.split("?", 1)[0]
+                if path.endswith("/api/auth/me"):
+                    _json(route, {
+                        "authenticated": True,
+                        "user": {
+                            "email": "publisher@example.test",
+                            "account_type": "affiliate_publisher",
+                            "is_admin": False,
+                            "workspace_role": "owner",
+                        },
+                    })
+                elif path.endswith("/api/status"):
+                    _json(route, {"clicks": 0, "conversion_events": 0, "commission_recorded": 0})
+                elif path.endswith("/api/marketplace/offers"):
+                    _json(route, {"count": 0, "data": []})
+                elif path.endswith("/api/marketplace/applications"):
+                    _json(route, {"count": 0, "total_count": 0, "data": []})
+                elif path.endswith("/api/campaigns"):
+                    _json(route, {"count": 0, "data": []})
+                else:
+                    _json(route, {"detail": "Unexpected API request"}, 404)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/?view=content-studio", wait_until="domcontentloaded")
+            page.wait_for_url("**/publisher")
+            page.get_by_role("heading", name="Publisher workspace").wait_for(state="visible")
+            assert page.locator("main").get_attribute("data-current-view") is None
+        finally:
+            browser.close()

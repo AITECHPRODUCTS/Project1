@@ -514,9 +514,18 @@ async def require_admin(user: dict[str, Any] = Depends(require_auth)) -> dict[st
 
 
 async def require_platform_admin(user: dict[str, Any] = Depends(require_auth)) -> dict[str, Any]:
-    """Require both the explicit global flag and immutable platform-admin persona."""
-    if user.get("is_admin") is not True or user.get("account_type") != "platform_admin":
+    """Require the explicit global platform-admin flag; workspace roles never imply it."""
+    if user.get("is_admin") is not True:
         raise HTTPException(403, "Platform Super Admin permission required")
+    return user
+
+
+async def require_platform_admin_persona(
+    user: dict[str, Any] = Depends(require_platform_admin),
+) -> dict[str, Any]:
+    """Additional immutable-persona check for the new Super Admin operations console."""
+    if user.get("account_type") != "platform_admin":
+        raise HTTPException(403, "Platform Super Admin persona required")
     return user
 
 
@@ -12037,7 +12046,7 @@ def _workflow_error_type(error: Any) -> str | None:
 @api.get("/admin/operations")
 async def platform_admin_operations(
     limit: int = Query(default=100, ge=1, le=200),
-    user: dict[str, Any] = Depends(require_platform_admin),
+    user: dict[str, Any] = Depends(require_platform_admin_persona),
     db: AsyncSession = Depends(get_session),
 ):
     """Bounded, cross-workspace operational evidence; never includes customer content or secrets."""
@@ -12187,7 +12196,7 @@ async def platform_admin_operations(
 async def retry_failed_read_only_workflow_stage(
     workflow_id: str,
     payload: WorkflowOperatorRetryRequest,
-    user: dict[str, Any] = Depends(require_platform_admin),
+    user: dict[str, Any] = Depends(require_platform_admin_persona),
     db: AsyncSession = Depends(get_session),
 ):
     """Start exactly one failed non-side-effecting stage; external publishing is never retried here."""
@@ -12289,7 +12298,7 @@ async def retry_failed_read_only_workflow_stage(
 @api.post("/admin/incidents/from-workflow/{workflow_id}", status_code=201)
 async def create_platform_incident_from_workflow(
     workflow_id: str,
-    user: dict[str, Any] = Depends(require_platform_admin),
+    user: dict[str, Any] = Depends(require_platform_admin_persona),
     db: AsyncSession = Depends(get_session),
 ):
     audit_workspace_id = _platform_admin_audit_workspace(user)
@@ -12361,13 +12370,14 @@ async def create_platform_incident_from_workflow(
             },
         ))
         await db.commit()
+        await db.refresh(incident)
     return _platform_incident_dict(incident)
 
 
 @api.post("/admin/incidents/{incident_id}/acknowledge")
 async def acknowledge_platform_incident(
     incident_id: str,
-    user: dict[str, Any] = Depends(require_platform_admin),
+    user: dict[str, Any] = Depends(require_platform_admin_persona),
     db: AsyncSession = Depends(get_session),
 ):
     audit_workspace_id = _platform_admin_audit_workspace(user)
@@ -12393,6 +12403,7 @@ async def acknowledge_platform_incident(
             details_json={"source_workspace_id": incident.source_workspace_id},
         ))
         await db.commit()
+        await db.refresh(incident)
     return _platform_incident_dict(incident)
 
 
@@ -12400,7 +12411,7 @@ async def acknowledge_platform_incident(
 async def resolve_platform_incident(
     incident_id: str,
     payload: PlatformIncidentResolveRequest,
-    user: dict[str, Any] = Depends(require_platform_admin),
+    user: dict[str, Any] = Depends(require_platform_admin_persona),
     db: AsyncSession = Depends(get_session),
 ):
     audit_workspace_id = _platform_admin_audit_workspace(user)
@@ -12426,6 +12437,7 @@ async def resolve_platform_incident(
             details_json={"source_workspace_id": incident.source_workspace_id, "resolution_note_length": len(payload.reason)},
         ))
         await db.commit()
+        await db.refresh(incident)
     return _platform_incident_dict(incident)
 
 

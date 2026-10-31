@@ -31,10 +31,14 @@ jobs:
         env:
           BACKUP_COMMIT: ${{ github.sha }}
           BACKUP_BRANCH: ${{ github.ref_name }}
+          PRE_PERSONA_BASELINE: 7ec24fcf45e60abc55d846f05f2901318fbb8a8f
         run: |
           set -euo pipefail
           mkdir -p backup-output
           git archive --format=zip --prefix=Project1/ "$BACKUP_COMMIT" > backup-output/Project1-source-snapshot.zip
+          git cat-file -e "$PRE_PERSONA_BASELINE^{commit}"
+          git merge-base --is-ancestor "$PRE_PERSONA_BASELINE" "$BACKUP_COMMIT"
+          git archive --format=zip --prefix=Project1-pre-persona-baseline/ "$PRE_PERSONA_BASELINE" > backup-output/Project1-pre-persona-working-baseline.zip
           git bundle create backup-output/Project1-full-history.bundle --all
           git bundle verify backup-output/Project1-full-history.bundle
           git clone --quiet backup-output/Project1-full-history.bundle backup-output/restore-verification
@@ -49,13 +53,17 @@ jobs:
 
           Contents:
           - Project1-source-snapshot.zip: complete working-tree source snapshot at the exact commit above.
+          - Project1-pre-persona-working-baseline.zip: source snapshot before the role/persona implementation (7ec24fcf45e60abc55d846f05f2901318fbb8a8f).
           - Project1-full-history.bundle: Git bundle containing repository refs and commit history available to the checkout.
           - This file: backup identification and restore instructions.
 
-          Restore the Git repository:
+          Restore the current Git repository:
             git clone Project1-full-history.bundle Project1
             cd Project1
             git checkout build/omni-affiliate-os-production
+
+          Restore the pre-persona working code:
+            git checkout 7ec24fcf45e60abc55d846f05f2901318fbb8a8f
 
           Verify the restored repository:
             git fsck --full
@@ -65,7 +73,7 @@ jobs:
           Local .env files, credentials, Docker volumes and user databases are not stored in Git and are not included.
           EOF
           rm -rf backup-output/restore-verification
-          (cd backup-output && sha256sum Project1-source-snapshot.zip Project1-full-history.bundle > SHA256SUM.txt)
+          (cd backup-output && sha256sum Project1-source-snapshot.zip Project1-pre-persona-working-baseline.zip Project1-full-history.bundle > SHA256SUM.txt)
           cd backup-output
           zip -q -r "../Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip" .
           cd ..

@@ -2171,3 +2171,119 @@ def test_skill_studio_exposes_ad_guardrail_runtime_and_submits_its_real_fixture_
             assert package["test_cases"][0]["expected_output"]["provider_action_executed"] is False
         finally:
             browser.close()
+
+
+
+def test_dashboard_sidebar_opens_dedicated_bookmarkable_module_screens():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                path = urlparse(route.request.url).path
+                payloads = {
+                    "/api/auth/me": {
+                        "authenticated": True,
+                        "csrf_token": "navigation-test-csrf",
+                        "user": {
+                            "user_id": "navigation-test-user",
+                            "email": "navigation@example.test",
+                            "is_admin": True,
+                            "workspace_id": "navigation-workspace",
+                            "workspace_role": "owner",
+                        },
+                    },
+                    "/api/workspaces": {
+                        "active_workspace_id": "navigation-workspace",
+                        "data": [{
+                            "id": "navigation-workspace",
+                            "name": "Navigation test workspace",
+                            "slug": "navigation-test",
+                            "role": "owner",
+                            "is_active": True,
+                            "lifecycle_state": "active",
+                        }],
+                    },
+                    "/api/status": {
+                        "app_name": "OmniAffiliateOS",
+                        "environment": "test",
+                        "execution_mode": "SEMI_AUTONOMOUS",
+                        "knowledge_index_available": False,
+                        "api_model_configured": False,
+                        "email_delivery_configured": False,
+                        "video_rendering_available": False,
+                        "publishing_dry_run": True,
+                        "ad_automation_execute": False,
+                        "clicks": 0,
+                        "conversion_events": 0,
+                        "commission_recorded": 0,
+                    },
+                    "/api/resource-budget": {
+                        "daily_budget_usd": 5.0,
+                        "daily_estimated_used_usd": 0.0,
+                        "daily_estimated_remaining_usd": 5.0,
+                        "niche_budget_usd": 1.5,
+                        "note": "Navigation test budget.",
+                    },
+                    "/api/integrations": {
+                        "total": 0,
+                        "counts": {"enabled": 0, "configured": 0},
+                        "items": [],
+                        "verification_policy": "Test fixture only.",
+                    },
+                    "/api/capabilities": {
+                        "statuses": [],
+                        "counts": {},
+                        "items": [],
+                        "provider_items": [],
+                        "global_policy": "Test fixture only.",
+                    },
+                    "/api/flywheel/status": {
+                        "active_session": None,
+                        "workflow_name": None,
+                        "workflow_status": "idle",
+                        "cancel_requested": False,
+                        "current_step": 0,
+                        "execution_mode": "SEMI_AUTONOMOUS",
+                        "stages": [],
+                    },
+                }
+                _fulfill_json(route, payloads.get(path, {}))
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            assert page.locator("main").get_attribute("data-current-view") == "overview"
+
+            page.get_by_role("button", name="Infographic maker").click()
+            page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'infographic-maker'")
+            assert page.locator("#infographic-maker").is_visible()
+            assert not page.locator("#content-angles").is_visible()
+            assert not page.locator("#overview").is_visible()
+            assert "view=infographic-maker" in page.url
+            assert page.get_by_role("button", name="Infographic maker").get_attribute("aria-current") == "page"
+
+            page.get_by_role("button", name="Content angles").click()
+            page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'content-angles'")
+            assert page.locator("#content-angles").is_visible()
+            assert not page.locator("#infographic-maker").is_visible()
+
+            page.go_back()
+            page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'infographic-maker'")
+            page.reload(wait_until="domcontentloaded")
+            page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'infographic-maker'")
+            assert page.locator("#infographic-maker").is_visible()
+
+            page.get_by_role("button", name="AI knowledge").click()
+            page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'ai-knowledge'")
+            page.get_by_role("heading", name="AI knowledge engine").wait_for(state="visible")
+            assert not page.get_by_role("heading", name="Autopilot settings").is_visible()
+            assert not page.locator("#measurement").is_visible()
+
+            page.get_by_role("button", name="Content studio").click()
+            page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'content-studio'")
+            page.get_by_role("heading", name="Content studio").wait_for(state="visible")
+            page.get_by_role("button", name="Open tool").first.wait_for(state="visible")
+        finally:
+            browser.close()

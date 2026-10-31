@@ -124,6 +124,15 @@ def test_publisher_dashboard_uses_publisher_identity_and_persisted_counts():
             page.get_by_text("12", exact=True).wait_for(state="visible")
             assert page.get_by_role("link", name="Explore merchant offers").is_visible()
             assert page.get_by_role("link", name="Manage integrations").is_visible()
+            publisher_nav = page.get_by_role("navigation", name="Publisher dashboard navigation")
+            assert publisher_nav.get_by_role("link", name="Publisher tools").get_attribute("href") == "#publisher-tools"
+            assert publisher_nav.get_by_role("link", name="My applications").get_attribute("href") == "/marketplace#my-applications"
+            assert publisher_nav.get_by_role("link", name="Campaigns").get_attribute("href") == "/campaigns"
+            assert page.get_by_role("link", name="View application status").get_attribute("href") == "/marketplace#my-applications"
+            assert page.get_by_role("link", name="Open article writer").get_attribute("href") == "/listicle-writer"
+            assert page.get_by_role("link", name="Open content health").get_attribute("href") == "/content-decay"
+            assert page.get_by_role("link", name="Create research brief").get_attribute("href") == "/research-brief"
+            assert page.get_by_role("link", name="Qualify an offer").get_attribute("href") == "/offers/qualification"
         finally:
             browser.close()
 
@@ -272,5 +281,40 @@ def test_publisher_cannot_open_legacy_operations_dashboard_with_view_query():
             page.wait_for_url("**/publisher")
             page.get_by_role("heading", name="Publisher workspace").wait_for(state="visible")
             assert page.locator("main").get_attribute("data-current-view") is None
+        finally:
+            browser.close()
+
+
+
+def test_platform_admin_identity_cannot_open_business_persona_dashboards():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            requests: list[str] = []
+
+            def handle_api(route):
+                requests.append(route.request.url)
+                if route.request.url.endswith("/api/auth/me"):
+                    _json(route, {
+                        "authenticated": True,
+                        "user": {
+                            "email": "operator@example.test",
+                            "account_type": "platform_admin",
+                            "is_admin": True,
+                        },
+                    })
+                else:
+                    _json(route, {"detail": "Forbidden"}, 403)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/publisher", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Publisher access required").wait_for(state="visible")
+            page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
+            page.get_by_role("alert").wait_for(state="visible")
+            assert "only available to Merchant / Product Owner accounts" in page.get_by_role("alert").inner_text()
+            assert sum(url.endswith("/api/auth/me") for url in requests) == 2
+            assert not any("/api/merchant/" in url for url in requests)
+            assert not any("/api/status" in url for url in requests)
         finally:
             browser.close()

@@ -51,7 +51,7 @@ export default function MerchantDashboardPage() {
     setError("");
     try {
       const identity = await apiFetch<{ user?: { account_type?: string; is_admin?: boolean } }>("/api/auth/me");
-      if (identity.user?.account_type !== "merchant_product_owner" && identity.user?.is_admin !== true) {
+      if (identity.user?.account_type !== "merchant_product_owner") {
         throw new Error("This dashboard is only available to Merchant / Product Owner accounts.");
       }
       const [offerResponse, applicationResponse] = await Promise.all([
@@ -98,9 +98,13 @@ export default function MerchantDashboardPage() {
               Manage your product and offer records, review affiliate applications, and keep internal decisions separate from external affiliate-network approval.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <a className={secondaryLink} href="/merchant/offers">Manage offers</a>
-            <a className={actionLink} href="/merchant/applications">Review applications</a>
+          <div className="flex flex-wrap items-center gap-2">
+            <nav aria-label="Merchant dashboard navigation" className="flex flex-wrap gap-2">
+              <a className={secondaryLink} href="/merchant" aria-current="page">Dashboard</a>
+              <a className={secondaryLink} href="/merchant/offers">Manage offers</a>
+              <a className={actionLink} href="/merchant/applications">Review applications</a>
+            </nav>
+            <button type="button" onClick={() => void load()} disabled={loading} className={secondaryLink + " disabled:opacity-50"}>{loading ? "Refreshing…" : "Refresh workspace"}</button>
           </div>
         </header>
 

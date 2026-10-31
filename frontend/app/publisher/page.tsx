@@ -24,7 +24,7 @@ export default function PublisherDashboardPage(){
     setLoading(true);setError("");setDenied(false);
     try{
       const identity=await apiFetch<Identity>("/api/auth/me");
-      if(identity.user?.account_type!=="affiliate_publisher"&&identity.user?.is_admin!==true){setDenied(true);return;}
+      if(identity.user?.account_type!=="affiliate_publisher"){setDenied(true);return;}
       setEmail(identity.user?.email||"");
       const [metrics,offers,applications,campaigns]=await Promise.all([
         apiFetch<Status>("/api/status"),
@@ -62,7 +62,14 @@ export default function PublisherDashboardPage(){
           <p className="mt-2 text-sm text-slate-500">Find suitable offers, prepare responsible promotions and measure recorded outcomes.</p>
           {email&&<p className="mt-2 text-xs text-slate-400">Signed in as {email}</p>}
         </div>
-        <button onClick={()=>void load()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50">{loading?"Refreshing…":"Refresh"}</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <nav aria-label="Publisher dashboard navigation" className="flex flex-wrap gap-2">
+            <a href="#publisher-tools" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold">Publisher tools</a>
+            <a href="/marketplace#my-applications" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold">My applications</a>
+            <a href="/campaigns" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold">Campaigns</a>
+          </nav>
+          <button onClick={()=>void load()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50">{loading?"Refreshing…":"Refresh"}</button>
+        </div>
       </header>
       {error&&<p role="alert" className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
       <section className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -75,18 +82,20 @@ export default function PublisherDashboardPage(){
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p><p className="mt-3 text-3xl font-black">{value}</p><p className="mt-1 text-xs leading-5 text-slate-500">{note}</p>
         </article>)}
       </section>
-      <section className="mt-8">
+      <section id="publisher-tools" className="mt-8">
         <h2 className="text-xl font-black">Publisher tools</h2>
         <p className="mt-1 text-sm text-slate-500">Existing features for your publisher workspace. A catalogue listing is not proof of a connected account or programme approval.</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <article className={card}><h3 className="font-black">Affiliate offer catalog</h3><p className="mt-2 text-sm text-slate-500">Search saved network offers and prepare shortlists.</p><a className={linkClass} href="/offers">Browse offer catalog</a></article>
           <article className={card}><h3 className="font-black">Publisher marketplace</h3><p className="mt-2 text-sm text-slate-500">{offerCount===null?"Review offers listed by merchants.":offerCount+" merchant offer(s) listed for this workspace."}</p><a className={linkClass} href="/marketplace">Explore merchant offers</a></article>
-          <article className={card}><h3 className="font-black">My applications</h3><p className="mt-2 text-sm text-slate-500">{applicationCount===null?"Review your submitted publisher applications.":applicationCount+" application record(s) in this workspace."}</p><a className={linkClass} href="/marketplace">View application status</a></article>
+          <article className={card}><h3 className="font-black">My applications</h3><p className="mt-2 text-sm text-slate-500">{applicationCount===null?"Review your submitted publisher applications.":applicationCount+" application record(s) in this workspace."}</p><a className={linkClass} href="/marketplace#my-applications">View application status</a></article>
           <article className={card}><h3 className="font-black">Affiliate research</h3><p className="mt-2 text-sm text-slate-500">Search connected affiliate-account product feeds.</p><a className={linkClass} href="/affiliate-research">Open research</a></article>
           <article className={card}><h3 className="font-black">Affiliate integrations</h3><p className="mt-2 text-sm text-slate-500">Connect supported networks using read permissions.</p><a className={linkClass} href="/integrations">Manage integrations</a></article>
           <article className={card}><h3 className="font-black">Campaign tracking</h3><p className="mt-2 text-sm text-slate-500">Manage tracked destinations and campaign records.</p><a className={linkClass} href="/campaigns">Open campaigns</a></article>
-          <article className={card}><h3 className="font-black">Content studio</h3><p className="mt-2 text-sm text-slate-500">Draft articles, creative assets and social content.</p><a className={linkClass} href="/?view=content-studio">Open content studio</a></article>
-          <article className={card}><h3 className="font-black">SEO tools</h3><p className="mt-2 text-sm text-slate-500">Audit pages and plan content maintenance.</p><a className={linkClass} href="/?view=seo-audit">Open SEO audit</a></article>
+          <article className={card}><h3 className="font-black">Article writer</h3><p className="mt-2 text-sm text-slate-500">Create evidence-aware affiliate articles with review and disclosure controls.</p><a className={linkClass} href="/listicle-writer">Open article writer</a></article>
+          <article className={card}><h3 className="font-black">Content health</h3><p className="mt-2 text-sm text-slate-500">Review observed content-decay signals and prioritize maintenance work.</p><a className={linkClass} href="/content-decay">Open content health</a></article>
+          <article className={card}><h3 className="font-black">Research briefs</h3><p className="mt-2 text-sm text-slate-500">Prepare structured research briefs before creating or refreshing content.</p><a className={linkClass} href="/research-brief">Create research brief</a></article>
+          <article className={card}><h3 className="font-black">Offer qualification</h3><p className="mt-2 text-sm text-slate-500">Evaluate offer evidence, restrictions and readiness before promoting it.</p><a className={linkClass} href="/offers/qualification">Qualify an offer</a></article>
           <article className={card}><h3 className="font-black">Leads & attribution</h3><p className="mt-2 text-sm text-slate-500">Review consented leads and attributed outcomes.</p><a className={linkClass} href="/leads">Open leads</a></article>
         </div>
       </section>

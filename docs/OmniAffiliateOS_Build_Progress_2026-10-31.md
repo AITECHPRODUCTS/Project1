@@ -33,3 +33,12 @@
 6. Production release needs legal/license and repository-confidentiality decisions, staging deployment, managed secrets/rotation, monitoring/SLOs, load/soak, accessibility, backup restore, rollback and DR evidence.
 
 No claim is made of guaranteed earnings, 100% failproof operation, universal provider connectivity, production deployment or live affiliate credentials.
+
+
+## Dashboard independence and navigation hardening — 31 October 2026
+
+- The Publisher dashboard now routes its article-writing, content-health, research-brief and offer-qualification shortcuts to their existing dedicated feature pages. The applications shortcut targets the actual application list section in the marketplace rather than only the marketplace page top.
+- Merchant navigation now provides explicit Dashboard, Manage offers and Review applications links plus a workspace data refresh action.
+- Platform Super Admin navigation now links directly to the platform operations and tenant lifecycle sections.
+- Dashboard client-side access checks now require the persisted account persona: `affiliate_publisher` for the Publisher dashboard, `merchant_product_owner` for the Merchant dashboard, and both `platform_admin` and `is_admin=true` for the Super Admin console. This prevents a global admin flag alone from making the business-persona dashboards interchangeable.
+- Browser regression coverage was extended for navigation destinations and cross-persona denial. These changes do not make the remaining platform lifecycle, provider integrations, ad delivery or commission settlement work complete; production readiness remains open pending full feature and live-environment acceptance.

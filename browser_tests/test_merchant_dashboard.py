@@ -107,6 +107,11 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
             assert any("/api/merchant/offers?" in url for url in requests)
             assert any("/api/merchant/applications?" in url for url in requests)
             assert "does not infer network approval" in page.locator("main").inner_text()
+            merchant_nav = page.get_by_role("navigation", name="Merchant dashboard navigation")
+            assert merchant_nav.get_by_role("link", name="Dashboard").get_attribute("href") == "/merchant"
+            assert merchant_nav.get_by_role("link", name="Manage offers").get_attribute("href") == "/merchant/offers"
+            assert merchant_nav.get_by_role("link", name="Review applications").get_attribute("href") == "/merchant/applications"
+            assert page.get_by_role("button", name="Refresh workspace").is_visible()
         finally:
             browser.close()
 

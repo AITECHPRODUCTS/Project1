@@ -82,7 +82,7 @@ export default function TenantLifecyclePage(){
   const checkPlatformAccess=useCallback(async()=>{
     try{
       const identity=await apiFetch<{user?:{is_admin?:boolean;account_type?:string}}>("/api/auth/me");
-      if(identity.user?.is_admin!==true){
+      if(identity.user?.is_admin!==true||identity.user?.account_type!=="platform_admin"){
         setAccessError("This console is only available to Platform Super Admin accounts.");
         setAccessStatus("denied");
         return;
@@ -242,10 +242,11 @@ export default function TenantLifecyclePage(){
     <div className="mx-auto max-w-6xl">
       <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex flex-wrap gap-4 text-sm font-semibold">
+          <nav aria-label="Platform administrator navigation" className="flex flex-wrap gap-4 text-sm font-semibold">
             <a href="/" className="text-indigo-600 hover:underline">← Growth command</a>
-            <a href="/#operations" className="text-indigo-600 hover:underline">Operations overview</a>
-          </div>
+            <a href="#platform-operations-title" className="text-indigo-600 hover:underline">Operations overview</a>
+            <a href="#tenant-lifecycle" className="text-indigo-600 hover:underline">Tenant lifecycle</a>
+          </nav>
           <p className="mt-4 text-xs font-black uppercase tracking-[.2em] text-indigo-600">Platform Super Admin</p>
           <h1 className="mt-1 text-3xl font-black tracking-tight">Tenant lifecycle console</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Suspend or reinstate a workspace with a mandatory human reason and tenant-scoped audit evidence.</p>
@@ -403,7 +404,12 @@ export default function TenantLifecyclePage(){
       {loading&&<p className="mt-6 text-sm text-slate-500">Loading tenant inventory…</p>}
       {!loading&&tenants.length===0&&<section className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-7 text-sm text-slate-600">No tenants were returned, or the active session lacks Platform Super Admin access.</section>}
 
-      <section className="mt-6 space-y-4">
+      <section id="tenant-lifecycle" aria-labelledby="tenant-lifecycle-title" className="mt-6 space-y-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-indigo-600">Workspace administration</p>
+          <h2 id="tenant-lifecycle-title" className="mt-1 text-2xl font-black">Tenant lifecycle</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">Review workspace status and perform audited suspend or reinstate actions.</p>
+        </div>
         {tenants.map(tenant=><article key={tenant.id} aria-label={"Tenant "+tenant.name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">

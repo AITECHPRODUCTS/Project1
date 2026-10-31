@@ -282,6 +282,15 @@ class PausedSession(TenantScopedMixin, Base):
 
 class AuditLog(TenantScopedMixin, Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index(
+            "uq_audit_workflow_operator_retry_claim",
+            "resource_id",
+            unique=True,
+            sqlite_where=text("action = 'workflow.operator_retry_claimed' AND resource_id IS NOT NULL"),
+            postgresql_where=text("action = 'workflow.operator_retry_claimed' AND resource_id IS NOT NULL"),
+        ),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     actor: Mapped[str] = mapped_column(String(320), default="system")
     action: Mapped[str] = mapped_column(String(180), index=True)
@@ -1258,3 +1267,36 @@ class DistributionQueueItem(TenantScopedMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+
+class PlatformIncident(Base):
+    """Durable platform-wide operator incident; source tenant is metadata, not data ownership."""
+
+    __tablename__ = "platform_incidents"
+    __table_args__ = (
+        CheckConstraint("severity IN ('low', 'medium', 'high', 'critical')", name="ck_platform_incidents_severity"),
+        CheckConstraint("status IN ('open', 'acknowledged', 'resolved')", name="ck_platform_incidents_status"),
+        UniqueConstraint("source_type", "source_resource_id", name="uq_platform_incidents_source"),
+        Index("ix_platform_incidents_status_created", "status", "created_at"),
+        Index("ix_platform_incidents_severity_status", "severity", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    severity: Mapped[str] = mapped_column(String(20), default="medium", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_workspace_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=True
+    )
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

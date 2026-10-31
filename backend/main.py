@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderCatalogObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderCatalogObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,PlatformIncident,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -514,8 +514,8 @@ async def require_admin(user: dict[str, Any] = Depends(require_auth)) -> dict[st
 
 
 async def require_platform_admin(user: dict[str, Any] = Depends(require_auth)) -> dict[str, Any]:
-    """Require the explicit global platform-admin flag; workspace roles never imply it."""
-    if user.get("is_admin") is not True:
+    """Require both the explicit global flag and immutable platform-admin persona."""
+    if user.get("is_admin") is not True or user.get("account_type") != "platform_admin":
         raise HTTPException(403, "Platform Super Admin permission required")
     return user
 
@@ -11993,6 +11993,440 @@ async def platform_admin_workflows(
             for row in rows
         ],
     }
+
+
+
+def _platform_admin_audit_workspace(user: dict[str, Any]) -> str:
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an active workspace to anchor the platform operations audit record")
+    return workspace_id
+
+
+def _platform_incident_dict(row: PlatformIncident) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "severity": row.severity,
+        "status": row.status,
+        "title": row.title,
+        "summary": row.summary,
+        "source_type": row.source_type,
+        "source_resource_id": row.source_resource_id,
+        "source_workspace_id": row.source_workspace_id,
+        "created_by": row.created_by,
+        "acknowledged_by": row.acknowledged_by,
+        "acknowledged_at": row.acknowledged_at.isoformat() if row.acknowledged_at else None,
+        "resolved_by": row.resolved_by,
+        "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+        "resolution_note": row.resolution_note,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _workflow_error_type(error: Any) -> str | None:
+    raw = str(error or "").strip()
+    if not raw:
+        return None
+    parts = raw.split(":", 2)
+    candidate = parts[1].strip() if len(parts) > 1 else ""
+    match = re.match(r"([A-Za-z][A-Za-z0-9_.]{0,79})", candidate)
+    return match.group(1) if match else "workflow_error"
+
+
+@api.get("/admin/operations")
+async def platform_admin_operations(
+    limit: int = Query(default=100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Bounded, cross-workspace operational evidence; never includes customer content or secrets."""
+    now = datetime.now(timezone.utc)
+    with workspace_scope(None):
+        workflow_rows = list((await db.scalars(
+            select(WorkflowRun).order_by(WorkflowRun.created_at.desc()).limit(limit)
+        )).all())
+        queue_rows = list((await db.scalars(
+            select(DistributionQueueItem).order_by(DistributionQueueItem.created_at.desc()).limit(limit)
+        )).all())
+        incident_rows = list((await db.scalars(
+            select(PlatformIncident).order_by(PlatformIncident.created_at.desc()).limit(limit)
+        )).all())
+        unknown_ids = set((await db.scalars(
+            select(AuditLog.resource_id).where(
+                AuditLog.action == "workflow.side_effect_outcome_unknown",
+                AuditLog.resource_id.is_not(None),
+            ).order_by(AuditLog.created_at.desc()).limit(1000)
+        )).all())
+        retry_claim_rows = list((await db.scalars(
+            select(AuditLog).where(
+                AuditLog.action == "workflow.operator_retry_claimed"
+            ).order_by(AuditLog.created_at.desc()).limit(1000)
+        )).all())
+
+    retry_claims = {str(row.resource_id): row for row in retry_claim_rows if row.resource_id}
+    workflow_workspace_ids = {str(row.workspace_id) for row in workflow_rows if row.workspace_id}
+    with workspace_scope(None):
+        active_workspace_ids = set((await db.scalars(
+            select(Workspace.id).where(
+                Workspace.id.in_(workflow_workspace_ids),
+                Workspace.lifecycle_state == "active",
+            )
+        )).all()) if workflow_workspace_ids else set()
+
+    workflow_data: list[dict[str, Any]] = []
+    for row in workflow_rows:
+        state = row.state_json if isinstance(row.state_json, dict) else {}
+        stage_map = state.get("stages") if isinstance(state.get("stages"), dict) else {}
+        failed_stage = None
+        stage_key = None
+        stage_side_effecting = False
+        try:
+            steps = resolve_steps(row.workflow_name)
+            if 0 <= int(row.current_step or 0) < len(steps):
+                failed_stage = steps[int(row.current_step or 0)]
+                stage_key = failed_stage.key
+                stage_side_effecting = bool(failed_stage.side_effecting)
+        except (ValueError, TypeError):
+            steps = []
+        stage_state = stage_map.get(stage_key, {}) if stage_key else {}
+        error = stage_state.get("error") if isinstance(stage_state, dict) else row.error_message
+        lease_expiry = row.lease_expires_at
+        if lease_expiry is not None and lease_expiry.tzinfo is None:
+            lease_expiry = lease_expiry.replace(tzinfo=timezone.utc)
+        stale_lease = row.status in {"queued", "running", "paused"} and (
+            lease_expiry is None or lease_expiry <= now
+        )
+        reconciliation_required = str(row.id) in unknown_ids
+        retry_claim = retry_claims.get(str(row.id))
+        retry_claimed = retry_claim is not None
+        retry_eligible = bool(
+            row.status == "failed"
+            and failed_stage is not None
+            and stage_state.get("status") == "failed"
+            and not stage_side_effecting
+            and not reconciliation_required
+            and not retry_claimed
+            and str(row.workspace_id) in active_workspace_ids
+        )
+        retry_details = retry_claim.details_json if retry_claim and isinstance(retry_claim.details_json, dict) else {}
+        workflow_data.append({
+            "id": row.id,
+            "workspace_id": row.workspace_id,
+            "workflow_name": row.workflow_name,
+            "status": row.status,
+            "current_step": row.current_step,
+            "current_stage": stage_key,
+            "execution_mode": row.execution_mode,
+            "attempt_count": int(row.attempt_count or 0),
+            "has_error": bool(row.error_message),
+            "error_type": _workflow_error_type(error or row.error_message),
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "started_at": row.started_at.isoformat() if row.started_at else None,
+            "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+            "heartbeat_at": row.heartbeat_at.isoformat() if row.heartbeat_at else None,
+            "lease_expires_at": row.lease_expires_at.isoformat() if row.lease_expires_at else None,
+            "stale_lease": stale_lease,
+            "manual_reconciliation_required": reconciliation_required,
+            "dead_letter_candidate": bool(row.status == "failed" and (stage_side_effecting or reconciliation_required)),
+            "retry_eligible": retry_eligible,
+            "retry_claimed": retry_claimed,
+            "retry_workflow_id": retry_details.get("retry_workflow_id"),
+            "incident_exists": any(
+                incident.source_type == "workflow_run" and incident.source_resource_id == row.id
+                for incident in incident_rows
+            ),
+        })
+
+    queue_data = [{
+        "id": row.id,
+        "workspace_id": row.workspace_id,
+        "title": "Distribution item (content title hidden)",
+        "channel": row.channel,
+        "status": row.status,
+        "attempt_count": int(row.attempt_count or 0),
+        "scheduled_at": row.scheduled_at.isoformat() if row.scheduled_at else None,
+        "last_attempt_at": row.last_attempt_at.isoformat() if row.last_attempt_at else None,
+        "has_error": bool(row.last_error),
+        "external_post_id_recorded": bool(row.external_post_id),
+        "operator_review_required": bool(row.last_error),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "dispatch_execution": "separate_dispatch_not_provided_by_review_queue",
+    } for row in queue_rows]
+
+    summary = {
+        "workflows_returned": len(workflow_data),
+        "failed_workflows": sum(item["status"] == "failed" for item in workflow_data),
+        "stale_workflow_leases": sum(item["stale_lease"] for item in workflow_data),
+        "workflow_reconciliation_required": sum(item["manual_reconciliation_required"] for item in workflow_data),
+        "read_only_retry_eligible": sum(item["retry_eligible"] for item in workflow_data),
+        "dead_letter_candidates": sum(item["dead_letter_candidate"] for item in workflow_data),
+        "distribution_queue_items_returned": len(queue_data),
+        "distribution_pending_review": sum(item["status"] == "pending_review" for item in queue_data),
+        "distribution_waiting_for_dispatch": sum(item["status"] == "approved_waiting_for_dispatch" for item in queue_data),
+        "distribution_items_with_recorded_errors": sum(item["has_error"] for item in queue_data),
+        "incidents_open": sum(item.status == "open" for item in incident_rows),
+        "incidents_acknowledged": sum(item.status == "acknowledged" for item in incident_rows),
+        "incidents_resolved": sum(item.status == "resolved" for item in incident_rows),
+    }
+    return {
+        "generated_at": now.isoformat(),
+        "limit": limit,
+        "bounded_snapshot": True,
+        "summary": summary,
+        "workflows": workflow_data,
+        "distribution_queue": queue_data,
+        "incidents": [_platform_incident_dict(row) for row in incident_rows],
+        "queue_dispatch_capability": "review_only_no_provider_dispatch_worker",
+        "queue_safety_note": "These are persisted review/scheduling rows. Queue approval does not publish. No provider retry is exposed until a separately authorized, idempotent dispatch worker exists.",
+        "recovery_safety_note": "Only one failed read-only workflow stage may be retried. Side-effecting or uncertain provider outcomes require manual reconciliation and are never blindly replayed.",
+    }
+
+
+@api.post("/admin/workflows/{workflow_id}/retry-read-only", status_code=202)
+async def retry_failed_read_only_workflow_stage(
+    workflow_id: str,
+    payload: WorkflowOperatorRetryRequest,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Start exactly one failed non-side-effecting stage; external publishing is never retried here."""
+    audit_workspace_id = _platform_admin_audit_workspace(user)
+    actor = str(user.get("email") or user.get("user_id") or "platform-admin")[:320]
+    with workspace_scope(None):
+        row = await db.scalar(select(WorkflowRun).where(WorkflowRun.id == workflow_id).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Workflow run not found")
+        if row.status != "failed":
+            raise HTTPException(409, "Only a failed workflow stage can be retried")
+        try:
+            steps = resolve_steps(row.workflow_name)
+        except ValueError as exc:
+            raise HTTPException(409, "This workflow definition is no longer available for a safe stage retry") from exc
+        index = int(row.current_step or 0)
+        if index < 0 or index >= len(steps):
+            raise HTTPException(409, "The persisted workflow checkpoint does not identify a retryable stage")
+        step = steps[index]
+        state = row.state_json if isinstance(row.state_json, dict) else {}
+        stage_state = (state.get("stages") or {}).get(step.key, {})
+        if not isinstance(stage_state, dict) or stage_state.get("status") != "failed":
+            raise HTTPException(409, "The current persisted stage is not recorded as failed")
+        if step.side_effecting:
+            raise HTTPException(409, "This stage can cause an external side effect; reconcile the provider before any resubmission")
+        unknown = await db.scalar(select(AuditLog.id).where(
+            AuditLog.action == "workflow.side_effect_outcome_unknown",
+            AuditLog.resource_id == row.id,
+        ).limit(1))
+        if unknown is not None:
+            raise HTTPException(409, "A provider outcome is uncertain; manual reconciliation is required before retry")
+        workspace = await db.get(Workspace, row.workspace_id)
+        if workspace is None or workspace.lifecycle_state != "active":
+            raise HTTPException(409, "The source workspace is suspended or unavailable")
+        prior_claim = await db.scalar(select(AuditLog.id).where(
+            AuditLog.action == "workflow.operator_retry_claimed",
+            AuditLog.resource_id == row.id,
+        ).limit(1))
+        if prior_claim is not None:
+            raise HTTPException(409, "A manual stage retry has already been claimed for this failed workflow")
+
+    claim = AuditLog(
+        workspace_id=audit_workspace_id,
+        actor=actor,
+        action="workflow.operator_retry_claimed",
+        resource_type="workflow",
+        resource_id=row.id,
+        outcome="claimed",
+        details_json={
+            "source_workflow_id": row.id,
+            "source_workspace_id": row.workspace_id,
+            "stage": step.key,
+            "retry_mode": "MANUAL_OVERRIDE",
+            "external_side_effect_retry": False,
+            "operator_reason": payload.reason,
+        },
+    )
+    with workspace_scope(audit_workspace_id):
+        db.add(claim)
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "Another operator has already claimed a retry for this workflow") from None
+
+    retry_state = dict(state)
+    metadata = retry_state.get("metadata") if isinstance(retry_state.get("metadata"), dict) else {}
+    metadata = {
+        **metadata,
+        "initiated_by": actor,
+        "operator_retry_of": row.id,
+        "operator_retry_reason": payload.reason,
+    }
+    retry_state["metadata"] = metadata
+    try:
+        with workspace_scope(str(row.workspace_id)):
+            retry_id = await runner.start(step.key, retry_state, [step], mode="MANUAL_OVERRIDE")
+    except Exception as exc:
+        with workspace_scope(audit_workspace_id):
+            claim.outcome = "start_failed"
+            claim.details_json = {**claim.details_json, "start_error_type": type(exc).__name__}
+            await db.commit()
+        raise HTTPException(503, "The retry claim was recorded, but the new stage could not be started; operator review is required") from None
+
+    with workspace_scope(audit_workspace_id):
+        claim.outcome = "started"
+        claim.details_json = {**claim.details_json, "retry_workflow_id": retry_id}
+        await db.commit()
+    return {
+        "source_workflow_id": row.id,
+        "retry_workflow_id": retry_id,
+        "stage": step.key,
+        "status": "queued",
+        "execution_mode": "MANUAL_OVERRIDE",
+        "external_side_effect_retry": False,
+    }
+
+
+@api.post("/admin/incidents/from-workflow/{workflow_id}", status_code=201)
+async def create_platform_incident_from_workflow(
+    workflow_id: str,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    audit_workspace_id = _platform_admin_audit_workspace(user)
+    actor = str(user.get("email") or user.get("user_id") or "platform-admin")[:320]
+    with workspace_scope(None):
+        run = await db.get(WorkflowRun, workflow_id)
+        if run is None:
+            raise HTTPException(404, "Workflow run not found")
+        if run.status != "failed":
+            raise HTTPException(409, "Create a linked incident only for a persisted failed workflow")
+        existing = await db.scalar(select(PlatformIncident).where(
+            PlatformIncident.source_type == "workflow_run",
+            PlatformIncident.source_resource_id == run.id,
+        ))
+        if existing is not None:
+            return JSONResponse(status_code=200, content={**_platform_incident_dict(existing), "already_exists": True})
+        unknown = await db.scalar(select(AuditLog.id).where(
+            AuditLog.action == "workflow.side_effect_outcome_unknown",
+            AuditLog.resource_id == run.id,
+        ).limit(1))
+        try:
+            steps = resolve_steps(run.workflow_name)
+            stage = steps[int(run.current_step or 0)].key
+        except (ValueError, IndexError, TypeError):
+            stage = "unknown"
+        severity = "critical" if unknown is not None else "high"
+        error_type = _workflow_error_type(run.error_message) or "unclassified"
+        incident = PlatformIncident(
+            severity=severity,
+            status="open",
+            title=f"{run.workflow_name[:130]} failed at {stage}",
+            summary=(
+                f"Persisted workflow failure in workspace {run.workspace_id}; "
+                f"stage={stage}; error_type={error_type}; attempt_count={int(run.attempt_count or 0)}; "
+                f"manual_reconciliation_required={unknown is not None}. "
+                "Sensitive workflow state, content and provider payloads are intentionally not copied into this incident."
+            ),
+            source_type="workflow_run",
+            source_resource_id=run.id,
+            source_workspace_id=run.workspace_id,
+            created_by=actor,
+        )
+        db.add(incident)
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            with workspace_scope(None):
+                existing = await db.scalar(select(PlatformIncident).where(
+                    PlatformIncident.source_type == "workflow_run",
+                    PlatformIncident.source_resource_id == run.id,
+                ))
+            if existing is not None:
+                return JSONResponse(status_code=200, content={**_platform_incident_dict(existing), "already_exists": True})
+            raise HTTPException(409, "The linked incident could not be created") from None
+    with workspace_scope(audit_workspace_id):
+        db.add(AuditLog(
+            workspace_id=audit_workspace_id,
+            actor=actor,
+            action="platform.incident.created",
+            resource_type="platform_incident",
+            resource_id=incident.id,
+            outcome="open",
+            details_json={
+                "source_type": "workflow_run",
+                "source_resource_id": run.id,
+                "source_workspace_id": run.workspace_id,
+                "severity": severity,
+            },
+        ))
+        await db.commit()
+    return _platform_incident_dict(incident)
+
+
+@api.post("/admin/incidents/{incident_id}/acknowledge")
+async def acknowledge_platform_incident(
+    incident_id: str,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    audit_workspace_id = _platform_admin_audit_workspace(user)
+    actor = str(user.get("email") or user.get("user_id") or "platform-admin")[:320]
+    with workspace_scope(None):
+        incident = await db.get(PlatformIncident, incident_id)
+        if incident is None:
+            raise HTTPException(404, "Platform incident not found")
+        if incident.status == "resolved":
+            raise HTTPException(409, "A resolved incident cannot be acknowledged")
+        if incident.status == "open":
+            incident.status = "acknowledged"
+            incident.acknowledged_by = actor
+            incident.acknowledged_at = datetime.now(timezone.utc)
+    with workspace_scope(audit_workspace_id):
+        db.add(AuditLog(
+            workspace_id=audit_workspace_id,
+            actor=actor,
+            action="platform.incident.acknowledged",
+            resource_type="platform_incident",
+            resource_id=incident.id,
+            outcome=incident.status,
+            details_json={"source_workspace_id": incident.source_workspace_id},
+        ))
+        await db.commit()
+    return _platform_incident_dict(incident)
+
+
+@api.post("/admin/incidents/{incident_id}/resolve")
+async def resolve_platform_incident(
+    incident_id: str,
+    payload: PlatformIncidentResolveRequest,
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    audit_workspace_id = _platform_admin_audit_workspace(user)
+    actor = str(user.get("email") or user.get("user_id") or "platform-admin")[:320]
+    with workspace_scope(None):
+        incident = await db.get(PlatformIncident, incident_id)
+        if incident is None:
+            raise HTTPException(404, "Platform incident not found")
+        if incident.status == "resolved":
+            raise HTTPException(409, "This incident is already resolved")
+        incident.status = "resolved"
+        incident.resolved_by = actor
+        incident.resolved_at = datetime.now(timezone.utc)
+        incident.resolution_note = payload.reason
+    with workspace_scope(audit_workspace_id):
+        db.add(AuditLog(
+            workspace_id=audit_workspace_id,
+            actor=actor,
+            action="platform.incident.resolved",
+            resource_type="platform_incident",
+            resource_id=incident.id,
+            outcome="resolved",
+            details_json={"source_workspace_id": incident.source_workspace_id, "resolution_note_length": len(payload.reason)},
+        ))
+        await db.commit()
+    return _platform_incident_dict(incident)
 
 
 @api.get("/admin/audit/export.csv")

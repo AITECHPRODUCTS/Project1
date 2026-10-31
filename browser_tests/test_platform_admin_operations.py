@@ -28,6 +28,35 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
         "status": "paused_for_approval", "current_step": "S5", "execution_mode": "SEMI_AUTONOMOUS",
         "has_error": False, "created_at": "2026-10-30T08:00:00+00:00",
     }]}
+    operations = {
+        "generated_at": "2026-10-31T12:00:00+00:00", "limit": 100, "bounded_snapshot": True,
+        "summary": {
+            "workflows_returned": 1, "failed_workflows": 0, "stale_workflow_leases": 0,
+            "workflow_reconciliation_required": 0, "read_only_retry_eligible": 0, "dead_letter_candidates": 0,
+            "distribution_queue_items_returned": 1, "distribution_pending_review": 1,
+            "distribution_waiting_for_dispatch": 0, "distribution_items_with_recorded_errors": 0,
+            "incidents_open": 0, "incidents_acknowledged": 0, "incidents_resolved": 0,
+        },
+        "workflows": [{
+            "id": "workflow-run-42", "workspace_id": "workspace-7", "workflow_name": "full_flywheel",
+            "status": "paused", "current_step": 4, "current_stage": "S5", "execution_mode": "SEMI_AUTONOMOUS",
+            "attempt_count": 1, "has_error": False, "error_type": None, "created_at": "2026-10-30T08:00:00+00:00",
+            "heartbeat_at": "2026-10-30T08:01:00+00:00", "lease_expires_at": "2026-10-30T08:06:00+00:00",
+            "stale_lease": False, "manual_reconciliation_required": False, "dead_letter_candidate": False,
+            "retry_eligible": False, "retry_claimed": False, "retry_workflow_id": None, "incident_exists": False,
+        }],
+        "distribution_queue": [{
+            "id": "queue-item-1", "workspace_id": "workspace-7", "title": "Scheduled creator post",
+            "channel": "pinterest", "status": "pending_review", "attempt_count": 0,
+            "scheduled_at": None, "last_attempt_at": None, "has_error": False, "external_post_id_recorded": False,
+            "operator_review_required": False, "created_at": "2026-10-30T08:00:00+00:00",
+            "dispatch_execution": "separate_dispatch_not_provided_by_review_queue",
+        }],
+        "incidents": [],
+        "queue_dispatch_capability": "review_only_no_provider_dispatch_worker",
+        "queue_safety_note": "Queue approval does not publish. No provider retry is exposed until a separately authorized, idempotent dispatch worker exists.",
+        "recovery_safety_note": "Only one failed read-only workflow stage may be retried. Side-effecting or uncertain provider outcomes require manual reconciliation and are never blindly replayed.",
+    }
     integrations = {"items": [{
         "provider_id": "openaffiliate", "display_name": "OpenAffiliate", "status": "not_configured",
         "write_access_verified": False, "reason": "Account authorization and live contract are not verified.",
@@ -97,6 +126,8 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
                     })
                 elif "/api/admin/overview" in url:
                     _fulfill_json(route, overview)
+                elif "/api/admin/operations?" in url:
+                    _fulfill_json(route, operations)
                 elif "/api/admin/workflows?" in url:
                     _fulfill_json(route, workflows)
                 elif "/api/integrations" in url:
@@ -127,6 +158,9 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
             assert page.get_by_test_id("platform-metric-workflows").inner_text() == "42"
             assert page.get_by_test_id("platform-queue-state").inner_text() == "not verified by this endpoint"
             assert page.get_by_test_id("platform-workflow-workflow-run-42").is_visible()
+            assert page.get_by_test_id("platform-queue-item-queue-item-1").is_visible()
+            assert page.get_by_test_id("platform-distribution-queue").get_by_text("Queue approval does not publish").is_visible()
+            assert page.get_by_test_id("platform-incident-console").is_visible()
             assert page.get_by_test_id("provider-readiness-openaffiliate").get_by_text("not configured").is_visible()
             assert page.get_by_test_id("provider-readiness-openaffiliate").get_by_text("Write access: not verified").is_visible()
             assert page.get_by_test_id("platform-audit-109").is_visible()
@@ -139,7 +173,7 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
             assert page.get_by_test_id("provider-capability-openaffiliate").get_by_text("partially available").is_visible()
             assert any("/api/capabilities" in url for url in seen)
             assert any("/api/admin/overview" in url for url in seen)
-            assert any("/api/admin/workflows?limit=20" in url for url in seen)
+            assert any("/api/admin/operations?limit=100" in url for url in seen)
             assert any("/api/integrations" in url for url in seen)
             assert any("/api/admin/audit?limit=20" in url for url in seen)
         finally:

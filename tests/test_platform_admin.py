@@ -29,7 +29,7 @@ async def test_workspace_admin_does_not_inherit_platform_admin_permission():
 
 @pytest.mark.asyncio
 async def test_explicit_platform_admin_flag_allows_global_read_only_console():
-    user = {"is_admin": True, "workspace_role": "member", "user_id": "admin-1"}
+    user = {"is_admin": True, "account_type": "platform_admin", "workspace_role": "member", "user_id": "admin-1"}
 
     result = await require_platform_admin(user)
 

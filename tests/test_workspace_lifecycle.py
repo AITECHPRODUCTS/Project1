@@ -49,6 +49,7 @@ def _as_user(monkeypatch, *, is_admin=True, workspace_id=ADMIN_WORKSPACE):
             "workspace_id": workspace_id,
             "workspace_role": "owner",
             "is_admin": is_admin,
+            "account_type": "platform_admin" if is_admin else "affiliate_publisher",
         }
 
     monkeypatch.setitem(main.app.dependency_overrides, main.require_auth, current_user)

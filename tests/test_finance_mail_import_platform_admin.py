@@ -23,6 +23,7 @@ def _override_user(monkeypatch, *, platform_admin: bool, workspace_id: str | Non
             "workspace_id": workspace_id,
             "workspace_role": "owner" if platform_admin else "admin",
             "is_admin": platform_admin,
+            "account_type": "platform_admin" if platform_admin else "merchant_product_owner",
         }
     monkeypatch.setitem(main.app.dependency_overrides, main.require_auth, current_user)
 

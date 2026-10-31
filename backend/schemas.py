@@ -165,6 +165,37 @@ class WorkspaceInvitationAcceptRequest(BaseModel):
     token: str = Field(min_length=32, max_length=200)
 
 
+class WorkflowOperatorRetryRequest(BaseModel):
+    """Explicitly acknowledge a single failed stage retry, with no external side effects."""
+
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=10, max_length=2000)
+    confirm_retry: Literal[True]
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("reason must contain at least ten non-whitespace characters")
+        return normalized
+
+
+class PlatformIncidentResolveRequest(BaseModel):
+    """Human resolution note for a durable platform incident."""
+
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("reason must contain at least ten non-whitespace characters")
+        return normalized
+
+
 class WorkspaceLifecycleActionRequest(BaseModel):
     """Human reason required for an audited workspace suspend/reinstate action."""
 

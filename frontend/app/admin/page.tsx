@@ -40,7 +40,27 @@ type PlatformOverview = {
   runtime:{environment:string;scheduler_running:boolean;publishing_dry_run:boolean;ad_automation_execute:boolean;durable_queue_status:string};
   release:{deployment_verification:string;note:string};
 };
-type AdminWorkflow = {id:string;workspace_id:string;workflow_name:string;status:string;current_step:string|null;execution_mode:string;has_error:boolean;created_at:string|null};
+type AdminWorkflow = {
+  id:string;workspace_id:string;workflow_name:string;status:string;current_step:number;current_stage:string|null;
+  execution_mode:string;attempt_count:number;has_error:boolean;error_type:string|null;created_at:string|null;
+  heartbeat_at:string|null;lease_expires_at:string|null;stale_lease:boolean;manual_reconciliation_required:boolean;
+  dead_letter_candidate:boolean;retry_eligible:boolean;retry_claimed:boolean;retry_workflow_id:string|null;incident_exists:boolean;
+};
+type AdminQueueItem = {
+  id:string;workspace_id:string;title:string;channel:string;status:string;attempt_count:number;scheduled_at:string|null;
+  last_attempt_at:string|null;has_error:boolean;external_post_id_recorded:boolean;operator_review_required:boolean;
+  created_at:string|null;dispatch_execution:string;
+};
+type AdminIncident = {
+  id:string;severity:string;status:string;title:string;summary:string;source_type:string|null;source_resource_id:string|null;
+  source_workspace_id:string|null;created_by:string;acknowledged_by:string|null;acknowledged_at:string|null;
+  resolved_by:string|null;resolved_at:string|null;resolution_note:string|null;created_at:string|null;updated_at:string|null;
+};
+type AdminOperations = {
+  generated_at:string;limit:number;bounded_snapshot:boolean;summary:Record<string,number>;
+  workflows:AdminWorkflow[];distribution_queue:AdminQueueItem[];incidents:AdminIncident[];
+  queue_safety_note:string;recovery_safety_note:string;
+};
 type AdminAuditEvent = {id:number;workspace_id:string|null;actor:string;action:string;resource_type:string;resource_id:string;outcome:string;created_at:string|null};
 type CapabilityRow = {id:string;title:string;status:string;reason:string;prerequisites:string[];external_side_effect:boolean};
 type CapabilityMatrix = {
@@ -69,6 +89,14 @@ export default function TenantLifecyclePage(){
   const [notice,setNotice]=useState("");
   const [overview,setOverview]=useState<PlatformOverview|null>(null);
   const [workflows,setWorkflows]=useState<AdminWorkflow[]>([]);
+  const [queueItems,setQueueItems]=useState<AdminQueueItem[]>([]);
+  const [incidents,setIncidents]=useState<AdminIncident[]>([]);
+  const [operationSummary,setOperationSummary]=useState<Record<string,number>>({});
+  const [queueSafetyNote,setQueueSafetyNote]=useState("");
+  const [recoverySafetyNote,setRecoverySafetyNote]=useState("");
+  const [retryReasons,setRetryReasons]=useState<Record<string,string>>({});
+  const [incidentResolutionReasons,setIncidentResolutionReasons]=useState<Record<string,string>>({});
+  const [operationActionBusy,setOperationActionBusy]=useState("");
   const [providers,setProviders]=useState<ProviderReadiness[]>([]);
   const [auditEvents,setAuditEvents]=useState<AdminAuditEvent[]>([]);
   const [operationsLoading,setOperationsLoading]=useState(false);
@@ -163,14 +191,19 @@ export default function TenantLifecyclePage(){
       .catch(err=>{setCapabilityError(err instanceof Error?err.message:"Capability details are unavailable for the active platform-admin workspace.");})
       .finally(()=>setCapabilityLoading(false));
     try{
-      const [overviewData,workflowData,registryData,auditData]=await Promise.all([
+      const [overviewData,operationsData,registryData,auditData]=await Promise.all([
         apiFetch<PlatformOverview>("/api/admin/overview"),
-        apiFetch<{data:AdminWorkflow[]}>("/api/admin/workflows?limit=20"),
+        apiFetch<AdminOperations>("/api/admin/operations?limit=100"),
         apiFetch<{items:ProviderReadiness[]}>("/api/integrations"),
         apiFetch<{data:AdminAuditEvent[]}>("/api/admin/audit?limit=20"),
       ]);
       setOverview(overviewData);
-      setWorkflows(workflowData.data||[]);
+      setWorkflows(operationsData.workflows||[]);
+      setQueueItems(operationsData.distribution_queue||[]);
+      setIncidents(operationsData.incidents||[]);
+      setOperationSummary(operationsData.summary||{});
+      setQueueSafetyNote(operationsData.queue_safety_note||"");
+      setRecoverySafetyNote(operationsData.recovery_safety_note||"");
       setProviders(registryData.items||[]);
       setAuditEvents(auditData.data||[]);
     }catch(err){
@@ -179,6 +212,58 @@ export default function TenantLifecyclePage(){
       setOperationsLoading(false);
     }
   },[]);
+
+
+  const retryWorkflowStage=async(run:AdminWorkflow)=>{
+    const reason=(retryReasons[run.id]||"").trim();
+    if(reason.length<10){setOperationsError("Enter a ten-character operator reason before retrying the read-only stage.");return;}
+    setOperationActionBusy("retry:"+run.id);setOperationsError("");setNotice("");
+    try{
+      const result=await apiFetch<{retry_workflow_id:string;stage:string}>("/api/admin/workflows/"+encodeURIComponent(run.id)+"/retry-read-only",{
+        method:"POST",body:JSON.stringify({reason,confirm_retry:true}),
+      });
+      setRetryReasons(current=>({...current,[run.id]:""}));
+      setNotice("A single-stage "+result.stage+" manual retry was queued as "+result.retry_workflow_id+". No provider side effect was retried.");
+      await loadOperations();
+    }catch(err){setOperationsError(err instanceof Error?err.message:"The safe stage retry was rejected.");}
+    finally{setOperationActionBusy("");}
+  };
+
+  const createWorkflowIncident=async(run:AdminWorkflow)=>{
+    setOperationActionBusy("incident:"+run.id);setOperationsError("");setNotice("");
+    try{
+      const incident=await apiFetch<AdminIncident>("/api/admin/incidents/from-workflow/"+encodeURIComponent(run.id),{method:"POST"});
+      setIncidents(current=>current.some(item=>item.id===incident.id)?current:[incident,...current]);
+      setNotice("Incident "+incident.id+" is "+(incident.status||"open")+".");
+      await loadOperations();
+    }catch(err){setOperationsError(err instanceof Error?err.message:"Could not create the linked incident.");}
+    finally{setOperationActionBusy("");}
+  };
+
+  const acknowledgeIncident=async(incident:AdminIncident)=>{
+    setOperationActionBusy("ack:"+incident.id);setOperationsError("");setNotice("");
+    try{
+      const updated=await apiFetch<AdminIncident>("/api/admin/incidents/"+encodeURIComponent(incident.id)+"/acknowledge",{method:"POST"});
+      setIncidents(current=>current.map(item=>item.id===updated.id?updated:item));
+      setNotice("Incident acknowledged and audited.");await loadOperations();
+    }catch(err){setOperationsError(err instanceof Error?err.message:"Could not acknowledge the incident.");}
+    finally{setOperationActionBusy("");}
+  };
+
+  const resolveIncident=async(incident:AdminIncident)=>{
+    const reason=(incidentResolutionReasons[incident.id]||"").trim();
+    if(reason.length<10){setOperationsError("Enter a resolution note with at least ten characters.");return;}
+    setOperationActionBusy("resolve:"+incident.id);setOperationsError("");setNotice("");
+    try{
+      const updated=await apiFetch<AdminIncident>("/api/admin/incidents/"+encodeURIComponent(incident.id)+"/resolve",{
+        method:"POST",body:JSON.stringify({reason}),
+      });
+      setIncidents(current=>current.map(item=>item.id===updated.id?updated:item));
+      setIncidentResolutionReasons(current=>({...current,[incident.id]:""}));
+      setNotice("Incident resolved with an audit note.");await loadOperations();
+    }catch(err){setOperationsError(err instanceof Error?err.message:"Could not resolve the incident.");}
+    finally{setOperationActionBusy("");}
+  };
 
   useEffect(()=>{void checkPlatformAccess();},[checkPlatformAccess]);
   useEffect(()=>{if(accessStatus!=="allowed")return;void loadTenants();},[accessStatus,loadTenants]);
@@ -331,15 +416,73 @@ export default function TenantLifecyclePage(){
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-lg font-black">Recent workflow runs · read only</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Workflow operations · {workflows.length} recent records</h3>
+                <button type="button" onClick={()=>void loadOperations()} disabled={operationsLoading||!!operationActionBusy} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-indigo-700">Refresh operations</button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  ["Failed",operationSummary.failed_workflows||0],
+                  ["Expired leases",operationSummary.stale_workflow_leases||0],
+                  ["Reconcile first",operationSummary.workflow_reconciliation_required||0],
+                  ["Read-only retries",operationSummary.read_only_retry_eligible||0],
+                ].map(([label,value])=><div key={String(label)} className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-bold uppercase text-slate-500">{label}</p><p className="mt-1 text-xl font-black tabular-nums">{value}</p></div>)}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">{recoverySafetyNote}</p>
               <div className="mt-3 space-y-2">
                 {workflows.map(run=><article key={run.id} data-testid={"platform-workflow-"+run.id} className="rounded-xl border border-slate-100 p-3">
                   <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{run.workflow_name}</strong><span className="text-xs font-bold">{run.status.replace(/_/g," ")}</span></div>
-                  <p className="mt-1 text-xs text-slate-600">Mode: {run.execution_mode.replace(/_/g," ")} · Stage: {run.current_step||"not recorded"}</p>
-                  <p className="mt-1 break-all text-[11px] text-slate-500">Workspace: {run.workspace_id}</p>
-                  {run.has_error&&<p className="mt-1 text-xs font-bold text-rose-700">Recorded workflow error; inspect using an authorized support process.</p>}
+                  <p className="mt-1 text-xs text-slate-600">Mode: {run.execution_mode.replace(/_/g," ")} · Stage: {run.current_stage||"not recorded"} · Attempts: {run.attempt_count}</p>
+                  <p className="mt-1 break-all text-[11px] text-slate-500">Workspace: {run.workspace_id} · Lease: {run.lease_expires_at?new Date(run.lease_expires_at).toLocaleString():"not recorded"}</p>
+                  {run.stale_lease&&<p className="mt-1 text-xs font-bold text-amber-800" data-testid={"platform-workflow-stale-"+run.id}>Lease expired; investigate durable runner recovery.</p>}
+                  {run.manual_reconciliation_required&&<p className="mt-1 text-xs font-bold text-rose-700" data-testid={"platform-workflow-reconcile-"+run.id}>External provider outcome unknown. Reconcile provider state before resubmission; retry is blocked.</p>}
+                  {run.dead_letter_candidate&&<p className="mt-1 text-xs font-bold text-rose-700">Dead-letter candidate · operator incident/reconciliation required.</p>}
+                  {run.has_error&&<p className="mt-1 text-xs text-slate-600">Recorded error class: {run.error_type||"not classified"}</p>}
+                  {run.retry_eligible&&<div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <label className="block text-xs font-semibold text-slate-600">Reason for single-stage read-only retry
+                      <input value={retryReasons[run.id]||""} onChange={event=>setRetryReasons(current=>({...current,[run.id]:event.target.value}))} minLength={10} maxLength={2000} className={inputClass} placeholder="Explain why this stage is safe to retry"/>
+                    </label>
+                    <button type="button" onClick={()=>void retryWorkflowStage(run)} disabled={!!operationActionBusy||(retryReasons[run.id]||"").trim().length<10} className={buttonClass+" bg-indigo-600 text-white"}>{operationActionBusy==="retry:"+run.id?"Queueing…":"Retry failed read-only stage"}</button>
+                  </div>}
+                  {run.status==="failed"&&!run.incident_exists&&<button type="button" onClick={()=>void createWorkflowIncident(run)} disabled={!!operationActionBusy} className="mt-3 rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700">{operationActionBusy==="incident:"+run.id?"Creating incident…":"Create incident record"}</button>}
+                  {run.retry_claimed&&<p className="mt-2 text-xs text-slate-500">A manual retry was already claimed{run.retry_workflow_id?" · child run "+run.retry_workflow_id:""}.</p>}
                 </article>)}
                 {workflows.length===0&&<p className="text-sm text-slate-500">No persisted workflow runs.</p>}
+              </div>
+            </section>
+                        <section className="rounded-2xl border border-slate-200 bg-white p-5" data-testid="platform-incident-console">
+              <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-black">Platform incident records</h3><span className="text-xs font-bold text-slate-500">Open {operationSummary.incidents_open||0} · Acknowledged {operationSummary.incidents_acknowledged||0}</span></div>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Incidents are durable platform records. Acknowledgement and resolution are audited; resolving does not automatically retry a workflow or modify customer data.</p>
+              <div className="mt-3 space-y-2">
+                {incidents.map(incident=><article key={incident.id} data-testid={"platform-incident-"+incident.id} className="rounded-xl border border-slate-100 p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{incident.title}</strong><span className="text-xs font-bold">{incident.severity} · {incident.status}</span></div>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{incident.summary}</p>
+                  <p className="mt-1 break-all text-[11px] text-slate-500">Source: {incident.source_type||"manual"} · {incident.source_resource_id||"not linked"} · Workspace: {incident.source_workspace_id||"platform"}</p>
+                  {incident.resolution_note&&<p className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-50 p-2 text-xs text-emerald-900">Resolution: {incident.resolution_note}</p>}
+                  {incident.status==="open"&&<button type="button" onClick={()=>void acknowledgeIncident(incident)} disabled={!!operationActionBusy} className="mt-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">Acknowledge</button>}
+                  {incident.status!=="resolved"&&<div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <label className="block text-xs font-semibold text-slate-600">Resolution note
+                      <input value={incidentResolutionReasons[incident.id]||""} onChange={event=>setIncidentResolutionReasons(current=>({...current,[incident.id]:event.target.value}))} minLength={10} maxLength={2000} className={inputClass} placeholder="Record what was investigated and corrected"/>
+                    </label>
+                    <button type="button" onClick={()=>void resolveIncident(incident)} disabled={!!operationActionBusy||(incidentResolutionReasons[incident.id]||"").trim().length<10} className={buttonClass+" bg-slate-800 text-white"}>{operationActionBusy==="resolve:"+incident.id?"Saving…":"Resolve incident"}</button>
+                  </div>}
+                </article>)}
+                {incidents.length===0&&<p className="text-sm text-slate-500">No platform incidents have been recorded.</p>}
+              </div>
+            </section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5" data-testid="platform-distribution-queue">
+              <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-black">Distribution queue · operator visibility</h3><span className="text-xs font-bold text-slate-500">{queueItems.length} persisted items</span></div>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{queueSafetyNote}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-600">Pending review: {operationSummary.distribution_pending_review||0} · Waiting for separate dispatch: {operationSummary.distribution_waiting_for_dispatch||0} · Recorded errors: {operationSummary.distribution_items_with_recorded_errors||0}</p>
+              <div className="mt-3 space-y-2">
+                {queueItems.map(item=><article key={item.id} data-testid={"platform-queue-item-"+item.id} className="rounded-xl border border-slate-100 p-3">
+                  <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{item.title}</strong><span className="text-xs font-bold">{item.status.replace(/_/g," ")}</span></div>
+                  <p className="mt-1 text-xs text-slate-600">Channel: {item.channel} · Attempts recorded: {item.attempt_count}</p>
+                  <p className="mt-1 break-all text-[11px] text-slate-500">Workspace: {item.workspace_id} · Item: {item.id}</p>
+                  {item.operator_review_required&&<p className="mt-1 text-xs font-bold text-rose-700">Recorded queue error — operator review required.</p>}
+                  {item.external_post_id_recorded&&<p className="mt-1 text-xs text-slate-600">A provider post ID is recorded; verify remote state before any resubmission.</p>}
+                </article>)}
+                {queueItems.length===0&&<p className="text-sm text-slate-500">No distribution queue items were returned.</p>}
               </div>
             </section>
             <section className="rounded-2xl border border-slate-200 bg-white p-5">

@@ -1,3 +1,10 @@
+## S1 connected affiliate-marketplace research — multi-account search candidate (31 October 2026)
+
+- backend/main.py POST /api/affiliate-research/search searches active workspace-scoped read-only Digistore24 and Flipkart accounts (max 25 accounts, max 10 results/account).
+- Provider credentials are decrypted server-side. Result snapshots persist under the exact workspace and provider connection. Provider errors are recorded per account and do not stop successful searches through other providers.
+- frontend/app/affiliate-research/page.tsx adds the affiliate-earner research screen; frontend/app/page.tsx links to it. API and Chromium tests cover persistence, workspace isolation, partial provider failures and the search journey.
+- Exact-SHA CI is pending; do not mark complete until push and PR workflow logs are inspected. ClickBank is not included because its current adapter is account/order reporting, not marketplace product search. Commission, cookie, payout, eligibility and approval remain unverified; the skill remains PARTIAL.
+
 # Master requirement traceability
 
 ## S7/S8 Skill Studio: existing ad guardrail runtime exposed and verified — 31 October 2026

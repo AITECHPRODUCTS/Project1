@@ -1,3 +1,12 @@
+## S1 connected affiliate-marketplace research — multi-account search candidate (31 October 2026)
+
+- Added authenticated POST /api/affiliate-research/search to search connected, read-only Digistore24 and Flipkart accounts from one bounded query (maximum 25 account connections; maximum 10 results per account).
+- Each account is processed independently. Provider-reported snapshots are upserted by workspace + connection + provider + observation type + external ID, and each account attempt is audited. Credential/permission errors degrade only the affected connection; provider availability errors do not discard another provider's successful results.
+- Added the /affiliate-research affiliate-earner page and a cockpit navigation link. The UI labels provider-reported values and keeps commission, cookie, payout, eligibility and approval terms unknown unless separately verified.
+- API tests cover both adapters, snapshot persistence, audit evidence, workspace isolation, independent provider failures and empty/unconfigured accounts. Chromium acceptance covers one search request and two provider result cards.
+- This is read-only: no application submission, publishing, ad-spend change, provider account mutation or payout transfer. ClickBank is excluded because its current connector exposes account/order reporting, not a product-search endpoint.
+- Candidate CI pending exact-head run inspection. Keep research/affiliate-program-search PARTIAL; this does not complete any of the 53 upstream skills.
+
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-31
 

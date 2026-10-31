@@ -334,3 +334,6 @@ These additive rules apply to every future Project1 build session.
 
 
 104. 2026-10-30 S1 Flipkart provider slice: preserve all provider connection and catalog observations under the same active workspace and exact `ProviderAccountConnection`; never allow one affiliate tracking ID to overwrite another account's source URL or product snapshot. The Flipkart connector is read-only. Treat search/offer results as provider-reported and time-stamped; commission, cookie, payout, eligibility and network approval remain unknown unless a separate authoritative source verifies them. Keep `research/affiliate-program-search` partial. Do not mark this slice verified until exact-head push and PR Python, PostgreSQL migration/drift, browser UAT, frontend, AI/RAG, security, secret scan and repository-guard jobs finish with inspected logs. No live token or production write is to be used during CI.
+
+
+105. Candidate 2026-10-31 — unified workspace-scoped affiliate marketplace search. Search connected read-only Digistore24/Flipkart accounts only; preserve workspace and exact connection ownership; redact credentials; audit results and errors; label provider metrics and leave commission, cookie, payout, eligibility and approval unknown. No external side effects. Exact-head push/PR CI must pass before marking verified.

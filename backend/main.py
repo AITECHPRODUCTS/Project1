@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -2304,6 +2304,178 @@ async def list_saved_digistore24_marketplace_entries(
             "Saved provider-reported marketplace snapshots. Verify affiliate-share units, eligibility, approval, "
             "promo-link availability, cookie duration, payout timing and hold/refund terms with Digistore24 before promotion."
         ),
+    }
+
+
+@api.post("/affiliate-research/search")
+async def search_connected_affiliate_marketplaces(
+    payload: AffiliateResearchSearchRequest,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Search connected Digistore24 and Flipkart read-only catalogs in the active workspace."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before searching affiliate marketplaces.")
+    supported = ("digistore24", "flipkart")
+    with workspace_scope(workspace_id):
+        connections = list((await db.scalars(
+            select(ProviderAccountConnection).where(
+                ProviderAccountConnection.workspace_id == workspace_id,
+                ProviderAccountConnection.provider_id.in_(supported),
+                ProviderAccountConnection.status == "connected_read_only",
+                ProviderAccountConnection.credential_ciphertext.is_not(None),
+            ).order_by(ProviderAccountConnection.created_at.asc()).limit(25)
+        )).all())
+
+    summaries = {provider: {"provider_id": provider, "status": "not_configured",
+        "connected_accounts_found": 0, "accounts_searched": 0, "result_count": 0,
+        "persisted_count": 0, "errors": [], "commission_terms_status": "unknown"}
+        for provider in supported}
+    results = []
+    successes = 0
+    failures = 0
+    actor = str(user.get("email") or user.get("user_id") or "workspace-user")[:320]
+
+    for connection in connections:
+        provider = connection.provider_id
+        summary = summaries[provider]
+        summary["connected_accounts_found"] += 1
+        account_ref = str((connection.account_nicknames_json or [""])[0])[:100] if connection.account_nicknames_json else None
+        checked_at = utcnow()
+        try:
+            if provider == "digistore24":
+                secret = decrypt_digistore24_api_key(connection.credential_ciphertext, connection.credential_key_version)
+                report = await search_digistore24_marketplace(secret, query=payload.query, limit=payload.limit)
+                items = report.get("entries") or []
+                persisted = await _upsert_digistore24_marketplace_observations(
+                    db, workspace_id=workspace_id, connection_id=connection.id, items=items
+                )
+                mapped = [{
+                    "provider_id": provider, "connection_id": connection.id, "account_reference": account_ref,
+                    "external_id": item.get("external_id"), "title": item.get("title"),
+                    "description": item.get("description") or "", "category": item.get("category"),
+                    "vendor": item.get("vendor_name"), "product_url": item.get("product_url"),
+                    "price_amount": item.get("price_amount"), "currency": item.get("currency"),
+                    "availability_status": item.get("approval_status"),
+                    "provider_reported_metrics": {
+                        "affiliate_share": item.get("affiliate_share"),
+                        "affiliate_profit_per_visitor": item.get("affiliate_profit_per_visitor"),
+                        "affiliate_profit_per_sale": item.get("affiliate_profit_per_sale"),
+                        "stats_stars": item.get("stats_stars"),
+                        "stats_cancel_rate": item.get("stats_cancel_rate"),
+                        "stats_conversion_rate": item.get("stats_conversion_rate"),
+                    },
+                    "commission_terms_status": "provider_marketplace_fields_only",
+                    "source_endpoint": report.get("source_endpoint"),
+                    "source_checked_at": checked_at.isoformat(),
+                    "evidence_type": report.get("evidence_type"),
+                } for item in items]
+                terms_status = "provider_marketplace_fields_only"
+            else:
+                if not account_ref:
+                    raise StoredFlipkartCredentialError("Tracking ID missing.")
+                secret = decrypt_flipkart_api_token(connection.credential_ciphertext, connection.credential_key_version)
+                report = await search_flipkart_products(account_ref, secret, query=payload.query, result_count=payload.limit)
+                items = report.get("products") or []
+                persisted = await _upsert_flipkart_catalog_observations(
+                    db, workspace_id=workspace_id, connection_id=connection.id, observation_type="product",
+                    source_endpoint=report.get("source_endpoint") or "affiliate/1.0/search.json", items=items
+                )
+                mapped = [{
+                    "provider_id": provider, "connection_id": connection.id, "account_reference": account_ref,
+                    "external_id": item.get("external_id"), "title": item.get("title"),
+                    "description": item.get("description") or "", "category": item.get("category"),
+                    "vendor": item.get("brand"), "product_url": item.get("product_url"),
+                    "price_amount": item.get("price_amount"), "currency": item.get("currency"),
+                    "availability_status": "IN_STOCK" if item.get("in_stock") is True else "OUT_OF_STOCK" if item.get("in_stock") is False else "UNKNOWN",
+                    "provider_reported_metrics": {},
+                    "commission_terms_status": "not_exposed_by_product_search_endpoint",
+                    "source_endpoint": report.get("source_endpoint"),
+                    "source_checked_at": checked_at.isoformat(),
+                    "evidence_type": report.get("evidence_type"),
+                } for item in items]
+                terms_status = "not_exposed_by_product_search_endpoint"
+
+            connection.last_checked_at = checked_at
+            connection.last_error_code = None
+            with workspace_scope(workspace_id):
+                db.add(AuditLog(workspace_id=workspace_id, actor=actor,
+                    action="affiliate_research.marketplace_search",
+                    resource_type="provider_account_connection", resource_id=connection.id,
+                    outcome="provider_reported",
+                    details_json={"provider_id": provider, "result_count": len(mapped),
+                        "persisted_count": persisted, "query_present": True, "read_only": True}))
+                await db.commit()
+            results.extend(mapped)
+            summary["accounts_searched"] += 1
+            summary["result_count"] += len(mapped)
+            summary["persisted_count"] += persisted
+            summary["status"] = "provider_reported"
+            summary["commission_terms_status"] = terms_status
+            successes += 1
+        except (StoredDigistore24CredentialError, StoredFlipkartCredentialError):
+            await db.rollback()
+            connection.status = "degraded"
+            connection.last_error_code = "credential_decryption_failed"
+            connection.last_checked_at = checked_at
+            code = "credential_decryption_failed"
+            failures += 1
+            summary["errors"].append({"connection_id": connection.id, "code": code})
+            summary["status"] = "degraded"
+            with workspace_scope(workspace_id):
+                db.add(AuditLog(workspace_id=workspace_id, actor=actor,
+                    action="affiliate_research.marketplace_search", resource_type="provider_account_connection",
+                    resource_id=connection.id, outcome=code,
+                    details_json={"provider_id": provider, "query_present": True, "read_only": True}))
+                await db.commit()
+        except (Digistore24AccessError, FlipkartAccessError):
+            await db.rollback()
+            connection.status = "degraded"
+            connection.last_error_code = "credential_or_permission_rejected"
+            connection.last_checked_at = checked_at
+            code = "credential_or_permission_rejected"
+            failures += 1
+            summary["errors"].append({"connection_id": connection.id, "code": code})
+            summary["status"] = "degraded"
+            with workspace_scope(workspace_id):
+                db.add(AuditLog(workspace_id=workspace_id, actor=actor,
+                    action="affiliate_research.marketplace_search", resource_type="provider_account_connection",
+                    resource_id=connection.id, outcome=code,
+                    details_json={"provider_id": provider, "query_present": True, "read_only": True}))
+                await db.commit()
+        except (Digistore24ProviderUnavailable, FlipkartProviderUnavailable):
+            await db.rollback()
+            connection.last_error_code = "provider_unavailable"
+            connection.last_checked_at = checked_at
+            code = "provider_unavailable"
+            failures += 1
+            summary["errors"].append({"connection_id": connection.id, "code": code})
+            summary["status"] = "degraded"
+            with workspace_scope(workspace_id):
+                db.add(AuditLog(workspace_id=workspace_id, actor=actor,
+                    action="affiliate_research.marketplace_search", resource_type="provider_account_connection",
+                    resource_id=connection.id, outcome=code,
+                    details_json={"provider_id": provider, "query_present": True, "read_only": True}))
+                await db.commit()
+
+    for summary in summaries.values():
+        if summary["connected_accounts_found"] and summary["accounts_searched"] and summary["errors"]:
+            summary["status"] = "partial"
+        elif summary["connected_accounts_found"] and summary["accounts_searched"]:
+            summary["status"] = "provider_reported"
+        elif summary["connected_accounts_found"] and summary["errors"]:
+            summary["status"] = "degraded"
+    overall = "not_configured" if not connections else "partial" if successes and failures else "provider_reported" if successes else "provider_unavailable"
+    return {
+        "query": payload.query, "status": overall, "provider_account_limit": 25,
+        "provider_account_limit_reached": len(connections) == 25,
+        "connected_accounts_searched": successes, "result_count": len(results),
+        "results": results, "providers": list(summaries.values()),
+        "execution": {"provider_api_calls": successes + failures, "external_writes_executed": False,
+            "affiliate_applications_submitted": False, "content_published": False,
+            "ad_spend_changed": False, "payouts_transferred": False},
+        "disclaimer": "Provider-reported read-only observations only. A listing does not prove program approval, eligibility, commission entitlement, cookie duration, payout terms, product quality or future earnings.",
     }
 
 

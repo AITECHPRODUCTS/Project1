@@ -42,6 +42,20 @@ class Digistore24ConnectionCreateRequest(BaseModel):
         return SecretStr(raw)
 
 
+class AffiliateResearchSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=2, max_length=120)
+    limit: int = Field(default=10, ge=1, le=10)
+
+    @field_validator("query")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Enter at least two characters for affiliate marketplace research.")
+        return normalized
+
+
 class Digistore24MarketplaceSearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str = Field(min_length=2, max_length=120)

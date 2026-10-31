@@ -121,7 +121,7 @@ def test_publisher_dashboard_uses_publisher_identity_and_persisted_counts():
             page.goto(BASE_URL + "/publisher", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Publisher workspace").wait_for(state="visible")
             assert page.get_by_text("Tracked clicks").is_visible()
-            assert page.get_by_text("12", exact=True).is_visible()
+            page.get_by_text("12", exact=True).wait_for(state="visible")
             assert page.get_by_role("link", name="Explore merchant offers").is_visible()
             assert page.get_by_role("link", name="Manage integrations").is_visible()
         finally:

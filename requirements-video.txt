@@ -1,0 +1,3 @@
+# Optional video rendering and text-to-speech.
+edge-tts>=6.1,<8.0
+moviepy>=2.0,<3.0

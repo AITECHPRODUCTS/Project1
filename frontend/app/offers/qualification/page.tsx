@@ -1,0 +1,213 @@
+"use client";
+
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { RefreshCw, Save } from "lucide-react";
+import { apiFetch } from "@/lib/api";
+
+type CheckState = "pass" | "fail" | "unknown" | "pending";
+type ReviewStatus = "pending_review" | "qualified" | "rejected" | "needs_evidence" | "deferred";
+type CheckKey = "account_eligibility" | "geography_fit" | "traffic_source_fit" | "terms_review" | "landing_page_review" | "disclosure_review";
+type Qualification = {
+  status: string; account_eligibility: CheckState; geography_fit: CheckState; traffic_source_fit: CheckState;
+  terms_review: CheckState; landing_page_review: CheckState; disclosure_review: CheckState; evidence_urls: string[];
+  notes: string; policy_version: string; reviewed_by: string | null; reviewed_at: string | null;
+  evidence_basis: string; affiliate_network_approval_implied: false;
+};
+type QueueItem = {
+  offer: { id: string; network: string; external_id: string; name: string; category: string | null; description: string;
+    url: string | null; cookie_days: number | null; reward_type: string | null; reward_value: string | null;
+    epc: number | null; conversion_rate: number | null; verification_basis: string };
+  qualification: Qualification;
+};
+type QueueResponse = { count: number; total_count: number; offset: number; limit: number; status_filter: string; data: QueueItem[]; note: string };
+
+type EvidenceSnapshot = {
+  id: string; source_url: string; source_host: string; title: string; description: string; excerpt: string;
+  response_sha256: string | null; excerpt_sha256: string | null; http_status: number | null;
+  content_type: string; fetch_status: "fetched" | "fetch_failed"; error_code: string | null; fetched_at: string | null;
+};
+type EvidenceSnapshotResponse = {
+  count: number; data: EvidenceSnapshot[];
+  freshness: { status: string; approval_allowed: boolean; max_age_hours: number; message: string };
+  note: string; evidence_basis: string;
+};
+
+const checks: { key: CheckKey; label: string }[] = [
+  { key: "account_eligibility", label: "Publisher account eligibility" }, { key: "geography_fit", label: "Target geography allowed" },
+  { key: "traffic_source_fit", label: "Traffic sources allowed" }, { key: "terms_review", label: "Program terms reviewed" },
+  { key: "landing_page_review", label: "Destination / landing page reviewed" }, { key: "disclosure_review", label: "Affiliate disclosure ready" },
+];
+const checkOptions = [{ value: "unknown", label: "Unknown" }, { value: "pending", label: "Pending evidence" },
+  { value: "pass", label: "Pass (operator attested)" }, { value: "fail", label: "Fail" }];
+const statusOptions: { value: ReviewStatus; label: string }[] = [
+  { value: "pending_review", label: "Pending review" }, { value: "needs_evidence", label: "Needs more evidence" },
+  { value: "qualified", label: "Qualified for internal planning" }, { value: "deferred", label: "Deferred" }, { value: "rejected", label: "Rejected" },
+];
+const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100";
+const labelClass = "block text-sm font-semibold text-slate-700";
+
+function QualificationCard({ item, onSaved }: { item: QueueItem; onSaved: (message: string) => Promise<void> }) {
+  const [status, setStatus] = useState<ReviewStatus>(statusOptions.some(s => s.value === item.qualification.status) ? item.qualification.status as ReviewStatus : "pending_review");
+  const [values, setValues] = useState<Record<CheckKey, CheckState>>({
+    account_eligibility: item.qualification.account_eligibility, geography_fit: item.qualification.geography_fit,
+    traffic_source_fit: item.qualification.traffic_source_fit, terms_review: item.qualification.terms_review,
+    landing_page_review: item.qualification.landing_page_review, disclosure_review: item.qualification.disclosure_review,
+  });
+  const [evidence, setEvidence] = useState(item.qualification.evidence_urls.join("\n"));
+  const [notes, setNotes] = useState(item.qualification.notes);
+  const [policyVersion, setPolicyVersion] = useState(item.qualification.policy_version || "manual-review-v1");
+
+  const [evidenceSnapshots, setEvidenceSnapshots] = useState<EvidenceSnapshot[]>([]);
+  const [evidenceFreshness, setEvidenceFreshness] = useState<string>("");
+  const [evidenceMessage, setEvidenceMessage] = useState("");
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const evidenceEndpoint = "/api/offers/" + encodeURIComponent(item.offer.id) + "/evidence-snapshots";
+  const loadEvidenceSnapshots = async () => {
+    setEvidenceBusy(true); setEvidenceMessage("");
+    try {
+      const result = await apiFetch<EvidenceSnapshotResponse>(evidenceEndpoint);
+      setEvidenceSnapshots(result.data || []);
+      setEvidenceFreshness(result.freshness?.status || "unknown");
+      setEvidenceMessage(result.count + " saved snapshot(s) loaded. " + result.note);
+    } catch (cause) {
+      setEvidenceMessage(cause instanceof Error ? cause.message : "Saved source snapshots could not be loaded.");
+    } finally { setEvidenceBusy(false); }
+  };
+  const captureEvidenceSnapshots = async () => {
+    const sourceUrls = [...new Set(evidence.split("\n").map(value => value.trim()).filter(Boolean))];
+    if (sourceUrls.length === 0) { setEvidenceMessage("Enter at least one HTTPS evidence URL before capturing."); return; }
+    if (sourceUrls.length > 10) { setEvidenceMessage("Capture is limited to 10 unique public HTTPS sources at a time."); return; }
+    setEvidenceBusy(true); setEvidenceMessage("");
+    try {
+      const result = await apiFetch<EvidenceSnapshotResponse>(evidenceEndpoint, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_urls: sourceUrls }),
+      });
+      setEvidenceSnapshots(result.data || []);
+      setEvidenceFreshness(result.freshness?.status || "unknown");
+      setEvidenceMessage(result.data.filter(row => row.fetch_status === "fetched").length + " of " + result.count + " source(s) captured. " + result.note);
+    } catch (cause) {
+      setEvidenceMessage(cause instanceof Error ? cause.message : "Public source capture failed.");
+    } finally { setEvidenceBusy(false); }
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setError("");
+    const urls = evidence.split("\n").map(value => value.trim()).filter(Boolean);
+    if (status === "qualified" && (checks.some(check => values[check.key] !== "pass") || urls.length === 0)) {
+      setError("To qualify for internal planning, all six checks must be pass and at least one evidence URL is required."); return;
+    }
+    if (["rejected", "deferred", "needs_evidence"].includes(status) && !notes.trim()) {
+      setError("Add reviewer notes for rejected, deferred, or needs-evidence decisions."); return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch("/api/offers/" + encodeURIComponent(item.offer.id) + "/qualification", { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...values, evidence_urls: urls, notes, policy_version: policyVersion }) });
+      await onSaved("Qualification review saved for " + item.offer.name + ". This is an operator decision, not network approval.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Qualification review could not be saved."); }
+    finally { setBusy(false); }
+  };
+  return <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="qualification-card">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="text-lg font-black">{item.offer.name}</h2><p className="mt-1 text-xs text-slate-500">{item.offer.network} · {item.offer.external_id} · {item.offer.category || "Category unknown"}</p><p className="mt-2 text-sm text-slate-600">{item.offer.description || "No description supplied."}</p></div>
+      <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900">{item.qualification.status === "not_reviewed" ? "Not reviewed" : item.qualification.status.replaceAll("_", " ")}</span>
+    </div>
+    <p className="mt-3 text-xs text-slate-500">{item.offer.verification_basis === "provider_claimed_unattested" ? "Provider claimed — not independently attested." : "Provider verification unknown."} Current metrics and operator evidence remain unverified.</p>
+    {item.qualification.reviewed_at && <p className="mt-2 text-xs text-slate-500">Last reviewed {new Date(item.qualification.reviewed_at).toLocaleString()} by {item.qualification.reviewed_by || "unknown reviewer"} · policy {item.qualification.policy_version}</p>}
+    <form onSubmit={submit} className="mt-5 space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{checks.map(check => <div key={check.key}>
+        <label className={labelClass} htmlFor={item.offer.id + "-" + check.key}>{check.label}</label>
+        <select id={item.offer.id + "-" + check.key} aria-label={check.label} className={inputClass} value={values[check.key]} onChange={event => setValues(current => ({ ...current, [check.key]: event.target.value as CheckState }))}>
+          {checkOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select></div>)}</div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div><label className={labelClass} htmlFor={item.offer.id + "-review-status"}>Decision</label><select id={item.offer.id + "-review-status"} className={inputClass} value={status} onChange={event => setStatus(event.target.value as ReviewStatus)}>{statusOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+        <div><label className={labelClass} htmlFor={item.offer.id + "-policy-version"}>Policy/checklist version</label><input id={item.offer.id + "-policy-version"} className={inputClass} maxLength={80} value={policyVersion} onChange={event => setPolicyVersion(event.target.value)} required/></div>
+      </div>
+      <div><label className={labelClass} htmlFor={item.offer.id + "-evidence"}>Evidence URLs (one HTTPS URL per line)</label><textarea id={item.offer.id + "-evidence"} className={inputClass + " min-h-24"} maxLength={12000} value={evidence} onChange={event => setEvidence(event.target.value)} placeholder="https://merchant.example/affiliate-terms"/></div>
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void captureEvidenceSnapshots()} disabled={evidenceBusy} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{evidenceBusy ? "Capturing…" : "Capture public evidence"}</button>
+          <button type="button" onClick={() => void loadEvidenceSnapshots()} disabled={evidenceBusy} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">Load saved snapshots</button>
+          {evidenceFreshness && <span className="self-center text-xs font-bold text-slate-600">Capture window: {evidenceFreshness.replaceAll("_", " ")}</span>}
+        </div>
+        <p className="mt-2 text-xs leading-5 text-slate-600">Captures bounded public HTTPS page text without following redirects or using supplied credentials. A captured page is not proof that its claims are true, current, legally valid, or approved by the affiliate network.</p>
+        {evidenceMessage && <p role="status" className="mt-2 text-xs leading-5 text-slate-700">{evidenceMessage}</p>}
+        {evidenceSnapshots.length > 0 && <div className="mt-3 space-y-2">
+          {evidenceSnapshots.map(snapshot => <article key={snapshot.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs text-slate-800">{snapshot.title || snapshot.source_host}</strong><span className={"text-xs font-bold " + (snapshot.fetch_status === "fetched" ? "text-emerald-700" : "text-rose-700")}>{snapshot.fetch_status.replaceAll("_", " ")}</span></div>
+            <p className="mt-1 break-all text-[11px] text-slate-500">{snapshot.source_url}</p>
+            {snapshot.fetched_at && <p className="mt-1 text-[11px] text-slate-500">Captured {new Date(snapshot.fetched_at).toLocaleString()} · HTTP {snapshot.http_status ?? "unknown"}</p>}
+            {snapshot.excerpt && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{snapshot.excerpt}</p>}
+            {snapshot.response_sha256 && <p className="mt-2 break-all font-mono text-[10px] text-slate-400">SHA-256 {snapshot.response_sha256}</p>}
+            {snapshot.error_code && <p className="mt-1 text-xs text-rose-700">Capture error: {snapshot.error_code}</p>}
+          </article>)}
+        </div>}
+      </div>
+      <div><label className={labelClass} htmlFor={item.offer.id + "-review-notes"}>Reviewer notes</label><textarea id={item.offer.id + "-review-notes"} className={inputClass + " min-h-20"} maxLength={2000} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Record what was checked, unknowns, and follow-up required."/></div>
+      {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
+      <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save size={15}/>{busy ? "Saving review…" : "Save qualification review"}</button>
+    </form>
+  </article>;
+}
+
+export default function OfferQualificationPage() {
+  const [filter, setFilter] = useState("needs_review");
+  const [queue, setQueue] = useState<QueueResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const load = useCallback(async (nextFilter: string, nextOffset = 0) => {
+    setLoading(true); setError("");
+    try {
+      const requestQueue = (offset: number) => apiFetch<QueueResponse>("/api/offers/qualification-queue?status=" + encodeURIComponent(nextFilter) + "&limit=50&offset=" + String(offset));
+      let result = await requestQueue(nextOffset);
+      // A saved decision can remove the last page from a filtered queue. Clamp to the
+      // final valid page rather than leaving the operator on an empty, un-navigable page.
+      if (nextOffset > 0 && nextOffset >= result.total_count) {
+        const lastOffset = Math.max(0, Math.floor((result.total_count - 1) / result.limit) * result.limit);
+        if (lastOffset !== nextOffset) result = await requestQueue(lastOffset);
+      }
+      setQueue(result);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Qualification queue could not be loaded."); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(filter, 0); }, [filter, load]);
+  const onSaved = async (text: string) => { setMessage(text); await load(filter, queue?.offset ?? 0); };
+  const pageStart = queue && queue.total_count > 0 ? queue.offset + 1 : 0;
+  const pageEnd = queue ? queue.offset + queue.count : 0;
+  const canGoPrevious = !!queue && queue.offset > 0 && !loading;
+  const canGoNext = !!queue && queue.offset + queue.count < queue.total_count && queue.count > 0 && !loading;
+  return <main className="min-h-screen bg-[var(--canvas)] px-4 py-6 text-slate-800 sm:px-8 sm:py-10"><div className="mx-auto max-w-7xl">
+    <a href="/offers" className="text-sm font-bold text-indigo-700">← Affiliate offer catalog</a>
+    <p className="mt-6 text-xs font-black uppercase tracking-[.2em] text-indigo-600">S1 · Evidence and eligibility</p>
+    <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Offer qualification review</h1>
+    <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Record workspace-specific checks for account eligibility, geography, traffic restrictions, terms, landing-page safety and disclosure. This checklist is an operator attestation; it does not verify provider claims or imply affiliate-network approval.</p>
+    <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Qualification boundary:</strong><span>“Qualified” means eligible for internal planning only. Live network approval and provider-side facts remain unverified.</span></div>
+    <div className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="min-w-56 flex-1"><label className={labelClass} htmlFor="qualification-filter">Queue filter</label><select id="qualification-filter" className={inputClass} value={filter} onChange={event => setFilter(event.target.value)}>
+        <option value="needs_review">Needs review (default)</option><option value="not_reviewed">Not reviewed</option><option value="pending_review">Pending review</option><option value="needs_evidence">Needs evidence</option><option value="qualified">Qualified for internal planning</option><option value="deferred">Deferred</option><option value="rejected">Rejected</option><option value="all">All catalog offers</option>
+      </select></div>
+      <button type="button" onClick={() => void load(filter)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""}/> Refresh queue</button>
+      <p className="text-sm text-slate-500">{queue ? queue.total_count + " offers match this filter" : "Loading saved review queue…"}</p>
+    </div>
+    {message && <p role="status" data-testid="qualification-message" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{message}</p>}
+    {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</p>}
+    {loading && <p role="status" className="mt-5 text-sm text-slate-500">Loading qualification records…</p>}
+    {!loading && queue && queue.data.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">No offers match this filter. Try “All catalog offers” to review the current shared catalog.</p>}
+    {!loading && queue && queue.data.length > 0 && <div className="mt-5 space-y-4">{queue.data.map(item => <QualificationCard key={item.offer.id} item={item} onSaved={onSaved}/>)}</div>}
+    {queue && queue.total_count > queue.limit && <nav aria-label="Qualification queue pagination" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-sm text-slate-600" aria-live="polite">Showing {pageStart}–{pageEnd} of {queue.total_count} offers</p>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => void load(filter, Math.max(0, queue.offset - queue.limit))} disabled={!canGoPrevious} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold disabled:opacity-40">Previous page</button>
+        <button type="button" onClick={() => void load(filter, queue.offset + queue.limit)} disabled={!canGoNext} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold disabled:opacity-40">Next page</button>
+      </div>
+    </nav>}
+    <p className="mt-6 text-xs leading-5 text-slate-500">{queue?.note || "Stored decisions are operator-supplied and workspace-specific. They are not independent provider evidence."}</p>
+  </div></main>;
+}

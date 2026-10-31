@@ -1,0 +1,427 @@
+name: Affiliate OS CI
+
+on:
+  push:
+    branches: [main, 'build/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keep one active run per event/branch and queue the next candidate instead of cancelling in-flight checks.
+  # GitHub may replace an older pending run when a newer run enters the same concurrency group.
+  group: affiliate-os-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  repo-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Verify repository inventory and source syntax
+        run: python scripts/verify_project.py
+      - name: Verify DNS-pinned outbound HTTP transport boundary
+        run: python scripts/verify_outbound_transport_boundary.py
+      - name: Verify pinned 53-skill source and runtime parity
+        run: python scripts/verify_skill_registry.py
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+      - name: Verify source bundle
+        run: python scripts/verify_project.py
+      - name: Migration graph and empty SQLite upgrade
+        env:
+          APP_ENV: test
+          DATABASE_URL: sqlite+aiosqlite:///./storage/ci-test.db
+        run: mkdir -p storage && rm -f storage/ci-test.db && alembic heads && alembic upgrade head && alembic current && alembic check && alembic downgrade -1 && alembic upgrade head && alembic check
+      - name: Compile Python
+        run: python -m compileall -q backend ai_memory tests scripts migrations
+      - name: Run tests
+        env:
+          APP_ENV: development
+          LLM_BACKEND: offline
+          DATABASE_URL: sqlite+aiosqlite:///./storage/ci-test.db
+        run: pytest -q
+
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: omni_affiliate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d omni_affiliate_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+      - name: PostgreSQL migration upgrade/downgrade and drift gate
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/omni_affiliate_test
+        run: alembic heads && alembic upgrade head && alembic current && alembic check && alembic downgrade -1 && alembic upgrade head && alembic check
+      - name: Verify concurrent conversion reversals and workflow lease claims against PostgreSQL
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/omni_affiliate_test
+          POSTGRES_WEBHOOK_INTEGRATION: "1"
+        run: pytest -q tests/test_conversion_webhook_postgres.py tests/test_workflow_durable_recovery_postgres.py tests/test_resource_budget_postgres.py tests/test_comparison_revision_sequence_postgres.py
+
+  ai-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-ai.txt
+      - name: Install CPU-only PyTorch and optional AI/RAG dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --no-cache-dir -r requirements-ai.txt
+      - name: Verify AI/RAG dependency imports
+        run: python scripts/verify_ai_profile.py
+      - name: Generate reproducible AI/RAG SBOM and license inventory with isolated tooling
+        run: |
+          mkdir -p artifacts
+          python -m venv .scan-tools
+          .scan-tools/bin/python -m pip install --upgrade pip cyclonedx-bom==7.5.0 pip-licenses==5.5.5
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          .scan-tools/bin/cyclonedx-py environment "$(command -v python)" --output-file artifacts/sbom-python-ai.json --output-reproducible
+          .scan-tools/bin/pip-licenses --python="$(command -v python)" --from=mixed --format=json --with-urls --output-file=artifacts/python-licenses-ai.json
+          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-ai.json --exceptions docs/license-policy-exceptions.json --report-output artifacts/license-policy-python-ai.json
+          printf '{"commit_sha":"%s","profile":"python-ai-rag"}\n' "$GITHUB_SHA" > artifacts/sbom-metadata.json
+      - name: Upload AI/RAG SBOM and license evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: supply-chain-ai-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install dependencies from the committed lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Preserve the committed lockfile for review
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-package-lock
+          path: frontend/package-lock.json
+          if-no-files-found: error
+          retention-days: 3
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build production UI
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: npm run build
+      - name: Prune optional and development-only packages from the runtime tree
+        run: npm prune --omit=dev --omit=optional --no-audit --no-fund
+      - name: Verify production dependency boundary
+        run: node scripts/verify-production-dependencies.mjs
+      - name: Smoke test Next production server after pruning
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: |
+          set -eu
+          npm run start -- -H 127.0.0.1 -p 3100 > /tmp/omni-next-production.log 2>&1 &
+          server_pid=$!
+          cleanup() { kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3100/ads/guardrails > /tmp/omni-guardrails.html 2>/dev/null; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat /tmp/omni-next-production.log; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then cat /tmp/omni-next-production.log; exit 1; fi
+          grep -q "Ad budget guardrails" /tmp/omni-guardrails.html
+          curl --fail --silent --show-error http://127.0.0.1:3100/ > /tmp/omni-home.html
+          echo "Pruned frontend production server smoke passed."
+      - name: Build final frontend Docker image and inspect shipped runtime dependencies
+        run: docker build --tag omni-affiliate-os-frontend-ci:ci --file Dockerfile .
+      - name: Smoke test the final frontend Docker image
+        run: |
+          set -eu
+          docker run --detach --name omni-affiliate-os-frontend-ci --publish 127.0.0.1:3200:3000 omni-affiliate-os-frontend-ci:ci
+          cleanup() { docker rm --force omni-affiliate-os-frontend-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker exec omni-affiliate-os-frontend-ci node scripts/verify-production-dependencies.mjs
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3200/ads/guardrails > /tmp/omni-docker-guardrails.html 2>/dev/null; then
+              ready=true
+              break
+            fi
+            if [ "$(docker inspect --format='{{.State.Running}}' omni-affiliate-os-frontend-ci)" != true ]; then docker logs omni-affiliate-os-frontend-ci; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs omni-affiliate-os-frontend-ci; exit 1; fi
+          grep -q "Ad budget guardrails" /tmp/omni-docker-guardrails.html
+          echo "Final frontend image production smoke passed."
+
+
+  browser-uat:
+    needs: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install pinned browser test dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+      - name: Install Chromium and operating-system dependencies
+        run: python -m playwright install --with-deps chromium
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Build and exercise the production UI in Chromium
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+          BROWSER_BASE_URL: http://127.0.0.1:3100
+        run: |
+          set -eu
+          export APP_ENV=test
+          export DATABASE_URL=sqlite+aiosqlite:///./storage/browser-uat.db
+          export APP_SESSION_SECRET=browser-uat-only-secret-not-for-deployment
+          export APP_PUBLIC_URL=http://127.0.0.1:8000
+          export INITIAL_ADMIN_EMAIL=browser-admin@example.test
+          export INITIAL_ADMIN_PASSWORD=Browser-UAT-admin-password-2026!
+          export CORS_ORIGINS=http://127.0.0.1:3100
+          mkdir -p storage
+          python -m alembic upgrade head
+          uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/omni-browser-uat-api.log 2>&1 &
+          api_pid=$!
+          server_pid=""
+          cleanup() {
+            if [ -n "$server_pid" ]; then kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; fi
+            kill "$api_pid" 2>/dev/null || true
+            wait "$api_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          api_ready=false
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error http://127.0.0.1:8000/health > /tmp/omni-browser-uat-health.json 2>/dev/null; then
+              api_ready=true
+              break
+            fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then cat /tmp/omni-browser-uat-api.log; exit 1; fi
+            sleep 1
+          done
+          if [ "$api_ready" != true ]; then cat /tmp/omni-browser-uat-api.log; exit 1; fi
+          cd frontend
+          npm ci --no-audit --no-fund
+          npm run build
+          npm prune --omit=dev --omit=optional --no-audit --no-fund
+          npm run start -- -H 127.0.0.1 -p 3100 > /tmp/omni-browser-uat-next.log 2>&1 &
+          server_pid=$!
+          ready=false
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error http://127.0.0.1:3100/skills > /tmp/omni-browser-uat-skills.html 2>/dev/null; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat /tmp/omni-browser-uat-next.log; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then cat /tmp/omni-browser-uat-next.log; exit 1; fi
+          cd ..
+          python -m pytest -q browser_tests
+
+  lockfile-sync:
+    # Capture the runner-resolved lockfile once, then validate a clean npm ci install
+    # before committing the exact artifact to the one existing implementation branch.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/build/omni-affiliate-os-production'
+    needs: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Download the resolved frontend lockfile
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-package-lock
+          path: frontend
+      - name: Validate lockfile matches package manifest
+        working-directory: frontend
+        run: |
+          node - <<'NODE'
+          const pkg = require("./package.json");
+          const lock = require("./package-lock.json");
+          if (lock.lockfileVersion !== 3) throw new Error("Expected npm lockfile v3");
+          for (const section of ["dependencies", "devDependencies"]) {
+            if (JSON.stringify(pkg[section] || {}) !== JSON.stringify((lock.packages[""] || {})[section] || {})) {
+              throw new Error(`package-lock root ${section} do not match package.json`);
+            }
+          }
+          console.log(`Validated npm lockfile v${lock.lockfileVersion} with ${Object.keys(lock.packages).length - 1} dependency packages`);
+          NODE
+      - name: Verify reproducible clean install and production build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: npm ci --no-audit --no-fund && npm run typecheck && npm run build
+      - name: Commit resolved lockfile without rewriting history
+        id: commit-lockfile
+        run: |
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Frontend lockfile is already committed and unchanged."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "build: pin frontend npm lockfile"
+            git push origin HEAD:build/omni-affiliate-os-production
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "lockfile_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Prepare redacted secret-scan report directory
+        run: mkdir -p artifacts
+      - name: Scan full repository history with pinned Gitleaks (all findings redacted)
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -w /repo \
+            ghcr.io/gitleaks/gitleaks@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb \
+            git . --redact --report-format json --report-path artifacts/gitleaks-report.json --exit-code 1
+      - name: Upload redacted secret-scan report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: secret-scan-${{ github.sha }}
+          path: artifacts/gitleaks-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install Python dependency audit tool
+        run: python -m pip install --upgrade pip pip-audit
+      - name: Install core/test dependencies for complete environment inventory
+        run: pip install -r requirements-dev.txt
+      - name: Generate reproducible Python SBOM and license inventory with isolated pinned tooling
+        run: |
+          mkdir -p artifacts
+          python -m venv .scan-tools
+          .scan-tools/bin/python -m pip install --upgrade pip cyclonedx-bom==7.5.0 pip-licenses==5.5.5
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          .scan-tools/bin/cyclonedx-py environment "$(command -v python)" --output-file artifacts/sbom-python-core.json --output-reproducible
+          .scan-tools/bin/pip-licenses --python="$(command -v python)" --from=mixed --format=json --with-urls --output-file=artifacts/python-licenses-core.json
+          python scripts/verify_license_policy.py --python-report artifacts/python-licenses-core.json --exceptions docs/license-policy-exceptions.json --report-output artifacts/license-policy-python-core.json
+          printf '{"commit_sha":"%s","profile":"python-core-test"}\n' "$GITHUB_SHA" > artifacts/sbom-metadata.json
+      - name: Generate complete frontend build-install CycloneDX SBOM
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund && npm sbom --sbom-format=cyclonedx > ../artifacts/sbom-frontend-build-install.json
+      - name: Review full build-install license inventory (build-only scope)
+        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend-build-install.json --exceptions docs/license-policy-exceptions.json --build-inventory-only --report-output artifacts/license-policy-frontend-build-install.json
+      - name: Build and prune the exact frontend production dependency tree
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        run: |
+          npm run typecheck
+          npm run build
+          npm prune --omit=dev --omit=optional --no-audit --no-fund
+          node scripts/verify-production-dependencies.mjs
+          node scripts/build-production-sbom.mjs ../artifacts/sbom-frontend-build-install.json ../artifacts/sbom-frontend-production.json
+      - name: Enforce production frontend license policy without exceptions
+        run: python scripts/verify_license_policy.py --cyclonedx-report artifacts/sbom-frontend-production.json --report-output artifacts/license-policy-frontend-production.json
+      - name: Upload core/frontend SBOM and license evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: supply-chain-core-frontend-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Audit core runtime and test dependency graph
+        run: pip-audit -r requirements-dev.txt
+      - name: Verify local SQLite vector-store security boundary
+        run: python scripts/verify_vector_store_security_boundary.py
+      - name: Audit optional AI and RAG dependency graph without advisory exceptions
+        run: pip-audit -r requirements-ai.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies from the committed lockfile
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Audit frontend dependency graph
+        working-directory: frontend
+        run: npm audit --audit-level=high

@@ -1,0 +1,192 @@
+# Provider catalogue. Disabled entries are catalogued only, not connected or approved.
+# Enable a provider only after reviewing its current terms and obtaining authorized credentials.
+app:
+  workflow_step_timeout_seconds: 180
+  max_workflow_retries: 2
+  max_content_sources: 10
+  max_campaign_daily_spend_usd: 0
+  full_autonomous_default: false
+networks:
+  openaffiliate: {enabled: true, adapter: openaffiliate, items_path: data}
+  amazon_associates: {enabled: false, adapter: signed_proxy, items_path: data}
+  clickbank: {enabled: false, adapter: clickbank, items_path: data}
+  warriorplus: {enabled: false, adapter: generic_json, items_path: data}
+  jvzoo: {enabled: false, adapter: generic_json, items_path: data}
+  digistore24: {enabled: true, adapter: workspace_read_only, items_path: entries}
+  maxbounty: {enabled: false, adapter: catalog_only, items_path: data}
+  cj_affiliate: {enabled: false, adapter: generic_json, items_path: data}
+  impact: {enabled: false, adapter: generic_json, items_path: data}
+  awin: {enabled: false, adapter: generic_json, items_path: data}
+  shareasale: {enabled: false, adapter: generic_json, items_path: data}
+  rakuten_advertising: {enabled: false, adapter: generic_json, items_path: data}
+  flexoffers: {enabled: false, adapter: catalog_only, items_path: data}
+  partnerize: {enabled: false, adapter: catalog_only, items_path: data}
+  partnerstack: {enabled: false, adapter: generic_json, items_path: data}
+  everflow: {enabled: false, adapter: catalog_only, items_path: data}
+  tune: {enabled: false, adapter: catalog_only, items_path: data}
+  affise: {enabled: false, adapter: catalog_only, items_path: data}
+  admitad: {enabled: false, adapter: catalog_only, items_path: data}
+  webgains: {enabled: false, adapter: catalog_only, items_path: data}
+  tradedoubler: {enabled: false, adapter: catalog_only, items_path: data}
+  performcb: {enabled: false, adapter: catalog_only, items_path: data}
+  hasoffers: {enabled: false, adapter: catalog_only, items_path: data}
+  avantlink: {enabled: false, adapter: catalog_only, items_path: data}
+  pepperjam: {enabled: false, adapter: catalog_only, items_path: data}
+  commission_factory: {enabled: false, adapter: catalog_only, items_path: data}
+  refersion: {enabled: false, adapter: catalog_only, items_path: data}
+  goaffpro: {enabled: false, adapter: catalog_only, items_path: data}
+  uppromote: {enabled: false, adapter: catalog_only, items_path: data}
+  rewardful: {enabled: false, adapter: catalog_only, items_path: data}
+  firstpromoter: {enabled: false, adapter: catalog_only, items_path: data}
+  tapfiliate: {enabled: false, adapter: catalog_only, items_path: data}
+  postaffiliatepro: {enabled: false, adapter: catalog_only, items_path: data}
+  leadpages_affiliate: {enabled: false, adapter: catalog_only, items_path: data}
+  convertkit: {enabled: false, adapter: catalog_only, items_path: data}
+  kit_affiliate: {enabled: false, adapter: catalog_only, items_path: data}
+  getresponse: {enabled: false, adapter: catalog_only, items_path: data}
+  activecampaign: {enabled: false, adapter: catalog_only, items_path: data}
+  hubspot: {enabled: false, adapter: catalog_only, items_path: data}
+  semrush: {enabled: false, adapter: catalog_only, items_path: data}
+  ahrefs: {enabled: false, adapter: catalog_only, items_path: data}
+  surfer_seo: {enabled: false, adapter: catalog_only, items_path: data}
+  jasper: {enabled: false, adapter: catalog_only, items_path: data}
+  grammarly: {enabled: false, adapter: catalog_only, items_path: data}
+  canva: {enabled: false, adapter: catalog_only, items_path: data}
+  adobe: {enabled: false, adapter: catalog_only, items_path: data}
+  envato: {enabled: false, adapter: catalog_only, items_path: data}
+  shutterstock: {enabled: false, adapter: catalog_only, items_path: data}
+  pexels: {enabled: false, adapter: catalog_only, items_path: data}
+  skillshare: {enabled: false, adapter: catalog_only, items_path: data}
+  coursera: {enabled: false, adapter: catalog_only, items_path: data}
+  udemy: {enabled: false, adapter: catalog_only, items_path: data}
+  teachable: {enabled: false, adapter: catalog_only, items_path: data}
+  thinkific: {enabled: false, adapter: catalog_only, items_path: data}
+  kajabi: {enabled: false, adapter: catalog_only, items_path: data}
+  systeme_io: {enabled: false, adapter: catalog_only, items_path: data}
+  clickfunnels: {enabled: false, adapter: catalog_only, items_path: data}
+  builderall: {enabled: false, adapter: catalog_only, items_path: data}
+  kartra: {enabled: false, adapter: catalog_only, items_path: data}
+  freshworks: {enabled: false, adapter: catalog_only, items_path: data}
+  zoho: {enabled: false, adapter: catalog_only, items_path: data}
+  monday: {enabled: false, adapter: catalog_only, items_path: data}
+  notion: {enabled: false, adapter: catalog_only, items_path: data}
+  asana: {enabled: false, adapter: catalog_only, items_path: data}
+  microsoft_365: {enabled: false, adapter: catalog_only, items_path: data}
+  google_workspace: {enabled: false, adapter: catalog_only, items_path: data}
+  dropbox: {enabled: false, adapter: catalog_only, items_path: data}
+  pcloud: {enabled: false, adapter: catalog_only, items_path: data}
+  nordvpn: {enabled: false, adapter: catalog_only, items_path: data}
+  surfshark: {enabled: false, adapter: catalog_only, items_path: data}
+  expressvpn: {enabled: false, adapter: catalog_only, items_path: data}
+  protonvpn: {enabled: false, adapter: catalog_only, items_path: data}
+  webhosting: {enabled: false, adapter: catalog_only, items_path: data}
+  bluehost: {enabled: false, adapter: catalog_only, items_path: data}
+  hostinger: {enabled: false, adapter: catalog_only, items_path: data}
+  siteground: {enabled: false, adapter: catalog_only, items_path: data}
+  cloudways: {enabled: false, adapter: catalog_only, items_path: data}
+  kinsta: {enabled: false, adapter: catalog_only, items_path: data}
+  wpengine: {enabled: false, adapter: catalog_only, items_path: data}
+  dreamhost: {enabled: false, adapter: catalog_only, items_path: data}
+  namecheap: {enabled: false, adapter: catalog_only, items_path: data}
+  cloudflare: {enabled: false, adapter: catalog_only, items_path: data}
+  digitalocean: {enabled: false, adapter: catalog_only, items_path: data}
+  vultr: {enabled: false, adapter: catalog_only, items_path: data}
+  linode: {enabled: false, adapter: catalog_only, items_path: data}
+  aws: {enabled: false, adapter: catalog_only, items_path: data}
+  gcp: {enabled: false, adapter: catalog_only, items_path: data}
+  azure: {enabled: false, adapter: catalog_only, items_path: data}
+  shopify: {enabled: false, adapter: catalog_only, items_path: data}
+  bigcommerce: {enabled: false, adapter: catalog_only, items_path: data}
+  woocommerce: {enabled: false, adapter: catalog_only, items_path: data}
+  etsy: {enabled: false, adapter: catalog_only, items_path: data}
+  ebay: {enabled: false, adapter: catalog_only, items_path: data}
+  walmart: {enabled: false, adapter: catalog_only, items_path: data}
+  bestbuy: {enabled: false, adapter: catalog_only, items_path: data}
+  target: {enabled: false, adapter: catalog_only, items_path: data}
+  flipkart: {enabled: false, adapter: catalog_only, items_path: data}
+  myntra: {enabled: false, adapter: catalog_only, items_path: data}
+  meesho: {enabled: false, adapter: catalog_only, items_path: data}
+  ajio: {enabled: false, adapter: catalog_only, items_path: data}
+  tatacliq: {enabled: false, adapter: catalog_only, items_path: data}
+  reliance_digital: {enabled: false, adapter: catalog_only, items_path: data}
+  croma: {enabled: false, adapter: catalog_only, items_path: data}
+  newegg: {enabled: false, adapter: catalog_only, items_path: data}
+  b_h_photo: {enabled: false, adapter: catalog_only, items_path: data}
+  adorama: {enabled: false, adapter: catalog_only, items_path: data}
+  aliexpress: {enabled: false, adapter: catalog_only, items_path: data}
+  alibaba: {enabled: false, adapter: catalog_only, items_path: data}
+  temu: {enabled: false, adapter: catalog_only, items_path: data}
+  booking_com: {enabled: false, adapter: catalog_only, items_path: data}
+  agoda: {enabled: false, adapter: catalog_only, items_path: data}
+  travelpayouts: {enabled: false, adapter: catalog_only, items_path: data}
+  getyourguide: {enabled: false, adapter: catalog_only, items_path: data}
+  viator: {enabled: false, adapter: catalog_only, items_path: data}
+  airalo: {enabled: false, adapter: catalog_only, items_path: data}
+  tripadvisor: {enabled: false, adapter: catalog_only, items_path: data}
+  expedia: {enabled: false, adapter: catalog_only, items_path: data}
+  hotels_com: {enabled: false, adapter: catalog_only, items_path: data}
+  klook: {enabled: false, adapter: catalog_only, items_path: data}
+  omio: {enabled: false, adapter: catalog_only, items_path: data}
+  skyscanner: {enabled: false, adapter: catalog_only, items_path: data}
+  kiwi_com: {enabled: false, adapter: catalog_only, items_path: data}
+  trainline: {enabled: false, adapter: catalog_only, items_path: data}
+  discovercars: {enabled: false, adapter: catalog_only, items_path: data}
+  rentalcars: {enabled: false, adapter: catalog_only, items_path: data}
+  wise: {enabled: false, adapter: catalog_only, items_path: data}
+  revolut: {enabled: false, adapter: catalog_only, items_path: data}
+  payoneer: {enabled: false, adapter: catalog_only, items_path: data}
+  freshbooks: {enabled: false, adapter: catalog_only, items_path: data}
+  quickbooks: {enabled: false, adapter: catalog_only, items_path: data}
+  intuit: {enabled: false, adapter: catalog_only, items_path: data}
+  wise_business: {enabled: false, adapter: catalog_only, items_path: data}
+  investing_com: {enabled: false, adapter: catalog_only, items_path: data}
+  tradingview: {enabled: false, adapter: catalog_only, items_path: data}
+  interactive_brokers: {enabled: false, adapter: catalog_only, items_path: data}
+  etoro: {enabled: false, adapter: catalog_only, items_path: data}
+  coinbase: {enabled: false, adapter: catalog_only, items_path: data}
+  binance: {enabled: false, adapter: catalog_only, items_path: data}
+  kraken: {enabled: false, adapter: catalog_only, items_path: data}
+  ledger: {enabled: false, adapter: catalog_only, items_path: data}
+  trezor: {enabled: false, adapter: catalog_only, items_path: data}
+  playstation: {enabled: false, adapter: catalog_only, items_path: data}
+  xbox: {enabled: false, adapter: catalog_only, items_path: data}
+  nintendo: {enabled: false, adapter: catalog_only, items_path: data}
+  fanatical: {enabled: false, adapter: catalog_only, items_path: data}
+  green_man_gaming: {enabled: false, adapter: catalog_only, items_path: data}
+  humble_bundle: {enabled: false, adapter: catalog_only, items_path: data}
+  g2a: {enabled: false, adapter: catalog_only, items_path: data}
+  kinguin: {enabled: false, adapter: catalog_only, items_path: data}
+  itch_io: {enabled: false, adapter: catalog_only, items_path: data}
+  epic_games: {enabled: false, adapter: catalog_only, items_path: data}
+  pinterest: {enabled: false, adapter: catalog_only, items_path: data}
+  reddit: {enabled: false, adapter: catalog_only, items_path: data}
+  meta: {enabled: false, adapter: catalog_only, items_path: data}
+  tiktok: {enabled: false, adapter: catalog_only, items_path: data}
+  snapchat: {enabled: false, adapter: catalog_only, items_path: data}
+  youtube: {enabled: false, adapter: catalog_only, items_path: data}
+  quora: {enabled: false, adapter: catalog_only, items_path: data}
+  linkedin: {enabled: false, adapter: catalog_only, items_path: data}
+  x: {enabled: false, adapter: catalog_only, items_path: data}
+  telegram: {enabled: false, adapter: catalog_only, items_path: data}
+  discord: {enabled: false, adapter: catalog_only, items_path: data}
+  wordpress: {enabled: false, adapter: catalog_only, items_path: data}
+  ghost: {enabled: false, adapter: catalog_only, items_path: data}
+  resend: {enabled: false, adapter: catalog_only, items_path: data}
+  mailchimp: {enabled: false, adapter: catalog_only, items_path: data}
+  brevo: {enabled: false, adapter: catalog_only, items_path: data}
+  mailerlite: {enabled: false, adapter: catalog_only, items_path: data}
+publishing:
+  dry_run_default: true
+  allow_external_writes: false
+  supported_manual_or_configured_adapters: [reddit, pinterest, wordpress, ghost]
+  disclosure_required: true
+  approval_required_for_publication: true
+budgets:
+  daily_model_usd: 5.00
+  per_niche_model_usd: 1.50
+  default_paid_media_usd: 0.00
+rag:
+  collection: affiliate_doctrine
+  required_primary_references: [offer-frameworks.md, platform-rules.md, seo-strategy.md, social-data-providers.md]
+  max_source_bytes: 2000000
+  top_k: 6

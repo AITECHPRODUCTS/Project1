@@ -1,0 +1,879 @@
+{
+  "manifest_version": 1,
+  "source_name": "Affitor/affiliate-skills",
+  "source_repository": "https://github.com/Affitor/affiliate-skills",
+  "source_commit": "f4cb063a0ee83b1b9e5167e396ab46cc9123dadc",
+  "source_tree_sha": "f4cb063a0ee83b1b9e5167e396ab46cc9123dadc",
+  "archive_sha256": "dc463b31d80d6917142d99d9bc7f7b19385e8e0c74ff5c0cc57f4410ed73e1a6",
+  "license": "MIT",
+  "source_archive_entry_count": 289,
+  "skill_definition_count": 53,
+  "registry_skill_count": 53,
+  "filesystem_skill_file_count": 53,
+  "upstream_readme_claimed_skill_count": 52,
+  "auxiliary_skill_md_paths": [
+    "SKILL.md",
+    "template/SKILL.md"
+  ],
+  "skill_rows": [
+    {
+      "slug": "affiliate-program-search",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/affiliate-program-search/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/affiliate-program-search/SKILL.md",
+      "source_blob_sha": "677fd6e8a6408f3c516910d776083b66b1197ed0"
+    },
+    {
+      "slug": "commission-calculator",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/commission-calculator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/commission-calculator/SKILL.md",
+      "source_blob_sha": "d2431b4e5c1701661a4c114e0b27d316241d5afe"
+    },
+    {
+      "slug": "competitor-spy",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/competitor-spy/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/competitor-spy/SKILL.md",
+      "source_blob_sha": "cbb38b4f36e5b8505d6387c06b287e6a6d83b27f"
+    },
+    {
+      "slug": "content-angle-ranker",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/content-angle-ranker/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/content-angle-ranker/SKILL.md",
+      "source_blob_sha": "c9a01996f9ea3a07f23fbaae2b3f06a8ff957983"
+    },
+    {
+      "slug": "find-and-verify-affiliate-program",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/find-and-verify-affiliate-program/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/find-and-verify-affiliate-program/SKILL.md",
+      "source_blob_sha": "fe683b11232cf1b58c66ffa00d9af15a89c745db"
+    },
+    {
+      "slug": "monopoly-niche-finder",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/monopoly-niche-finder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/monopoly-niche-finder/SKILL.md",
+      "source_blob_sha": "9f09b36a6c252b5fe4a93a3adb34a8f071178cab"
+    },
+    {
+      "slug": "niche-opportunity-finder",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/niche-opportunity-finder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/niche-opportunity-finder/SKILL.md",
+      "source_blob_sha": "b4ee038c049a8a39bf111affbb8f85774d48f462"
+    },
+    {
+      "slug": "purple-cow-audit",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/purple-cow-audit/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/purple-cow-audit/SKILL.md",
+      "source_blob_sha": "72cf29b20b725ad46a03911d047df1cd260ef24f"
+    },
+    {
+      "slug": "submit-program",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/submit-program/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/submit-program/SKILL.md",
+      "source_blob_sha": "a0fe9de481cc1580cc268d668d221e98f0f89556"
+    },
+    {
+      "slug": "traffic-analyzer",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/traffic-analyzer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/traffic-analyzer/SKILL.md",
+      "source_blob_sha": "1210bf173d40c53f4cf2b379bc85b51b427d26b5"
+    },
+    {
+      "slug": "trending-content-scout",
+      "stage": "research",
+      "version": "1.0.0",
+      "source_path": "skills/research/trending-content-scout/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/trending-content-scout/SKILL.md",
+      "source_blob_sha": "2421fd861266f6f6d20212e2073bd91feeb08626"
+    },
+    {
+      "slug": "content-pillar-atomizer",
+      "stage": "content",
+      "version": "1.0.0",
+      "source_path": "skills/content/content-pillar-atomizer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/content-pillar-atomizer/SKILL.md",
+      "source_blob_sha": "2e0d325a7a39e5236f725f27fa156362dd342ad0"
+    },
+    {
+      "slug": "content-research-brief",
+      "stage": "content",
+      "version": "1.0.0",
+      "source_path": "skills/content/content-research-brief/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/content-research-brief/SKILL.md",
+      "source_blob_sha": "31159555872b1c1fd7653c01cc3ae63a6fb0ae10"
+    },
+    {
+      "slug": "infographic-generator",
+      "stage": "content",
+      "version": "1.0.0",
+      "source_path": "skills/content/infographic-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/infographic-generator/SKILL.md",
+      "source_blob_sha": "9a0081ac7d763ad3adf02f0449ce4ff06aedf3bc"
+    },
+    {
+      "slug": "reddit-post-writer",
+      "stage": "content",
+      "version": "1.0.0",
+      "source_path": "skills/content/reddit-post-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/reddit-post-writer/SKILL.md",
+      "source_blob_sha": "ad148855ab86831c41c31271d02aceeb3b97deff"
+    },
+    {
+      "slug": "tiktok-script-writer",
+      "stage": "content",
+      "version": "1.0.0",
+      "source_path": "skills/content/tiktok-script-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/tiktok-script-writer/SKILL.md",
+      "source_blob_sha": "ce8f65813f0b3029cc22e83ae6e77d290346a11f"
+    },
+    {
+      "slug": "twitter-thread-writer",
+      "stage": "content",
+      "version": "1.0.0",
+      "source_path": "skills/content/twitter-thread-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/twitter-thread-writer/SKILL.md",
+      "source_blob_sha": "a115904f0dbadd923c09b36b7e18ba3684e9fc4b"
+    },
+    {
+      "slug": "viral-post-writer",
+      "stage": "content",
+      "version": "1.0.0",
+      "source_path": "skills/content/viral-post-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/viral-post-writer/SKILL.md",
+      "source_blob_sha": "32a6308619b79cb96233a961e666cc5deffe32b8"
+    },
+    {
+      "slug": "affiliate-blog-builder",
+      "stage": "blog",
+      "version": "1.0.0",
+      "source_path": "skills/blog/affiliate-blog-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/affiliate-blog-builder/SKILL.md",
+      "source_blob_sha": "b36c1d933daeac90e0e37267d1ee588375a843fd"
+    },
+    {
+      "slug": "comparison-post-writer",
+      "stage": "blog",
+      "version": "1.0.0",
+      "source_path": "skills/blog/comparison-post-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/comparison-post-writer/SKILL.md",
+      "source_blob_sha": "d6b17e03495ddbe3beb8266024442b94092cbd85"
+    },
+    {
+      "slug": "content-decay-detector",
+      "stage": "blog",
+      "version": "1.0.0",
+      "source_path": "skills/blog/content-decay-detector/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/content-decay-detector/SKILL.md",
+      "source_blob_sha": "0c9b954bed11c92ac1271a5cc5c4d471855343af"
+    },
+    {
+      "slug": "content-moat-calculator",
+      "stage": "blog",
+      "version": "1.0.0",
+      "source_path": "skills/blog/content-moat-calculator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/content-moat-calculator/SKILL.md",
+      "source_blob_sha": "b822b845305f3f26e677dd79d9b4dd25a0e40d76"
+    },
+    {
+      "slug": "how-to-tutorial-writer",
+      "stage": "blog",
+      "version": "1.0.0",
+      "source_path": "skills/blog/how-to-tutorial-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/how-to-tutorial-writer/SKILL.md",
+      "source_blob_sha": "5db6cbde3fc91def4fdb85c81fee4e5d9615c35b"
+    },
+    {
+      "slug": "keyword-cluster-architect",
+      "stage": "blog",
+      "version": "1.0.0",
+      "source_path": "skills/blog/keyword-cluster-architect/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/keyword-cluster-architect/SKILL.md",
+      "source_blob_sha": "49a874649587de325783b03e013acc710894e908"
+    },
+    {
+      "slug": "listicle-generator",
+      "stage": "blog",
+      "version": "1.0.0",
+      "source_path": "skills/blog/listicle-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/listicle-generator/SKILL.md",
+      "source_blob_sha": "a1639fab4029df0e9ccc279988d61df57f1a9778"
+    },
+    {
+      "slug": "bonus-stack-builder",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/bonus-stack-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/bonus-stack-builder/SKILL.md",
+      "source_blob_sha": "185cf8d0ddff47eaf6eabef71793cd0b25688a19"
+    },
+    {
+      "slug": "grand-slam-offer",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/grand-slam-offer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/grand-slam-offer/SKILL.md",
+      "source_blob_sha": "f209e6e3f27abbe0e4af98a89286f0746c117cf2"
+    },
+    {
+      "slug": "guarantee-generator",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/guarantee-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/guarantee-generator/SKILL.md",
+      "source_blob_sha": "d2ec014760b4688432805cf50a0fef65d88e0036"
+    },
+    {
+      "slug": "landing-page-creator",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/landing-page-creator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/landing-page-creator/SKILL.md",
+      "source_blob_sha": "fac3224146014c1a0c6413330c9190321793b407"
+    },
+    {
+      "slug": "product-showcase-page",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/product-showcase-page/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/product-showcase-page/SKILL.md",
+      "source_blob_sha": "a5ba53d3ba814a74b35106f6dc97b24e1fe202e0"
+    },
+    {
+      "slug": "squeeze-page-builder",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/squeeze-page-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/squeeze-page-builder/SKILL.md",
+      "source_blob_sha": "4e03c09405a0cf8ff358367ac2614f5a322a8f40"
+    },
+    {
+      "slug": "value-ladder-architect",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/value-ladder-architect/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/value-ladder-architect/SKILL.md",
+      "source_blob_sha": "3d670f9b2aeb320499953578c4ee10e3984e8803"
+    },
+    {
+      "slug": "webinar-registration-page",
+      "stage": "landing",
+      "version": "1.0.0",
+      "source_path": "skills/landing/webinar-registration-page/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/webinar-registration-page/SKILL.md",
+      "source_blob_sha": "db5035e06f0b1f707265365e321344195ef434e3"
+    },
+    {
+      "slug": "bio-link-deployer",
+      "stage": "distribution",
+      "version": "1.0.0",
+      "source_path": "skills/distribution/bio-link-deployer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/bio-link-deployer/SKILL.md",
+      "source_blob_sha": "9f5c7c3ecbf824ea9a4d113f2c10d30f84bfcc47"
+    },
+    {
+      "slug": "email-drip-sequence",
+      "stage": "distribution",
+      "version": "1.0.0",
+      "source_path": "skills/distribution/email-drip-sequence/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/email-drip-sequence/SKILL.md",
+      "source_blob_sha": "b4a7228a76eee03f31a4277761be7d98407d8701"
+    },
+    {
+      "slug": "github-pages-deployer",
+      "stage": "distribution",
+      "version": "1.0.0",
+      "source_path": "skills/distribution/github-pages-deployer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/github-pages-deployer/SKILL.md",
+      "source_blob_sha": "0b5d2407e1390c312819abdb40f144045825c45d"
+    },
+    {
+      "slug": "social-media-scheduler",
+      "stage": "distribution",
+      "version": "1.0.0",
+      "source_path": "skills/distribution/social-media-scheduler/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/social-media-scheduler/SKILL.md",
+      "source_blob_sha": "8b8c4f8f169faef438ea148ebee701c6661010fb"
+    },
+    {
+      "slug": "ab-test-generator",
+      "stage": "analytics",
+      "version": "1.0.0",
+      "source_path": "skills/analytics/ab-test-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/ab-test-generator/SKILL.md",
+      "source_blob_sha": "4926fd4be932fd600238ac317b00cfaa700fda06"
+    },
+    {
+      "slug": "conversion-tracker",
+      "stage": "analytics",
+      "version": "1.0.0",
+      "source_path": "skills/analytics/conversion-tracker/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/conversion-tracker/SKILL.md",
+      "source_blob_sha": "c2733dabc5226428e801b0cc7646c17e9018e392"
+    },
+    {
+      "slug": "internal-linking-optimizer",
+      "stage": "analytics",
+      "version": "1.0.0",
+      "source_path": "skills/analytics/internal-linking-optimizer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/internal-linking-optimizer/SKILL.md",
+      "source_blob_sha": "a0e1aab6e96bdf818aa13c4ca2f61b43ac43b5ea"
+    },
+    {
+      "slug": "performance-report",
+      "stage": "analytics",
+      "version": "1.0.0",
+      "source_path": "skills/analytics/performance-report/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/performance-report/SKILL.md",
+      "source_blob_sha": "ee1c2d31667240e8c0fffe3b033a158b0ff36ab7"
+    },
+    {
+      "slug": "seo-audit",
+      "stage": "analytics",
+      "version": "1.0.0",
+      "source_path": "skills/analytics/seo-audit/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/seo-audit/SKILL.md",
+      "source_blob_sha": "cec87c9b93f50ab6b92f7a57eef4f41c80e32a6b"
+    },
+    {
+      "slug": "content-repurposer",
+      "stage": "automation",
+      "version": "1.0.0",
+      "source_path": "skills/automation/content-repurposer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/content-repurposer/SKILL.md",
+      "source_blob_sha": "b2f41c5ee2f68686e7e489c43728b9069b8016da"
+    },
+    {
+      "slug": "email-automation-builder",
+      "stage": "automation",
+      "version": "1.0.0",
+      "source_path": "skills/automation/email-automation-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/email-automation-builder/SKILL.md",
+      "source_blob_sha": "2b0e7e2b352794e28858778e6cfd7c0486273479"
+    },
+    {
+      "slug": "multi-program-manager",
+      "stage": "automation",
+      "version": "1.0.0",
+      "source_path": "skills/automation/multi-program-manager/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/multi-program-manager/SKILL.md",
+      "source_blob_sha": "5c956dc0f28aec9e32d2589480bd044ee21a4879"
+    },
+    {
+      "slug": "paid-ad-copy-writer",
+      "stage": "automation",
+      "version": "1.0.0",
+      "source_path": "skills/automation/paid-ad-copy-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/paid-ad-copy-writer/SKILL.md",
+      "source_blob_sha": "9c7ab8f97fdd1de5827f93cf49069742b06dcec7"
+    },
+    {
+      "slug": "proprietary-data-generator",
+      "stage": "automation",
+      "version": "1.0.0",
+      "source_path": "skills/automation/proprietary-data-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/proprietary-data-generator/SKILL.md",
+      "source_blob_sha": "ea4ecff99e8da0aed8bf9c2e8c2f7c0258f870c0"
+    },
+    {
+      "slug": "category-designer",
+      "stage": "meta",
+      "version": "1.0.0",
+      "source_path": "skills/meta/category-designer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/category-designer/SKILL.md",
+      "source_blob_sha": "9578b86c5153b6a86d6fab8c207f6dcd6c253933"
+    },
+    {
+      "slug": "compliance-checker",
+      "stage": "meta",
+      "version": "1.0.0",
+      "source_path": "skills/meta/compliance-checker/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/compliance-checker/SKILL.md",
+      "source_blob_sha": "08a023f51e80f41ce1b2580b62997b9679eb48a2"
+    },
+    {
+      "slug": "create-skill",
+      "stage": "meta",
+      "version": "1.0.0",
+      "source_path": "skills/meta/create-skill/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/create-skill/SKILL.md",
+      "source_blob_sha": "49b43f87abfd3999483b582ffae2321284042b9a"
+    },
+    {
+      "slug": "funnel-planner",
+      "stage": "meta",
+      "version": "1.0.0",
+      "source_path": "skills/meta/funnel-planner/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/funnel-planner/SKILL.md",
+      "source_blob_sha": "908fb1b82bd3bf3b5a31fa494341703cc682369d"
+    },
+    {
+      "slug": "self-improver",
+      "stage": "meta",
+      "version": "1.0.0",
+      "source_path": "skills/meta/self-improver/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/self-improver/SKILL.md",
+      "source_blob_sha": "d7c0af9d6426ff8f0fe05e9c16ed9033077a762c"
+    },
+    {
+      "slug": "skill-finder",
+      "stage": "meta",
+      "version": "1.0.0",
+      "source_path": "skills/meta/skill-finder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/skill-finder/SKILL.md",
+      "source_blob_sha": "58bf7a1ba8c642acde01f9cd8294a0cf9329b5e9"
+    }
+  ],
+  "vendored_files": [
+    {
+      "source_path": "LICENSE",
+      "target_path": "knowledge/affiliate-skills/upstream/LICENSE",
+      "upstream_git_blob_sha": "bb5b7cd551d788e79604bb049c5f7daa2e20ecdb",
+      "size_bytes": 1064
+    },
+    {
+      "source_path": "README.md",
+      "target_path": "knowledge/affiliate-skills/upstream/README.md",
+      "upstream_git_blob_sha": "5f172ceb5225afe880a8663b398639c53bff0a22",
+      "size_bytes": 22156
+    },
+    {
+      "source_path": "SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/SKILL.md",
+      "upstream_git_blob_sha": "f415065564a15af1d2aceb60ddd26b42c0f0e900",
+      "size_bytes": 3221
+    },
+    {
+      "source_path": "VERSION",
+      "target_path": "knowledge/affiliate-skills/upstream/VERSION",
+      "upstream_git_blob_sha": "6085e946503a10fb4d58a5c7d9a6e572c21ddd2e",
+      "size_bytes": 6
+    },
+    {
+      "source_path": "evals/evals.json",
+      "target_path": "knowledge/affiliate-skills/upstream/evals/evals.json",
+      "upstream_git_blob_sha": "4653edacf39477ffc67c93c428b84962c2fa6ee0",
+      "size_bytes": 32184
+    },
+    {
+      "source_path": "registry.json",
+      "target_path": "knowledge/affiliate-skills/upstream/registry.json",
+      "upstream_git_blob_sha": "b7b4624c4f8dddbed3e433c1bd18693510710d0d",
+      "size_bytes": 45543
+    },
+    {
+      "source_path": "shared/references/affiliate-glossary.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/affiliate-glossary.md",
+      "upstream_git_blob_sha": "c01377d1c69156b6cab81ef660140dcfcd92c53b",
+      "size_bytes": 3050
+    },
+    {
+      "source_path": "shared/references/affitor-branding.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/affitor-branding.md",
+      "upstream_git_blob_sha": "7470988d5811d7cba8c93e291d31f157a8d94bbb",
+      "size_bytes": 1131
+    },
+    {
+      "source_path": "shared/references/case-studies.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/case-studies.md",
+      "upstream_git_blob_sha": "ca06ab9ef7918df8631ce485acad6a176ffbe145",
+      "size_bytes": 4262
+    },
+    {
+      "source_path": "shared/references/feedback-protocol.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/feedback-protocol.md",
+      "upstream_git_blob_sha": "6a05ccf009d9d019bc02aabdfdac242f4b989d3d",
+      "size_bytes": 7876
+    },
+    {
+      "source_path": "shared/references/flywheel-connections.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/flywheel-connections.md",
+      "upstream_git_blob_sha": "47802f84c6ff7264e6e82a195485e53e04433d4c",
+      "size_bytes": 9472
+    },
+    {
+      "source_path": "shared/references/ftc-compliance.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/ftc-compliance.md",
+      "upstream_git_blob_sha": "20499e2d3c4130b4462d5d0583322329d2967cf9",
+      "size_bytes": 2711
+    },
+    {
+      "source_path": "shared/references/offer-frameworks.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/offer-frameworks.md",
+      "upstream_git_blob_sha": "aa4b012db689da58a85c8445fee14e9f7a06f757",
+      "size_bytes": 5058
+    },
+    {
+      "source_path": "shared/references/platform-rules.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/platform-rules.md",
+      "upstream_git_blob_sha": "6a71062cbe532971f399a32281f814c9ba0d526d",
+      "size_bytes": 2828
+    },
+    {
+      "source_path": "shared/references/sample-api-response.json",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/sample-api-response.json",
+      "upstream_git_blob_sha": "99e1f8c985da6cddd0ed2d7b021ea7cfa476d28a",
+      "size_bytes": 5432
+    },
+    {
+      "source_path": "shared/references/seo-strategy.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/seo-strategy.md",
+      "upstream_git_blob_sha": "728e00c84164f3d8482545194946e8f538080534",
+      "size_bytes": 5530
+    },
+    {
+      "source_path": "shared/references/social-data-providers.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/social-data-providers.md",
+      "upstream_git_blob_sha": "128498062a6889cc5032538f7bab434dae64baf3",
+      "size_bytes": 13898
+    },
+    {
+      "source_path": "shared/references/version-check.md",
+      "target_path": "knowledge/affiliate-skills/upstream/shared/references/version-check.md",
+      "upstream_git_blob_sha": "66abaf5e027e8312fce1f767f2795305df21c36c",
+      "size_bytes": 5256
+    },
+    {
+      "source_path": "skills/analytics/ab-test-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/ab-test-generator/SKILL.md",
+      "upstream_git_blob_sha": "4926fd4be932fd600238ac317b00cfaa700fda06",
+      "size_bytes": 8779
+    },
+    {
+      "source_path": "skills/analytics/conversion-tracker/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/conversion-tracker/SKILL.md",
+      "upstream_git_blob_sha": "c2733dabc5226428e801b0cc7646c17e9018e392",
+      "size_bytes": 8463
+    },
+    {
+      "source_path": "skills/analytics/internal-linking-optimizer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/internal-linking-optimizer/SKILL.md",
+      "upstream_git_blob_sha": "a0e1aab6e96bdf818aa13c4ca2f61b43ac43b5ea",
+      "size_bytes": 9541
+    },
+    {
+      "source_path": "skills/analytics/performance-report/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/performance-report/SKILL.md",
+      "upstream_git_blob_sha": "ee1c2d31667240e8c0fffe3b033a158b0ff36ab7",
+      "size_bytes": 10064
+    },
+    {
+      "source_path": "skills/analytics/seo-audit/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/analytics/seo-audit/SKILL.md",
+      "upstream_git_blob_sha": "cec87c9b93f50ab6b92f7a57eef4f41c80e32a6b",
+      "size_bytes": 9852
+    },
+    {
+      "source_path": "skills/automation/content-repurposer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/content-repurposer/SKILL.md",
+      "upstream_git_blob_sha": "b2f41c5ee2f68686e7e489c43728b9069b8016da",
+      "size_bytes": 10610
+    },
+    {
+      "source_path": "skills/automation/email-automation-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/email-automation-builder/SKILL.md",
+      "upstream_git_blob_sha": "2b0e7e2b352794e28858778e6cfd7c0486273479",
+      "size_bytes": 11747
+    },
+    {
+      "source_path": "skills/automation/multi-program-manager/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/multi-program-manager/SKILL.md",
+      "upstream_git_blob_sha": "5c956dc0f28aec9e32d2589480bd044ee21a4879",
+      "size_bytes": 9447
+    },
+    {
+      "source_path": "skills/automation/paid-ad-copy-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/paid-ad-copy-writer/SKILL.md",
+      "upstream_git_blob_sha": "9c7ab8f97fdd1de5827f93cf49069742b06dcec7",
+      "size_bytes": 12236
+    },
+    {
+      "source_path": "skills/automation/proprietary-data-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/automation/proprietary-data-generator/SKILL.md",
+      "upstream_git_blob_sha": "ea4ecff99e8da0aed8bf9c2e8c2f7c0258f870c0",
+      "size_bytes": 11408
+    },
+    {
+      "source_path": "skills/blog/affiliate-blog-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/affiliate-blog-builder/SKILL.md",
+      "upstream_git_blob_sha": "b36c1d933daeac90e0e37267d1ee588375a843fd",
+      "size_bytes": 16986
+    },
+    {
+      "source_path": "skills/blog/comparison-post-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/comparison-post-writer/SKILL.md",
+      "upstream_git_blob_sha": "d6b17e03495ddbe3beb8266024442b94092cbd85",
+      "size_bytes": 14346
+    },
+    {
+      "source_path": "skills/blog/content-decay-detector/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/content-decay-detector/SKILL.md",
+      "upstream_git_blob_sha": "0c9b954bed11c92ac1271a5cc5c4d471855343af",
+      "size_bytes": 8224
+    },
+    {
+      "source_path": "skills/blog/content-moat-calculator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/content-moat-calculator/SKILL.md",
+      "upstream_git_blob_sha": "b822b845305f3f26e677dd79d9b4dd25a0e40d76",
+      "size_bytes": 9011
+    },
+    {
+      "source_path": "skills/blog/how-to-tutorial-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/how-to-tutorial-writer/SKILL.md",
+      "upstream_git_blob_sha": "5db6cbde3fc91def4fdb85c81fee4e5d9615c35b",
+      "size_bytes": 14559
+    },
+    {
+      "source_path": "skills/blog/keyword-cluster-architect/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/keyword-cluster-architect/SKILL.md",
+      "upstream_git_blob_sha": "49a874649587de325783b03e013acc710894e908",
+      "size_bytes": 9576
+    },
+    {
+      "source_path": "skills/blog/listicle-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/blog/listicle-generator/SKILL.md",
+      "upstream_git_blob_sha": "a1639fab4029df0e9ccc279988d61df57f1a9778",
+      "size_bytes": 14042
+    },
+    {
+      "source_path": "skills/content/content-pillar-atomizer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/content-pillar-atomizer/SKILL.md",
+      "upstream_git_blob_sha": "2e0d325a7a39e5236f725f27fa156362dd342ad0",
+      "size_bytes": 12382
+    },
+    {
+      "source_path": "skills/content/content-research-brief/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/content-research-brief/SKILL.md",
+      "upstream_git_blob_sha": "31159555872b1c1fd7653c01cc3ae63a6fb0ae10",
+      "size_bytes": 16741
+    },
+    {
+      "source_path": "skills/content/infographic-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/infographic-generator/SKILL.md",
+      "upstream_git_blob_sha": "9a0081ac7d763ad3adf02f0449ce4ff06aedf3bc",
+      "size_bytes": 16476
+    },
+    {
+      "source_path": "skills/content/reddit-post-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/reddit-post-writer/SKILL.md",
+      "upstream_git_blob_sha": "ad148855ab86831c41c31271d02aceeb3b97deff",
+      "size_bytes": 16378
+    },
+    {
+      "source_path": "skills/content/tiktok-script-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/tiktok-script-writer/SKILL.md",
+      "upstream_git_blob_sha": "ce8f65813f0b3029cc22e83ae6e77d290346a11f",
+      "size_bytes": 14710
+    },
+    {
+      "source_path": "skills/content/twitter-thread-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/twitter-thread-writer/SKILL.md",
+      "upstream_git_blob_sha": "a115904f0dbadd923c09b36b7e18ba3684e9fc4b",
+      "size_bytes": 14368
+    },
+    {
+      "source_path": "skills/content/viral-post-writer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/content/viral-post-writer/SKILL.md",
+      "upstream_git_blob_sha": "32a6308619b79cb96233a961e666cc5deffe32b8",
+      "size_bytes": 15325
+    },
+    {
+      "source_path": "skills/distribution/bio-link-deployer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/bio-link-deployer/SKILL.md",
+      "upstream_git_blob_sha": "9f5c7c3ecbf824ea9a4d113f2c10d30f84bfcc47",
+      "size_bytes": 12259
+    },
+    {
+      "source_path": "skills/distribution/email-drip-sequence/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/email-drip-sequence/SKILL.md",
+      "upstream_git_blob_sha": "b4a7228a76eee03f31a4277761be7d98407d8701",
+      "size_bytes": 12164
+    },
+    {
+      "source_path": "skills/distribution/github-pages-deployer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/github-pages-deployer/SKILL.md",
+      "upstream_git_blob_sha": "0b5d2407e1390c312819abdb40f144045825c45d",
+      "size_bytes": 15256
+    },
+    {
+      "source_path": "skills/distribution/social-media-scheduler/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/distribution/social-media-scheduler/SKILL.md",
+      "upstream_git_blob_sha": "8b8c4f8f169faef438ea148ebee701c6661010fb",
+      "size_bytes": 14305
+    },
+    {
+      "source_path": "skills/landing/bonus-stack-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/bonus-stack-builder/SKILL.md",
+      "upstream_git_blob_sha": "185cf8d0ddff47eaf6eabef71793cd0b25688a19",
+      "size_bytes": 10410
+    },
+    {
+      "source_path": "skills/landing/grand-slam-offer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/grand-slam-offer/SKILL.md",
+      "upstream_git_blob_sha": "f209e6e3f27abbe0e4af98a89286f0746c117cf2",
+      "size_bytes": 10836
+    },
+    {
+      "source_path": "skills/landing/guarantee-generator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/guarantee-generator/SKILL.md",
+      "upstream_git_blob_sha": "d2ec014760b4688432805cf50a0fef65d88e0036",
+      "size_bytes": 9682
+    },
+    {
+      "source_path": "skills/landing/landing-page-creator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/landing-page-creator/SKILL.md",
+      "upstream_git_blob_sha": "fac3224146014c1a0c6413330c9190321793b407",
+      "size_bytes": 14599
+    },
+    {
+      "source_path": "skills/landing/product-showcase-page/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/product-showcase-page/SKILL.md",
+      "upstream_git_blob_sha": "a5ba53d3ba814a74b35106f6dc97b24e1fe202e0",
+      "size_bytes": 14408
+    },
+    {
+      "source_path": "skills/landing/squeeze-page-builder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/squeeze-page-builder/SKILL.md",
+      "upstream_git_blob_sha": "4e03c09405a0cf8ff358367ac2614f5a322a8f40",
+      "size_bytes": 14401
+    },
+    {
+      "source_path": "skills/landing/value-ladder-architect/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/value-ladder-architect/SKILL.md",
+      "upstream_git_blob_sha": "3d670f9b2aeb320499953578c4ee10e3984e8803",
+      "size_bytes": 10096
+    },
+    {
+      "source_path": "skills/landing/webinar-registration-page/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/landing/webinar-registration-page/SKILL.md",
+      "upstream_git_blob_sha": "db5035e06f0b1f707265365e321344195ef434e3",
+      "size_bytes": 17475
+    },
+    {
+      "source_path": "skills/meta/category-designer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/category-designer/SKILL.md",
+      "upstream_git_blob_sha": "9578b86c5153b6a86d6fab8c207f6dcd6c253933",
+      "size_bytes": 11360
+    },
+    {
+      "source_path": "skills/meta/compliance-checker/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/compliance-checker/SKILL.md",
+      "upstream_git_blob_sha": "08a023f51e80f41ce1b2580b62997b9679eb48a2",
+      "size_bytes": 10687
+    },
+    {
+      "source_path": "skills/meta/create-skill/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/create-skill/SKILL.md",
+      "upstream_git_blob_sha": "49b43f87abfd3999483b582ffae2321284042b9a",
+      "size_bytes": 17368
+    },
+    {
+      "source_path": "skills/meta/funnel-planner/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/funnel-planner/SKILL.md",
+      "upstream_git_blob_sha": "908fb1b82bd3bf3b5a31fa494341703cc682369d",
+      "size_bytes": 9016
+    },
+    {
+      "source_path": "skills/meta/self-improver/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/self-improver/SKILL.md",
+      "upstream_git_blob_sha": "d7c0af9d6426ff8f0fe05e9c16ed9033077a762c",
+      "size_bytes": 10359
+    },
+    {
+      "source_path": "skills/meta/skill-finder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/meta/skill-finder/SKILL.md",
+      "upstream_git_blob_sha": "58bf7a1ba8c642acde01f9cd8294a0cf9329b5e9",
+      "size_bytes": 8283
+    },
+    {
+      "source_path": "skills/research/affiliate-program-search/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/affiliate-program-search/SKILL.md",
+      "upstream_git_blob_sha": "677fd6e8a6408f3c516910d776083b66b1197ed0",
+      "size_bytes": 1015
+    },
+    {
+      "source_path": "skills/research/commission-calculator/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/commission-calculator/SKILL.md",
+      "upstream_git_blob_sha": "d2431b4e5c1701661a4c114e0b27d316241d5afe",
+      "size_bytes": 13510
+    },
+    {
+      "source_path": "skills/research/competitor-spy/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/competitor-spy/SKILL.md",
+      "upstream_git_blob_sha": "cbb38b4f36e5b8505d6387c06b287e6a6d83b27f",
+      "size_bytes": 15021
+    },
+    {
+      "source_path": "skills/research/content-angle-ranker/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/content-angle-ranker/SKILL.md",
+      "upstream_git_blob_sha": "c9a01996f9ea3a07f23fbaae2b3f06a8ff957983",
+      "size_bytes": 19454
+    },
+    {
+      "source_path": "skills/research/find-and-verify-affiliate-program/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/find-and-verify-affiliate-program/SKILL.md",
+      "upstream_git_blob_sha": "fe683b11232cf1b58c66ffa00d9af15a89c745db",
+      "size_bytes": 16661
+    },
+    {
+      "source_path": "skills/research/monopoly-niche-finder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/monopoly-niche-finder/SKILL.md",
+      "upstream_git_blob_sha": "9f09b36a6c252b5fe4a93a3adb34a8f071178cab",
+      "size_bytes": 8990
+    },
+    {
+      "source_path": "skills/research/niche-opportunity-finder/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/niche-opportunity-finder/SKILL.md",
+      "upstream_git_blob_sha": "b4ee038c049a8a39bf111affbb8f85774d48f462",
+      "size_bytes": 10992
+    },
+    {
+      "source_path": "skills/research/purple-cow-audit/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/purple-cow-audit/SKILL.md",
+      "upstream_git_blob_sha": "72cf29b20b725ad46a03911d047df1cd260ef24f",
+      "size_bytes": 9926
+    },
+    {
+      "source_path": "skills/research/submit-program/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/submit-program/SKILL.md",
+      "upstream_git_blob_sha": "a0fe9de481cc1580cc268d668d221e98f0f89556",
+      "size_bytes": 16243
+    },
+    {
+      "source_path": "skills/research/traffic-analyzer/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/traffic-analyzer/SKILL.md",
+      "upstream_git_blob_sha": "1210bf173d40c53f4cf2b379bc85b51b427d26b5",
+      "size_bytes": 15210
+    },
+    {
+      "source_path": "skills/research/trending-content-scout/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/skills/research/trending-content-scout/SKILL.md",
+      "upstream_git_blob_sha": "2421fd861266f6f6d20212e2073bd91feeb08626",
+      "size_bytes": 21753
+    },
+    {
+      "source_path": "template/SKILL.md",
+      "target_path": "knowledge/affiliate-skills/upstream/template/SKILL.md",
+      "upstream_git_blob_sha": "a4be3cf91c96ffd1c2a0b4741050b95b0390eaae",
+      "size_bytes": 4290
+    }
+  ],
+  "note": "Source documentation and shared references are pinned reference doctrine, not proof the app capability is end-to-end implemented or a provider is connected."
+}

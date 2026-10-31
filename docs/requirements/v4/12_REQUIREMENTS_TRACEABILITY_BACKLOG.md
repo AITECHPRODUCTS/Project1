@@ -1,0 +1,563 @@
+# Requirement-to-code backlog
+
+| ID | Area | Current evidence | Status | Acceptance still required |
+|---|---|---|---|---|
+| R-01 | S1 offer discovery and traffic screening | `backend/tools/affiliate_api.py`, `backend/services/s1_research.py`, `backend/services/traffic_analyzer.py`, `POST /api/research/traffic-analyzer` | partial | Authorized live source/freshness, real provider contracts, verified analytics metrics and geo validation |
+| R-02 | S2 content intelligence | `backend/services/s2_s3_content.py`, `backend/services/llm.py` | partial | Claim ledger and grounding evaluation |
+| R-03 | S3 SEO/blog | backend/services/s2_s3_content.py; backend/services/comparison_post_writer.py; backend/services/listicle_writer.py; backend/services/content_decay_detector.py; backend/services/content_moat_calculator.py; comparison-post/listicle/content-decay/content-moat API routes | partial | Comparison/listicle drafts, evidence snapshots and listicle immutable revisions/root-scoped sequence are implemented and exercised by API/browser tests; current full CI verified on SHA b576807c9a6bea9a6f1d1ab1c6654d443f06641b (push 40914232006, PR 40914245417; Python 823 passed, browser UAT 29 passed). Bounded HTTPS snapshots, literal fact matching, integrity hashes and draft-only review do not verify factual truth/currentness. Search Console ingestion, validated competitor metrics, keyword demand, technical crawl, legal/program eligibility and publication UAT remain open |
+| R-04 | S4 landing/consent | `backend/services/s4_s5_landing.py`, `backend/services/email_delivery.py`, `backend/schemas.py`, `POST /api/public/leads/capture` | partial | Explicit audited re-consent and fresh sequence scheduling are implemented; the public squeeze-page now exposes a separate optional re-subscribe confirmation checkbox. Accessibility, browser UAT and broader consent/unsubscribe acceptance remain |
+| R-05 | S5 distribution | `backend/services/s4_s5_landing.py`, `backend/services/cms_publisher.py` | partial | OAuth scopes, remote success and idempotency |
+| R-06 | S6 attribution/ledger | `backend/services/tracking_service.py`, `backend/models.py`, `POST /api/webhooks/conversions/{network}` | partial | Signed bounded webhook input, per-network secrets, workspace idempotency, row-locked full and partial reversals, Numeric(18,6) append-only ledger/backfill and read-only evidence-separated finance UI are implemented. Mocked route and PostgreSQL partial-then-full reversal tests passed on exact SHA `37bd5adcfd64f03c3b5e13436dfaf7a4c401d37d`. Still required: provider reconciliation, provider-specific signature contracts, browser UAT and end-to-end provider evidence |
+| R-07 | S7 operations/budgets | `backend/services/resource_budget.py`, `backend/core/state_machine.py` | partial | PostgreSQL transaction-scoped, workspace-keyed advisory lock and a two-module concurrent reservation cap test passed on exact SHA `f2d508177905a2f5f0f85bdeb991feb061080111`. Remaining: durable worker queue/lease recovery acceptance and operational load evidence |
+| R-08 | S8 learning | `backend/services/s6_s8_analytics.py`, `ai_memory/rag_chain.py`, `backend/models.py` | partial | Learning now includes partially reversed original conversions using net commission from the immutable ledger and excludes reversal rows/full reversals from positive conversion counts. Low-sample gates and review-required promotion remain; exact-SHA CI pending. Independent evaluation datasets, rollback/promotion acceptance and operational outcome validation remain |
+| R-09 | Provider catalogue | `config.yaml`, `backend/services/integration_registry.py` | catalogued/partial | Per-provider live auth, scope, contract and health evidence |
+| R-10 | Autopilot truth table | `backend/services/capability_matrix.py`, `GET /api/capabilities` | implemented, not environment-verified | UI/API end-to-end and provider state sync |
+| R-11 | Responsive control center | `frontend/app/page.tsx`, `frontend/components/FlywheelVisualizer.tsx` | present, unverified | Multi-viewport browser and accessibility UAT |
+| R-12 | Production schema | `migrations/versions/0001_initial_schema.py`; exact-SHA CI at `e6e6eb4e552b4887da252db0df172dd25ee79561` | PostgreSQL upgrade/downgrade/drift and reversal integration pass in push/PR runs | Production backup/restore rehearsal, rollback evidence and deployed database operations |
+| R-13 | Tenant SaaS | `backend/models.py`, `backend/main.py` | major gap | Workspace schema, row-level scope and cross-tenant tests |
+| R-14 | Platform Super Admin | requirements and current global admin gaps | not implemented end-to-end | Separate platform RBAC, tenant/incident/kill switch UI |
+| R-15 | All 53 skills | `../skill-parity-matrix.csv` | 53 partial, 0 not implemented | Implement and verify each skill service/API/UI/provider path |
+| R-16 | Production release | Actions + deployment docs | not release ready | All required CI, provider, security, staging and rollback gates |
+
+| R-17 | Affiliate portfolio operations | `backend/services/multi_program_manager.py`, `POST /api/automation/multi-program-manager` | partial | Authorized network data and payout reconciliation, attribution quality, program-action UAT |
+
+| R-18 | P0 — pinned skill source/traceability | `knowledge/affiliate-skills/upstream/SOURCE_MANIFEST.json`; 53 vendored skill documents; `scripts/verify_skill_registry.py`; repo-guard CI on `e6e6eb4e552b4887da252db0df172dd25ee79561` | source integrity and registry/status parity guard passed on exact push/PR SHA; runtime 53 partial / 0 not implemented | Per-skill service/API/UI/provider acceptance, retrieval evaluation and provider authorization remain independently required |
+
+| R-19 | P0 — reproducible frontend dependencies | `frontend/package-lock.json` (npm lockfile v3, 141 packages); `npm ci` typecheck/build on exact SHA `e6e6eb4e552b4887da252db0df172dd25ee79561` | implemented and CI-verified on push/PR; lockfile-sync passed on push | Continue running `npm ci`; add SBOM/license/secret scans and keep dependency audit findings remediated |
+
+| R-20 | P0 — dependency security audits | `.github/workflows/ci.yml` `security-audit`; core/test and AI/RAG `pip-audit`; frontend `npm audit`; `docs/SECURITY_EXCEPTIONS.md` | Push run [40264037056](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056) and PR run [40264040473](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473) passed on `668b33670ea11e30f97ccc3c6e50180124609207`, including core/test audit, guarded AI/RAG audit, and frontend `npm audit --audit-level=high`. Next.js 16.4.3 and patched PostCSS/parser resolutions are locked. Four documented Chroma IDs remain conditionally excepted after local-only guard | Remove the Chroma exception after an upstream fix/vector-store replacement; add SBOM/license/secret-scan evidence and rerun every audit on each release candidate |
+
+
+## P0 security acceptance follow-up (2026-10-26)
+- Test addition: `tests/test_auth_tenancy_guards.py` covers session invalidation when workspace membership is revoked, denial of unscoped static bearer tokens for tenant data, and workspace member denial from admin authorization.
+- Verification passed on exact SHA `e715878c76fb6f1876c2ff1769653fa72ad51396`: push run [40264570099](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264570099) completed successfully. Existing route coverage and DB tenant-filter tests do not replace these auth-contract assertions.
+
+
+## P0 — WebSocket/event tenant isolation (2026-10-26)
+- Finding: workflow/HITL events previously lacked workspace IDs, and EventHub broadcast them to every connected WebSocket. The endpoint also did not revalidate active workspace membership at connect time.
+- Candidate fix binds event payloads to workspace scope, routes only to same-workspace sockets, rejects scope-less events, and validates membership on connect and recovery.
+- Four regression tests added in `tests/test_websocket_tenant_isolation.py`. Verified on exact SHA `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push [40265255592](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592) and PR [40265259440](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440) both succeeded.
+
+
+## P0 — workflow lifecycle tenant ownership (2026-10-26)
+- Implemented explicit workspace context at workflow start and required workspace scope for status/resume. Status/resume verify the WorkflowRun and PausedSession belong to the requested workspace; internal paused recovery passes the stored owning workspace. Dashboard status aggregates run tenant queries under the authorized workspace scope.
+- Added tests for auth on workflow/status endpoints, cross-workspace status/resume denial, and refusal to start a workflow without workspace context.
+- Verified exact SHA 16eee55a6935e9afa1d5f2b020c867713754aa67: push [40265845238](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265845238) and PR [40265848400](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265848400) both succeeded.
+- Next P0 audit: require Platform Super Admin for shared RAG knowledge-index ingestion; remove host-local absolute path from end-user status responses and test deny-by-default behavior.
+
+
+## P0 — shared knowledge-index administration and path disclosure (2026-10-26)
+- Shared doctrine ingestion now declares `Depends(require_platform_admin)`; a workspace owner/admin cannot mutate the shared RAG index using their workspace privilege.
+- UI renders the ingestion button only to Platform Super Admin. Knowledge status returns only availability/configuration and collection/reference metadata, not the server's resolved filesystem path.
+- Added `tests/test_knowledge_admin_access.py` for workspace-owner denial, explicit platform-admin allowed behavior (ingester stubbed), and path non-disclosure.
+- Verified exact SHA `743e404e63b7c3a54423a18b1cf17af1338c5abf`: push [40266330644](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644) and PR [40266336192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192) both succeeded.
+- Remaining P0 security issue: four documented ChromaDB advisories remain behind a conditional local-only guard; remove the exception after an upstream fix or a verified vector-store replacement.
+- Next: inspect resource-budget/learning summary access under workspace and background execution contexts, then add tests for any tenant leak.
+
+## P0 — campaign/conversion workspace binding verified (2026-10-26)
+- Verified on `4becae03e155fedc361e5b9fcdfc9fde66602f75`; push [40268073324](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324) and PR [40268078547](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547) both green.
+- Campaign list/create/health fail closed without a selected workspace and scope reads/writes to the authenticated tenant. API conversion duplicate checks include workspace ID, and both Conversion and ConversionLedgerEntry are explicitly tenant-bound.
+- Regression tests deny users without a workspace, prove cross-workspace campaigns are hidden and cross-workspace health is not found, and prove the same provider event ID can be recorded independently in separate workspaces. The older conversion-ledger test now stubs an authorized workspace rather than relying on development fallback while using a fake DB session.
+- Next: audit remaining ContentAsset/Lead/ScheduledEmail routes and public lead-capture token binding.
+
+
+## P0 — blog and lead/email tenant boundary verified (2026-10-26)
+- Verified on `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`; push [40269971909](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909) and PR [40269976725](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725) both succeeded.
+- Tenant-owned blog assets and lead/email sequences now require a concrete authenticated workspace or a valid signed public-capture workspace token. Lead and queued-email queries are scoped by workspace; unscoped email delivery is rejected.
+- Six new regression tests passed with the full CI matrix, including workspace-specific subscriber identity and sequence idempotency.
+- Next P0 audit: review the social-publish endpoint, landing-page token issuance, and other externally impactful provider operations for authentication, workspace ownership, approval and dry-run-by-default semantics.
+
+
+
+## P0 — social/CMS external-publish authorization and landing-token issuance (2026-10-26)
+- Source audit at `31826a37d7494050457606c963aefba3421dceb9` found unauthenticated social publishing, ambient-only landing token issuance, and CMS publishing authorized by workspace admin despite global provider credentials.
+- Candidate requires platform-super-admin plus selected workspace for global provider writes; live social/CMS actions require `confirm_live_publish=true`; success/failure outcomes are written to workspace audit logs; landing token issuance uses the authenticated workspace explicitly.
+- Six new regression tests and full exact-SHA CI passed at `6f3994096e502911b23fb54e8cb94c3f2181a16d`: push [40270795625](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625) and PR [40270800499](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499) both green.
+
+
+## P0 — external-publishing authorization and landing token binding verified (2026-10-26)
+- Verified at `6f3994096e502911b23fb54e8cb94c3f2181a16d`, push [40270795625](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625) and PR [40270800499](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499) both passed.
+- Social and CMS writes with shared global credentials require Platform Super Admin and active workspace; live publishing requires `confirm_live_publish=true`; CMS also preserves the `CMS_PUBLISH_EXECUTE` gate. Success/failure metadata is audited under the selected workspace.
+- Landing-page token issuance requires an authenticated active workspace and explicit workspace scope. Six new tests cover the auth/role/workspace/approval/audit behavior; Python reported 250 passed and 2 skipped.
+- Next P0: audit workflow runner step handlers and remaining provider mutation endpoints for approvals, idempotency, audit evidence and dry-run enforcement. ChromaDB advisories and release/UAT evidence remain open.
+
+## P0 — workflow-stage publishing and conversion-import isolation verified (2026-10-26)
+- At `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`, S5 directly calls `social_media_scheduler` and could bypass route authorization when global publishing is enabled. S6 conversion imports use the runner's ambient scope without an explicit workspace predicate/row field.
+- Candidate binds live publishing to authenticated Platform Super Admin plus top-level confirmation and selected workspace, records attempt/outcome audit rows, and makes conversion dedup/insert explicitly workspace-specific.
+- Five regression tests passed. Corrected implementation SHA `64a2d30af5dddb79150428936993ef1811b4419f`: push [40275131255](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275131255) and PR [40275135461](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275135461) both completed successfully. Python suite: **255 passed, 2 skipped**, one existing deprecation warning. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG import profile (**9 imports**), frontend typecheck/production build, dependency security audit, 53-skill repository guard and push lockfile reproducibility all passed.
+## Workflow S5/S6 candidate — failed first verification and correction
+- Initial candidate `9dcc5f0c842eddaeca86c40ed13d2997c1eddebe`: push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40274907786 reported 2 failures, 253 passed, 2 skipped. One revealed missing explicit workspace in the route-passed metadata (runner added it later); the other was an invalid direct-call fixture supplying forged positive authorization values rather than testing absent authorization.
+- Follow-up stamps workspace in trusted API metadata and changes the direct S5 test to ensure untrusted/missing authorization is denied. Corrected SHA `64a2d30af5dddb79150428936993ef1811b4419f` then passed push [40275131255](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275131255) and PR [40275135461](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275135461); Python reported 255 passed, 2 skipped. The initial failure remains recorded above for traceability.
+## P0 — scheduled-email duplicate delivery and worker lease verified (2026-10-26)
+- The existing due-email worker can race because the status change is committed only after the provider call. Candidate uses conditional atomic claim updates scoped by workspace/status, a migration-backed claim timestamp, and stable Resend idempotency keys.
+- Recover claims after 15 minutes only within 23 hours; older ambiguous claims become `delivery_unknown` because Resend documents a 24-hour idempotency-key window. Three regression tests passed. Verified implementation SHA `fedd1f74dbaa33e210b0587c774bc2ad63d92b8d`: push [40276085004](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276085004) and PR [40276090006](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276090006) both succeeded. Python suite: **258 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite upgrade/drift, PostgreSQL migration upgrade/downgrade/drift and concurrency, AI/RAG profile (**9 imports**), frontend typecheck/production build, dependency security audit, 53-skill guard and push lockfile reproducibility all passed.
+## Email worker correction trace
+- First SHA `7c1b6bab08924a077aa790cbf39130e5eece0aad` failed one stable unsubscribe header assertion (257 passed, 2 skipped; push [40275990654](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275990654), PR [40275995997](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275995997)). Corrected regex at `fedd1f74dbaa33e210b0587c774bc2ad63d92b8d`; push [40276085004](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276085004) and PR [40276090006](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276090006) both passed.
+
+
+
+## P0 — workflow side-effect retry safety verified (2026-10-26)
+- Runner currently retries timeout/connection errors generically, including external publishing in S5; an ambiguous provider result could be duplicated.
+- Candidate marks S5 as side-effecting, suppresses transient automatic retries and writes a tenant-scoped reconciliation event. Read-only retry behavior should remain unchanged.
+- Two regression tests pending exact-SHA push/PR.
+
+- At `3dc01b9b954bf0ec392aafed522c4ec968faffa9`, the workflow runner marks S5 as side-effecting and suppresses automatic retries after timeout/connection errors that may have occurred after an external provider accepted a post. It persists `workflow.side_effect_outcome_unknown` scoped to the workspace and requires reconciliation before any manual re-submit. Read-only transient retries remain.
+- Two regression tests passed and full exact-SHA CI is green. Verified implementation SHA `3dc01b9b954bf0ec392aafed522c4ec968faffa9`: push [40277040070](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277040070) and PR [40277047842](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277047842) both passed. Python suite: **260 passed, 2 skipped**, one existing Starlette/httpx deprecation warning. SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG profile (**9 imports**), frontend typecheck/production build, dependency security audit, 53-skill guard and push lockfile reproducibility all passed.
+
+## P0 — manual provider-write idempotency verified (2026-10-26)
+- Verified SHA `1cc839bbf80d1a66e35b9e36f244b4fa13cb68af`: push [40278503530](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278503530) and PR [40278508177](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278508177) both succeeded.
+- Migration 0009 and the tenant-scoped ExternalAction registry ensure direct social/CMS provider claims are durable before the provider call; identical completed requests replay, changed key payloads return 409, missing keys return 428, and ambiguous network/5xx outcomes block same-key and alternate-key repeats until reconciliation.
+- Four regression tests passed with Python 264 passed / 2 skipped; full CI passed. Initial CI exposed one stale fixture without an Idempotency-Key; the fixture was corrected without weakening production enforcement.
+- Next P0: workflow S5 currently invokes the social adapter directly and must participate in the same idempotency registry to prevent duplicate posts from manually restarted/re-submitted workflows.
+
+
+## CI correction — live social confirmation test now supplies the idempotency key
+- Initial candidate `b3495a58202f944621f43063efbe9d293323ee24` had one test-only failure because the older authorization regression test omitted `Idempotency-Key`; the endpoint's 428 response is intended and the test must exercise the complete provider-write contract.
+- Corrected the fixture, keeping production enforcement unchanged. Full exact-SHA push and PR CI are pending.
+
+
+## P0 — S5 workflow idempotency verified (2026-10-26)
+- Verified on `e7ca02df933c3028489e8c3ba1abbfba3d82ae90`; push [40279412060](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279412060) and PR [40279416167](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279416167) both passed.
+- S5 uses the shared tenant-scoped ExternalAction registry and stable per-item keys derived from the workflow-level `Idempotency-Key`. Completed actions replay; changed payloads or in-progress/unknown outcomes return conflict and block duplicate side effects.
+- Three new workflow S5 tests passed (Python 267 passed / 2 skipped). Full SQLite/PostgreSQL migration/concurrency, AI/RAG, frontend, dependency audit, repo guard, and push lockfile checks passed.
+- Next: review remaining provider adapters and externally impactful workflow/worker paths for authorization, idempotency and safe retries.
+
+
+## P0 — global offer registry sync — verified (2026-10-26)
+- Verified at `498c0b595a8dd158b06eae2924f87d3897a8525b`: push [40279967742](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279967742) and PR [40279972611](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279972611) both green.
+- `/api/offers/sync` calls OpenAffiliate and updates the global shared `Offer` catalog; it now requires Platform Super Admin and an active workspace used for audit accountability. Unauthorized callers cannot trigger the upstream provider call.
+- Audit records include provider, created/updated counts or error type, request limit and query-presence metadata. Four regression tests passed; Python suite 271 passed/2 skipped and full required CI passed.
+- Next: review remaining global provider integration/configuration routes for equivalent authorization and audit controls.
+
+## P0 — OpenAffiliate SSRF/network boundary verified (2026-10-26)
+- Verified SHA `49043acd6e71841c7d365a97a9d8ca31168cc8da`: push [40280504806](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280504806) and PR [40280508646](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280508646) both passed.
+- OpenAffiliate now uses `validate_public_http_url` before HTTP-client creation on cache misses and keeps redirects disabled; the existing response byte cap and JSON schema handling remain intact.
+- Two regressions passed: private/loopback endpoint is rejected before a client can open; valid provider requests use the validated URL. Python 273 passed / 2 skipped and all required CI jobs passed.
+- Next P0 audit: other API routes and provider-configuration/public-read surfaces.
+
+
+
+## P0 — shared commission mailbox import authorization verified
+- The IMAP host/user/password and sender allowlist are global config. The endpoint previously relied on `require_admin`, which permits workspace admins, and would import messages from the shared mailbox into the caller-selected workspace.
+- Verified on exact SHA `0ea1735648ce408fb831abc51179544facd3ed69` via push [40281363532](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532) and PR [40281370173](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173); Python 277 passed/2 skipped and every required CI job passed. Platform Super Admin and selected workspace are required; success/failure audit contains counts/error type only, never mailbox content.
+
+
+## P0 — shared IMAP commission import verified (2026-10-26)
+- Exact SHA `0ea1735648ce408fb831abc51179544facd3ed69`; push [40281363532](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532) and PR [40281370173](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173) succeeded.
+- Four tests passed: workspace-admin denied before importer call, platform admin without workspace denied, successful import scoped/audited with only counts, and failure audited by error type/502 without mailbox contents in audit metadata.
+- Python 277 passed/2 skipped; full backend, PostgreSQL, AI/RAG, frontend, security audit, repository guard and push lockfile matrix passed.
+- Next: global provider/configuration access review. Production is not release-ready while ChromaDB advisories and live-provider/UAT/SBOM/license/secret/deployment/restore evidence remain unresolved.
+
+
+## P0 — global provider readiness/capability access verified (2026-10-26)
+- Candidate changes restrict `/api/integrations` and `/api/capabilities` to Platform Super Admin + active workspace because responses reveal global provider/model/email/CMS/social readiness and missing configuration variable names.
+- Existing response status meanings remain unchanged; only access is tightened. Raw credential values are not returned and are covered by sentinel-redaction tests.
+- Verified on exact SHA `a0bb0ff23f86b29e7e4a9072d2109e77d0328d40`; push [40282793722](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282793722) and PR [40282799345](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282799345) passed; Python 281 passed/2 skipped and all required jobs passed.
+
+
+## Next P0 — public route abuse/rate limiting
+- Audit public tracking, public lead-capture and draft-generation routes for per-IP/token quotas, payload-size limits, budget consumption, bot abuse and trusted-proxy assumptions.
+- Inspect existing middleware/edge controls first; make no assumption that a missing route decorator means there is no upstream limit. Add bounded route-level controls and tests only if no existing defense exists.
+- Keep release blocked until the ChromaDB advisories and production UAT/SBOM/license/secret/deployment/restore gates are closed.
+
+
+## P0 — public-route abuse controls and generation budgets verified (2026-10-26)
+- Baseline verified at `96402915bc857035a859e068810f5d23f58ecca7` in push [40283105487](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283105487) and PR [40283111955](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283111955).
+- Candidate hardens the existing signup/login/public-lead limiter with Redis atomic fixed windows in production, fails closed on Redis failure, adds workspace/IP budgets for LLM and video generation, requires authenticated workspace on expensive generation endpoints, caps keyword clustering at 500 values and public capture bodies at 32 KiB, and caps stateless tracking input at 8,192 characters.
+- Regression tests and exact-SHA CI pending.
+
+
+## Next P0 — outbound fetch and render abuse/SSRF boundaries
+- Review all public outbound requests in research URL fetch, OpenAffiliate offer discovery, generic provider adapters and Pexels video download. Confirm safe DNS/IP resolution on every connection, redirects disabled or revalidated, byte caps, timeouts and rate budgets.
+- Existing `backend/services/url_safety.py` and `backend/services/video_engine.py` already have controls; inspect their exact semantics and add only verified regression gaps. Note trusted proxy behaviour explicitly.
+- Production remains blocked by ChromaDB advisories and provider/UAT/SBOM/license/secret/deployment/restore evidence.
+
+
+## P0 — public outbound fetch, proxy and video asset safety (2026-10-26)
+- Finding: URL validation blocked non-public DNS answers but the actual HTTP request resolved the hostname again, so the socket destination was not pinned. Campaign health probes had the same pattern; Pexels asset downloads lacked media Content-Type/declared-size checks and a source-duration cap.
+- Candidate shared transport pins requests to a vetted public IP while preserving Host/SNI, disables redirects and proxy environment variables, applies total deadlines, and checks both declared and streamed response size. It is reused by HTML research fetches, configured OpenAffiliate requests, link-health probes and Pexels search/media downloads.
+- Added limits: 2 MiB Pexels search JSON, 150 MiB media download, 180 seconds source/narration, 500 MiB rendered output, and 2 MiB / 12 seconds for default public HTML fetches.
+- Competitor research now requires authentication and a selected workspace, applies the existing distributed IP/workspace quota, and limits each URL to 2,048 characters.
+- Exact-SHA CI and new regression tests are pending. Staging must still validate ingress sanitization and Uvicorn trusted-proxy configuration; do not use wildcard forwarded-header trust.
+
+
+## P0 — public outbound-fetch/video safety verified (2026-10-26)
+- Source and tests verified on `f2d232f7ce5efaea2e3d1abca8a6ba7e47cf339c`; push [40288412469](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288412469) and PR [40288420524](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288420524) both passed.
+- Implemented DNS-pinned public fetch with preserved Host/SNI, no redirects or env proxy use, request deadline and size/MIME limits; reused in research/affiliate API/health probes. Pexels B-roll is type-, size- and duration-bounded; generated output directory and size bounded. Competitor fetching is authenticated, workspace scoped and distributed-rate-limited.
+- CI evidence: Python 301 passed/2 skipped; Postgres migration/concurrency, SQLite migration/drift, 9 AI/RAG imports, front-end, audit, skill parity and lockfile sync passed.
+- Staging still needs to prove exact trusted-proxy config; four ChromaDB advisory exceptions and further release checks remain open.
+
+
+## P0 — configured CMS endpoints and credentialed POST SSRF (2026-10-26)
+- Audit finding: WordPress/Ghost `SITE_URL` was checked with DNS validation, then the site was resolved again by HTTPX when sending the authenticated POST. That is a check-then-connect DNS-rebinding gap on a global-credential integration.
+- Candidate fix: extend the shared public-URL transport to allow only the fixed GET/HEAD/POST methods used by the application, preserve Host/SNI with the actual socket pinned to a validated public IP, disable redirects and environment proxies, and enforce a 2 MiB response cap on CMS JSON.
+- Four tests cover WordPress/Ghost POST endpoints, selected JSON payloads/auth headers, redirects, and oversized response rejection. Status: pending exact-SHA CI.
+
+
+## P0 — CMS configured-host DNS rebinding fix verified (2026-10-26)
+- Exact SHA `13ec393d0897c4ba75ed83ba6bed8ce8690f7c06`: push [40290026088](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290026088) and PR [40290033400](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290033400) both passed.
+- CMS endpoints no longer validate DNS and then use a second independent resolution when sending global WordPress/Ghost credentials. They use the shared pinned HTTP helper, preserve Host/SNI, disable redirects and environment proxies, apply total timeout and enforce a 2 MiB JSON response cap.
+- Four CMS tests pass. The first CI failure was five test-double incompatibilities and was corrected without weakening production assertions. Final Python result: 305 passed, 2 skipped.
+- Next: review remaining configurable direct HTTP calls and prove trusted proxy configuration in staging; keep Chroma advisories and release/UAT evidence gates open.
+
+
+## P0 — remaining fixed-provider direct HTTP (2026-10-26)
+- Source scan identified direct clients for Resend emails, Reddit OAuth and search, X trends, Pinterest/Reddit post submission, and Meta campaign pause. These are fixed provider endpoints, not arbitrary URL fetches, but credentials and external writes should use the same pinned IP/no-proxy/no-redirect transport.
+- Candidate adds a JSON/form request helper with response cap and migrates callers; retains stable per-email Idempotency-Key, workspace tenant logic, publication dry-run and Meta automation execution gate. Three focused tests added. Pending exact-SHA full CI.
+
+
+## P0 — final configurable affiliate adapter pinned transport (2026-10-26)
+- Finding at base `868fbbc25d3d8dde5e5d772e1abeec9b3a4a16a4`: the broad backend/AI Python source scan found `backend/adapters/factory.py::ConfiguredJSONAdapter.fetch_offers` as the only remaining standalone provider HTTP client outside the shared `url_safety.py` transport. It performed DNS admission validation, then a separate unpinned client request.
+- Candidate routes through `request_public_json`, which re-resolves the target for the actual request, pins its socket to the vetted public IP, disables environment proxies and redirect following, and caps JSON response size at 2 MiB. Existing adapter limit and configured item-path behavior are retained.
+- Tests updated for loopback denial through the real helper and request contract/normalization via a fake helper. Verified at `aa3a0e175c09df3572f077b1c76d565ec2776207` by push [40301426819](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819) and PR [40301436060](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060); Python 321 passed, 2 skipped.
+- Separately, the trusted proxy setting is implemented and syntax-tested, but actual proxy-header stripping and trusted-source behavior need proof from the real staging ingress.
+
+## P0 — final configurable affiliate adapter transport verified (2026-10-26)
+- Exact SHA `aa3a0e175c09df3572f077b1c76d565ec2776207`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060 both passed.
+- Scan across 59 Python modules found the generic configured adapter as the final standalone outbound client outside `url_safety.py`. Replaced its unpinned HTTPX client with the pinned helper, bounded response size at 2 MiB, and preserved result parsing/limits.
+- Real-loopback test confirms private literal destinations fail before connecting; mocked helper contract covers method, query, auth, response cap and normalization.
+- Release gates still open: actual proxy behavior in staging, four ChromaDB advisory exceptions or reviewed vector-store replacement, live provider UAT, SBOM/license/secret scans, deployment smoke, backup/restore.
+
+
+## P0 — Remove ChromaDB from optional AI/RAG (2026-10-26; candidate)
+- Base `38a7b0ff6399d4702f8e8f798cdee81567a5c45d` passed the previous full push/PR matrix.
+- Candidate uses `ai_memory/local_vector_store.py` (SQLite, normalized float32 embedding blobs, JSON metadata, stable IDs/upserts, collection and embedding-model checks, cosine similarity); ingestion/retrieval now use that storage; active AI requirements remove `chromadb` and `langchain-chroma`; CI removes four advisory ignore arguments.
+- Five tests cover persistent reopen/search ranking, stable-ID update and delete, collection isolation, model identity mismatch and invalid vector rejection.
+- Status: **CI verified** on exact SHA `3ba90e4cb2fcb72494c0fda71e1d535398229c22`; push [40304270245](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245) and PR [40304278972](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972) passed, including clean unignored AI audit and 10 AI/RAG imports. Existing Chroma files are not migrated automatically; rebuild with `python -m ai_memory.ingester` during rollout.
+
+
+## P0 — AI profile verifier path correction (2026-10-26)
+- First candidate `6a24ed5e73181bc190e6da391e6b4df040ebb49c` passed all jobs except AI import verification. The only reported error was `ModuleNotFoundError: No module named 'ai_memory'` from executing the verifier file path directly.
+- Candidate correction adds the repository root to `sys.path` before import checks. Needs full push/PR CI re-verification.
+
+
+## P0 — ChromaDB dependency removal CI evidence (2026-10-26)
+- Exact SHA `3ba90e4cb2fcb72494c0fda71e1d535398229c22`, push [40304270245](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245) and PR [40304278972](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972) both passed.
+- Removed `chromadb` and `langchain-chroma` from active AI requirements, replaced the retrieval index with local SQLite storage, removed the four dependency-audit ignores, and guarded against package/runtime reintroduction.
+- The candidate's first AI-profile failure was a verifier import-path issue and was fixed without weakening the check. The new verifier reports 10 successful AI/RAG imports; unignored `pip-audit -r requirements-ai.txt` is green.
+- Deployment still needs a preserved-index backup, re-ingestion with `python -m ai_memory.ingester`, count/source/retrieval validation in staging, and separate release UAT/security/backup evidence.
+
+
+## P1 — durable workflow lease/recovery candidate (2026-10-26)
+- Models/migration: `WorkflowRun.lease_owner`, `lease_expires_at`, `heartbeat_at`, `attempt_count`; Alembic migration `0010_durable_workflow_leases`.
+- Runtime: process-unique worker ID, periodic heartbeat, expired lease claim with PostgreSQL row locking, recovery loop for queued/running/paused workflow checkpoints.
+- Safety: only a read-only checkpoint is resumed after lease expiry; expired live S5 publication is marked `unknown` and requires manual provider reconciliation. No automatic duplicate external write is attempted.
+- Tests: four SQLite recovery tests plus a PostgreSQL-only concurrent claim test added to the explicit integration job.
+- Status: **CI verified** on exact SHA `03d967e97b1993b80f853cc2fec72cf9e6b5f392`: push [40306591424](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306591424) and PR [40306596350](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306596350) passed; PostgreSQL migration/drift and the concurrent lease claim test passed. Multi-replica HITL response routing remains unverified; response payload is not persisted and may need resubmission after interruption.
+
+
+## P1 — durable workflow leases/restart recovery verified (2026-10-26)
+- Exact SHA `03d967e97b1993b80f853cc2fec72cf9e6b5f392`; push [40306591424](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306591424) and PR [40306596350](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306596350) both passed.
+- Four SQLite recovery/lease tests passed as part of Python (330 passed, 3 skipped). PostgreSQL job applied migration `0010_durable_workflow_leases`, ran drift checks through downgrade/re-upgrade, and passed 3 integration tests including concurrent workflow claim.
+- Expired worker leases are claimed through PostgreSQL row locks. Read-only work resumes from the persisted current-step checkpoint. Potentially accepted live S5 publication is marked unknown and requires manual reconciliation.
+- Remaining limitation: HITL response data is not persisted and must be re-submitted after a process death; multi-replica response routing, durable outbox/queue semantics, crash/fault load tests and production operational validation remain open.
+
+
+## P1 — durable encrypted HITL response and multi-worker resume (2026-10-26)
+- The previous recovery checkpoint acknowledged resume requests while the response existed only in process memory. This meant process loss or a different API replica could drop an acknowledged response.
+- Candidate migration adds `paused_sessions.verification_response_encrypted`; Fernet encryption uses a key derived from the stable shared `APP_SESSION_SECRET`. The scheduler loop polls for resume requests for its own lease and wakes the local task. Recovery retains encrypted queued responses and consumes them before emitting a new HITL alert.
+- Regression tests cover a non-owner API instance submitting the response and the lease owner waking, as well as process restart, lease claim and response consumption. Verified on exact SHA `92af1c5d06544e4870c8c550176fd19a25084d06`; push [40333566763](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763) and PR [40333573375](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375) both passed.
+
+
+## HITL response encryption dependency audit correction (2026-10-26)
+- The first candidate CI reported seven cryptography 46.0.7 advisories; that range is rejected and not waived.
+- Change `requirements.txt` to `cryptography>=50,<51` and rerun the full exact-SHA CI. Release status remains pending until `pip-audit -r requirements-dev.txt` and all other required jobs pass.
+
+
+## P1 — durable encrypted HITL response verified (2026-10-26)
+- Exact SHA `92af1c5d06544e4870c8c550176fd19a25084d06`; push [40333566763](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763) and PR [40333573375](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375) both passed all required jobs.
+- The migration-backed `PausedSession.verification_response_encrypted` uses Fernet derived from stable `APP_SESSION_SECRET`; response data never enters plain workflow state or audit detail.
+- Two end-to-end tests cover an API request arriving at a non-owner instance and waking the lease owner, plus a response being consumed by a fresh worker after restart/lease claim. SQLite and PostgreSQL migration/drift/concurrency, Python, AI/RAG, frontend, dependency audit, repository guard and lockfile sync passed.
+- An initial audit failure found cryptography 46.0.7 had advisories; requirement was tightened to `cryptography>=50,<51` and the follow-up audit passed. No advisory exception was used.
+- Production remains pending remaining provider/UAT, comprehensive security testing, SBOM/license/secret scan, deployment and backup/restore evidence.
+
+
+## P0 — outbound transport boundary guard (2026-10-26; candidate)
+- The current approved transport pins each actual outbound connection to a verified public IP, maintains TLS hostname validation/SNI, disables redirects and ambient proxies, and bounds responses.
+- Added `scripts/verify_outbound_transport_boundary.py`, a standard-library AST check for raw provider HTTP client creation outside `backend/services/url_safety.py`; CI runs it in the fast repository guard.
+- Added regression tests for aliased HTTPX/requests/aiohttp/urllib/urllib3 clients, the allowed transport module, helper-based requests and syntax errors.
+- Status: pending exact-SHA push/PR CI. This does not close the live staging proxy trust gate.
+
+
+## P0 — outbound transport boundary guard verified (2026-10-26)
+- Exact SHA `1725afcfc17acc8b890d8ccbc4bf04114638458d`; push [40338107674](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674) and PR [40338115729](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729) both green.
+- Six regression tests and fast CI guard pass. Runtime code in `backend/` and `ai_memory/` may not create raw HTTP clients outside the DNS-pinned approved transport. Transport SNI/pinning/redirect/proxy invariants are checked.
+- Python 338 passed, 3 skipped, 1 warning; AI/RAG profile verified 10 imports; SQLite/PostgreSQL migration/concurrency, frontend, security audit, skill parity and lockfile sync passed.
+- Still open: real staging ingress test for spoofed `Forwarded`/`X-Forwarded-For`; authorized provider UAT, SBOM/license/secret scans, deployment smoke, backup/restore, monitoring/SLO evidence.
+
+## P0 — Uvicorn trusted-proxy middleware compatibility (2026-10-26; candidate)
+- Raised uvicorn[standard] lower bound from 0.30 to 0.31 because the app validates CIDR trust configuration and needs a Uvicorn version with IP-network parsing support.
+- Added tests/test_trusted_proxy_middleware.py using the real Uvicorn middleware for untrusted spoof attempts, trusted CIDR forwarding and multi-hop chains.
+- Pending exact-SHA full push and PR CI. A live staging request through the real reverse proxy remains mandatory to prove it strips/replaces incoming forwarding headers.
+
+
+## P0 — automated SBOM, license-policy and secret scanning (2026-10-26) — verified
+- Exact SHA `f254ec0d998fa6541fba8415d0ed059fda7e4a23`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348612494 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348624953 both succeeded.
+- CI produces reproducible CycloneDX SBOM artifacts for Python core/test, optional AI/RAG and frontend; emits license inventory JSON keyed to `GITHUB_SHA`; runs full-history Gitleaks with redaction; and uploads report artifacts with candidate SHA in their names.
+- Verification: Python **361 passed, 3 skipped, 1 existing warning**; all 8 push jobs and all 7 required PR jobs passed. The secret scan reported zero findings after the one exact-fingerprint ordinary-text false positive was narrowly ignored under regression test.
+- Python core/test (76 packages) and AI/RAG (90 packages) license reports have zero findings; frontend (109 packages) has two exact, expiring LGPL items marked release blockers, with `release_approved=false`. Legal review or replacement is mandatory before production distribution.
+- Remaining independent release gates: actual staging proxy spoof/identity behavior, authorized provider live UAT, deploy smoke, monitoring/SLO, production data/RAG re-ingestion validation and backup/restore.
+
+
+## P0 — hosted LLM SDK bypass of outbound transport (2026-10-26)
+- Finding on `7a2626094c370ba12b8f10249e44dd02abd5d1e0`: raw HTTP call sites used the pinned transport, but `ChatOpenAI` constructed the OpenAI SDK-managed HTTP client independently.
+- Candidate adds an injected DNS-pinned `http_async_client`, request-time HTTPS/public-address validation, connection-IP pinning, Host/SNI preservation, no redirects and `trust_env=False`; SDK auto-retries are disabled to reduce ambiguous duplicate model spend. Static guard now enforces the injected client for ChatOpenAI/OpenAI SDK constructors.
+- New tests cover transport behavior and static policy. The async-only candidate failed the strict guard at the legacy RAG factory; correction is verified at `337e31ed9a964a7cdfcde56abb9ee9d379400265` by push [40360698617](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617) and PR [40360704559](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559). Staging deployment, actual proxy ingress and authorized provider UAT remain separate gates.
+
+
+## P0 — SDK sync + async outbound-boundary corrective candidate (2026-10-26)
+- The failed candidate run identified the legacy `ai_memory/rag_chain.py` RetrievalQA factory as a second `ChatOpenAI` constructor without a pinned HTTP client. Exact-SHA failed runs: push [40359428990](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359428990), PR [40359436287](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40359436287). The failure correctly prevented a green repo-guard.
+- Corrective implementation adds a pinned sync transport alongside the async one and requires both in the static guard; both SDK call sites inject them. CI tests for sync transport pinning and both-client enforcement passed on exact SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`.
+
+
+## P0 — hosted LLM SDK egress boundary verified (2026-10-26)
+- Exact SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559 both green.
+- The strict guard uncovered and closed both SDK call sites. The primary LLM and legacy RAG RetrievalQA paths inject both pinned synchronous and asynchronous clients; a missing sync or async client fails the static guard.
+- Python: 368 passed, 3 skipped, one existing warning. SQLite/PostgreSQL migration and concurrency, AI/RAG profile/SBOM, frontend build, dependency/license audit, repository/53-skill guard, secret scan and lockfile sync passed.
+- Remaining separate release gates: actual staging egress and trusted-proxy tests, live provider/model authorization UAT, LGPL license review/replacement, production deployment smoke, monitoring/SLO and backup/restore.
+
+## P0 — model artifact downloads at runtime (2026-10-26; candidate)
+- The blueprint keeps model inference, RAG doctrine, and model artifacts as distinct release gates. Source review found `HuggingFaceEmbeddings` and Transformers `from_pretrained` calls defaulted to online Hub resolution when artifacts were missing.
+- Candidate centralizes embedding construction, makes embedding/AutoTokenizer/AutoModelForCausalLM/PEFT loads local-files-only, validates immutable 40-character embedding revision pins, requires a pin for production Hub embedding IDs, and incorporates the revision into vector-index identity without changing the SQLite schema.
+- Regression tests cover helper arguments, mutable-revision rejection, production-setting enforcement and static detection of missing local-only flags. Runbook: `docs/MODEL_ARTIFACT_OPERATIONS.md`. Exact resulting-SHA CI pending; a staged model artifact/license review and production RAG retrieval check remain deployment gates.
+
+
+## P0 — model artifact runtime egress boundary verified (2026-10-26)
+- Verified at `393e12760762993e70a862af9b4c3ab61d308739`; push [40364123382](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382) and PR [40364131533](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533) both succeeded.
+- Python 377 passed, 3 skipped, 1 warning. PostgreSQL, AI/RAG import + SBOM/license, frontend, dependency/license audit, secret scan, skill parity and lockfile sync passed.
+- First attempt at `47bd006c665ba490d2cbd0c0a87c57c8350ef0f4` failed four static-guard fixture tests because literal `\\n` text produced invalid Python source. The test fixtures were corrected on `393e12760762993e70a862af9b4c3ab61d308739`; the strict guard was preserved and both rerun workflows passed.
+- No model artifacts are claimed staged or license-reviewed. Next: obtain provenance/license sign-off, stage the immutable model snapshot, validate cache-only startup and RAG retrieval golden tests on a deployment candidate.
+
+
+## P0 — proprietary experiment-learning dataset generator verified (2026-10-26)
+- Verified on `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`: push [40365898032](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032) and PR [40365904286](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286) passed.
+- Workspace-scoped endpoint persists review-only JSONL candidates and audit evidence; event IDs are deduplicated, low-sample or inconsistent experiments excluded, and rows contain aggregate experiment data only (no visitor IDs).
+- The first run at 684e6e1ae3d5b2a19fa6df6b074735788e47f420 failed two test assertions: the privacy assertion treated visitor_identifiers_included as a leaked identifier, and the skill-matrix assertion used stale 47/6 counts. Corrective SHA a9eebf989704b7d7d347ee9021572bd2d5ea4f03 narrows the privacy assertion to synthetic visitor values and aligns counts to 48/5; full CI passed.
+- Python 385 passed, 3 skipped; all required CI jobs passed. Data are internal, not provider-attested; observed rates are not causal proof; no model training or promotion occurs.
+- Next P0: operator-run model artifact provenance/digest/license gate. Production artifact staging/cache-only load/retrieval tests remain unverified.
+
+
+## P0 — staged model-artifact provenance/digest release gate (2026-10-26; candidate)
+- Added `scripts/verify_model_artifact_manifest.py` to validate exact application SHA, model directory containment/digest, Hub revision pin, acquisition provenance and license approval, local-only policy and remote-code prohibition. Manifest schema and invocation are documented in `docs/MODEL_ARTIFACT_OPERATIONS.md`.
+- Added `tests/test_model_artifact_manifest.py` for valid and invalid manifest, hash, path, revision, policy and approval cases.
+- Status: candidate until full hosted push and PR CI passes on exact resulting SHA. No production artifact was provided or claimed staged. Model licensing/sign-off, staged cache-only load and retrieval golden tests are deployment evidence gates.
+
+
+
+## P0 — staged model artifact manifest gate verified at source/CI level (2026-10-26)
+- Exact SHA: a3c2627d26a765ac88e4ef3c164b86e850a7c40c; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367360162; PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367367483. Both workflows succeeded.
+- Python 396 passed, 3 skipped, 1 warning; PostgreSQL migrations/concurrency, AI/RAG imports and SBOM/license, frontend, dependency/license audits, secret scan, source/53-skill guard and push lockfile sync passed.
+- The validator checks application SHA, path containment and symlinks, staged-tree digest, immutable Hub revision, license/acquisition metadata, timezone-aware timestamps and local-only runtime flags. Ten test cases cover valid and invalid manifests.
+- Real staged model provenance, license review, cache-only load from the deployed image and RAG retrieval golden tests remain external deployment evidence; none are claimed complete.
+
+## R-02 follow-up — source statistic extraction regression (2026-10-28)
+- Failure evidence: pre-fix SHA `a9a76b66586bf22b4d39762f2a894ae9eb3cef2f`; push [40628516136](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40628516136) and PR [40628523691](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40628523691) failed in the Python test job. Exact log: 529 passed, 3 skipped, 1 failed because `observed_statistics` was empty for a source containing `30%`.
+- Fix candidate: correct percent-token boundary handling and extend regression assertions to currency, percent words, plural units and snapshot-hash linkage.
+- Status: awaiting exact-SHA hosted verification; do not mark R-02 or the release gate complete until both push and PR checks pass.
+
+
+## R-02 — source statistic extraction regression verified (2026-10-28)
+- Exact SHA `2677741f65aedc1c9c53a53fa5dd3c412abde273`; push [40634328707](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40634328707) and PR [40634334600](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40634334600) both completed successfully.
+- Push: all eight jobs succeeded, including PostgreSQL integration and lockfile sync. PR: all required jobs succeeded; lockfile sync is push-only and was skipped. Python: 530 passed, 3 skipped, one existing warning. PostgreSQL migration upgrade/downgrade/drift and concurrent conversion-reversal/workflow-lease checks passed.
+- Status: **verified at source and hosted CI level**. Production/release readiness remains blocked by separate staging, provider, license and deployment evidence gates.
+
+
+## Ads safety follow-up — freshness of provider evidence (2026-10-28, candidate)
+- Requirement: S6 / targeted-ad guardrails must not make a current spend, ROAS or CPA decision from stale or implausibly future-dated provider observations.
+- Implementation candidate: `backend/services/ad_guardrails.py`; latest observation per platform/creative must be no older than 24 hours and not more than five minutes in the future. Historical daily snapshots remain included in campaign totals once each creative/platform passes the latest-observation freshness gate.
+- Regression tests: `tests/test_ad_budget_guardrails.py` covers stale evidence, historical data plus fresh latest evidence, and materially future-dated observations.
+- Safety boundary: this evaluator remains a recommendation only; it does not call provider APIs, authorize spend or execute a pause.
+- Status: **candidate / CI pending** at the time this record was written. Promote only after exact-SHA push and PR workflows pass and logs are inspected. Live provider polling contracts and account-level UAT remain open.
+
+
+## Ads safety follow-up — freshness of provider evidence (2026-10-28, verified)
+- Requirement: S6 / targeted-ad guardrails must not make a current spend, ROAS or CPA decision from stale or implausibly future-dated provider observations.
+- Implementation: `backend/services/ad_guardrails.py`; latest observation per platform/creative must be no older than 24 hours and not more than five minutes in the future. Historical daily snapshots remain included in campaign totals when each creative/platform has a fresh latest observation.
+- Tests: `tests/test_ad_budget_guardrails.py` covers stale evidence, historical data plus fresh latest evidence, and materially future-dated observations.
+- Exact-SHA CI: commit `3bc5770f3c89561e13686ea9c0023dd1ebbf5d78`; push [40636590192](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40636590192) all 8 jobs passed; PR [40636595214](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40636595214) all required jobs passed (lockfile-sync skipped for PR). Python 532 passed, 3 skipped, one warning.
+- Safety boundary: this evaluator remains a recommendation only; it does not call provider APIs, authorize spend or execute a pause. Live provider polling contracts and account-level UAT remain open.
+
+
+| R-21 | S6 commission reconciliation status hardening | `backend/services/commission_reconciliation.py`, `tests/test_commission_reconciliation.py`, exact commit `32f7f01a4b180f54a7fd7d0c8dc06e8c72acb969` | Implemented and exact-head push/PR CI passed: [push](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678582977), [PR](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40678593095) | Live network statement contracts, provider-authenticated evidence, PostgreSQL finance tenant UAT, currency minor-unit policies and end-to-end finance browser UAT |
+
+
+| R-21 | Persisted offer shortlists and compare workflow | OfferShortlist, OfferShortlistItem, migration 0028_offer_shortlists, GET/POST /api/offers/shortlists, detail/add/remove/delete routes, frontend/app/offers/page.tsx, tests/test_offer_shortlists_api.py, browser UAT | Implemented and hosted-CI verified on base SHA 3badf73a5c6eb25d8cdd06fd8e1d49ae7734e324; optional note-entry UI verified on latest SHA 267dd5c489b92c0d6b02c1229e4162d9736a7cd4 (push 40822952573, PR 40822958502) | Official provider facts, eligibility, terms, source attestation and broad S1 provider acceptance remain partial; staging/production readiness remains open |
+
+| R-22 | S1 offer qualification and decision workflow | OfferQualificationReview model, migration 0029_offer_qualification_reviews, workspace-scoped queue, owner/admin decision API, qualification UI, API and browser acceptance tests | Implemented and hosted-CI verified on exact SHA 03bdbb6f60a6e8b9f86472a86f17d0156214dadc (push 40824127725, PR 40824132752) | Provider-backed eligibility/terms/authenticity, live marketplace contracts and external approval remain unverified; production readiness remains open |
+
+| R-23 | Qualification queue pagination | `frontend/app/offers/qualification/page.tsx`; `browser_tests/test_workspace_browser_smoke.py::test_offer_qualification_queue_paginates_and_preserves_filter`; `test_offer_qualification_returns_to_valid_page_when_last_filtered_item_is_removed` | Verified through exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) at `10c985564dfea7b9494ecdf7bd0045753ef8c00c`; browser UAT 22 passed; push lockfile-sync passed | Provider-backed offer eligibility/terms, external network contracts and actual approval evidence remain distinct, open requirements |
+
+
+## R-24 — Lead CRM evidence/search and paid-ad snapshot safety verified (2026-10-29)
+- Lead API: workspace-scoped bounded limit/offset, stable ordering, global email/resource/first-touch/last-touch UTM search, and total count; UI previous/next, stale-page recovery, global search and current-page UTM filter.
+- Lead consent evidence: persisted email-confirmation timestamp and source; lazy read-only consent-event history with purpose, source/channel, policy version, event time and captured wording.
+- Paid-ad guardrail: same-latest-timestamp provider snapshot conflicts are detected; ambiguous evidence blocks stop-loss decisions. UI exposes the conflicting fields and explains that no remote action was executed.
+- Exact-SHA CI evidence: push [40832233239](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832233239), PR [40832239987](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40832239987); Python 748 passed, 7 skipped, 5 warnings; browser UAT 19 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped.
+- Remaining: authenticated production provider adapters, external account UAT, full workflow E2E/staging, 53-skill parity, public/proprietary licensing decision and release/deployment evidence. These changes do not authorize live ad spend or send marketing email.
+
+
+## 2026-10-29 lead CRM export checkpoint — verified at 10c985564dfea7b9494ecdf7bd0045753ef8c00c
+
+- The current lead view has bounded pagination, stale-page recovery, global email/resource/first-touch/last-touch UTM search, and read-only consent history.
+- The CSV export endpoint reuses the workspace predicate and global search, logs privacy-minimized audit metadata, escapes formula-leading fields, sets no-store headers and fails closed above 10,000 results.
+- Exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) passed on `10c985564dfea7b9494ecdf7bd0045753ef8c00c`: Python 764 passed, 7 skipped; browser UAT 22 passed; PostgreSQL, frontend, security, AI, secret scan and repo guard passed. Push lockfile-sync passed.
+- Still partial: external CRM sync, complete consent lifecycle journey UAT, real email-provider verification, retention/deletion policy acceptance and production E2E/staging evidence.
+
+## 2026-10-29 lead CSV export database acceptance — verified at 10c985564dfea7b9494ecdf7bd0045753ef8c00c
+
+- The earlier CSV feature was already passing on push [40833516478](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833516478) and PR [40833522299](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40833522299).
+- The added persisted SQLite multi-workspace regression now verifies the search/export result and workspace-scoped audit row. The related export fixture is flushed within workspace A before switching to workspace B; production tenant-write protection was not weakened.
+- Exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) passed on `10c985564dfea7b9494ecdf7bd0045753ef8c00c`: Python 764 passed, 7 skipped; browser UAT 22 passed; PostgreSQL migration/drift, frontend, security, AI, secret scan and repo guard passed. Push lockfile-sync passed.
+- External CRM import/sync and jurisdiction-specific legal completeness remain unverified.
+
+## P0 — Resend delivery schema drift correction (2026-10-29; candidate)
+- Failed predecessor `e0ee81fe04f6e332319680bb2b5b1ba942cbb2c7`: push [40836353831](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836353831) and PR [40836360147](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40836360147) failed schema drift because migration 0030 declared server default `resend`, but the ORM model did not.
+- Verified fix commit `273a88d0ea247df78a862de86effd43be9b3f9cd` declares both ORM client and DB server defaults for `EmailDeliveryEvent.provider` and adds model metadata regression coverage. Exact-SHA push [40837426005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837426005) and PR [40837433276](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837433276) passed: Python 758 passed, browser UAT 20 passed, and PostgreSQL migration/drift verification passed.
+- Keep production provider readiness unverified until valid owner-managed Resend webhook secret, configured endpoint, real signed delivery events and bounce/complaint/suppression UAT have been exercised. Never commit provider secrets.
+
+
+### Current verification correction (same existing branch; candidate pending)
+
+- The schema-default correction made Alembic drift checks pass in the PR run, including PostgreSQL migration verification. The Python suite then failed one API test: `test_lead_list_paginates_and_counts_only_the_active_workspace` constructed a `SimpleNamespace` without `email_suppressed_at` and `email_suppression_reason`, which the latest lead serializer now returns. The failure was isolated to stale test fixture data; 757 other tests passed, 7 skipped. Updated the fixture to include both model fields. Fresh exact-SHA push/PR runs are required before closing the checkpoint.
+
+
+## P0 — Resend delivery-event schema/fixture repair verified (2026-10-29)
+- Exact-SHA push [40837426005](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837426005) and PR [40837433276](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40837433276) passed on `273a88d0ea247df78a862de86effd43be9b3f9cd`: 758 Python passed, 7 skipped; browser UAT 20 passed; PostgreSQL, frontend, security, AI profile, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by its configured event condition.
+- The ORM server default matches migration 0030; lead-list test data matches the expanded lead serialization contract. External Resend account delivery remains unverified.
+
+## S4 — Workspace-scoped read-only email-delivery history (verified, 2026-10-29)
+
+- The workspace-owned endpoint returns bounded latest-first persisted signed provider events with allowlisted event metadata and sanitized bounce information; frontend history is read-only with loading/error/empty states.
+- Verification on exact-SHA push [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396) and PR [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094): Python 762 passed, 7 skipped; browser UAT 22 passed; PostgreSQL, frontend, security, AI, secret scan and repo guard passed.
+- Live Resend endpoint/secret configuration and real account delivery/bounce/complaint/suppression UAT remain open.
+
+## S4 — Authenticated individual-lead JSON data export (verified, 2026-10-29)
+
+- The authenticated export returns one workspace-owned lead record with bounded consent/delivery/send-state/confirmation metadata, fails closed above per-collection bounds, uses opaque minimized audit references and sends no-store/nosniff attachment headers. It excludes email bodies, provider tokens, raw webhook payloads and payload checksums.
+- The SQLite API test covers workspace scoping, export serialization, audit privacy, missing-workspace/lead handling and bounds; browser UAT covers the download.
+- Exact-SHA push [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396) and PR [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094) passed on `293250bf7e209fe78839eec8afad55080acb6449`: Python 762 passed, 7 skipped; browser UAT 22 passed; required push jobs passed.
+- This stored-record export is not a legal-completeness certification; governed deletion/retention and jurisdiction-specific review remain open.
+
+## S5/S6 — Resend event ordering and replay integrity (verified at 293250bf7e209fe78839eec8afad55080acb6449)
+
+- Regression coverage rejects a reused provider event ID with changed signed payload and keeps hard-bounce suppression terminal when a later delivered event arrives.
+- Exact-SHA push [40841059396](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841059396) and PR [40841067094](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40841067094) passed: Python 762 passed, 7 skipped; PostgreSQL, frontend, security, AI, secret scan and repo guard passed.
+- Live Resend endpoint/secret setup and actual account delivery/bounce/complaint UAT remain open.
+
+## 2026-10-29 database readiness probe — verified
+
+- Added `GET /health/ready` in `backend/main.py`. It executes `SELECT 1` through the standard database session dependency; success returns a minimal ready response and query errors return generic HTTP 503 without exposing driver details. The existing `GET /health` liveness behavior is preserved.
+- Tests in `tests/test_health_readiness.py` cover the successful query and safe failure response.
+- Exact-SHA push [40842314161](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842314161) and PR [40842321920](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40842321920) passed on `10c985564dfea7b9494ecdf7bd0045753ef8c00c`: Python 764 passed, 7 skipped, 5 warnings; browser UAT 22 passed; PostgreSQL, frontend, security audit, AI profile, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- This probe verifies database query reachability only—not migration freshness, workers/queues, real staging, monitoring, restore or provider connectivity.
+
+
+
+## 2026-10-29 paid-ad ROAS numeric input validation — verified
+
+- `evaluate_roas` rejects negative, boolean and non-finite financial inputs rather than clamping them; it rejects blank/oversized campaign identifiers and ratio overflow.
+- `POST /api/ads/evaluate` now returns HTTP 422 for invalid input rather than returning a derived stop-loss recommendation.
+- Exact-SHA push [40843642045](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843642045) and PR [40843648833](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40843648833) passed at `b538a03718d7e912925ee08aaf9ea249445c9220`: Python 781 passed, 7 skipped, 5 warnings; browser UAT 22 passed; PostgreSQL, frontend, security/SBOM, AI profile, secret scan, repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by design.
+- This does not provide live ad-network performance ingestion, authorize spend, or execute remote campaign changes. Provider credentials and account-level UAT remain release gates.
+
+## 2026-10-29 — comparison source snapshot evidence verified
+
+Exact-SHA verification for cb82e4cdbe1eeb9d7bdfd51c1956c1655358daad: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851987784 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40851997494 passed. Python 785 passed, 7 skipped, 5 warnings; browser UAT 24 passed on each run. PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by its configured push-only condition.
+
+Implementation captures a bounded public-page snapshot through the pinned outbound transport, stores UTC time and excerpt hash, and records per-product exact-text presence/not-found/fetch failure. This is evidence of text presence, not independent truth/currentness/provider approval. Product and release status remain partial/not production ready; provider authorization, live terms, legal review, staging, backup/restore and remaining skill acceptance are still separate gates.
+
+## R-25 — Saved comparison draft history and workspace isolation — verified 2026-10-29
+
+- Added GET /api/content/comparison-posts with bounded pagination and GET /api/content/comparison-posts/{asset_id} for authenticated active-workspace users.
+- Both reads explicitly filter by workspace ID and comparison_post asset type. Responses are no-store; missing or foreign-workspace IDs return 404.
+- UI loads the history on page entry, refreshes after generation and can reopen saved HTML and evidence metadata. API tests cover the two-workspace case; browser UAT covers creation and reopening after page reload.
+- Verified exact-SHA on 321ba0a463819af2fe6915c55dcf62fb0fc1c0a0: push 40855889234 and PR 40855896327 passed; Python 787 passed/7 skipped/5 warnings and browser UAT 25 passed. PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile-sync passed.
+- This closes saved draft retrieval only. Product evidence verification, live provider connections, compliance and production deployment/restore remain open.
+
+## R-26 — Immutable comparison draft revisions — verified 2026-10-29
+
+- Added the optional `revision_of_asset_id` request field and workspace-scoped source validation for `POST /api/content/comparison-post`. Missing/foreign source IDs return 404; only comparison drafts with `status=draft` can be revised. Access is validated before model/source network work.
+- Each revision creates a new `ContentAsset`, stores revision number and parent/root asset IDs in metadata, and records a distinct `content_comparison_post.revised` audit event. The source asset is not changed; the editor can choose a revision or an independent draft.
+- Added API/database and Chromium acceptance for the new revision, original immutability, root metadata persistence and cross-workspace denial.
+- Exact-SHA push [40858629542](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858629542) and PR [40858638120](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40858638120) passed. Python 787 passed/7 skipped/5 warnings; browser UAT 25 passed. PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
+- Remaining acceptance: immutable revision lineage is implemented, but sourced text presence is not fact verification; official affiliate eligibility, compliance/legal review, live provider/publishing, staging and production operations remain open.
+
+## R-26 — atomic comparison draft revision sequencing verified (2026-10-29)
+
+- Added `ComparisonDraftRevisionSequence`, migration `0031_comparison_draft_revision_sequences`, and `reserve_comparison_revision_number`. The counter is scoped by workspace and root draft and advanced atomically, with audit reservation committed before generation I/O. Original content assets remain immutable; failed generations can leave a documented number gap rather than reuse a reservation.
+- Added SQLite history-seeding/monotonic regression and PostgreSQL integration coverage for 24 simultaneous reservations; the CI PostgreSQL command now runs `tests/test_comparison_revision_sequence_postgres.py`.
+- A first run failed because the test fixture did not flush the workspace before inserting its child content asset. Fixed the fixture ordering; the production FK and tenant protections were not relaxed.
+- Exact-SHA push [40860248603](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40860248603) and PR [40860256236](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40860256236) passed: Python 788 passed/8 skipped/5 warnings, PostgreSQL migration/integration 8 passed including concurrency, browser UAT 25 passed, and all configured frontend/Docker, AI/RAG, security/SBOM, secret scan and repo-guard jobs passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured push-only trigger.
+- Still open: product source wording is not independent fact verification; provider eligibility, real account authorization/UAT, legal/compliance acceptance, external publishing, staging operations and backup/restore are distinct release gates.
+
+## P0 — Comparison draft body/source integrity verified (2026-10-29)
+
+- Code SHA 585c30cf91d8d8baf64796ddbd565c90550412eb binds the exact stored article body and canonical source-snapshot manifest to creation/revision audit evidence. Source excerpt hashes are rechecked; detail exposes content/source integrity status and editorial review is rejected with 409 if content, snapshot provenance, or baseline is missing/mismatched.
+- Regression coverage mutates a saved revision’s body and snapshot excerpt, checks both integrity mismatches, and proves that submitting the mutated body hash still cannot obtain editorial approval. An older direct-insert test fixture was corrected to seed a valid integrity baseline and creation audit. Production enforcement was not relaxed.
+- Exact push [40882079872](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40882079872) and PR [40882091616](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40882091616) passed: Python 796 passed/8 skipped/5 warnings; browser UAT 26 passed; PostgreSQL 8 passed; frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by its push-only trigger.
+- Limitations/release gates unchanged: these hashes are not cryptographic signatures; they do not withstand privileged rewriting of all database records and do not prove product fact truth, currentness, compliance, affiliate eligibility or publishing authorization. Production remains blocked on provider UAT, legal review, full skill acceptance, staging/deployment, monitoring and backup/restore/rollback evidence.
+
+## P0/P1 — comparison article review lifecycle and integrity — verified 2026-10-29
+
+- Exact code SHA `378f890da1063b8e98eaea9f979bd6d2ff9e9112` passes push [40886156627](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40886156627) and PR [40886166294](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40886166294).
+- Comparison articles now have bounded source snapshots, product-scoped literal fact evidence, workspace-scoped list/detail retrieval, immutable revisions, an atomic workspace/root revision counter and audit reservation, and owner/admin review decisions for approve/request-changes/reject.
+- Editorial review checks the stored HTML body, source snapshot manifest and excerpt hashes, evidence payload hash and creation/revision audit binding. It rejects missing or altered baselines with HTTP 409. The review record is tied to the saved content hash; approval remains editorial only and publishing is not authorized.
+- Acceptance evidence: Python 798 passed/8 skipped/5 warnings; Chromium browser UAT 26 passed; PostgreSQL migration/integration 8 passed; frontend/Docker, AI/RAG, security/SBOM, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync skipped by configured push-only condition.
+- A single failing predecessor test was corrected because its expected baseline hash was scoped to a nested database seeding function. The correction only shares the test fixture value outside that function; it does not bypass production integrity checks.
+- Still open: product fact truth/currentness, official affiliate-provider account/eligibility proof, jurisdictional legal/compliance approval, external publication, remaining skill acceptance, live staging/deployment, monitoring and backup/restore/rollback evidence.
+
+## S3 listicle generator and editorial decision checkpoint — verified 29 October 2026
+
+- New `blog/listicle-generator` path adds structured product input, deterministic comparison/at-a-glance information, product-scoped literal-text evidence and safe HTML narrative.
+- Public sources use the existing pinned, bounded HTTPS fetch service. Source/fact status is explicit and never treated as independent proof of truth/currentness; no prices, rankings, reviews or earnings are invented to fill gaps.
+- Draft persists under active workspace and binds body SHA-256, source snapshot excerpt hashes, canonical source manifest and evidence-payload digest to creation-audit evidence. Detail and review deny with HTTP 409 if content/evidence baselines drift.
+- Owner/admin approve/request-changes/reject is one-time and content-hash-bound. It is editorial-only and does not authorize publishing.
+- Exact-SHA push [40897990313](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40897990313) and PR [40898005395](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40898005395) passed: Python 802 passed/8 skipped/5 warnings, browser UAT 29 passed, and all required backend/frontend/database/AI/security/secret/repo checks passed. Push lockfile sync passed; PR lockfile sync skipped by the configured push-only trigger.
+- Next acceptance: listicle revisions; currentness/independent fact verification; official provider eligibility/terms, regional restrictions and legal review; end-to-end provider UAT and production deployment/restore gates.
+
+## S2/S3 — Capture-time freshness for comparison and listicle review — verified 29 October 2026
+
+- Code: 662a72a7398849bd5ed463ead4824502f3a3d7f6; shared service backend/services/source_freshness.py, comparison/listicle endpoints, UI and unit/API/browser tests.
+- Default maximum snapshot age is 24 hours; five minutes of positive clock skew is tolerated. Missing/mismatched source inventory, fetch failure, invalid/naive timestamps, stale snapshots and materially future-dated captures block owner/admin approve operations. Blocked attempts are audited and return HTTP 409 SOURCE_EVIDENCE_NOT_CURRENT. Request-changes/reject remain available.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909269285 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40909278592 passed: Python 812 passed/9 skipped/5 warnings; browser UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard passed; push lockfile-sync passed.
+- This is a capture-time gate only; it does not prove product fact accuracy, source publication date, freshness of prices/terms, provider eligibility, legal compliance or authorization to publish. No-source drafts remain editorially reviewable but explicitly unverified.
+- Next priority: continue P0 tenant/platform authorization and provider-write idempotency review, then provider sandbox/account UAT, 53-skill acceptance, licensed runtime disposition and production staging/backup/restore gates. Overall status remains NOT PRODUCTION READY.
+
+## P0 — fail-closed compliance evidence parser and stored-source validation — verified 29 October 2026
+
+- Code c31459af067540eb35b033ca5fb4d8532962be21: runtime revalidates stored evidence source URLs, rejects invalid/local/private/credential-bearing URLs, and no longer treats timezone-naive persisted evidence reviewed_at as UTC. Naive assessment evaluation time is rejected; future-dated evidence is not valid.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911398073 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40911408321 passed: Python 819 passed/9 skipped/5 warnings; browser UAT 29 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan and repo guard passed; push lockfile sync passed.
+- This is a fail-closed validation improvement, not a substitute for a current authoritative source, independent legal review or a complete jurisdiction-law database. Continue with remaining platform/admin authorization and provider-side UAT.
+
+## R-27 — P0 live session account/admin privilege revalidation — verified 29 October 2026
+
+- Code: `backend/main.py` `require_auth`; regression tests: `tests/test_auth_tenancy_guards.py`.
+- Account activation and Platform Super Admin privilege are now re-read from `UserAccount` on every session-backed workspace request. Missing/inactive account records invalidate the session; the persisted email/admin flag replaces stale values before workspace authorization. Workspace owner/admin still does not imply platform-admin authority.
+- Four regression tests cover a revoked admin grant, inactive account, missing account and new admin grant.
+- Exact-SHA push [40914232006](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40914232006) and PR [40914245417](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40914245417) passed; Python 823 passed/9 skipped/5 warnings, browser UAT 29 passed, PostgreSQL/frontend/AI/security/secret/repo checks passed and push lockfile-sync passed.
+- Still required: full Platform Super Admin lifecycle/tenant/incident/kill-switch UI, remaining provider-write and background-worker authorization audit, real provider/account UAT and production staging/operations. This fix is a security slice, not platform-wide release approval.
+
+## R-28 — P0 persisted Platform Super Admin provider-write pause — verified 29 October 2026
+
+- Code: backend/models.py PlatformExecutionControl, migration migrations/versions/0033_platform_execution_control.py, backend/main.py GET/POST /api/admin/execution-control, backend/services/external_action_registry.py and frontend/app/admin/page.tsx.
+- Acceptance: required operator reason, persisted actor/time/global pause state, workspace-scoped audit event, Platform Super Admin authorization, fail-closed missing singleton row, HTTP 423 for new registry claims while paused, completed idempotency replay without duplicate provider call, admin UI and Chromium pause/resume journey.
+- Tests: tests/test_platform_execution_control.py; enhanced tests/test_external_publish_idempotency.py; updated provider-action fixtures; browser_tests/test_workspace_lifecycle_admin.py. Initial CI exposed isolated compliance test fixtures without the new singleton row; those fixtures were corrected while production fail-closed behavior remained intact.
+- Exact-SHA verification on corrected head 56edbec957d1667dea4e2a9dbc4efd19de422632: push [40921800860](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40921800860) and PR [40921812153](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40921812153) both passed. Python 835 passed / 9 skipped / 5 warnings; browser UAT 30 passed; PostgreSQL, frontend/Docker, AI/RAG, security/SBOM, secret scan, repo guard and push lockfile-sync passed. PR lockfile-sync skipped by its configured push-only condition.
+- Boundary: the pause gates new external actions only where the central ExternalAction registry is used. It does not reverse in-flight remote requests or block side-effect paths that bypass the registry. Remaining provider-path coverage, live provider/account UAT and actual staged kill-switch drills remain mandatory. Overall release is NOT PRODUCTION READY.
+
+## R-29 — P0 persisted outbound-pause enforcement for Resend email — verified 29 October 2026
+
+- Code SHA: 7145e2f2189cbac940c9471139388f4a1d89750d on the existing build/omni-affiliate-os-production branch.
+- backend/services/email_delivery.py now calls the same PlatformExecutionControl singleton row-lock gate before it claims a scheduled marketing email and before it persists a new double-opt-in confirmation request. The former uses the existing conditional queued-email status claim in the same transaction; the latter checks before lead/confirmation/event creation. Stable Resend idempotency keys are preserved.
+- New regressions confirm the paused scheduled worker makes no provider call and leaves the current item unclaimed; missing control returns 503 and leaves the item unclaimed; double-opt-in is blocked before lead/confirmation/consent mutation. Workspace-scoped, minimized audit evidence records each block.
+- Exact-SHA push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925318303 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40925331019 passed: Python 838 passed/9 skipped/5 warnings; browser UAT 30 passed; PostgreSQL integration 9 passed; frontend/Docker, AI/RAG (10 imports), security/SBOM/license, secret scan and repo guard passed. Push lockfile-sync passed; PR lockfile-sync skipped under its configured push-only condition.
+- Boundary: the pause now covers central registry claims and these two direct Resend send paths; other provider mutation/background paths need individual enforcement. In-flight operations are not rolled back. Real provider account and staged emergency-pause UAT remain open. Product remains NOT PRODUCTION READY.
+
+
+## R-30 — Workspace-scoped offer source capture and evidence history
+
+- Added bounded public HTTPS page capture for S1 offer qualification using the existing pinned SSRF-safe transport, no redirect following, credential-like query rejection, a 10-source cap, 1 MB response cap and limited concurrency.
+- Stores sanitized page metadata/excerpts, response and excerpt SHA-256 hashes, HTTP/content type, capture timestamps and bounded failed-fetch records in workspace-owned rows. Owner/admin capture, workspace-scoped read history and audit events are included.
+- API/service tests cover HTML sanitization, hashing, failure minimization, URL restrictions, authorization and cross-workspace isolation; the qualification UI supports capture, reload and review.
+- Boundary: capture age measures only when a page was fetched. It does not prove factual truth, legal validity, current terms, publisher eligibility or external network approval. Human qualification remains a separate decision.
+- Verified on implementation SHA 6447e27f9ddd1ad87cf0f670f2cb772768851256: [push run 41115207514](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41115207514) and [PR run 41115218879](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41115218879) both completed successfully. Python 895 passed, 9 skipped, 5 warnings; Chromium browser UAT 44 passed; PostgreSQL, frontend production/Docker smoke and security gates passed. Live provider UAT and production deployment remain open.

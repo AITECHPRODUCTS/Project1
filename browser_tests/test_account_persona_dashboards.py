@@ -173,3 +173,67 @@ def test_publisher_account_cannot_open_merchant_dashboard():
             assert "only available to Merchant / Product Owner accounts" in page.locator("main [role=alert]").inner_text()
         finally:
             browser.close()
+
+def test_publisher_registration_redirects_to_publisher_dashboard():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            registered = {"done": False}
+            calls = []
+
+            def handle_api(route):
+                request = route.request
+                path = request.url.split("?", 1)[0]
+                calls.append((request.method, path))
+                if path.endswith("/api/auth/me"):
+                    if registered["done"]:
+                        _json(route, {
+                            "authenticated": True,
+                            "csrf_token": "publisher-persona-csrf",
+                            "user": {
+                                "email": "publisher@example.test",
+                                "account_type": "affiliate_publisher",
+                                "is_admin": False,
+                                "workspace_role": "owner",
+                            },
+                        })
+                    else:
+                        _json(route, {"detail": "Authentication required"}, 401)
+                elif path.endswith("/api/auth/register") and request.method == "POST":
+                    payload = request.post_data_json
+                    assert payload["account_type"] == "affiliate_publisher"
+                    registered["done"] = True
+                    _json(route, {
+                        "authenticated": True,
+                        "csrf_token": "publisher-persona-csrf",
+                        "user": {
+                            "email": payload["email"],
+                            "account_type": payload["account_type"],
+                            "is_admin": False,
+                            "workspace_role": "owner",
+                        },
+                    }, 201)
+                elif path.endswith("/api/status"):
+                    _json(route, {"clicks": 0, "conversion_events": 0, "commission_recorded": 0})
+                elif path.endswith("/api/marketplace/offers"):
+                    _json(route, {"count": 0, "data": []})
+                elif path.endswith("/api/marketplace/applications"):
+                    _json(route, {"count": 0, "total_count": 0, "data": []})
+                elif path.endswith("/api/campaigns"):
+                    _json(route, {"count": 0, "data": []})
+                else:
+                    _json(route, {"detail": "Unexpected API request"}, 404)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/register", wait_until="domcontentloaded")
+            page.get_by_label("Affiliate / Publisher").check(force=True)
+            page.get_by_label("Email address").fill("publisher@example.test")
+            page.get_by_label("Password").fill("PublisherStrongPassword123")
+            page.get_by_role("button", name="Create account").click()
+            page.wait_for_url("**/publisher")
+            page.get_by_role("heading", name="Publisher workspace").wait_for(state="visible")
+            assert ("POST", "http://127.0.0.1:8000/api/auth/register") in calls
+            assert any(path.endswith("/api/marketplace/offers") for _, path in calls)
+        finally:
+            browser.close()

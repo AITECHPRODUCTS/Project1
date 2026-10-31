@@ -63,3 +63,13 @@ No claim is made of guaranteed earnings, 100% failproof operation, universal pro
 - The new Super Admin operations APIs require both the global admin flag and explicit platform_admin persona, without changing the existing shared global-admin dependency used by existing provider/finance integrations. Added API tests for cross-workspace visibility, safe read-only retry, side-effect retry denial, incident lifecycle/audit, and denial of a business persona even when the global flag is present. Browser UAT now exercises the operations API and renders queue/incident panels.
 - Remaining in this area: a real durable provider dispatch worker with per-provider idempotency and reconciliation; persisted dead-letter queue semantics for retryable queue jobs; incidents from broader system/worker events; alert delivery, support tools, usage/cost limits, and release monitoring.
 - Automated tests are added in this increment and must be treated as unverified until the exact-commit push and PR Actions runs finish. Docker/local user acceptance on the user's port 3001 instance still requires rebuilding the local Compose stack and exercising it on the user's machine. CI does not prove that running local containers have been updated.
+
+
+## 2026-10-31 — unified public entry and role-aware workspace UX
+- Preserved the existing large Growth Command application code as an authenticated workspace component; the new homepage does not replace or discard those tools.
+- Added a public homepage at /, a unified sign-in route at /login, and an improved Brand / Partner signup flow at /register.
+- Both business personas now land on the same /dashboard entry after registration or sign-in. The dashboard reads the authenticated identity and shows Merchant or Affiliate actions and counts from existing role-authorized APIs.
+- Added /growth for existing Publisher Growth Command tools and /platform for the existing command centre restricted to platform administrators. The separate /admin Platform Super Admin operations console remains intact.
+- Workspace switching uses existing authorized memberships only. The current backend still models one business persona per account; the UI does not pretend a user can switch roles without backend authorization.
+- Existing /publisher, /merchant and their detail routes remain in place for compatibility. Browser smoke journeys now use the preserved /growth route.
+- Updated persona browser tests for the common dashboard entry. Exact-commit CI evidence is pending until push and PR workflows complete.

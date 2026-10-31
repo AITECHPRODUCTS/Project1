@@ -21,8 +21,8 @@ def test_registration_page_requires_an_explicit_single_persona():
             page.get_by_role("heading", name="Create your account").wait_for(state="visible")
             submit = page.get_by_role("button", name="Create account")
             assert submit.is_disabled()
-            assert not page.get_by_label("Affiliate / Publisher").is_checked()
-            assert not page.get_by_label("Merchant / Product Owner").is_checked()
+            assert not page.get_by_label("I'm a partner").is_checked()
+            assert not page.get_by_label("I'm a brand").is_checked()
         finally:
             browser.close()
 
@@ -76,12 +76,13 @@ def test_merchant_registration_redirects_to_merchant_dashboard():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/register", wait_until="domcontentloaded")
-            page.get_by_label("Merchant / Product Owner").check(force=True)
+            page.get_by_label("I'm a brand").check(force=True)
             page.get_by_label("Email address").fill("merchant@example.test")
             page.get_by_label("Password").fill("MerchantStrongPassword123")
             page.get_by_role("button", name="Create account").click()
-            page.wait_for_url("**/merchant")
-            page.get_by_role("heading", name="Merchant workspace").wait_for(state="visible")
+            page.wait_for_url("**/dashboard")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+            assert page.get_by_text("Brand / Merchant workspace").is_visible()
             assert ("POST", "http://127.0.0.1:8000/api/auth/register") in calls
             assert any(path.endswith("/api/merchant/offers") for _, path in calls)
         finally:
@@ -268,51 +269,29 @@ def test_publisher_registration_redirects_to_publisher_dashboard():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/register", wait_until="domcontentloaded")
-            page.get_by_label("Affiliate / Publisher").check(force=True)
+            page.get_by_label("I'm a partner").check(force=True)
             page.get_by_label("Email address").fill("publisher@example.test")
             page.get_by_label("Password").fill("PublisherStrongPassword123")
             page.get_by_role("button", name="Create account").click()
-            page.wait_for_url("**/publisher")
-            page.get_by_role("heading", name="Publisher workspace").wait_for(state="visible")
+            page.wait_for_url("**/dashboard")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+            assert page.get_by_text("Affiliate / Partner workspace").is_visible()
             assert ("POST", "http://127.0.0.1:8000/api/auth/register") in calls
             assert any(path.endswith("/api/marketplace/offers") for _, path in calls)
         finally:
             browser.close()
 
-def test_publisher_cannot_open_legacy_operations_dashboard_with_view_query():
+def test_public_homepage_query_does_not_open_the_legacy_growth_workspace():
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
             page = browser.new_page()
-
-            def handle_api(route):
-                path = route.request.url.split("?", 1)[0]
-                if path.endswith("/api/auth/me"):
-                    _json(route, {
-                        "authenticated": True,
-                        "user": {
-                            "email": "publisher@example.test",
-                            "account_type": "affiliate_publisher",
-                            "is_admin": False,
-                            "workspace_role": "owner",
-                        },
-                    })
-                elif path.endswith("/api/status"):
-                    _json(route, {"clicks": 0, "conversion_events": 0, "commission_recorded": 0})
-                elif path.endswith("/api/marketplace/offers"):
-                    _json(route, {"count": 0, "data": []})
-                elif path.endswith("/api/marketplace/applications"):
-                    _json(route, {"count": 0, "total_count": 0, "data": []})
-                elif path.endswith("/api/campaigns"):
-                    _json(route, {"count": 0, "data": []})
-                else:
-                    _json(route, {"detail": "Unexpected API request"}, 404)
-
-            page.route("**/api/**", handle_api)
+            api_calls = []
+            page.route("**/api/**", lambda route: (api_calls.append(route.request.url), _json(route, {"detail": "No API call expected"}, 401)))
             page.goto(BASE_URL + "/?view=content-studio", wait_until="domcontentloaded")
-            page.wait_for_url("**/publisher")
-            page.get_by_role("heading", name="Publisher workspace").wait_for(state="visible")
+            page.get_by_role("heading", name="Grow through partnerships.").wait_for(state="visible")
             assert page.locator("main").get_attribute("data-current-view") is None
+            assert api_calls == []
         finally:
             browser.close()
 

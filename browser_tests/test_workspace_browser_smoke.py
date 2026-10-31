@@ -438,9 +438,8 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             assert any(item["name"] == workspace_name for item in workspace_data)
 
             page = context.new_page()
-            page.goto(BASE_URL, wait_until="domcontentloaded")
-            page.wait_for_url("**/merchant")
-            page.get_by_role("heading", name="Merchant workspace").wait_for(state="visible")
+            page.goto(BASE_URL + "/dashboard", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
 
             # Exercise the authenticated review-only creative endpoint without
             # navigating this Merchant account into the Publisher-only dashboard.
@@ -1871,7 +1870,7 @@ def test_manual_override_submits_only_selected_stage_and_keeps_operator_selectio
                     _fulfill_json(route, {})
 
             page.route("**/api/**", handle_api)
-            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
             page.get_by_role("button", name="Flywheel").click()
             mode_select = page.get_by_label("Execution mode")
@@ -1988,7 +1987,7 @@ def test_dashboard_switches_active_workspace_using_authorized_backend_membership
                     _fulfill_json(route, {})
 
             page.route("**/api/**", handle_api)
-            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
             selector = page.get_by_label("Active workspace")
             selector.wait_for(state="visible")
@@ -2107,7 +2106,7 @@ def test_registered_user_can_create_workspace_and_dashboard_reloads_into_it():
                     _fulfill_json(route, {})
 
             page.route("**/api/**", handle_api)
-            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
             page.get_by_role("button", name="New workspace").click()
             form = page.get_by_role("region", name="Create a workspace")
@@ -2257,7 +2256,7 @@ def test_dashboard_sidebar_opens_dedicated_bookmarkable_module_screens():
                 _fulfill_json(route, payloads.get(path, {}))
 
             page.route("**/api/**", handle_api)
-            page.goto(BASE_URL, wait_until="domcontentloaded")
+            page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
             assert page.locator("main").get_attribute("data-current-view") == "overview"
 

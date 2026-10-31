@@ -1,82 +1,33 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect,useState,type FormEvent } from "react";
+import Link from "next/link";
+import { ArrowLeft,ArrowRight,Building2,CheckCircle2,Layers3,Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+type PublicAccountType="affiliate_publisher"|"merchant_product_owner";
 
-type PublicAccountType = "affiliate_publisher" | "merchant_product_owner";
-
-export default function RegisterPage() {
-  const [email,setEmail]=useState("");
-  const [password,setPassword]=useState("");
-  const [workspaceName,setWorkspaceName]=useState("");
-  const [accountType,setAccountType]=useState<PublicAccountType|"">("");
-  const [busy,setBusy]=useState(false);
-  const [error,setError]=useState("");
-
-  const submit=async(event:FormEvent)=>{
-    event.preventDefault();
-    if(!accountType){setError("Choose one account type before continuing.");return;}
-    setBusy(true);setError("");
-    try{
-      const created=await apiFetch<{user?:{account_type?:PublicAccountType}}>("/api/auth/register",{
-        method:"POST",
-        body:JSON.stringify({
-          email:email.trim(),
-          password,
-          workspace_name:workspaceName.trim()||(
-            accountType==="merchant_product_owner"?"My Merchant Workspace":"My Publisher Workspace"
-          ),
-          account_type:accountType
-        })
-      });
-      const selected=created.user?.account_type||accountType;
-      window.location.replace(selected==="merchant_product_owner"?"/merchant":"/publisher");
-    }catch(cause){
-      setError(cause instanceof Error?cause.message:"Account registration failed.");
-    }finally{setBusy(false);}
-  };
-
-  return <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900">
-    <div className="mx-auto max-w-2xl">
-      <a href="/" className="text-sm font-bold text-indigo-700">← Back to sign in</a>
-      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9">
-        <p className="text-xs font-black uppercase tracking-[.2em] text-indigo-600">OmniAffiliateOS</p>
-        <h1 className="mt-2 text-3xl font-black">Create your account</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-600">Choose one business role. Your account will have one role-specific dashboard; workspace membership permissions do not change this selection.</p>
-        <form onSubmit={submit} className="mt-7 space-y-5">
-          <fieldset>
-            <legend className="text-sm font-bold">Which role describes your business?</legend>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className={`cursor-pointer rounded-2xl border p-4 transition ${accountType==="affiliate_publisher"?"border-indigo-500 bg-indigo-50":"border-slate-200 bg-white"}`}>
-                <input className="sr-only" type="radio" name="account_type" value="affiliate_publisher" checked={accountType==="affiliate_publisher"} onChange={()=>setAccountType("affiliate_publisher")}/>
-                <span className="block font-black">Affiliate / Publisher</span>
-                <span className="mt-2 block text-xs leading-5 text-slate-600">Find offers, apply to programmes, create content and track affiliate performance.</span>
-              </label>
-              <label className={`cursor-pointer rounded-2xl border p-4 transition ${accountType==="merchant_product_owner"?"border-emerald-500 bg-emerald-50":"border-slate-200 bg-white"}`}>
-                <input className="sr-only" type="radio" name="account_type" value="merchant_product_owner" checked={accountType==="merchant_product_owner"} onChange={()=>setAccountType("merchant_product_owner")}/>
-                <span className="block font-black">Merchant / Product Owner</span>
-                <span className="mt-2 block text-xs leading-5 text-slate-600">Manage products, commission offers, publisher applications and partner performance.</span>
-              </label>
-            </div>
-          </fieldset>
-          <div>
-            <label htmlFor="register-email" className="block text-sm font-bold">Email address</label>
-            <input id="register-email" type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"/>
-          </div>
-          <div>
-            <label htmlFor="register-password" className="block text-sm font-bold">Password</label>
-            <input id="register-password" type="password" autoComplete="new-password" minLength={14} required value={password} onChange={e=>setPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"/>
-            <p className="mt-1 text-xs text-slate-500">Use at least 14 characters and a unique password.</p>
-          </div>
-          <div>
-            <label htmlFor="register-workspace" className="block text-sm font-bold">First workspace name (optional)</label>
-            <input id="register-workspace" value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} maxLength={160} placeholder="Defaults to a role-specific workspace name" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"/>
-          </div>
-          {error&&<p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-          <button type="submit" disabled={busy||!accountType} className="w-full rounded-xl bg-indigo-600 px-5 py-3.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?"Creating account…":"Create account"}</button>
-        </form>
-        <p className="mt-6 text-sm text-slate-500">Already registered? <a href="/" className="font-bold text-indigo-700">Sign in</a></p>
-      </section>
-    </div>
-  </main>;
+export default function RegisterPage(){
+ const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [workspaceName,setWorkspaceName]=useState("");const [accountType,setAccountType]=useState<PublicAccountType|"">("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+ useEffect(()=>{const role=new URLSearchParams(window.location.search).get("role");if(role==="brand")setAccountType("merchant_product_owner");if(role==="partner")setAccountType("affiliate_publisher");},[]);
+ const submit=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!accountType){setError("Choose whether you are joining as a brand or a partner.");return;}setBusy(true);setError("");try{await apiFetch("/api/auth/register",{method:"POST",body:JSON.stringify({email:email.trim(),password,workspace_name:workspaceName.trim()||(accountType==="merchant_product_owner"?"My Brand Workspace":"My Partner Workspace"),account_type:accountType})});window.location.replace("/dashboard");}catch(cause){setError(cause instanceof Error?cause.message:"Account registration failed. Please try again.");setBusy(false);}};
+ const baseCard="relative flex cursor-pointer gap-3 rounded-2xl border p-5 transition ";
+ return <main className="min-h-screen bg-[#f7f8fc] px-5 py-10 text-slate-900 sm:py-14"><div className="mx-auto max-w-3xl">
+  <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-indigo-700"><ArrowLeft size={16}/> Back to home</Link>
+  <div className="mx-auto mt-8 max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_70px_-40px_rgba(15,23,42,.28)] sm:p-10">
+   <Link href="/" className="inline-flex items-center gap-2.5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 text-white"><Layers3 size={20}/></span><span className="text-lg font-black tracking-tight">OmniAffiliateOS</span></Link>
+   <p className="mt-9 text-xs font-extrabold uppercase tracking-[.18em] text-indigo-600">Let's get your workspace ready</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Create your account.</h1><p className="mt-3 text-sm leading-6 text-slate-600">First, tell us a little about how you plan to use OmniAffiliateOS. You can start with one role and invite teammates into your workspace.</p>
+   <form onSubmit={submit} className="mt-8 space-y-6">
+    <fieldset><legend className="text-sm font-extrabold text-slate-900">Which best describes you?</legend><div className="mt-3 grid gap-3 sm:grid-cols-2">
+     <label className={baseCard+(accountType==="merchant_product_owner"?"border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-100":"border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50")}><input className="sr-only" type="radio" name="account_type" value="merchant_product_owner" checked={accountType==="merchant_product_owner"} onChange={()=>setAccountType("merchant_product_owner")}/><span className={"grid h-11 w-11 shrink-0 place-items-center rounded-xl "+(accountType==="merchant_product_owner"?"bg-indigo-600 text-white":"bg-slate-100 text-slate-600")}><Building2 size={21}/></span><span><span className="block font-extrabold text-slate-900">I'm a brand</span><span className="mt-1 block text-xs leading-5 text-slate-600">I want to run an affiliate or partner program for my products.</span><span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-indigo-700">Next: create your program <ArrowRight size={12}/></span></span>{accountType==="merchant_product_owner"&&<CheckCircle2 size={18} className="absolute right-4 top-4 text-indigo-600"/>}</label>
+     <label className={baseCard+(accountType==="affiliate_publisher"?"border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-100":"border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50")}><input className="sr-only" type="radio" name="account_type" value="affiliate_publisher" checked={accountType==="affiliate_publisher"} onChange={()=>setAccountType("affiliate_publisher")}/><span className={"grid h-11 w-11 shrink-0 place-items-center rounded-xl "+(accountType==="affiliate_publisher"?"bg-indigo-600 text-white":"bg-slate-100 text-slate-600")}><Users size={21}/></span><span><span className="block font-extrabold text-slate-900">I'm a partner</span><span className="mt-1 block text-xs leading-5 text-slate-600">I want to discover programs, promote offers and earn commissions.</span><span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-indigo-700">Next: explore programs <ArrowRight size={12}/></span></span>{accountType==="affiliate_publisher"&&<CheckCircle2 size={18} className="absolute right-4 top-4 text-indigo-600"/>}</label>
+    </div></fieldset>
+    <div className="grid gap-5 sm:grid-cols-2"><div><label htmlFor="register-email" className="block text-sm font-bold text-slate-800">Email address</label><input id="register-email" type="email" autoComplete="email" required value={email} onChange={event=>setEmail(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" placeholder="you@company.com"/></div><div><label htmlFor="register-password" className="block text-sm font-bold text-slate-800">Create a password</label><input id="register-password" type="password" autoComplete="new-password" minLength={14} required value={password} onChange={event=>setPassword(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" placeholder="At least 14 characters"/><p className="mt-1 text-xs text-slate-500">Use a unique password of at least 14 characters.</p></div></div>
+    <div><label htmlFor="register-workspace" className="block text-sm font-bold text-slate-800">Workspace name <span className="font-normal text-slate-400">(optional)</span></label><input id="register-workspace" value={workspaceName} onChange={event=>setWorkspaceName(event.target.value)} maxLength={160} placeholder={accountType==="merchant_product_owner"?"e.g. Acme Partner Program":"e.g. My Creator Workspace"} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"/></div>
+    {error&&<p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
+    <button type="submit" disabled={busy||!accountType} className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{busy?"Creating your workspace…":"Create account"} <ArrowRight size={17}/></button>
+   </form>
+   <p className="mt-7 text-center text-sm text-slate-500">Already have an account? <Link href="/login" className="font-bold text-indigo-700 hover:underline">Sign in</Link></p>
+  </div>
+  <p className="mt-5 text-center text-xs leading-5 text-slate-400">Your account role determines which workspace tools are available. Platform administration is provisioned separately.</p>
+ </div></main>;
 }

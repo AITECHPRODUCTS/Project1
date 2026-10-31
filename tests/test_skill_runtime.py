@@ -798,3 +798,158 @@ def test_commission_calculator_is_executable_through_a_governed_skill_fixture():
     assert report["runtime_handler_allowlisted"] is True
     assert report["runtime_execution_tested"] is True
     assert report["cases"][0]["runtime_output_matches_expected"] is True
+
+
+def test_ad_guardrail_review_package_executes_a_real_fixture_and_fails_closed_without_evidence():
+    input_value = {
+        "policy": {
+            "id": "policy-guardrail-1",
+            "campaign_plan_id": "plan-1",
+            "daily_spend_cap_usd": 30,
+            "campaign_spend_cap_usd": 500,
+            "minimum_roas": 1.2,
+            "maximum_cpa_usd": 35,
+            "minimum_verified_impressions": 1000,
+            "minimum_verified_clicks": 30,
+            "minimum_verified_conversions": 3,
+        },
+        "observations": [],
+        "now": "2026-10-28T18:00:00+00:00",
+    }
+    expected_output = {
+        "policy_id": "policy-guardrail-1",
+        "campaign_plan_id": "plan-1",
+        "evaluated_at": "2026-10-28T18:00:00+00:00",
+        "timezone": "UTC",
+        "status": "blocked_pending_provider_verification",
+        "reported_observation_count": 0,
+        "verified_observation_count": 0,
+        "snapshot_observation_count": 0,
+        "snapshot_conflicts": [],
+        "unverified_observation_count": 0,
+        "configured_daily_spend_cap_usd": "30.00",
+        "plan_daily_budget_usd": "0.00",
+        "effective_daily_spend_cap_usd": "30.00",
+        "campaign_spend_cap_usd": "500.00",
+        "verified_spend_today_usd": "0.00",
+        "verified_campaign_spend_usd": "0.00",
+        "minimum_roas": "1.2000",
+        "verified_roas": None,
+        "maximum_cpa_usd": "35.00",
+        "verified_cpa_usd": None,
+        "sample_gate": {
+            "minimum_verified_impressions": 1000,
+            "minimum_verified_clicks": 30,
+            "minimum_verified_conversions": 3,
+            "actual_verified_impressions": 0,
+            "actual_verified_clicks": 0,
+            "actual_verified_conversions": 0,
+            "passed": False,
+        },
+        "freshness_gate": {
+            "max_age_hours": 24,
+            "max_future_skew_minutes": 5,
+            "latest_creative_count": 0,
+            "stale_creatives": [],
+            "future_dated_creatives": [],
+            "passed": True,
+        },
+        "breaches": [],
+        "stop_recommended": False,
+        "kill_switch_should_engage": False,
+        "live_spend_authorized": False,
+        "provider_action_executed": False,
+        "input_provenance": "caller_supplied_unattested",
+        "source_attestation_verified": False,
+        "operational_action_permitted": False,
+        "hypothetical_review": {
+            "basis": "scenario_only_if_inputs_are_independently_attested",
+            "status_if_independently_attested": "blocked_pending_provider_verification",
+            "potential_breaches_if_independently_attested": [],
+            "sample_gate_if_independently_attested": {
+                "minimum_verified_impressions": 1000,
+                "minimum_verified_clicks": 30,
+                "minimum_verified_conversions": 3,
+                "actual_verified_impressions": 0,
+                "actual_verified_clicks": 0,
+                "actual_verified_conversions": 0,
+                "passed": False,
+            },
+            "freshness_gate_if_independently_attested": {
+                "max_age_hours": 24,
+                "max_future_skew_minutes": 5,
+                "latest_creative_count": 0,
+                "stale_creatives": [],
+                "future_dated_creatives": [],
+                "passed": True,
+            },
+            "spend_metrics_if_independently_attested": {
+                "daily_spend_usd": "0.00",
+                "campaign_spend_usd": "0.00",
+                "roas": None,
+                "cpa_usd": None,
+            },
+            "is_provider_attested": False,
+            "provider_action_executed": False,
+        },
+        "note": (
+            "Authoritative status is calculated only from caller-supplied, unattested input and therefore "
+            "fails closed. The nested scenario is hypothetical if these values are independently verified; "
+            "it is not provider evidence and cannot authorize a live spend, pause or kill-switch action."
+        ),
+    }
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "policy": {"type": "object", "additionalProperties": True},
+            "observations": {"type": "array", "items": {"type": "object", "additionalProperties": True}, "maxItems": 1000},
+            "now": {"type": "string", "minLength": 20, "maxLength": 64},
+        },
+        "required": ["policy", "observations", "now"],
+        "additionalProperties": False,
+    }
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "status": {"type": "string"},
+            "source_attestation_verified": {"type": "boolean"},
+            "operational_action_permitted": {"type": "boolean"},
+            "live_spend_authorized": {"type": "boolean"},
+            "provider_action_executed": {"type": "boolean"},
+            "stop_recommended": {"type": "boolean"},
+            "kill_switch_should_engage": {"type": "boolean"},
+        },
+        "required": [
+            "status", "source_attestation_verified", "operational_action_permitted",
+            "live_spend_authorized", "provider_action_executed", "stop_recommended",
+            "kill_switch_should_engage",
+        ],
+        "additionalProperties": True,
+    }
+    package = build_skill_package({
+        "skill_id": "ads/guardrail-review",
+        "display_name": "Ad budget guardrail review",
+        "version": "1.0.0",
+        "description": "Fails closed for caller-supplied ad metrics and never mutates an ad account.",
+        "stage": "S7",
+        "runtime_handler": "ads.guardrail_review",
+        "capabilities": ["ads.review"],
+        "input_schema": input_schema,
+        "output_schema": output_schema,
+        "instructions_markdown": "# Review only\nNever convert caller-supplied ad observations into provider-attested evidence.",
+        "test_cases": [{
+            "name": "empty evidence fails closed",
+            "input": input_value,
+            "expected_output": expected_output,
+        }],
+    })
+    report = package["validation_report"]
+    assert report["all_fixtures_passed"] is True
+    assert report["runtime_handler"] == "ads.guardrail_review"
+    assert report["runtime_execution_tested"] is True
+    assert report["cases"][0]["runtime_output_matches_expected"] is True
+    result = execute_skill_handler("ads.guardrail_review", input_value)
+    assert result["live_spend_authorized"] is False
+    assert result["provider_action_executed"] is False
+    assert result["source_attestation_verified"] is False
+    assert result["operational_action_permitted"] is False

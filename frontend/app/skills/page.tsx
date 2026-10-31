@@ -110,6 +110,62 @@ const runtimePresets:Record<string,{skillId:string;name:string;stage:string;desc
     instructions:"# Comparison only: term snapshots are not source authentication or network approval; human review is mandatory.",
     testCases:[{name:"commission and geography changed",input:{previous_terms:{terms_version:"terms-v1",commission_type:"percentage",commission_value:"10.0000",commission_currency:"usd",cookie_days:30,attribution_window_days:30,allowed_regions:["US","GB"],restricted_traffic_sources:["paid_search"]},current_terms:{terms_version:"terms-v1",commission_type:"percentage",commission_value:"12",commission_currency:"USD",cookie_days:30,attribution_window_days:30,allowed_regions:["US"],restricted_traffic_sources:["paid_search"]},has_previous_snapshot:true},expected_output:{current_terms:{terms_version:"terms-v1",commission_type:"percentage",commission_value:"12.0000",commission_currency:"USD",cookie_days:30,attribution_window_days:30,allowed_regions:["US"],restricted_traffic_sources:["paid_search"]},terms_sha256:"b067e15f070fd9a8d702f0549d2462e5095a0cd5574065a03af977585f0bcb23",change_status:"changes_detected",changed_fields:["commission_value","allowed_regions"],changes:[{field:"commission_value",previous:"10.0000",current:"12.0000"},{field:"allowed_regions",previous:["GB","US"],current:["US"]}],requires_revalidation:true,source_attestation_verified:false,provider_approval_verified:false,automatic_activation_permitted:false,requires_human_review:true,review_reasons:["source_authenticity_not_independently_verified","material_offer_terms_changed"],note:"This handler compares supplied term snapshots only. It does not authenticate the merchant/network, prove current eligibility, or permit offer activation."}}],
   },
+  "ads.guardrail_review":{
+    skillId:"ads/guardrail-review",name:"Ad budget guardrail review",stage:"S7",
+    description:"Review configured spend limits against supplied ad observations. Caller-supplied metrics remain unattested; this handler must fail closed and never change an ad account.",
+    capabilities:"ads.review",
+    inputSchema:{type:"object",properties:{
+      policy:{type:"object",properties:{
+        id:{type:"string",minLength:1,maxLength:128},campaign_plan_id:{type:"string",minLength:1,maxLength:128},
+        daily_spend_cap_usd:{type:"number",minimum:0.000001,maximum:1000000000000},
+        campaign_spend_cap_usd:{type:"number",minimum:0.000001,maximum:1000000000000},
+        minimum_roas:{type:"number",minimum:0,maximum:1000000},maximum_cpa_usd:{type:"number",minimum:0,maximum:1000000000000},
+        minimum_verified_impressions:{type:"integer",minimum:0,maximum:1000000000},
+        minimum_verified_clicks:{type:"integer",minimum:0,maximum:1000000000},
+        minimum_verified_conversions:{type:"integer",minimum:0,maximum:1000000000},
+      },required:["id","campaign_plan_id","daily_spend_cap_usd","campaign_spend_cap_usd","minimum_roas","maximum_cpa_usd","minimum_verified_impressions","minimum_verified_clicks","minimum_verified_conversions"],additionalProperties:false},
+      observations:{type:"array",maxItems:1000,items:{type:"object",properties:{
+        platform:{type:"string",minLength:1,maxLength:40},creative_id:{type:"string",minLength:1,maxLength:255},
+        observed_at:{type:"string",minLength:20,maxLength:64},spend_usd:{type:"number",minimum:0,maximum:1000000000000},
+        commission_usd:{type:"number",minimum:0,maximum:1000000000000},impressions:{type:"integer",minimum:0,maximum:1000000000},
+        clicks:{type:"integer",minimum:0,maximum:1000000000},conversions:{type:"integer",minimum:0,maximum:1000000000},
+        evidence_status:{type:"string",minLength:1,maxLength:60},
+      },required:["platform","creative_id","observed_at","spend_usd","commission_usd","impressions","clicks","conversions","evidence_status"],additionalProperties:false}},
+      now:{type:"string",minLength:20,maxLength:64},
+      plan_daily_budget_usd:{type:"number",minimum:0,maximum:1000000000000},
+    },required:["policy","observations","now"],additionalProperties:false},
+    outputSchema:{type:"object",properties:{
+      status:{type:"string",minLength:1,maxLength:80},source_attestation_verified:{type:"boolean"},
+      operational_action_permitted:{type:"boolean"},live_spend_authorized:{type:"boolean"},
+      provider_action_executed:{type:"boolean"},stop_recommended:{type:"boolean"},
+      kill_switch_should_engage:{type:"boolean"},hypothetical_review:{type:"object",additionalProperties:true},
+      note:{type:"string",minLength:1,maxLength:1000},
+    },required:["status","source_attestation_verified","operational_action_permitted","live_spend_authorized","provider_action_executed","stop_recommended","kill_switch_should_engage","hypothetical_review","note"],additionalProperties:true},
+    instructions:"# Review-only guardrail\\nUse the supplied policy and observations to calculate a hypothetical review. Treat all input metrics as unattested. Never authorize or execute a pause, kill switch, budget change, or other provider action.",
+    testCases:[{name:"empty evidence fails closed",input:{
+      policy:{id:"policy-guardrail-1",campaign_plan_id:"plan-1",daily_spend_cap_usd:30,campaign_spend_cap_usd:500,minimum_roas:1.2,maximum_cpa_usd:35,minimum_verified_impressions:1000,minimum_verified_clicks:30,minimum_verified_conversions:3},
+      observations:[],now:"2026-10-28T18:00:00+00:00"
+    },expected_output:{
+      policy_id:"policy-guardrail-1",campaign_plan_id:"plan-1",evaluated_at:"2026-10-28T18:00:00+00:00",timezone:"UTC",
+      status:"blocked_pending_provider_verification",reported_observation_count:0,verified_observation_count:0,snapshot_observation_count:0,
+      snapshot_conflicts:[],unverified_observation_count:0,configured_daily_spend_cap_usd:"30.00",plan_daily_budget_usd:"0.00",
+      effective_daily_spend_cap_usd:"30.00",campaign_spend_cap_usd:"500.00",verified_spend_today_usd:"0.00",
+      verified_campaign_spend_usd:"0.00",minimum_roas:"1.2000",verified_roas:null,maximum_cpa_usd:"35.00",verified_cpa_usd:null,
+      sample_gate:{minimum_verified_impressions:1000,minimum_verified_clicks:30,minimum_verified_conversions:3,actual_verified_impressions:0,actual_verified_clicks:0,actual_verified_conversions:0,passed:false},
+      freshness_gate:{max_age_hours:24,max_future_skew_minutes:5,latest_creative_count:0,stale_creatives:[],future_dated_creatives:[],passed:true},
+      breaches:[],stop_recommended:false,kill_switch_should_engage:false,live_spend_authorized:false,provider_action_executed:false,
+      input_provenance:"caller_supplied_unattested",source_attestation_verified:false,operational_action_permitted:false,
+      hypothetical_review:{
+        basis:"scenario_only_if_inputs_are_independently_attested",status_if_independently_attested:"blocked_pending_provider_verification",
+        potential_breaches_if_independently_attested:[],
+        sample_gate_if_independently_attested:{minimum_verified_impressions:1000,minimum_verified_clicks:30,minimum_verified_conversions:3,actual_verified_impressions:0,actual_verified_clicks:0,actual_verified_conversions:0,passed:false},
+        freshness_gate_if_independently_attested:{max_age_hours:24,max_future_skew_minutes:5,latest_creative_count:0,stale_creatives:[],future_dated_creatives:[],passed:true},
+        spend_metrics_if_independently_attested:{daily_spend_usd:"0.00",campaign_spend_usd:"0.00",roas:null,cpa_usd:null},
+        is_provider_attested:false,provider_action_executed:false
+      },
+      note:"Authoritative status is calculated only from caller-supplied, unattested input and therefore fails closed. The nested scenario is hypothetical if these values are independently verified; it is not provider evidence and cannot authorize a live spend, pause or kill-switch action."
+    }}],
+  },
 };
 function sampleRuntimeInput(handler:string){
   if(handler==="content.extractive_summary")return {text:summaryFixtureText,max_sentences:2};
@@ -118,6 +174,7 @@ function sampleRuntimeInput(handler:string){
   if(handler==="research.offer_metrics")return {offer:{reward_type:"one-time",gravity_score:4.5},clicks:20,conversions:2,total_revenue:50,gravity_weight:2};
   if(handler==="research.commission_calculator")return {monthly_visitors:100,click_through_rate_pct:10,affiliate_conversion_rate_pct:10,programs:[{name:"One-time Example",reward_type:"cps_one_time",commission_type:"percentage",commission_value:20,currency:"USD",average_order_value:50}]};
   if(handler==="research.offer_term_change_review")return runtimePresets["research.offer_term_change_review"].testCases[0].input;
+  if(handler==="ads.guardrail_review")return runtimePresets["ads.guardrail_review"].testCases[0].input;
   return {};
 }
 type ExecutionResult={ok:boolean;body:string};
@@ -216,7 +273,7 @@ export default function SkillPackagesPage(){
           <form onSubmit={submit} className="mt-4 space-y-4">
             <div className="grid gap-3 sm:grid-cols-2"><label className={label}>Skill ID<input className={field} value={skillId} onChange={e=>setSkillId(e.target.value)} required minLength={3}/></label><label className={label}>Version<input className={field} value={version} onChange={e=>setVersion(e.target.value)} required pattern="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?" title="Use semantic version, e.g. 1.0.0"/></label></div>
             <div className="grid gap-3 sm:grid-cols-2"><label className={label}>Display name<input className={field} value={name} onChange={e=>setName(e.target.value)} required minLength={3}/></label><label className={label}>Lifecycle stage<select className={field} value={stage} onChange={e=>setStage(e.target.value)}>{["S1","S2","S3","S4","S5","S6","S7","S8"].map(v=><option key={v}>{v}</option>)}</select></label></div>
-            <label className={label}>Safe runtime handler<select className={field} value={runtimeHandler} onChange={e=>changeRuntimeHandler(e.target.value)}><option value="none">None — contract-only package</option><option value="content.extractive_summary">Content · extractive summary</option><option value="research.keyword_extract">Research · keyword extraction</option><option value="research.offer_metrics">Research · measured offer metrics</option><option value="research.commission_calculator">Research · commission calculator</option><option value="research.offer_term_change_review">Research · offer-term change review</option><option value="analytics.roas_calculator">Analytics · ROAS calculator (review only)</option></select><span className="mt-1 block text-xs font-normal text-slate-500">Selecting a handler loads its real input/output contract and a regression fixture. User-authored Markdown remains data, never executable code.</span></label>
+            <label className={label}>Safe runtime handler<select className={field} value={runtimeHandler} onChange={e=>changeRuntimeHandler(e.target.value)}><option value="none">None — contract-only package</option><option value="content.extractive_summary">Content · extractive summary</option><option value="research.keyword_extract">Research · keyword extraction</option><option value="research.offer_metrics">Research · measured offer metrics</option><option value="research.commission_calculator">Research · commission calculator</option><option value="research.offer_term_change_review">Research · offer-term change review</option><option value="ads.guardrail_review">Ads · guardrail review (fails closed)</option><option value="analytics.roas_calculator">Analytics · ROAS calculator (review only)</option></select><span className="mt-1 block text-xs font-normal text-slate-500">Selecting a handler loads its real input/output contract and a regression fixture. User-authored Markdown remains data, never executable code.</span></label>
             <label className={label}>Description<textarea className={field} rows={2} value={description} onChange={e=>setDescription(e.target.value)} required minLength={10}/></label>
             <label className={label}>Declared capabilities<input className={field} value={capabilities} onChange={e=>setCapabilities(e.target.value)} required/><span className="mt-1 block text-xs font-normal text-slate-500">Comma-separated identifiers. Provider/write/spend-related capabilities are flagged for human review.</span></label>
             <label className={label}>Input JSON schema<textarea className={field+" font-mono text-xs"} rows={7} value={inputSchema} onChange={e=>setInputSchema(e.target.value)} required spellCheck={false}/></label>

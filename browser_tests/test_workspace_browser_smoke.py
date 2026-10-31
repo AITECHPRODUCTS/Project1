@@ -2126,3 +2126,48 @@ def test_registered_user_can_create_workspace_and_dashboard_reloads_into_it():
             assert auth_workspace_ids.count("created-workspace") >= 1
         finally:
             browser.close()
+
+
+def test_skill_studio_exposes_ad_guardrail_runtime_and_submits_its_real_fixture_contract():
+    submitted: list[dict] = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_packages(route):
+                if route.request.method == "GET":
+                    _fulfill_json(route, {"count": 0, "data": []})
+                    return
+                submitted.append(route.request.post_data_json)
+                _fulfill_json(route, {
+                    "skill_id": "ads/guardrail-review",
+                    "version": "1.0.0",
+                    "status": "pending_review",
+                    "package_sha256": "a" * 64,
+                })
+
+            page.route("**/api/skills/packages**", handle_packages)
+            page.goto(f"{BASE_URL}/skills", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Governed skill packages").wait_for(state="visible")
+            selector = page.get_by_label("Safe runtime handler")
+            assert selector.locator("option[value='ads.guardrail_review']").count() == 1
+            selector.select_option("ads.guardrail_review")
+
+            assert page.get_by_label("Skill ID").input_value() == "ads/guardrail-review"
+            assert page.get_by_label("Display name").input_value() == "Ad budget guardrail review"
+            assert page.get_by_label("Lifecycle stage").input_value() == "S7"
+            input_schema = json.loads(page.get_by_label("Input JSON schema").input_value())
+            assert "observations" in input_schema["properties"]
+            assert input_schema["properties"]["observations"]["maxItems"] == 1000
+
+            page.get_by_role("button", name="Validate and save package").click()
+            page.get_by_role("status").filter(has_text="Package ads/guardrail-review@1.0.0 saved").wait_for(state="visible")
+            assert len(submitted) == 1
+            package = submitted[0]
+            assert package["runtime_handler"] == "ads.guardrail_review"
+            assert package["test_cases"][0]["input"]["observations"] == []
+            assert package["test_cases"][0]["expected_output"]["live_spend_authorized"] is False
+            assert package["test_cases"][0]["expected_output"]["provider_action_executed"] is False
+        finally:
+            browser.close()

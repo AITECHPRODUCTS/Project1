@@ -2416,6 +2416,8 @@ async def disconnect_provider_account(connection_id: str, user: dict[str, Any] =
                 if row.provider_id == "clickbank"
                 else "The saved credential was removed from OmniAffiliateOS. Revoke or regenerate the token in Flipkart Affiliate API settings separately."
                 if row.provider_id == "flipkart"
+                else "The saved credential was removed from OmniAffiliateOS. Revoke the API key in Digistore24 Settings → Account access → API keys separately."
+                if row.provider_id == "digistore24"
                 else "The saved credential was removed from OmniAffiliateOS. Revoke it with the provider separately."
             )}
 

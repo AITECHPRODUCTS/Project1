@@ -12,7 +12,7 @@ networks:
   clickbank: {enabled: false, adapter: clickbank, items_path: data}
   warriorplus: {enabled: false, adapter: generic_json, items_path: data}
   jvzoo: {enabled: false, adapter: generic_json, items_path: data}
-  digistore24: {enabled: false, adapter: generic_json, items_path: data}
+  digistore24: {enabled: true, adapter: workspace_read_only, items_path: entries}
   maxbounty: {enabled: false, adapter: catalog_only, items_path: data}
   cj_affiliate: {enabled: false, adapter: generic_json, items_path: data}
   impact: {enabled: false, adapter: generic_json, items_path: data}

@@ -29,6 +29,33 @@ class ClickBankConnectionCreateRequest(BaseModel):
         return SecretStr(raw)
 
 
+class Digistore24ConnectionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    api_key: SecretStr
+
+    @field_validator("api_key")
+    @classmethod
+    def validate_api_key(cls, value: SecretStr) -> SecretStr:
+        raw = value.get_secret_value().strip()
+        if not 20 <= len(raw) <= 512 or any(ord(char) < 33 or ord(char) > 126 for char in raw):
+            raise ValueError("Enter an active Digistore24 API key created with Read access.")
+        return SecretStr(raw)
+
+
+class Digistore24MarketplaceSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=2, max_length=120)
+    limit: int = Field(default=50, ge=1, le=50)
+
+    @field_validator("query")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Enter at least two characters for marketplace search.")
+        return normalized
+
+
 class FlipkartConnectionCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tracking_id: str = Field(min_length=2, max_length=100)

@@ -65,3 +65,20 @@ def test_capability_matrix_distinguishes_configured_offer_adapter_from_verified_
     assert "not passed a live health/contract check" in offer["reason"]
     assert provider["status"] == "partially_available"
     assert provider["external_side_effect"] is False
+
+
+def test_workspace_credentialed_readonly_provider_is_partial_until_connected():
+    settings = Settings(_env_file=None, app_env="development")
+    registry = build_network_registry(
+        {"networks": {"digistore24": {"enabled": True, "adapter": "workspace_read_only"}}},
+        environ={},
+    )
+    provider = registry["items"][0]
+    assert provider["status"] == "not_configured"
+    assert provider["adapter_coverage"] == "workspace_credentialed_read_only"
+    assert provider["credential_scope"] == "workspace"
+    assert provider["offer_discovery"] is True
+    assert provider["commission_reporting"] is False
+    assert provider["publish_content"] is False
+    matrix = build_capability_matrix(settings, registry)
+    assert all(item["status"] in CAPABILITY_STATUSES for item in matrix["items"])

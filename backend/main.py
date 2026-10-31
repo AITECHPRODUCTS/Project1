@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -76,6 +76,11 @@ from backend.services.clickbank_accounts import (
     fingerprint_clickbank_api_key, verify_clickbank_api_key, fetch_clickbank_quickstats, fetch_clickbank_order_counts, fetch_clickbank_order_transactions,
 )
 from backend.services.capability_matrix import build_capability_matrix
+from backend.services.digistore24_accounts import (
+    Digistore24AccessError, Digistore24ProviderUnavailable, StoredDigistore24CredentialError,
+    decrypt_digistore24_api_key, encrypt_digistore24_api_key, fingerprint_digistore24_api_key,
+    verify_digistore24_api_key, search_digistore24_marketplace,
+)
 from backend.services.flipkart_accounts import (
     FlipkartAccessError, FlipkartProviderUnavailable, StoredFlipkartCredentialError,
     decrypt_flipkart_api_token, encrypt_flipkart_api_token, fingerprint_flipkart_credentials,
@@ -965,6 +970,7 @@ def _provider_connection_payload(row: ProviderAccountConnection) -> dict[str, An
             + (["Product Feed Directory"] if "product_feed.directory.read" in (row.capabilities_json or []) else [])
             + (["Product Search"] if "products.search" in (row.capabilities_json or []) else [])
             + (["Active Offers"] if "offers.list" in (row.capabilities_json or []) else [])
+            + (["Marketplace entries read"] if "marketplace.entries.read" in (row.capabilities_json or []) else [])
         ),
         "credential_present": bool(row.credential_ciphertext),
         "last_checked_at": row.last_checked_at.isoformat() if row.last_checked_at else None,
@@ -1955,6 +1961,350 @@ async def list_flipkart_provider_offers(
     }
 
 
+
+
+
+
+async def _load_digistore24_connection(
+    connection_id: str,
+    *,
+    workspace_id: str,
+    db: AsyncSession,
+) -> ProviderAccountConnection:
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id,
+            ProviderAccountConnection.workspace_id == workspace_id,
+        ))
+    if row is None:
+        raise HTTPException(404, "Digistore24 provider connection not found in the active workspace.")
+    if row.provider_id != "digistore24" or row.status == "disconnected" or not row.credential_ciphertext:
+        raise HTTPException(409, "An active Digistore24 read-only connection is required.")
+    return row
+
+
+async def _upsert_digistore24_marketplace_observations(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    connection_id: str,
+    items: list[dict[str, Any]],
+) -> int:
+    now = utcnow()
+    count = 0
+    for item in items:
+        encoded = json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+        fingerprint = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        external_id = str(item["external_id"])
+        with workspace_scope(workspace_id):
+            row = await db.scalar(select(ProviderCatalogObservation).where(
+                ProviderCatalogObservation.workspace_id == workspace_id,
+                ProviderCatalogObservation.connection_id == connection_id,
+                ProviderCatalogObservation.provider_id == "digistore24",
+                ProviderCatalogObservation.observation_type == "product",
+                ProviderCatalogObservation.external_id == external_id,
+            ))
+        raw_price = item.get("price_amount")
+        try:
+            price = Decimal(str(raw_price)) if raw_price is not None else None
+            if price is not None and (not price.is_finite() or abs(price) > Decimal("999999999999999")):
+                price = None
+        except (InvalidOperation, ValueError, TypeError):
+            price = None
+        values = {
+            "title": str(item["title"])[:500],
+            "description": str(item.get("description") or "")[:4000],
+            "category": str(item["category"])[:200] if item.get("category") else None,
+            "brand": str(item.get("vendor_name") or "")[:200] or None,
+            "provider_url": item.get("product_url"),
+            "image_url": None,
+            "price_amount": price,
+            "mrp_amount": None,
+            "currency": item.get("currency"),
+            "is_available": None,
+            "availability_status": "MARKETPLACE_LISTED",
+            "discount_percentage": None,
+            "starts_at": None,
+            "ends_at": None,
+            "source_endpoint": "listMarketplaceEntries",
+            "source_fingerprint": fingerprint,
+            "snapshot_json": json.loads(encoded),
+            "observed_at": now,
+            "updated_at": now,
+        }
+        with workspace_scope(workspace_id):
+            if row is None:
+                db.add(ProviderCatalogObservation(
+                    workspace_id=workspace_id,
+                    connection_id=connection_id,
+                    provider_id="digistore24",
+                    observation_type="product",
+                    external_id=external_id,
+                    created_at=now,
+                    **values,
+                ))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        count += 1
+    return count
+
+
+@api.post("/provider-connections/digistore24", status_code=201)
+async def connect_digistore24_account(
+    payload: Digistore24ConnectionCreateRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    api_key = payload.api_key.get_secret_value()
+    try:
+        fingerprint = fingerprint_digistore24_api_key(api_key)
+    except StoredDigistore24CredentialError:
+        raise HTTPException(503, "Provider credential encryption is not configured. Contact the platform operator.") from None
+    with workspace_scope(workspace_id):
+        existing = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.workspace_id == workspace_id,
+            ProviderAccountConnection.provider_id == "digistore24",
+            ProviderAccountConnection.credential_fingerprint == fingerprint,
+            ProviderAccountConnection.status != "disconnected",
+        ))
+    if existing is not None:
+        raise HTTPException(409, "This Digistore24 API key is already connected to the active workspace.")
+    try:
+        verified = await verify_digistore24_api_key(api_key)
+        encrypted = encrypt_digistore24_api_key(api_key)
+    except Digistore24AccessError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except Digistore24ProviderUnavailable as exc:
+        raise HTTPException(502, str(exc)) from None
+    except StoredDigistore24CredentialError:
+        raise HTTPException(503, "Provider credential encryption is not configured. Contact the platform operator.") from None
+
+    row = ProviderAccountConnection(
+        workspace_id=workspace_id,
+        provider_id="digistore24",
+        status="connected_read_only",
+        credential_ciphertext=encrypted,
+        credential_fingerprint=fingerprint,
+        credential_key_version=1,
+        account_nicknames_json=list(verified.get("account_references") or []),
+        capabilities_json=list(verified["capabilities"]),
+        created_by_user_id=str(user.get("user_id") or "")[:36] or None,
+        last_checked_at=utcnow(),
+    )
+    with workspace_scope(workspace_id):
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_account_connected",
+            resource_type="provider_account_connection",
+            resource_id=row.id,
+            outcome="connected_read_only",
+            details_json={
+                "provider_id": "digistore24",
+                "verified_operations": ["ping", "listMarketplaceEntries"],
+                "marketplace_entry_count": int(verified.get("marketplace_entry_count") or 0),
+                "capabilities": list(verified["capabilities"]),
+                "credential_encrypted": True,
+            },
+        ))
+        try:
+            await db.commit()
+            await db.refresh(row)
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "This Digistore24 API key is already connected to the active workspace.") from None
+    return _provider_connection_payload(row)
+
+
+@api.post("/provider-connections/{connection_id}/digistore24/test")
+async def test_digistore24_provider_connection(
+    connection_id: str,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    row = await _load_digistore24_connection(connection_id, workspace_id=workspace_id, db=db)
+    try:
+        api_key = decrypt_digistore24_api_key(row.credential_ciphertext, row.credential_key_version)
+        verified = await verify_digistore24_api_key(api_key)
+    except StoredDigistore24CredentialError:
+        outcome, status_code, detail = "credential_decryption_failed", 503, "Stored Digistore24 credentials cannot be decrypted. Reconnect the account."
+    except Digistore24AccessError:
+        outcome, status_code, detail = "credential_or_permission_rejected", 422, "Digistore24 rejected the API key or marketplace read permission."
+    except Digistore24ProviderUnavailable:
+        outcome, status_code, detail = "provider_unavailable", 502, "Digistore24 could not complete the account and marketplace verification request."
+    else:
+        outcome, status_code, detail = "connected_read_only", 200, ""
+    with workspace_scope(workspace_id):
+        row.last_checked_at = utcnow()
+        row.last_error_code = None if outcome == "connected_read_only" else outcome
+        row.status = "connected_read_only" if outcome == "connected_read_only" else "degraded"
+        if outcome == "connected_read_only":
+            row.capabilities_json = list(verified["capabilities"])
+            row.account_nicknames_json = list(verified.get("account_references") or [])
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "workspace-operator")[:320],
+            action="integration.provider_account_tested",
+            resource_type="provider_account_connection",
+            resource_id=row.id,
+            outcome=outcome,
+            details_json={"provider_id": "digistore24"},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    if status_code != 200:
+        raise HTTPException(status_code=status_code, detail=detail)
+    return _provider_connection_payload(row)
+
+
+@api.post("/provider-connections/{connection_id}/digistore24/marketplace/search")
+async def search_digistore24_marketplace_entries(
+    connection_id: str,
+    payload: Digistore24MarketplaceSearchRequest,
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    row = await _load_digistore24_connection(connection_id, workspace_id=workspace_id, db=db)
+    try:
+        api_key = decrypt_digistore24_api_key(row.credential_ciphertext, row.credential_key_version)
+        report = await search_digistore24_marketplace(api_key, query=payload.query, limit=payload.limit)
+    except StoredDigistore24CredentialError:
+        with workspace_scope(workspace_id):
+            row.status = "degraded"
+            row.last_error_code = "credential_decryption_failed"
+            row.last_checked_at = utcnow()
+            await db.commit()
+        raise HTTPException(503, "Stored Digistore24 credentials cannot be decrypted. Reconnect the account.") from None
+    except Digistore24AccessError as exc:
+        with workspace_scope(workspace_id):
+            row.status = "degraded"
+            row.last_error_code = "credential_or_permission_rejected"
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_marketplace_search",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="permission_rejected",
+                details_json={"provider_id": "digistore24"},
+            ))
+            await db.commit()
+        raise HTTPException(422, str(exc)) from None
+    except Digistore24ProviderUnavailable as exc:
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_marketplace_search",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="provider_unavailable",
+                details_json={"provider_id": "digistore24"},
+            ))
+            await db.commit()
+        raise HTTPException(502, str(exc)) from None
+
+    items = report["entries"]
+    try:
+        persisted_count = await _upsert_digistore24_marketplace_observations(
+            db, workspace_id=workspace_id, connection_id=row.id, items=items
+        )
+        with workspace_scope(workspace_id):
+            row.last_checked_at = utcnow()
+            row.last_error_code = None
+            db.add(AuditLog(
+                workspace_id=workspace_id,
+                actor=str(user.get("email") or "workspace-operator")[:320],
+                action="integration.provider_marketplace_search",
+                resource_type="provider_account_connection",
+                resource_id=row.id,
+                outcome="provider_reported",
+                details_json={
+                    "provider_id": "digistore24",
+                    "result_count": len(items),
+                    "persisted_count": persisted_count,
+                    "query_present": True,
+                    "evidence_type": report["evidence_type"],
+                },
+            ))
+            await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "A matching Digistore24 marketplace snapshot was updated concurrently. Retry the search.") from None
+    return {**report, "source_checked_at": utcnow().isoformat(), "persisted_count": persisted_count}
+
+
+@api.get("/provider-connections/{connection_id}/digistore24/marketplace")
+async def list_saved_digistore24_marketplace_entries(
+    connection_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+    user: dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = _provider_connection_workspace(user)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(ProviderAccountConnection).where(
+            ProviderAccountConnection.id == connection_id,
+            ProviderAccountConnection.workspace_id == workspace_id,
+            ProviderAccountConnection.provider_id == "digistore24",
+        ))
+    if row is None:
+        raise HTTPException(404, "Digistore24 provider connection not found in the active workspace.")
+    with workspace_scope(workspace_id):
+        count = await db.scalar(select(func.count(ProviderCatalogObservation.id)).where(
+            ProviderCatalogObservation.workspace_id == workspace_id,
+            ProviderCatalogObservation.connection_id == row.id,
+            ProviderCatalogObservation.provider_id == "digistore24",
+            ProviderCatalogObservation.observation_type == "product",
+        )) or 0
+        observations = (await db.scalars(select(ProviderCatalogObservation).where(
+            ProviderCatalogObservation.workspace_id == workspace_id,
+            ProviderCatalogObservation.connection_id == row.id,
+            ProviderCatalogObservation.provider_id == "digistore24",
+            ProviderCatalogObservation.observation_type == "product",
+        ).order_by(
+            ProviderCatalogObservation.observed_at.desc(),
+            ProviderCatalogObservation.external_id.asc(),
+        ).limit(limit).offset(offset))).all()
+    entries = []
+    for observation in observations:
+        snapshot = dict(observation.snapshot_json or {})
+        snapshot.update({
+            "external_id": observation.external_id,
+            "observed_at": observation.observed_at.isoformat() if observation.observed_at else None,
+            "source_endpoint": observation.source_endpoint,
+            "source_fingerprint": observation.source_fingerprint,
+        })
+        entries.append(snapshot)
+    latest = max(
+        (observation.observed_at for observation in observations if observation.observed_at is not None),
+        default=None,
+    )
+    return {
+        "provider_id": "digistore24",
+        "evidence_type": "persisted_provider_marketplace_observations",
+        "count": count,
+        "limit": limit,
+        "offset": offset,
+        "result_count": len(entries),
+        "has_more": offset + len(entries) < count,
+        "source_checked_at": latest.isoformat() if latest else None,
+        "entries": entries,
+        "commission_terms_status": "provider_marketplace_fields_only",
+        "note": (
+            "Saved provider-reported marketplace snapshots. Verify affiliate-share units, eligibility, approval, "
+            "promo-link availability, cookie duration, payout timing and hold/refund terms with Digistore24 before promotion."
+        ),
+    }
 
 
 @api.get("/provider-connections/{connection_id}/flipkart/catalog")

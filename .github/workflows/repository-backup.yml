@@ -65,10 +65,11 @@ jobs:
           Local .env files, credentials, Docker volumes and user databases are not stored in Git and are not included.
           EOF
           rm -rf backup-output/restore-verification
+          (cd backup-output && sha256sum Project1-source-snapshot.zip Project1-full-history.bundle > SHA256SUM.txt)
           cd backup-output
           zip -q -r "../Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip" .
           cd ..
-          sha256sum "Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip" | tee backup-output/SHA256SUM.txt
+          sha256sum "Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip" > "Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip.sha256"
           unzip -t "Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip"
 
       - name: Upload downloadable full repository backup

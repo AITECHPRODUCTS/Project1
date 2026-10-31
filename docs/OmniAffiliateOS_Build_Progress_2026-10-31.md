@@ -73,3 +73,5 @@ No claim is made of guaranteed earnings, 100% failproof operation, universal pro
 - Workspace switching uses existing authorized memberships only. The current backend still models one business persona per account; the UI does not pretend a user can switch roles without backend authorization.
 - Existing /publisher, /merchant and their detail routes remain in place for compatibility. Browser smoke journeys now use the preserved /growth route.
 - Updated persona browser tests for the common dashboard entry. Exact-commit CI evidence is pending until push and PR workflows complete.
+
+- Follow-up regression hardening: repointed two remaining legacy Growth Command browser journeys to /growth and explicitly declared their publisher persona fixtures; corrected the merchant dashboard financial-evidence destination to the existing /finance/provider-orders route.

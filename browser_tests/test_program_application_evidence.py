@@ -61,6 +61,7 @@ def test_program_application_splits_multiple_evidence_urls_before_saving():
                             "user": {
                                 "user_id": "browser-user",
                                 "email": "publisher@example.test",
+                                "account_type": "affiliate_publisher",
                                 "is_admin": False,
                                 "workspace_id": "browser-workspace",
                                 "workspace_role": "owner",
@@ -158,7 +159,7 @@ def test_program_application_splits_multiple_evidence_urls_before_saving():
                 route.continue_()
 
             page.route("**/api/**", handle_api)
-            page.goto(BASE_URL + "/", wait_until="domcontentloaded")
+            page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
             page.get_by_role("button", name="Program applications").click()
             page.locator("#program-applications").wait_for(state="visible")
@@ -234,6 +235,7 @@ def test_webinar_agenda_splits_multiple_items_before_saving():
                             "user": {
                                 "user_id": "webinar-browser-user",
                                 "email": "webinar-publisher@example.test",
+                                "account_type": "affiliate_publisher",
                                 "is_admin": False,
                                 "workspace_id": "webinar-browser-workspace",
                                 "workspace_role": "owner",
@@ -331,7 +333,7 @@ def test_webinar_agenda_splits_multiple_items_before_saving():
                 route.continue_()
 
             page.route("**/api/**", handle_api)
-            page.goto(BASE_URL + "/", wait_until="domcontentloaded")
+            page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
             page.get_by_role("button", name="Webinars").click()
             page.locator("#webinars").wait_for(state="visible")

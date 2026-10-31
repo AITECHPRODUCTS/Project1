@@ -75,3 +75,5 @@ No claim is made of guaranteed earnings, 100% failproof operation, universal pro
 - Updated persona browser tests for the common dashboard entry. Exact-commit CI evidence is pending until push and PR workflows complete.
 
 - Follow-up regression hardening: repointed two remaining legacy Growth Command browser journeys to /growth and explicitly declared their publisher persona fixtures; corrected the merchant dashboard financial-evidence destination to the existing /finance/provider-orders route.
+
+- Added the explicit authenticated persona to four legacy Growth Command browser fixtures (three Affiliate/Publisher sessions and one Platform Admin session), matching the new route gate without loosening runtime authorization.

@@ -1816,7 +1816,7 @@ def test_manual_override_submits_only_selected_stage_and_keeps_operator_selectio
                 if path == "/auth/me":
                     _fulfill_json(route, {
                         "csrf_token": "manual-mode-browser-test-token",
-                        "user": {"email": "manual-mode@example.test", "is_admin": False, "workspace_role": "owner"},
+                        "user": {"email": "manual-mode@example.test", "account_type": "affiliate_publisher", "is_admin": False, "workspace_role": "owner"},
                     })
                 elif path == "/status":
                     _fulfill_json(route, {
@@ -1926,6 +1926,7 @@ def test_dashboard_switches_active_workspace_using_authorized_backend_membership
                         "csrf_token": "workspace-switch-csrf",
                         "user": {
                             "email": "multi-role@example.test",
+                            "account_type": "affiliate_publisher",
                             "is_admin": False,
                             "workspace_id": active_workspace["id"],
                             "workspace_role": active_workspace["role"],
@@ -2041,6 +2042,7 @@ def test_registered_user_can_create_workspace_and_dashboard_reloads_into_it():
                         "user": {
                             "user_id": "registered-user-123",
                             "email": "registered@example.test",
+                            "account_type": "affiliate_publisher",
                             "is_admin": False,
                             "workspace_id": active_workspace["id"],
                             "workspace_role": active_workspace["role"],
@@ -2193,6 +2195,7 @@ def test_dashboard_sidebar_opens_dedicated_bookmarkable_module_screens():
                         "user": {
                             "user_id": "navigation-test-user",
                             "email": "navigation@example.test",
+                            "account_type": "platform_admin",
                             "is_admin": True,
                             "workspace_id": "navigation-workspace",
                             "workspace_role": "owner",

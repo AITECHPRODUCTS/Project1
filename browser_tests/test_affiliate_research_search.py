@@ -50,8 +50,10 @@ def test_connected_affiliate_marketplace_research_runs_single_workspace_search()
             page.get_by_role("button", name="Search connected accounts").click()
             page.get_by_role("heading", name="Ethical AI Marketing Course").wait_for(state="visible")
             page.get_by_role("heading", name="Creator Video Camera").wait_for(state="visible")
-            assert page.get_by_text("Not independently verified").count() == 2
-            assert page.get_by_text("Cookie / attribution").count() == 2
+            result_cards = page.locator('section[aria-label="Marketplace research results"] article')
+            assert result_cards.count() == 2
+            assert result_cards.filter(has_text="Not independently verified").count() == 2
+            assert result_cards.filter(has_text="Cookie / attribution").count() == 2
             assert len(requests) == 1
             assert requests[0] == {"method": "POST", "body": {"query": "creator tools", "limit": 10}}
             assert "provider-reported" in page.locator("main").inner_text().lower()

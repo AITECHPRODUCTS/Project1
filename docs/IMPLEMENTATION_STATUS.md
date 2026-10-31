@@ -1,6 +1,15 @@
 # Implementation status — Project1 / OmniAffiliateOS
 Updated: 2026-10-31
 
+## S7/S8 Skill Studio — expose the existing fail-closed ad-budget guardrail handler (31 October 2026)
+
+- Added the existing code-owned `ads.guardrail_review` runtime handler to the Skill Studio selector with its input/output contract and a deterministic empty-evidence fixture. The handler remains review-only: caller-supplied observations are normalized as unattested; it cannot authorize spend or execute provider pause/kill-switch actions.
+- Added a package-builder regression that executes the actual allowlisted handler and compares the full output to the fixture. Added Chromium browser coverage for selecting the handler, auto-populated skill identity/stage/schema, and submitted fixture payload. Updated the skill parity row from six to seven allowlisted deterministic runtime handlers; the `meta/create-skill` skill remains partial.
+- Changed paths: `frontend/app/skills/page.tsx`, `tests/test_skill_runtime.py`, `browser_tests/test_workspace_browser_smoke.py`, `docs/skill-parity-matrix.csv`.
+- Exact feature/test SHA: `375ea6594a64c09a0a075b4196400e89a54df344`. Push [41168528273](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41168528273) and PR [41168531487](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41168531487) both completed successfully. Python: **896 passed, 9 skipped, 5 warnings**; Chromium browser UAT: **45 passed** on each run; PostgreSQL integration, frontend typecheck/production/Docker checks, AI/RAG, security audit, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was skipped by its configured push-only condition.
+- Scope limit: this closes a real Skill Studio discoverability/runtime-fixture gap for one deterministic handler. It does not complete the 53-skill inventory, implement authenticated ad-platform ingestion, attest caller-supplied observations, or authorize live spend. No live ad account was connected or mutated.
+
+
 ## S1 offer qualification — public source evidence capture (implementation candidate 31 October 2026)
 
 - Added bounded public HTTPS source capture to the workspace offer-qualification path. Requests use the pinned SSRF-safe transport, do not follow redirects, reject credential-like query parameters, cap each capture at 10 unique sources and 1 MB per response, and limit concurrency.

@@ -56,3 +56,13 @@ S1 research/search/shortlists/qualification and some provider product/offer retr
 Live provider tests require the user's legitimate affiliate accounts, enabled API scopes and credentials configured securely in the application/secret manager. Do not paste keys or tokens into chat. Earnings and commissions cannot be guaranteed. The system must never invent missing metrics or imply that network approval, a payable commission, publication, spend or payout occurred without authoritative evidence.
 
 This checkpoint is a progress record, not production sign-off.
+
+
+## Verified increment — Skill Studio ad-budget guardrail runtime (31 October 2026)
+
+- Feature/test commit: `375ea6594a64c09a0a075b4196400e89a54df344`.
+- Exposed the existing fail-closed `ads.guardrail_review` backend handler in the Skill Studio UI with its actual input/output contract and a deterministic empty-evidence test fixture.
+- Added exact-output package-runtime regression and Chromium browser coverage of selector, auto-population and POST payload. Caller-supplied metrics remain untrusted and no ad account action is executable from this handler.
+- Push CI [41168528273](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41168528273) and PR CI [41168531487](https://github.com/AITECHPRODUCTS/Project1/actions/runs/41168531487) passed on this exact SHA: Python **896 passed, 9 skipped, 5 warnings**; Chromium browser UAT **45 passed** in each workflow; PostgreSQL, frontend typecheck/build/container checks, AI/RAG, security audit, secret scan and repository guard passed. Push lockfile-sync passed; PR lockfile-sync was intentionally skipped.
+- The 53-skill parity matrix remains **53 partial / 0 end-to-end complete**. The Skill Studio increment does not close the complete create-skill capability or any other skill end-to-end.
+- Product is still **NOT PRODUCTION READY / NOT DEPLOYED**. Real provider account tests, provider-authoritative advertising metrics, approved external writes, complete skill parity, production deployment/restore/rollback/monitoring and legal/license sign-off remain open.

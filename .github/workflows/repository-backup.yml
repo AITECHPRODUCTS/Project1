@@ -1,0 +1,81 @@
+name: Repository backup
+
+on:
+  push:
+    branches:
+      - build/omni-affiliate-os-production
+    paths:
+      - .github/workflows/repository-backup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-backup-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  create-full-repository-backup:
+    name: Create and validate full Git repository ZIP
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out complete repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Create source snapshot and full-history Git bundle
+        shell: bash
+        env:
+          BACKUP_COMMIT: ${{ github.sha }}
+          BACKUP_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p backup-output
+          git archive --format=zip --prefix=Project1/ "$BACKUP_COMMIT" > backup-output/Project1-source-snapshot.zip
+          git bundle create backup-output/Project1-full-history.bundle --all
+          git bundle verify backup-output/Project1-full-history.bundle
+          git clone --quiet backup-output/Project1-full-history.bundle backup-output/restore-verification
+          git -C backup-output/restore-verification fsck --full
+          RESTORED_COMMIT="$(git -C backup-output/restore-verification rev-parse "$BACKUP_COMMIT")"
+          test "$RESTORED_COMMIT" = "$BACKUP_COMMIT"
+          cat > backup-output/BACKUP_INFO.txt <<EOF
+          Project1 full repository backup
+          Repository: https://github.com/AITECHPRODUCTS/Project1
+          Branch at backup: $BACKUP_BRANCH
+          Exact source commit: $BACKUP_COMMIT
+
+          Contents:
+          - Project1-source-snapshot.zip: complete working-tree source snapshot at the exact commit above.
+          - Project1-full-history.bundle: Git bundle containing repository refs and commit history available to the checkout.
+          - This file: backup identification and restore instructions.
+
+          Restore the Git repository:
+            git clone Project1-full-history.bundle Project1
+            cd Project1
+            git checkout build/omni-affiliate-os-production
+
+          Verify the restored repository:
+            git fsck --full
+            git rev-parse HEAD
+
+          The source ZIP is a snapshot; the Git bundle is the history-preserving backup.
+          Local .env files, credentials, Docker volumes and user databases are not stored in Git and are not included.
+          EOF
+          rm -rf backup-output/restore-verification
+          cd backup-output
+          zip -q -r "../Project1_FULL_BACKUP_${BACKUP_COMMIT:0:12}.zip" .
+          cd ..
+          sha256sum "Project1_FULL_BACKUP_${BACKUP_COMMIT:0:12}.zip" | tee backup-output/SHA256SUM.txt
+          unzip -t "Project1_FULL_BACKUP_${BACKUP_COMMIT:0:12}.zip"
+
+      - name: Upload downloadable full repository backup
+        uses: actions/upload-artifact@v7
+        with:
+          name: Project1-full-backup-${{ github.sha }}
+          path: Project1_FULL_BACKUP_${{ github.sha }}.zip
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

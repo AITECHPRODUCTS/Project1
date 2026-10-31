@@ -22,7 +22,7 @@ def _client(tmp_path):
             db.add_all([a,b]);await db.commit()
             return a.id,b.id
     workspace_a,workspace_b=asyncio.run(setup())
-    user={"workspace_id":workspace_a,"workspace_role":"owner","email":"publisher@example.test","user_id":"publisher-user","is_admin":False}
+    user={"workspace_id":workspace_a,"workspace_role":"owner","email":"publisher@example.test","user_id":"publisher-user","is_admin":False,"account_type":"affiliate_publisher"}
     async def override_session():
         async with sessions() as db: yield db
     async def override_auth(): return user

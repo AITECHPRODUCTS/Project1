@@ -39,6 +39,7 @@ def _client(tmp_path):
         "email": "publisher@example.test",
         "user_id": "publisher-user",
         "is_admin": False,
+        "account_type": "affiliate_publisher",
     }
 
     async def override_session():

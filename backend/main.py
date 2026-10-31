@@ -1052,7 +1052,7 @@ def _provider_connection_workspace(user: dict[str, Any]) -> str:
 
 
 @api.get("/provider-connections")
-async def list_provider_connections(user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+async def list_provider_connections(user: dict[str, Any] = Depends(require_publisher_admin), db: AsyncSession = Depends(get_session)):
     workspace_id = _provider_connection_workspace(user)
     with workspace_scope(workspace_id):
         rows = (await db.scalars(select(ProviderAccountConnection)
@@ -1062,7 +1062,7 @@ async def list_provider_connections(user: dict[str, Any] = Depends(require_admin
 
 
 @api.post("/provider-connections/clickbank", status_code=201)
-async def connect_clickbank_account(payload: ClickBankConnectionCreateRequest, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+async def connect_clickbank_account(payload: ClickBankConnectionCreateRequest, user: dict[str, Any] = Depends(require_publisher_admin), db: AsyncSession = Depends(get_session)):
     workspace_id = _provider_connection_workspace(user)
     api_key = payload.api_key.get_secret_value()
     try:
@@ -1114,7 +1114,7 @@ async def connect_clickbank_account(payload: ClickBankConnectionCreateRequest, u
 
 
 @api.post("/provider-connections/{connection_id}/test")
-async def test_provider_account_connection(connection_id: str, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+async def test_provider_account_connection(connection_id: str, user: dict[str, Any] = Depends(require_publisher_admin), db: AsyncSession = Depends(get_session)):
     workspace_id = _provider_connection_workspace(user)
     with workspace_scope(workspace_id):
         row = await db.scalar(select(ProviderAccountConnection).where(
@@ -1160,7 +1160,7 @@ async def clickbank_provider_quickstats(
     start_date: date = Query(...),
     end_date: date = Query(...),
     account: str | None = Query(default=None, min_length=1, max_length=100),
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -1261,7 +1261,7 @@ async def clickbank_provider_order_counts(
     start_date: date = Query(...),
     end_date: date = Query(...),
     account: str = Query(..., min_length=1, max_length=100),
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -1368,7 +1368,7 @@ async def clickbank_provider_order_counts(
 async def import_clickbank_order_transactions(
     connection_id: str,
     payload: ClickBankOrderImportRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -1724,7 +1724,7 @@ async def _load_flipkart_connection(
 @api.post("/provider-connections/flipkart", status_code=201)
 async def connect_flipkart_account(
     payload: FlipkartConnectionCreateRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -1797,7 +1797,7 @@ async def connect_flipkart_account(
 @api.post("/provider-connections/{connection_id}/flipkart/test")
 async def test_flipkart_provider_connection(
     connection_id: str,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -1843,7 +1843,7 @@ async def test_flipkart_provider_connection(
 async def search_flipkart_provider_products(
     connection_id: str,
     payload: FlipkartProductSearchRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -1939,7 +1939,7 @@ async def search_flipkart_provider_products(
 async def list_flipkart_provider_offers(
     connection_id: str,
     kind: str = Query(default="all", pattern="^(all|dotd)$"),
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -2118,7 +2118,7 @@ async def _upsert_digistore24_marketplace_observations(
 @api.post("/provider-connections/digistore24", status_code=201)
 async def connect_digistore24_account(
     payload: Digistore24ConnectionCreateRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -2188,7 +2188,7 @@ async def connect_digistore24_account(
 @api.post("/provider-connections/{connection_id}/digistore24/test")
 async def test_digistore24_provider_connection(
     connection_id: str,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -2231,7 +2231,7 @@ async def test_digistore24_provider_connection(
 async def search_digistore24_marketplace_entries(
     connection_id: str,
     payload: Digistore24MarketplaceSearchRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -2312,7 +2312,7 @@ async def list_saved_digistore24_marketplace_entries(
     connection_id: str,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=10000),
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -2570,7 +2570,7 @@ async def list_saved_flipkart_catalog_observations(
     kind: str = Query(default="product", pattern="^(product|offer)$"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=10000),
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = _provider_connection_workspace(user)
@@ -2648,7 +2648,7 @@ async def list_saved_flipkart_catalog_observations(
 
 
 @api.delete("/provider-connections/{connection_id}")
-async def disconnect_provider_account(connection_id: str, user: dict[str, Any] = Depends(require_admin), db: AsyncSession = Depends(get_session)):
+async def disconnect_provider_account(connection_id: str, user: dict[str, Any] = Depends(require_publisher_admin), db: AsyncSession = Depends(get_session)):
     workspace_id = _provider_connection_workspace(user)
     with workspace_scope(workspace_id):
         row = await db.scalar(select(ProviderAccountConnection).where(

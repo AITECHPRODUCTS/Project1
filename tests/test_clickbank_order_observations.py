@@ -160,7 +160,7 @@ def _api_client(tmp_path):
             await db.commit()
             return workspace.id,connection.id
     workspace_id,connection_id=asyncio.run(setup())
-    user={"workspace_id":workspace_id,"workspace_role":"owner","email":"publisher@example.test","user_id":"owner-user","is_admin":False}
+    user={"workspace_id":workspace_id,"workspace_role":"owner","email":"publisher@example.test","user_id":"owner-user","is_admin":False,"account_type":"affiliate_publisher"}
     async def override_session():
         async with sessions() as db:
             yield db

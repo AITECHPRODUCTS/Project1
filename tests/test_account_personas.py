@@ -98,6 +98,15 @@ def test_opposite_persona_is_denied_by_business_api_routes():
             },
             "/api/marketplace/offers",
         ),
+        (
+            {
+                "user_id": "merchant-1",
+                "account_type": "merchant_product_owner",
+                "workspace_role": "owner",
+                "is_admin": False,
+            },
+            "/api/provider-connections",
+        ),
     ]
 
     for principal, path in principals_and_paths:

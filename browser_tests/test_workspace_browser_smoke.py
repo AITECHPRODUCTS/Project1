@@ -442,7 +442,8 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
             page.locator("#overview").get_by_text(email, exact=True).wait_for(state="visible")
 
-            # Exercise a real persisted, review-only content draft through the UI and API.
+            # Exercise a real persisted, review-only content draft through its dedicated screen.
+            page.get_by_role("button", name="Infographic maker").click()
             page.get_by_label("Infographic title").fill("Browser UAT evidence-first infographic")
             page.get_by_label("Key points (3–6, one per line)").fill(
                 "Compare products using the same criteria\n"
@@ -1869,6 +1870,7 @@ def test_manual_override_submits_only_selected_stage_and_keeps_operator_selectio
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL, wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("button", name="Flywheel").click()
             mode_select = page.get_by_label("Execution mode")
             mode_select.select_option("MANUAL_OVERRIDE")
 
@@ -2279,7 +2281,13 @@ def test_dashboard_sidebar_opens_dedicated_bookmarkable_module_screens():
             page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'ai-knowledge'")
             page.get_by_role("heading", name="AI knowledge engine").wait_for(state="visible")
             assert not page.get_by_role("heading", name="Autopilot settings").is_visible()
-            assert not page.locator("#measurement").is_visible()
+            assert not page.locator("#learning-controls").is_visible()
+            assert not page.locator("#finance-ledger").is_visible()
+
+            page.get_by_role("button", name="Measurement").click()
+            page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'measurement'")
+            assert page.locator("#learning-controls").is_visible()
+            assert page.locator("#finance-ledger").is_visible()
 
             page.get_by_role("button", name="Content studio").click()
             page.wait_for_function("document.querySelector('main')?.dataset.currentView === 'content-studio'")

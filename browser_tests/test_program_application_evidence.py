@@ -160,8 +160,8 @@ def test_program_application_splits_multiple_evidence_urls_before_saving():
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
-
-            page.locator("#program-applications").scroll_into_view_if_needed()
+            page.get_by_role("button", name="Program applications").click()
+            page.locator("#program-applications").wait_for(state="visible")
             page.locator("#program-app-provider").fill("Example Affiliate Network")
             page.locator("#program-app-name").fill("Example Publisher Program")
             page.locator("#program-app-url").fill("https://network.example.com/affiliate-terms")
@@ -333,8 +333,8 @@ def test_webinar_agenda_splits_multiple_items_before_saving():
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
-
-            page.locator("#webinars").scroll_into_view_if_needed()
+            page.get_by_role("button", name="Webinars").click()
+            page.locator("#webinars").wait_for(state="visible")
             page.locator("#webinar-title").fill("Browser regression webinar")
             page.locator("#webinar-host").fill("Example Presenter")
             page.locator("#webinar-summary").fill(

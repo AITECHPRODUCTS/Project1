@@ -66,10 +66,10 @@ jobs:
           EOF
           rm -rf backup-output/restore-verification
           cd backup-output
-          zip -q -r "../Project1_FULL_BACKUP_${BACKUP_COMMIT:0:12}.zip" .
+          zip -q -r "../Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip" .
           cd ..
-          sha256sum "Project1_FULL_BACKUP_${BACKUP_COMMIT:0:12}.zip" | tee backup-output/SHA256SUM.txt
-          unzip -t "Project1_FULL_BACKUP_${BACKUP_COMMIT:0:12}.zip"
+          sha256sum "Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip" | tee backup-output/SHA256SUM.txt
+          unzip -t "Project1_FULL_BACKUP_${BACKUP_COMMIT}.zip"
 
       - name: Upload downloadable full repository backup
         uses: actions/upload-artifact@v7

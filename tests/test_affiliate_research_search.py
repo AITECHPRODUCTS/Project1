@@ -30,7 +30,7 @@ def _client(tmp_path):
             return workspace_a.id, workspace_b.id
 
     workspace_a, workspace_b = asyncio.run(setup())
-    user = {"workspace_id": workspace_a, "workspace_role": "owner", "email": "research-owner@example.test", "user_id": "research-owner", "is_admin": False}
+    user = {"workspace_id": workspace_a, "workspace_role": "owner", "email": "research-owner@example.test", "user_id": "research-owner", "is_admin": False, "account_type": "affiliate_publisher"}
 
     async def override_session():
         async with sessions() as db:

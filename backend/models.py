@@ -546,9 +546,18 @@ class ComparisonDraftRevisionSequence(TenantScopedMixin, Base):
 
 class UserAccount(Base):
     __tablename__ = "user_accounts"
+    __table_args__ = (
+        CheckConstraint(
+            "account_type IN ('affiliate_publisher', 'merchant_product_owner', 'platform_admin')",
+            name="ck_user_accounts_account_type",
+        ),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(500))
+    account_type: Mapped[str] = mapped_column(
+        String(40), default="affiliate_publisher", server_default="affiliate_publisher", nullable=False
+    )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -560,6 +569,10 @@ class UserAccount(Base):
         # cannot observe a newly-created account as an indeterminate admin.
         kwargs.setdefault("is_admin", False)
         kwargs.setdefault("is_active", True)
+        if "account_type" not in kwargs:
+            kwargs["account_type"] = (
+                "platform_admin" if kwargs.get("is_admin") is True else "affiliate_publisher"
+            )
         super().__init__(**kwargs)
 
 class Workspace(Base):

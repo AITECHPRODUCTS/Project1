@@ -50,6 +50,10 @@ export default function MerchantDashboardPage() {
     setLoading(true);
     setError("");
     try {
+      const identity = await apiFetch<{ user?: { account_type?: string; is_admin?: boolean } }>("/api/auth/me");
+      if (identity.user?.account_type !== "merchant_product_owner" && identity.user?.is_admin !== true) {
+        throw new Error("This dashboard is only available to Merchant / Product Owner accounts.");
+      }
       const [offerResponse, applicationResponse] = await Promise.all([
         apiFetch<OfferResponse>("/api/merchant/offers?limit=300"),
         apiFetch<PendingApplicationResponse>("/api/merchant/applications?limit=1&offset=0&status=pending_review"),
@@ -87,7 +91,7 @@ export default function MerchantDashboardPage() {
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <a href="/" className="text-sm font-bold text-indigo-700">← Publisher workspace</a>
+            <a href="/merchant" className="text-sm font-bold text-indigo-700">Merchant workspace</a>
             <p className="mt-6 text-xs font-black uppercase tracking-[.2em] text-indigo-600">Merchant · Product publisher</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Merchant workspace</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">

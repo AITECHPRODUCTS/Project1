@@ -21,3 +21,21 @@ Release: current main/deployed SHA, actual CI/UAT, migration and rollback state.
 
 ## Current gap
 The branch includes a workspace capability outline and several admin-gated routes, but not yet a complete global Super Admin lifecycle or independently proven cross-tenant authorization. Do not mark this acceptance item complete until it is implemented and covered with negative isolation tests.
+
+
+## Account persona selection (2026-10-31)
+
+Public registration requires exactly one immutable account persona:
+- `affiliate_publisher` — Affiliate Marketer / Publisher dashboard.
+- `merchant_product_owner` — Merchant / Product Owner dashboard.
+
+Workspace membership roles (`owner`, `admin`, `member`, `viewer`) remain separate authorization levels inside the selected account persona. Workspace owner/admin permission does not grant the opposite business persona. Account persona is persisted on the user account, refreshed from the database for authenticated sessions, and cannot be changed through workspace creation, invitation acceptance, or workspace switching.
+
+The separately bootstrapped Platform Super Admin uses the reserved `platform_admin` account type. Public registration cannot request this type. Existing accounts are migrated to `platform_admin` when their explicit global admin flag is set; existing non-admin accounts with merchant-owned offers are migrated to `merchant_product_owner`; remaining legacy non-admin accounts are migrated to `affiliate_publisher`.
+
+Login routing:
+- Platform Super Admin → Platform operations dashboard.
+- Affiliate / Publisher → Publisher workspace dashboard.
+- Merchant / Product Owner → Merchant workspace dashboard.
+
+Cross-persona invitations and access to merchant/publisher API surfaces are denied.

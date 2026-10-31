@@ -77,6 +77,9 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
             def handle_api(route):
                 url = route.request.url
                 requests.append(url)
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
+                    return
                 if "/api/merchant/offers?" in url:
                     _fulfill_json(route, offers)
                     return
@@ -117,7 +120,7 @@ def test_merchant_subpages_link_back_to_dashboard():
             def handle_api(route):
                 url = route.request.url
                 if url.endswith("/api/auth/me"):
-                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test"}})
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
                 elif "/api/merchant/offers" in url:
                     _fulfill_json(route, {"count": 0, "data": []})
                 elif "/api/merchant/applications" in url:
@@ -150,6 +153,9 @@ def test_merchant_dashboard_surfaces_workspace_authorization_errors():
 
             def handle_api(route):
                 url = route.request.url
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
+                    return
                 if "/api/merchant/offers?" in url:
                     _fulfill_json(route, {"count": 0, "data": []})
                     return

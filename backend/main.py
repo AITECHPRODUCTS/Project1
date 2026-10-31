@@ -209,12 +209,14 @@ async def bootstrap_admin():
                 password_hash=password_hash.hash(settings.initial_admin_password),
                 is_admin=True,
                 is_active=True,
+                account_type="platform_admin",
             )
             db.add(account)
             await db.flush()
         else:
             account.is_admin = True
             account.is_active = True
+            account.account_type = "platform_admin"
         try:
             await ensure_workspace_membership(db, account, "Platform administrator workspace")
         except HTTPException as exc:
@@ -449,6 +451,7 @@ async def require_auth(
             "user_id": "local",
             "workspace_id": workspace.id if workspace else None,
             "workspace_role": "owner",
+            "account_type": "platform_admin",
         }
         if user["workspace_id"]:
             set_workspace_id(str(user["workspace_id"]))
@@ -471,6 +474,9 @@ async def require_auth(
                 raise HTTPException(403, "Account is inactive or no longer available")
             user["email"] = account.email
             user["is_admin"] = bool(account.is_admin)
+            user["account_type"] = str(
+                getattr(account, "account_type", "platform_admin" if account.is_admin else "affiliate_publisher")
+            )
 
             workspace = await db.get(Workspace, str(workspace_id))
             if workspace is None or getattr(workspace, "lifecycle_state", "active") != "active":
@@ -512,6 +518,30 @@ async def require_platform_admin(user: dict[str, Any] = Depends(require_auth)) -
     if user.get("is_admin") is not True:
         raise HTTPException(403, "Platform Super Admin permission required")
     return user
+
+
+def require_account_type(*allowed_account_types: str):
+    """Require a business persona; workspace ownership is not a substitute."""
+    allowed = frozenset(allowed_account_types)
+    async def dependency(user: dict[str, Any] = Depends(require_auth)) -> dict[str, Any]:
+        if user.get("is_admin") is True:
+            return user
+        if user.get("account_type") not in allowed:
+            raise HTTPException(403, "This feature is not available to the account's registered persona")
+        return user
+    return dependency
+
+
+async def require_merchant_admin(
+    user: dict[str, Any] = Depends(require_account_type("merchant_product_owner")),
+) -> dict[str, Any]:
+    return await require_admin(user)
+
+
+async def require_publisher_admin(
+    user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")),
+) -> dict[str, Any]:
+    return await require_admin(user)
 
 
 async def _record_external_publish_audit(
@@ -576,6 +606,7 @@ async def register(payload: RegisterRequest, request: Request, db: AsyncSession 
     account = UserAccount(
         email=email,
         password_hash=password_hash.hash(payload.password),
+        account_type=payload.account_type,
         is_admin=False,
         is_active=True,
     )
@@ -594,6 +625,7 @@ async def register(payload: RegisterRequest, request: Request, db: AsyncSession 
         "user_id": account.id,
         "workspace_id": membership.workspace_id,
         "workspace_role": membership.role,
+        "account_type": account.account_type,
     }
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     return {"authenticated": True, "user": request.session["user"], "csrf_token": request.session["csrf_token"]}
@@ -620,6 +652,7 @@ async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depe
         "user_id": account.id,
         "workspace_id": membership.workspace_id,
         "workspace_role": membership.role,
+        "account_type": account.account_type,
     }
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     return {"authenticated": True, "user": request.session["user"], "csrf_token": request.session["csrf_token"]}
@@ -716,6 +749,14 @@ async def switch_workspace(workspace_id: str, request: Request,
         raise HTTPException(404, "Workspace not found")
     if workspace.lifecycle_state != "active":
         raise HTTPException(409, "Workspace is suspended and cannot be selected")
+    workspace_owner = await db.get(UserAccount, workspace.owner_user_id) if workspace.owner_user_id else None
+    if (
+        workspace_owner is not None
+        and not workspace_owner.is_admin
+        and not user.get("is_admin")
+        and user.get("account_type") != workspace_owner.account_type
+    ):
+        raise HTTPException(403, "This account cannot switch into a workspace for a different persona")
     updated_user = dict(user)
     updated_user["workspace_id"] = workspace.id
     updated_user["workspace_role"] = membership.role
@@ -801,6 +842,21 @@ async def create_workspace_invitation(
     now = datetime.now(timezone.utc)
     account = await db.scalar(select(UserAccount).where(func.lower(UserAccount.email) == payload.email))
     if account is not None:
+        workspace_owner = await db.get(UserAccount, workspace.owner_user_id) if workspace.owner_user_id else None
+        workspace_persona = (
+            str(workspace_owner.account_type)
+            if workspace_owner is not None and not workspace_owner.is_admin
+            else str(user.get("account_type") or "")
+        )
+        if (
+            not user.get("is_admin")
+            and not account.is_admin
+            and account.account_type != str(user.get("account_type") or "")
+        ) or (
+            workspace_persona
+            and account.account_type not in {workspace_persona, "platform_admin"}
+        ):
+            raise HTTPException(409, "This account has a different registered persona and cannot join this workspace")
         member = await db.scalar(select(WorkspaceMembership).where(
             WorkspaceMembership.workspace_id == workspace.id,
             WorkspaceMembership.user_id == account.id,
@@ -914,6 +970,15 @@ async def accept_workspace_invitation(
     workspace = await db.get(Workspace, invitation.workspace_id)
     if workspace is None or workspace.lifecycle_state != "active":
         raise HTTPException(409, "Invited workspace is suspended or unavailable")
+    workspace_owner = await db.get(UserAccount, workspace.owner_user_id) if workspace.owner_user_id else None
+    invitation_sender = await db.get(UserAccount, invitation.invited_by_user_id) if invitation.invited_by_user_id else None
+    workspace_persona = (
+        str(workspace_owner.account_type) if workspace_owner is not None and not workspace_owner.is_admin
+        else str(invitation_sender.account_type) if invitation_sender is not None and not invitation_sender.is_admin
+        else None
+    )
+    if workspace_persona and not account.is_admin and account.account_type != workspace_persona:
+        raise HTTPException(403, "This invitation belongs to a different account persona")
     membership = await db.scalar(select(WorkspaceMembership).where(
         WorkspaceMembership.workspace_id == workspace.id,
         WorkspaceMembership.user_id == account.id,
@@ -2310,7 +2375,7 @@ async def list_saved_digistore24_marketplace_entries(
 @api.post("/affiliate-research/search")
 async def search_connected_affiliate_marketplaces(
     payload: AffiliateResearchSearchRequest,
-    user: dict[str, Any] = Depends(require_auth),
+    user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")),
     db: AsyncSession = Depends(get_session),
 ):
     """Search connected Digistore24 and Flipkart read-only catalogs in the active workspace."""
@@ -4147,7 +4212,7 @@ def _merchant_offer_term_snapshot_dict(row: MerchantOfferTermSnapshot) -> dict[s
 @api.post("/merchant/offers", status_code=201)
 async def create_merchant_offer(
     payload: MerchantOfferCreateRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     """Create a workspace-owned merchant offer draft; no external listing or affiliate-network approval occurs."""
@@ -4205,7 +4270,7 @@ async def create_merchant_offer(
 async def list_merchant_offers(
     limit: int = Query(default=100, ge=1, le=300),
     status: str | None = Query(default=None, max_length=40),
-    user: dict[str, Any] = Depends(require_auth),
+    user: dict[str, Any] = Depends(require_account_type("merchant_product_owner")),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = user.get("workspace_id")
@@ -4227,7 +4292,7 @@ async def list_merchant_offers(
 async def capture_merchant_offer_term_snapshot(
     offer_id: str,
     payload: MerchantOfferTermSnapshotCreateRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     """Persist operator-entered term evidence and invalidate approvals when material terms change."""
@@ -4361,7 +4426,7 @@ async def capture_merchant_offer_term_snapshot(
 async def list_merchant_offer_term_snapshots(
     offer_id: str,
     limit: int = Query(default=50, ge=1, le=200),
-    user: dict[str, Any] = Depends(require_auth),
+    user: dict[str, Any] = Depends(require_account_type("merchant_product_owner")),
     db: AsyncSession = Depends(get_session),
 ):
     """List immutable term snapshots visible to the active workspace."""
@@ -4392,7 +4457,7 @@ async def list_merchant_offer_term_snapshots(
 async def fetch_merchant_offer_terms_evidence(
     offer_id: str,
     snapshot_id: str,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     """Fetch a cited HTTPS page on explicit request; never verify or approve the offer automatically."""
@@ -4493,7 +4558,7 @@ async def list_merchant_offer_terms_evidence_fetches(
     offer_id: str,
     snapshot_id: str,
     limit: int = Query(default=20, ge=1, le=100),
-    user: dict[str, Any] = Depends(require_auth),
+    user: dict[str, Any] = Depends(require_account_type("merchant_product_owner")),
     db: AsyncSession = Depends(get_session),
 ):
     """List bounded fetch-attempt evidence for one workspace-owned terms snapshot."""
@@ -4532,7 +4597,7 @@ async def review_merchant_offer_terms_source_change(
     snapshot_id: str,
     fetch_id: str,
     payload: MerchantOfferTermEvidenceReviewRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     """Record an independent human decision for changed source content."""
@@ -4635,7 +4700,7 @@ async def review_merchant_offer_terms_source_change(
 @api.post("/merchant/offers/{offer_id}/submit")
 async def submit_merchant_offer(
     offer_id: str,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     """Submit an offer packet for a different workspace owner/admin to review."""
@@ -4681,7 +4746,7 @@ async def submit_merchant_offer(
 async def review_merchant_offer(
     offer_id: str,
     payload: MerchantOfferReviewRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     """Human review within the workspace; internal approval is not an external network approval."""
@@ -4800,7 +4865,7 @@ def _marketplace_application_dict(row: MarketplaceApplication) -> dict[str, Any]
 @api.post("/merchant/offers/{offer_id}/list")
 async def list_merchant_offer_in_marketplace(
     offer_id: str,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     """List an internally approved offer on this application's marketplace, not on an external network."""
@@ -4835,7 +4900,7 @@ async def list_merchant_offer_in_marketplace(
 @api.post("/merchant/offers/{offer_id}/unlist")
 async def unlist_merchant_offer_from_marketplace(
     offer_id: str,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = user.get("workspace_id")
@@ -4865,7 +4930,7 @@ async def unlist_merchant_offer_from_marketplace(
 async def list_published_marketplace_offers(
     limit: int = Query(default=100, ge=1, le=200),
     category: str | None = Query(default=None, max_length=160),
-    user: dict[str, Any] = Depends(require_auth),
+    user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")),
     db: AsyncSession = Depends(get_session),
 ):
     """Read the explicitly listed, internally approved catalog across workspaces."""
@@ -4896,7 +4961,7 @@ async def list_published_marketplace_offers(
 async def create_marketplace_application(
     offer_id: str,
     payload: MarketplaceApplicationCreateRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_publisher_admin),
     db: AsyncSession = Depends(get_session),
 ):
     publisher_workspace_id = user.get("workspace_id")
@@ -5017,7 +5082,7 @@ async def create_marketplace_application(
 @api.get("/marketplace/applications")
 async def list_publisher_marketplace_applications(
     limit: int = Query(default=100, ge=1, le=300),
-    user: dict[str, Any] = Depends(require_auth),
+    user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")),
     db: AsyncSession = Depends(get_session),
 ):
     workspace_id = user.get("workspace_id")
@@ -5040,7 +5105,7 @@ async def list_merchant_incoming_applications(
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=100000),
     status: str | None = Query(default=None, max_length=40),
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     merchant_workspace_id = user.get("workspace_id")
@@ -5082,7 +5147,7 @@ async def list_merchant_incoming_applications(
 async def review_incoming_marketplace_application(
     application_id: str,
     payload: MarketplaceApplicationReviewRequest,
-    user: dict[str, Any] = Depends(require_admin),
+    user: dict[str, Any] = Depends(require_merchant_admin),
     db: AsyncSession = Depends(get_session),
 ):
     merchant_workspace_id = user.get("workspace_id")
@@ -5160,7 +5225,7 @@ def _program_application_dict(row: AffiliateProgramApplication) -> dict[str, Any
 
 
 @api.post("/research/program-applications", status_code=201)
-async def create_program_application(payload: ProgramApplicationCreateRequest, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+async def create_program_application(payload: ProgramApplicationCreateRequest, user: dict[str, Any] = Depends(require_publisher_admin), db: AsyncSession = Depends(get_session)):
     """Create a workspace-owned application packet; no provider submission is performed."""
     workspace_id = user.get("workspace_id")
     if not workspace_id:
@@ -5197,7 +5262,7 @@ async def create_program_application(payload: ProgramApplicationCreateRequest, u
 
 
 @api.get("/research/program-applications")
-async def list_program_applications(limit: int = Query(default=100, ge=1, le=300), status: str | None = Query(default=None, max_length=40), user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+async def list_program_applications(limit: int = Query(default=100, ge=1, le=300), status: str | None = Query(default=None, max_length=40), user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")), db: AsyncSession = Depends(get_session)):
     workspace_id = user.get("workspace_id")
     if not workspace_id:
         raise HTTPException(403, "Select an authorized workspace before listing program applications")
@@ -5214,7 +5279,7 @@ async def list_program_applications(limit: int = Query(default=100, ge=1, le=300
 
 
 @api.post("/research/program-applications/{application_id}/review")
-async def review_program_application(application_id: str, payload: ProgramApplicationReviewRequest, user: dict[str, Any] = Depends(require_auth), db: AsyncSession = Depends(get_session)):
+async def review_program_application(application_id: str, payload: ProgramApplicationReviewRequest, user: dict[str, Any] = Depends(require_publisher_admin), db: AsyncSession = Depends(get_session)):
     """Internal human review only; this never submits to or claims approval by a network."""
     workspace_id = user.get("workspace_id")
     if not workspace_id:

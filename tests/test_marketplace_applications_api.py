@@ -83,6 +83,7 @@ def make_client(tmp_path):
     user = {
         "workspace_id": publisher_id, "workspace_role": "owner",
         "email": "publisher@example.com", "user_id": "publisher-user", "is_admin": False,
+        "account_type": "affiliate_publisher",
     }
 
     async def override_session():
@@ -113,12 +114,14 @@ def test_listed_offer_is_visible_to_other_workspaces_and_application_is_reviewed
             assert hidden_apply.status_code == 404, hidden_apply.text
 
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             listed = client.post(f"/api/merchant/offers/{offer_id}/list")
             assert listed.status_code == 200, listed.text
             assert listed.json()["marketplace_listed"] is True
             assert listed.json()["affiliate_network_approval_status"] == "not_configured"
 
             user["workspace_id"] = publisher_id
+            user["account_type"] = "affiliate_publisher"
             catalog = client.get("/api/marketplace/offers")
             assert catalog.status_code == 200, catalog.text
             assert catalog.json()["count"] == 1
@@ -143,15 +146,18 @@ def test_listed_offer_is_visible_to_other_workspaces_and_application_is_reviewed
             assert client.get("/api/marketplace/applications").json()["count"] == 1
 
             user["workspace_id"] = another_publisher_id
+            user["account_type"] = "affiliate_publisher"
             assert client.get("/api/marketplace/applications").json()["count"] == 0
             assert client.get("/api/marketplace/offers").json()["count"] == 1
 
             user["workspace_id"] = wrong_merchant_id
+            user["account_type"] = "merchant_product_owner"
             assert client.get("/api/merchant/applications").json()["count"] == 0
             wrong_review = client.post(f"/api/merchant/applications/{application['id']}/review", json={"decision": "approve"})
             assert wrong_review.status_code == 404, wrong_review.text
 
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             incoming = client.get("/api/merchant/applications")
             assert incoming.status_code == 200
             assert incoming.json()["count"] == 1
@@ -164,14 +170,17 @@ def test_listed_offer_is_visible_to_other_workspaces_and_application_is_reviewed
             assert reviewed.json()["provider_submission_performed"] is False
 
             user["workspace_id"] = publisher_id
+            user["account_type"] = "affiliate_publisher"
             outgoing = client.get("/api/marketplace/applications")
             assert outgoing.json()["data"][0]["status"] == "approved"
 
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             unlisted = client.post(f"/api/merchant/offers/{offer_id}/unlist")
             assert unlisted.status_code == 200, unlisted.text
             assert unlisted.json()["marketplace_listed"] is False
             user["workspace_id"] = publisher_id
+            user["account_type"] = "affiliate_publisher"
             assert client.get("/api/marketplace/offers").json()["count"] == 0
     finally:
         cleanup(engine, client)
@@ -182,11 +191,14 @@ def test_merchant_can_reject_an_application_and_review_is_one_time(tmp_path):
     try:
         with client:
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             assert client.post(f"/api/merchant/offers/{offer_id}/list").status_code == 200
             user["workspace_id"] = publisher_id
+            user["account_type"] = "affiliate_publisher"
             submitted = client.post(f"/api/marketplace/offers/{offer_id}/applications", json=application_payload())
             assert submitted.status_code == 201, submitted.text
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             rejected = client.post(f"/api/merchant/applications/{submitted.json()['id']}/review", json={
                 "decision": "reject", "reviewer_notes": "Traffic-source plan needs changes."
             })
@@ -203,6 +215,7 @@ def test_member_cannot_publish_marketplace_offers_or_review_applications(tmp_pat
     try:
         with client:
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             user["workspace_role"] = "member"
             assert client.post(f"/api/merchant/offers/{offer_id}/list").status_code == 403
             assert client.get("/api/merchant/applications").status_code == 403
@@ -226,10 +239,12 @@ def test_applications_are_rejected_when_regions_or_traffic_sources_conflict_with
     try:
         with client:
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             listed = client.post(f"/api/merchant/offers/{offer_id}/list")
             assert listed.status_code == 200, listed.text
 
             user["workspace_id"] = publisher_id
+            user["account_type"] = "affiliate_publisher"
             disallowed_region = application_payload()
             disallowed_region["intended_regions"] = ["US", "IN"]
             region_result = client.post(
@@ -307,6 +322,7 @@ def test_merchant_application_inbox_paginates_filters_and_is_not_cacheable(tmp_p
     try:
         with client:
             user["workspace_id"] = merchant_id
+            user["account_type"] = "merchant_product_owner"
             first = client.get("/api/merchant/applications?limit=7&offset=0")
             second = client.get("/api/merchant/applications?limit=7&offset=7")
             assert first.status_code == 200, first.text
@@ -340,6 +356,7 @@ def test_merchant_application_inbox_paginates_filters_and_is_not_cacheable(tmp_p
             assert beyond_last_page.json()["total_count"] == 30
 
             user["workspace_id"] = wrong_merchant_id
+            user["account_type"] = "merchant_product_owner"
             wrong_merchant_page = client.get("/api/merchant/applications?limit=7&offset=0")
             assert wrong_merchant_page.status_code == 200
             assert wrong_merchant_page.json()["total_count"] == 0

@@ -26,7 +26,7 @@ async def _setup(monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
-    state = {"user": {"email": "owner@example.test", "user_id": OWNER_ID, "workspace_id": WORKSPACE_ID, "workspace_role": "owner", "is_admin": False}}
+    state = {"user": {"email": "owner@example.test", "user_id": OWNER_ID, "workspace_id": WORKSPACE_ID, "workspace_role": "owner", "is_admin": False, "account_type": "affiliate_publisher"}}
 
     async def override_session():
         async with sessions() as db:
@@ -82,11 +82,11 @@ def test_owner_can_create_list_revoke_invitation_and_token_is_not_listed(monkeyp
 def test_workspace_admin_cannot_invite_admin_and_members_cannot_manage_invites(monkeypatch):
     engine, sessions, state = asyncio.run(_setup(monkeypatch))
     try:
-        state["user"] = {"email": "admin@example.test", "user_id": ADMIN_ID, "workspace_id": WORKSPACE_ID, "workspace_role": "admin", "is_admin": False}
+        state["user"] = {"email": "admin@example.test", "user_id": ADMIN_ID, "workspace_id": WORKSPACE_ID, "workspace_role": "admin", "is_admin": False, "account_type": "affiliate_publisher"}
         with TestClient(main.app) as client:
             elevated = client.post("/api/workspaces/invitations", json={"email": "other@example.test", "role": "admin"})
             assert elevated.status_code == 403, elevated.text
-            state["user"] = {"email": "invitee@example.test", "user_id": INVITEE_ID, "workspace_id": WORKSPACE_ID, "workspace_role": "member", "is_admin": False}
+            state["user"] = {"email": "invitee@example.test", "user_id": INVITEE_ID, "workspace_id": WORKSPACE_ID, "workspace_role": "member", "is_admin": False, "account_type": "affiliate_publisher"}
             denied = client.get("/api/workspaces/invitations")
             assert denied.status_code == 403, denied.text
     finally:
@@ -100,10 +100,10 @@ def test_acceptance_requires_matching_email_creates_membership_and_rejects_repla
             created = client.post("/api/workspaces/invitations", json={"email": "invitee@example.test", "role": "viewer"})
             assert created.status_code == 201, created.text
             token = created.json()["token"]
-            state["user"] = {"email": "other@example.test", "user_id": OTHER_ID, "workspace_id": HOME_WORKSPACE_ID, "workspace_role": "owner", "is_admin": False}
+            state["user"] = {"email": "other@example.test", "user_id": OTHER_ID, "workspace_id": HOME_WORKSPACE_ID, "workspace_role": "owner", "is_admin": False, "account_type": "affiliate_publisher"}
             mismatch = client.post("/api/workspaces/invitations/accept", json={"token": token})
             assert mismatch.status_code == 403, mismatch.text
-            state["user"] = {"email": "invitee@example.test", "user_id": INVITEE_ID, "workspace_id": HOME_WORKSPACE_ID, "workspace_role": "owner", "is_admin": False}
+            state["user"] = {"email": "invitee@example.test", "user_id": INVITEE_ID, "workspace_id": HOME_WORKSPACE_ID, "workspace_role": "owner", "is_admin": False, "account_type": "affiliate_publisher"}
             accepted = client.post("/api/workspaces/invitations/accept", json={"token": token})
             assert accepted.status_code == 200, accepted.text
             assert accepted.json()["active_workspace_id"] == WORKSPACE_ID
@@ -144,7 +144,7 @@ def test_expired_invitation_is_rejected(monkeypatch):
                     invitation.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
                     await db.commit()
             asyncio.run(expire())
-            state["user"] = {"email": "invitee@example.test", "user_id": INVITEE_ID, "workspace_id": HOME_WORKSPACE_ID, "workspace_role": "owner", "is_admin": False}
+            state["user"] = {"email": "invitee@example.test", "user_id": INVITEE_ID, "workspace_id": HOME_WORKSPACE_ID, "workspace_role": "owner", "is_admin": False, "account_type": "affiliate_publisher"}
             rejected = client.post("/api/workspaces/invitations/accept", json={"token": token})
             assert rejected.status_code == 410, rejected.text
     finally:

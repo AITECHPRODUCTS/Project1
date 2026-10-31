@@ -49,7 +49,7 @@ def make_client(tmp_path):
 
     workspace_id = asyncio.run(setup())
     user = {"workspace_id": workspace_id, "workspace_role": "owner",
-            "email": "owner@example.com", "is_admin": False}
+            "email": "owner@example.com", "is_admin": False, "account_type": "affiliate_publisher"}
 
     async def override_session():
         async with sessions() as db:

@@ -119,6 +119,9 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
             assert admin_nav.get_by_role("link", name="Growth command").get_attribute("href") == "/"
             assert admin_nav.get_by_role("link", name="Operations overview").get_attribute("href") == "#platform-operations-title"
             assert admin_nav.get_by_role("link", name="Tenant lifecycle").get_attribute("href") == "#tenant-lifecycle"
+            audit_export = page.get_by_test_id("platform-audit-export")
+            assert audit_export.get_attribute("href").endswith("/api/admin/audit/export.csv?limit=500")
+            assert "Export latest 500 audit rows" in audit_export.inner_text()
             assert page.get_by_test_id("platform-metric-users").inner_text() == "18"
             assert page.get_by_test_id("platform-metric-workspaces").inner_text() == "7"
             assert page.get_by_test_id("platform-metric-workflows").inner_text() == "42"

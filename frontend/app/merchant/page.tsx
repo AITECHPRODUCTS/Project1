@@ -9,6 +9,10 @@ type MerchantOffer = {
   status: string;
   affiliate_network_approval_status: string;
   affiliate_network_approved: boolean;
+  terms_verified: boolean;
+  seller_authorization_verified: boolean;
+  activation_allowed: boolean;
+  marketplace_listed: boolean;
   created_at: string | null;
 };
 
@@ -26,10 +30,14 @@ type PendingApplicationResponse = {
   data: unknown[];
 };
 
+type MerchantApplicationPreview={id:string;offer_name:string;status:string;applicant_email:string;created_at:string|null};
 type DashboardSnapshot = {
   offerCount: number;
   offers: MerchantOffer[];
   pendingApplications: number;
+  approvedApplications: number;
+  rejectedApplications: number;
+  recentPendingApplications: MerchantApplicationPreview[];
 };
 
 function readableStatus(value: string | null | undefined): string {
@@ -54,17 +62,20 @@ export default function MerchantDashboardPage() {
       if (identity.user?.account_type !== "merchant_product_owner") {
         throw new Error("This dashboard is only available to Merchant / Product Owner accounts.");
       }
-      const [offerResponse, applicationResponse] = await Promise.all([
+      const [offerResponse,pendingResponse,approvedResponse,rejectedResponse] = await Promise.all([
         apiFetch<OfferResponse>("/api/merchant/offers?limit=300"),
-        apiFetch<PendingApplicationResponse>("/api/merchant/applications?limit=1&offset=0&status=pending_review"),
+        apiFetch<PendingApplicationResponse & {data:MerchantApplicationPreview[]}>("/api/merchant/applications?limit=5&offset=0&status=pending_review"),
+        apiFetch<PendingApplicationResponse>("/api/merchant/applications?limit=1&offset=0&status=approved"),
+        apiFetch<PendingApplicationResponse>("/api/merchant/applications?limit=1&offset=0&status=rejected"),
       ]);
       const offers = Array.isArray(offerResponse.data) ? offerResponse.data : [];
       setSnapshot({
         offerCount: Number.isFinite(offerResponse.count) ? offerResponse.count : offers.length,
         offers,
-        pendingApplications: Number.isFinite(applicationResponse.total_count)
-          ? applicationResponse.total_count
-          : 0,
+        pendingApplications: Number.isFinite(pendingResponse.total_count) ? pendingResponse.total_count : 0,
+        approvedApplications: Number.isFinite(approvedResponse.total_count) ? approvedResponse.total_count : 0,
+        rejectedApplications: Number.isFinite(rejectedResponse.total_count) ? rejectedResponse.total_count : 0,
+        recentPendingApplications: Array.isArray(pendingResponse.data) ? pendingResponse.data : [],
       });
     } catch (cause) {
       setSnapshot(null);
@@ -84,6 +95,11 @@ export default function MerchantDashboardPage() {
   const submitted = snapshot?.offers.filter((offer) => offer.status === "submitted_for_review").length ?? 0;
   const internallyApproved = snapshot?.offers.filter((offer) => offer.status === "approved").length ?? 0;
   const networkMarkedApproved = snapshot?.offers.filter((offer) => offer.affiliate_network_approved === true).length ?? 0;
+  const termsVerified = snapshot?.offers.filter((offer) => offer.terms_verified === true).length ?? 0;
+  const sellerEvidenceVerified = snapshot?.offers.filter((offer) => offer.seller_authorization_verified === true).length ?? 0;
+  const activationReady = snapshot?.offers.filter((offer) => offer.activation_allowed === true).length ?? 0;
+  const marketplaceListed = snapshot?.offers.filter((offer) => offer.marketplace_listed === true).length ?? 0;
+  const evidenceGaps = snapshot?.offers.filter((offer) => offer.terms_verified !== true || offer.seller_authorization_verified !== true).length ?? 0;
   const recentOffers = snapshot?.offers.slice(0, 5) ?? [];
 
   return (
@@ -126,7 +142,7 @@ export default function MerchantDashboardPage() {
 
         {!loading && snapshot && (
           <>
-            <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-6" aria-label="Merchant workspace summary">
+            <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Merchant workspace summary">
               <article className={statCard}>
                 <p className="text-sm font-semibold text-slate-500">Offer records loaded</p>
                 <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-offers">{snapshot.offerCount}</p>
@@ -157,6 +173,31 @@ export default function MerchantDashboardPage() {
                 <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-network-approved">{networkMarkedApproved}</p>
                 <p className="mt-1 text-xs text-slate-500">Records explicitly marked approved by a network.</p>
               </article>
+              <article className={statCard}>
+                <p className="text-sm font-semibold text-slate-500">Terms evidence verified</p>
+                <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-terms-verified">{termsVerified}</p>
+                <p className="mt-1 text-xs text-slate-500">Among the latest 300 offers loaded.</p>
+              </article>
+              <article className={statCard}>
+                <p className="text-sm font-semibold text-slate-500">Seller authorization verified</p>
+                <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-seller-verified">{sellerEvidenceVerified}</p>
+                <p className="mt-1 text-xs text-slate-500">Separate evidence check; not a network approval.</p>
+              </article>
+              <article className={statCard}>
+                <p className="text-sm font-semibold text-slate-500">Activation-ready offers</p>
+                <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-activation-ready">{activationReady}</p>
+                <p className="mt-1 text-xs text-slate-500">Internal activation gate currently allows these offers.</p>
+              </article>
+              <article className={statCard}>
+                <p className="text-sm font-semibold text-slate-500">Marketplace listings</p>
+                <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-marketplace-listed">{marketplaceListed}</p>
+                <p className="mt-1 text-xs text-slate-500">Listed in the OmniAffiliateOS internal marketplace.</p>
+              </article>
+              <article className={statCard}>
+                <p className="text-sm font-semibold text-slate-500">Offers with evidence gaps</p>
+                <p className="mt-2 text-3xl font-black tabular-nums" data-testid="merchant-stat-evidence-gaps">{evidenceGaps}</p>
+                <p className="mt-1 text-xs text-slate-500">Terms or seller authorization still need explicit verification.</p>
+              </article>
             </section>
 
             <section className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,.8fr)]">
@@ -184,6 +225,8 @@ export default function MerchantDashboardPage() {
                           <h3 className="truncate font-bold text-slate-800">{offer.name}</h3>
                           <p className="mt-1 text-xs text-slate-500">Internal merchant status: {readableStatus(offer.status)}</p>
                           <p className="mt-1 text-xs text-slate-500">Affiliate-network status: {readableStatus(offer.affiliate_network_approval_status)}</p>
+                          <p className="mt-1 text-xs text-slate-500">Terms: {offer.terms_verified ? "verified" : "not verified"} · Seller authorization: {offer.seller_authorization_verified ? "verified" : "not verified"}</p>
+                          <p className="mt-1 text-xs text-slate-500">Activation: {offer.activation_allowed ? "allowed" : "blocked"} · Internal marketplace: {offer.marketplace_listed ? "listed" : "not listed"}</p>
                         </div>
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold capitalize text-slate-700">
                           {readableStatus(offer.status)}
@@ -203,6 +246,18 @@ export default function MerchantDashboardPage() {
                 <div className="mt-5 rounded-xl bg-indigo-50 p-4">
                   <p className="text-sm font-semibold text-indigo-800">Waiting for review</p>
                   <p className="mt-1 text-3xl font-black tabular-nums text-indigo-950" data-testid="merchant-stat-pending-applications">{snapshot.pendingApplications}</p>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-slate-100 p-3"><p className="text-xs text-slate-500">Approved internally</p><p className="mt-1 text-2xl font-black tabular-nums" data-testid="merchant-stat-applications-approved">{snapshot.approvedApplications}</p></div>
+                  <div className="rounded-xl border border-slate-100 p-3"><p className="text-xs text-slate-500">Rejected internally</p><p className="mt-1 text-2xl font-black tabular-nums" data-testid="merchant-stat-applications-rejected">{snapshot.rejectedApplications}</p></div>
+                </div>
+                <div className="mt-4">
+                  <h3 className="text-sm font-black">Latest pending applications</h3>
+                  {snapshot.recentPendingApplications.length===0&&<p className="mt-2 text-xs text-slate-500">No publisher applications are waiting for review.</p>}
+                  {snapshot.recentPendingApplications.map(application=><div key={application.id} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2">
+                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{application.offer_name}</p><p className="text-xs text-slate-500">{application.applicant_email}</p></div>
+                    <span className="text-xs font-bold text-amber-700">Pending review</span>
+                  </div>)}
                 </div>
                 <a className={actionLink + " mt-5 w-full"} href="/merchant/applications">Open application queue</a>
               </aside>

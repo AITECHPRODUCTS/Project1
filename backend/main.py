@@ -11995,6 +11995,89 @@ async def platform_admin_workflows(
     }
 
 
+@api.get("/admin/audit/export.csv")
+async def export_platform_admin_audit_csv(
+    limit: int = Query(default=500, ge=1, le=500),
+    workspace_id: str | None = Query(default=None, min_length=1, max_length=128),
+    action: str | None = Query(default=None, min_length=1, max_length=180),
+    outcome: str | None = Query(default=None, min_length=1, max_length=80),
+    user: dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Export a bounded platform audit snapshot; export metadata is itself audited."""
+    audit_workspace_id = str(user.get("workspace_id") or "").strip()
+    if not audit_workspace_id:
+        raise HTTPException(403, "Select an active workspace to anchor the platform audit-export record")
+
+    with workspace_scope(None):
+        query = select(AuditLog)
+        if workspace_id is not None:
+            query = query.where(AuditLog.workspace_id == workspace_id)
+        if action is not None:
+            query = query.where(AuditLog.action == action)
+        if outcome is not None:
+            query = query.where(AuditLog.outcome == outcome)
+        rows = list((await db.scalars(
+            query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit)
+        )).all())
+
+    def safe_cell(value: Any) -> str:
+        cell = "" if value is None else str(value)
+        if cell.lstrip(" \t\r").startswith(("=", "+", "-", "@")) or cell.startswith(("\t", "\r")):
+            return "'" + cell
+        return cell
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow([
+        "audit_id", "created_at", "workspace_id", "actor", "action",
+        "resource_type", "resource_id", "outcome",
+    ])
+    for row in rows:
+        writer.writerow([
+            safe_cell(row.id),
+            safe_cell(row.created_at.isoformat() if row.created_at else None),
+            safe_cell(row.workspace_id),
+            safe_cell(row.actor),
+            safe_cell(row.action),
+            safe_cell(row.resource_type),
+            safe_cell(row.resource_id),
+            safe_cell(row.outcome),
+        ])
+
+    with workspace_scope(audit_workspace_id):
+        db.add(AuditLog(
+            workspace_id=audit_workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "platform-admin")[:320],
+            action="platform.audit.exported",
+            resource_type="platform_audit_export",
+            resource_id=None,
+            outcome="completed",
+            details_json={
+                "format": "csv",
+                "row_count": len(rows),
+                "row_limit": limit,
+                "workspace_filter_applied": workspace_id is not None,
+                "action_filter_applied": action is not None,
+                "outcome_filter_applied": outcome is not None,
+                "exported_audit_values_recorded": False,
+            },
+        ))
+        await db.commit()
+
+    filename = f"omni-affiliate-platform-audit-{utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store, private",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
+
+
 @api.get("/admin/audit")
 async def platform_admin_audit(
     limit: int = Query(100, ge=1, le=500),

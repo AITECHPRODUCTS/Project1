@@ -31,6 +31,10 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
                 "status": "draft",
                 "affiliate_network_approval_status": "not_submitted",
                 "affiliate_network_approved": False,
+                "terms_verified": False,
+                "seller_authorization_verified": False,
+                "activation_allowed": False,
+                "marketplace_listed": False,
                 "created_at": "2026-10-30T08:00:00+00:00",
             },
             {
@@ -39,6 +43,10 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
                 "status": "submitted_for_review",
                 "affiliate_network_approval_status": "pending",
                 "affiliate_network_approved": False,
+                "terms_verified": True,
+                "seller_authorization_verified": False,
+                "activation_allowed": False,
+                "marketplace_listed": False,
                 "created_at": "2026-10-29T08:00:00+00:00",
             },
             {
@@ -47,6 +55,10 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
                 "status": "approved",
                 "affiliate_network_approval_status": "approved",
                 "affiliate_network_approved": True,
+                "terms_verified": True,
+                "seller_authorization_verified": True,
+                "activation_allowed": True,
+                "marketplace_listed": True,
                 "created_at": "2026-10-28T08:00:00+00:00",
             },
             {
@@ -55,6 +67,10 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
                 "status": "approved",
                 "affiliate_network_approval_status": "pending",
                 "affiliate_network_approved": False,
+                "terms_verified": True,
+                "seller_authorization_verified": True,
+                "activation_allowed": True,
+                "marketplace_listed": False,
                 "created_at": "2026-10-27T08:00:00+00:00",
             },
         ],
@@ -62,11 +78,19 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
     pending_applications = {
         "count": 1,
         "total_count": 4,
-        "limit": 1,
+        "limit": 5,
         "offset": 0,
         "status_filter": "pending_review",
-        "data": [],
+        "data": [{
+            "id": "application-pending-1",
+            "offer_name": "Creator toolkit",
+            "status": "pending_review",
+            "applicant_email": "publisher@example.test",
+            "created_at": "2026-10-30T09:00:00+00:00",
+        }],
     }
+    approved_applications = {"count": 1, "total_count": 3, "limit": 1, "offset": 0, "status_filter": "approved", "data": []}
+    rejected_applications = {"count": 1, "total_count": 1, "limit": 1, "offset": 0, "status_filter": "rejected", "data": []}
     requests: list[str] = []
 
     with sync_playwright() as playwright:
@@ -84,7 +108,12 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
                     _fulfill_json(route, offers)
                     return
                 if "/api/merchant/applications?" in url:
-                    _fulfill_json(route, pending_applications)
+                    if "status=approved" in url:
+                        _fulfill_json(route, approved_applications)
+                    elif "status=rejected" in url:
+                        _fulfill_json(route, rejected_applications)
+                    else:
+                        _fulfill_json(route, pending_applications)
                     return
                 _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
 
@@ -98,6 +127,14 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
             assert page.get_by_test_id("merchant-stat-applications").inner_text() == "4"
             assert page.get_by_test_id("merchant-stat-internal-approved").inner_text() == "2"
             assert page.get_by_test_id("merchant-stat-network-approved").inner_text() == "1"
+            assert page.get_by_test_id("merchant-stat-terms-verified").inner_text() == "3"
+            assert page.get_by_test_id("merchant-stat-seller-verified").inner_text() == "2"
+            assert page.get_by_test_id("merchant-stat-activation-ready").inner_text() == "2"
+            assert page.get_by_test_id("merchant-stat-marketplace-listed").inner_text() == "1"
+            assert page.get_by_test_id("merchant-stat-evidence-gaps").inner_text() == "2"
+            assert page.get_by_test_id("merchant-stat-applications-approved").inner_text() == "3"
+            assert page.get_by_test_id("merchant-stat-applications-rejected").inner_text() == "1"
+            assert page.get_by_text("publisher@example.test").is_visible()
             assert page.get_by_text("Internal merchant status: submitted for review").is_visible()
             pending_network_status = page.get_by_text("Affiliate-network status: pending", exact=True)
             assert pending_network_status.count() == 2

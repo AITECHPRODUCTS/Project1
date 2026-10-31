@@ -111,9 +111,35 @@ def test_publisher_dashboard_uses_publisher_identity_and_persisted_counts():
                 elif path.endswith("/api/marketplace/offers"):
                     _json(route, {"count": 4, "data": [{}, {}, {}, {}]})
                 elif path.endswith("/api/marketplace/applications"):
-                    _json(route, {"count": 2, "total_count": 2, "data": [{}, {}]})
+                    _json(route, {
+                        "count": 2,
+                        "total_count": 2,
+                        "data": [
+                            {"id": "publisher-app-1", "offer_name": "Creator toolkit", "status": "pending_review", "created_at": "2026-10-30T08:00:00+00:00", "reviewer_notes": None},
+                            {"id": "publisher-app-2", "offer_name": "Video platform", "status": "approved", "created_at": "2026-10-29T08:00:00+00:00", "reviewer_notes": "Approved internally"},
+                        ],
+                    })
                 elif path.endswith("/api/campaigns"):
                     _json(route, {"count": 1, "data": [{}]})
+                elif path.endswith("/api/finance/conversion-ledger"):
+                    _json(route, {
+                        "returned_count": 2,
+                        "total_entry_count": 2,
+                        "limit": 500,
+                        "read_only": True,
+                        "totals_by_currency_and_evidence": [
+                            {"currency": "USD", "evidence_status": "provider_reported_unreconciled", "entry_count": 1, "commission_total": "12.500000", "revenue_total": "50.000000"},
+                            {"currency": "INR", "evidence_status": "matched_click", "entry_count": 1, "commission_total": "240.000000", "revenue_total": "1200.000000"},
+                        ],
+                        "data": [{
+                            "id": "commission-evidence-1", "network": "ClickBank",
+                            "external_event_id": "order-1", "click_id": "click-1",
+                            "entry_type": "commission", "commission_amount": "12.500000",
+                            "revenue_amount": "50.000000", "currency": "USD",
+                            "status": "provisional", "evidence_status": "provider_reported_unreconciled",
+                            "created_at": "2026-10-30T08:00:00+00:00",
+                        }],
+                    })
                 else:
                     _json(route, {"detail": "Unexpected API request"}, 404)
 
@@ -124,6 +150,12 @@ def test_publisher_dashboard_uses_publisher_identity_and_persisted_counts():
             page.get_by_text("12", exact=True).wait_for(state="visible")
             assert page.get_by_role("link", name="Explore merchant offers").is_visible()
             assert page.get_by_role("link", name="Manage integrations").is_visible()
+            assert page.get_by_role("heading", name="Commission evidence by currency").is_visible()
+            assert page.get_by_text("USD", exact=True).is_visible()
+            assert page.get_by_text("INR", exact=True).is_visible()
+            assert page.get_by_test_id("publisher-commission-commission-evidence-1").is_visible()
+            assert page.get_by_test_id("publisher-application-pending_review").inner_text() == "1"
+            assert page.get_by_test_id("publisher-application-approved").inner_text() == "1"
             publisher_nav = page.get_by_role("navigation", name="Publisher dashboard navigation")
             assert publisher_nav.get_by_role("link", name="Publisher tools").get_attribute("href") == "#publisher-tools"
             assert publisher_nav.get_by_role("link", name="My applications").get_attribute("href") == "/marketplace#my-applications"

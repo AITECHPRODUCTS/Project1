@@ -1,7 +1,7 @@
 "use client";
 
 import {useCallback,useEffect,useState} from "react";
-import {apiFetch} from "@/lib/api";
+import {API_BASE,apiFetch} from "@/lib/api";
 
 type PlatformExecutionControl = {
   id:number;
@@ -343,7 +343,11 @@ export default function TenantLifecyclePage(){
               </div>
             </section>
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-lg font-black">Recent platform audit events · read only</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Recent platform audit events · read only</h3>
+                <a href={API_BASE+"/api/admin/audit/export.csv?limit=500"} download className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-indigo-700" data-testid="platform-audit-export">Export latest 500 audit rows (CSV)</a>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-slate-500">The export includes global audit metadata only, uses formula-safe CSV cells and records the export action itself.</p>
               <div className="mt-3 space-y-2">
                 {auditEvents.map(event=><article key={event.id} data-testid={"platform-audit-"+event.id} className="rounded-xl border border-slate-100 p-3">
                   <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{event.action}</strong><span className="text-xs font-bold">{event.outcome}</span></div>

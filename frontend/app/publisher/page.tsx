@@ -6,6 +6,10 @@ import { apiFetch } from "@/lib/api";
 type Identity={user?:{email?:string;account_type?:string;is_admin?:boolean}};
 type Status={clicks?:number;conversion_events?:number;commission_recorded?:number};
 type CountResponse={count?:number;total_count?:number;data?:unknown[]};
+type PublisherApplication={id:string;offer_name:string;status:string;created_at:string|null;reviewer_notes:string|null};
+type CommissionEvidenceTotal={currency:string;evidence_status:string;entry_count:number;commission_total:string;revenue_total:string};
+type CommissionObservation={id:string;network:string;external_event_id:string;entry_type:string;commission_amount:string;revenue_amount:string;currency:string;status:string;evidence_status:string;created_at:string|null};
+type CommissionLedger={total_entry_count:number;returned_count:number;totals_by_currency_and_evidence:CommissionEvidenceTotal[];data:CommissionObservation[]};
 
 const card="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md";
 const linkClass="mt-4 inline-flex rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white";
@@ -16,6 +20,9 @@ export default function PublisherDashboardPage(){
   const [offerCount,setOfferCount]=useState<number|null>(null);
   const [applicationCount,setApplicationCount]=useState<number|null>(null);
   const [campaignCount,setCampaignCount]=useState<number|null>(null);
+  const [applications,setApplications]=useState<PublisherApplication[]>([]);
+  const [commissionLedger,setCommissionLedger]=useState<CommissionLedger|null>(null);
+  const [commissionError,setCommissionError]=useState("");
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [denied,setDenied]=useState(false);
@@ -26,16 +33,26 @@ export default function PublisherDashboardPage(){
       const identity=await apiFetch<Identity>("/api/auth/me");
       if(identity.user?.account_type!=="affiliate_publisher"){setDenied(true);return;}
       setEmail(identity.user?.email||"");
-      const [metrics,offers,applications,campaigns]=await Promise.all([
+      const [metrics,offers,applicationResponse,campaigns]=await Promise.all([
         apiFetch<Status>("/api/status"),
         apiFetch<CountResponse>("/api/marketplace/offers?limit=100"),
-        apiFetch<CountResponse>("/api/marketplace/applications?limit=100"),
+        apiFetch<{count?:number;data?:PublisherApplication[]}>("/api/marketplace/applications?limit=100"),
         apiFetch<CountResponse>("/api/campaigns")
       ]);
       setStatus(metrics);
       setOfferCount(offers.count??offers.data?.length??0);
-      setApplicationCount(applications.total_count??applications.count??applications.data?.length??0);
+      const applicationRows=Array.isArray(applicationResponse.data)?applicationResponse.data:[];
+      setApplications(applicationRows);
+      setApplicationCount(applicationResponse.count??applicationRows.length);
       setCampaignCount(campaigns.count??campaigns.data?.length??0);
+      try{
+        const ledger=await apiFetch<CommissionLedger>("/api/finance/conversion-ledger");
+        setCommissionLedger(ledger);
+        setCommissionError("");
+      }catch(ledgerError){
+        setCommissionLedger(null);
+        setCommissionError(ledgerError instanceof Error?ledgerError.message:"Commission evidence is currently unavailable.");
+      }
     }catch(cause){
       const message=cause instanceof Error?cause.message:"Publisher dashboard could not be loaded.";
       if(message.includes("401"))window.location.replace("/");
@@ -76,11 +93,51 @@ export default function PublisherDashboardPage(){
         {[
           ["Tracked clicks",status?String(status.clicks??0):"—","First-party records in this workspace"],
           ["Conversion events",status?String(status.conversion_events??0):"—","Recorded provider events; not all are confirmed"],
-          ["Commission recorded",status?Number(status.commission_recorded??0).toFixed(2):"—","Recorded amount; currency is not normalized or verified as payout"],
+          ["Commission entries",commissionLedger?String(commissionLedger.total_entry_count):"—","Evidence-ledger observations; not a payout or settled balance"],
           ["Campaigns",campaignCount===null?"—":String(campaignCount),"Persisted campaign records in this workspace"]
         ].map(([title,value,note])=><article key={title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p><p className="mt-3 text-3xl font-black">{value}</p><p className="mt-1 text-xs leading-5 text-slate-500">{note}</p>
         </article>)}
+      </section>
+      <section className="mt-8 grid gap-5 xl:grid-cols-2">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="publisher-commission-evidence-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-indigo-600">Financial evidence · read only</p>
+              <h2 id="publisher-commission-evidence-title" className="mt-1 text-xl font-black">Commission evidence by currency</h2>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Currencies and evidence states stay separate. These records do not prove a network payout or funds received.</p>
+            </div>
+            <a href="/finance/provider-orders" className="text-sm font-bold text-indigo-700">Reconcile provider orders</a>
+          </div>
+          {commissionError&&<p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{commissionError}</p>}
+          {!commissionError&&commissionLedger&&commissionLedger.totals_by_currency_and_evidence.length===0&&<p className="mt-4 rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">No commission evidence has been recorded yet.</p>}
+          {commissionLedger&&commissionLedger.totals_by_currency_and_evidence.length>0&&<div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[420px] text-left text-sm">
+              <thead><tr className="border-b border-slate-100 text-xs text-slate-500"><th className="py-2 pr-3">Currency</th><th className="py-2 pr-3">Evidence state</th><th className="py-2 pr-3 text-right">Entries</th><th className="py-2 text-right">Commission recorded</th></tr></thead>
+              <tbody>{commissionLedger.totals_by_currency_and_evidence.map((item,index)=><tr key={item.currency+"-"+item.evidence_status+"-"+index} className="border-b border-slate-50">
+                <td className="py-2 pr-3 font-bold">{item.currency}</td><td className="py-2 pr-3">{item.evidence_status.replaceAll("_"," ")}</td><td className="py-2 pr-3 text-right tabular-nums">{item.entry_count}</td><td className="py-2 text-right tabular-nums">{item.commission_total}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
+          {commissionLedger&&commissionLedger.data.length>0&&<div className="mt-4 space-y-2">
+            <h3 className="text-sm font-black">Latest recorded observations</h3>
+            {commissionLedger.data.slice(0,4).map(item=><div key={item.id} data-testid={"publisher-commission-"+item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{item.network}</strong><span className="text-xs font-bold">{item.evidence_status.replaceAll("_"," ")}</span></div>
+              <p className="mt-1 text-xs text-slate-600">{item.entry_type.replaceAll("_"," ")} · {item.status.replaceAll("_"," ")}</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">{item.commission_amount} {item.currency}</p>
+            </div>)}
+          </div>}
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="publisher-application-status-title">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-indigo-600">Partner pipeline</p><h2 id="publisher-application-status-title" className="mt-1 text-xl font-black">My application status</h2><p className="mt-1 text-xs text-slate-500">Latest {applications.length} application record(s) returned by the active workspace.</p></div><a href="/marketplace#my-applications" className="text-sm font-bold text-indigo-700">Open all applications</a></div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {(["pending_review","approved","rejected"] as const).map(statusName=><div key={statusName} className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-bold uppercase text-slate-500">{statusName.replaceAll("_"," ")}</p><p className="mt-1 text-2xl font-black tabular-nums" data-testid={"publisher-application-"+statusName}>{applications.filter(item=>item.status===statusName).length}</p></div>)}
+          </div>
+          <div className="mt-4 space-y-2">
+            {applications.slice(0,4).map(item=><div key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2"><span className="text-sm font-semibold">{item.offer_name}</span><span className="text-xs text-slate-600">{item.status.replaceAll("_"," ")}</span></div>)}
+            {applications.length===0&&<p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">No publisher applications have been submitted from this workspace.</p>}
+          </div>
+        </article>
       </section>
       <section id="publisher-tools" className="mt-8">
         <h2 className="text-xl font-black">Publisher tools</h2>

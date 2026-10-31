@@ -42,3 +42,12 @@ No claim is made of guaranteed earnings, 100% failproof operation, universal pro
 - Platform Super Admin navigation now links directly to the platform operations and tenant lifecycle sections.
 - Dashboard client-side access checks now require the persisted account persona: `affiliate_publisher` for the Publisher dashboard, `merchant_product_owner` for the Merchant dashboard, and both `platform_admin` and `is_admin=true` for the Super Admin console. This prevents a global admin flag alone from making the business-persona dashboards interchangeable.
 - Browser regression coverage was extended for navigation destinations and cross-persona denial. These changes do not make the remaining platform lifecycle, provider integrations, ad delivery or commission settlement work complete; production readiness remains open pending full feature and live-environment acceptance.
+
+
+## Dashboard business-operations increment — 31 October 2026
+
+- Publisher dashboard now reads the immutable conversion evidence ledger and presents commission totals grouped by currency and evidence status, with recent observations and an internal-application status summary. It does not add multi-currency values together or label provider observations as paid commission.
+- Merchant dashboard now derives terms-verification, seller-authorization, activation-readiness, marketplace-listing and evidence-gap counts from persisted offer records. It also reads the pending, internally approved and rejected publisher-application counts and shows a short pending-review preview.
+- Platform Super Admin now has a bounded CSV export of global audit metadata with exact workspace/action/outcome filters, formula-injection-safe cells, no-store response headers and an audit record for the export action. Exported values are not copied into the export audit event.
+- Browser coverage now verifies the new publisher and merchant summaries and the Admin export link. API tests cover export scoping filters, spreadsheet formula safety, export audit recording and rejection of non-platform-admin users or missing audit workspaces.
+- Queue/dead-letter recovery, incident management, usage/cost controls, richer release monitoring, live provider credentials and local real-user acceptance remain open; this increment is not a production-readiness declaration.

@@ -442,20 +442,23 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             page.wait_for_url("**/merchant")
             page.get_by_role("heading", name="Merchant workspace").wait_for(state="visible")
 
-            # Exercise a real persisted, review-only content draft through its dedicated screen.
-            page.get_by_role("button", name="Infographic maker").click()
-            page.get_by_label("Infographic title").fill("Browser UAT evidence-first infographic")
-            page.get_by_label("Key points (3–6, one per line)").fill(
-                "Compare products using the same criteria\n"
-                "Verify claims against official source material\n"
-                "Record limitations before publishing"
+            # Exercise the authenticated review-only creative endpoint without
+            # navigating this Merchant account into the Publisher-only dashboard.
+            infographic_response = context.request.post(
+                api_base + "/api/content/infographic",
+                data={
+                    "title": "Browser UAT evidence-first infographic",
+                    "subtitle": "A merchant-side content draft test",
+                    "audience": "Product customers",
+                    "key_points": [
+                        "Compare products using the same criteria",
+                        "Verify claims against official source material",
+                        "Record limitations before publishing",
+                    ],
+                    "source_urls": [],
+                },
+                headers={"X-CSRF-Token": registered["csrf_token"]},
             )
-            with page.expect_response(
-                lambda response: response.url.endswith("/api/content/infographic")
-                and response.request.method == "POST"
-            ) as infographic_response_info:
-                page.get_by_role("button", name="Create infographic SVG").click()
-            infographic_response = infographic_response_info.value
             assert infographic_response.status == 201, infographic_response.text()
             infographic = infographic_response.json()
             assert infographic["requires_review"] is True

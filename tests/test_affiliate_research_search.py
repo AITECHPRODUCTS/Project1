@@ -86,7 +86,7 @@ def _seed_connections(sessions, workspace_a, workspace_b):
                     credential_ciphertext="y", credential_fingerprint="b" * 64,
                     account_nicknames_json=["tracking-123"], capabilities_json=["products.search.read"]),
                 ProviderAccountConnection(workspace_id=workspace_b, provider_id="digistore24", status="connected_read_only",
-                    credential_ciphertext="encrypted-other-workspace", credential_fingerprint="c" * 64,
+                    credential_ciphertext="z", credential_fingerprint="c" * 64,
                     account_nicknames_json=["other-account"], capabilities_json=["marketplace.entries.read"]),
             ])
             await db.commit()

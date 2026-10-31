@@ -2337,8 +2337,33 @@ async def search_connected_affiliate_marketplaces(
     failures = 0
     actor = str(user.get("email") or user.get("user_id") or "workspace-user")[:320]
 
+    async def record_failure(connection_id: str, provider: str, code: str, checked_at, degrade: bool):
+        # A rollback expires ORM instances; re-load under the active workspace before
+        # changing the connection or adding an audit row.
+        await db.rollback()
+        with workspace_scope(workspace_id):
+            current = await db.scalar(select(ProviderAccountConnection).where(
+                ProviderAccountConnection.id == connection_id,
+                ProviderAccountConnection.workspace_id == workspace_id,
+                ProviderAccountConnection.provider_id == provider,
+            ))
+            if current is not None:
+                if degrade:
+                    current.status = "degraded"
+                current.last_error_code = code
+                current.last_checked_at = checked_at
+            db.add(AuditLog(
+                workspace_id=workspace_id, actor=actor,
+                action="affiliate_research.marketplace_search",
+                resource_type="provider_account_connection", resource_id=connection_id,
+                outcome=code,
+                details_json={"provider_id": provider, "query_present": True, "read_only": True},
+            ))
+            await db.commit()
+
     for connection in connections:
         provider = connection.provider_id
+        connection_id = str(connection.id)
         summary = summaries[provider]
         summary["connected_accounts_found"] += 1
         account_ref = str((connection.account_nicknames_json or [""])[0])[:100] if connection.account_nicknames_json else None
@@ -2349,10 +2374,10 @@ async def search_connected_affiliate_marketplaces(
                 report = await search_digistore24_marketplace(secret, query=payload.query, limit=payload.limit)
                 items = report.get("entries") or []
                 persisted = await _upsert_digistore24_marketplace_observations(
-                    db, workspace_id=workspace_id, connection_id=connection.id, items=items
+                    db, workspace_id=workspace_id, connection_id=connection_id, items=items
                 )
                 mapped = [{
-                    "provider_id": provider, "connection_id": connection.id, "account_reference": account_ref,
+                    "provider_id": provider, "connection_id": connection_id, "account_reference": account_ref,
                     "external_id": item.get("external_id"), "title": item.get("title"),
                     "description": item.get("description") or "", "category": item.get("category"),
                     "vendor": item.get("vendor_name"), "product_url": item.get("product_url"),
@@ -2379,11 +2404,11 @@ async def search_connected_affiliate_marketplaces(
                 report = await search_flipkart_products(account_ref, secret, query=payload.query, result_count=payload.limit)
                 items = report.get("products") or []
                 persisted = await _upsert_flipkart_catalog_observations(
-                    db, workspace_id=workspace_id, connection_id=connection.id, observation_type="product",
+                    db, workspace_id=workspace_id, connection_id=connection_id, observation_type="product",
                     source_endpoint=report.get("source_endpoint") or "affiliate/1.0/search.json", items=items
                 )
                 mapped = [{
-                    "provider_id": provider, "connection_id": connection.id, "account_reference": account_ref,
+                    "provider_id": provider, "connection_id": connection_id, "account_reference": account_ref,
                     "external_id": item.get("external_id"), "title": item.get("title"),
                     "description": item.get("description") or "", "category": item.get("category"),
                     "vendor": item.get("brand"), "product_url": item.get("product_url"),
@@ -2402,7 +2427,7 @@ async def search_connected_affiliate_marketplaces(
             with workspace_scope(workspace_id):
                 db.add(AuditLog(workspace_id=workspace_id, actor=actor,
                     action="affiliate_research.marketplace_search",
-                    resource_type="provider_account_connection", resource_id=connection.id,
+                    resource_type="provider_account_connection", resource_id=connection_id,
                     outcome="provider_reported",
                     details_json={"provider_id": provider, "result_count": len(mapped),
                         "persisted_count": persisted, "query_present": True, "read_only": True}))
@@ -2415,49 +2440,23 @@ async def search_connected_affiliate_marketplaces(
             summary["commission_terms_status"] = terms_status
             successes += 1
         except (StoredDigistore24CredentialError, StoredFlipkartCredentialError):
-            await db.rollback()
-            connection.status = "degraded"
-            connection.last_error_code = "credential_decryption_failed"
-            connection.last_checked_at = checked_at
             code = "credential_decryption_failed"
+            await record_failure(connection_id, provider, code, checked_at, degrade=True)
             failures += 1
-            summary["errors"].append({"connection_id": connection.id, "code": code})
+            summary["errors"].append({"connection_id": connection_id, "code": code})
             summary["status"] = "degraded"
-            with workspace_scope(workspace_id):
-                db.add(AuditLog(workspace_id=workspace_id, actor=actor,
-                    action="affiliate_research.marketplace_search", resource_type="provider_account_connection",
-                    resource_id=connection.id, outcome=code,
-                    details_json={"provider_id": provider, "query_present": True, "read_only": True}))
-                await db.commit()
         except (Digistore24AccessError, FlipkartAccessError):
-            await db.rollback()
-            connection.status = "degraded"
-            connection.last_error_code = "credential_or_permission_rejected"
-            connection.last_checked_at = checked_at
             code = "credential_or_permission_rejected"
+            await record_failure(connection_id, provider, code, checked_at, degrade=True)
             failures += 1
-            summary["errors"].append({"connection_id": connection.id, "code": code})
+            summary["errors"].append({"connection_id": connection_id, "code": code})
             summary["status"] = "degraded"
-            with workspace_scope(workspace_id):
-                db.add(AuditLog(workspace_id=workspace_id, actor=actor,
-                    action="affiliate_research.marketplace_search", resource_type="provider_account_connection",
-                    resource_id=connection.id, outcome=code,
-                    details_json={"provider_id": provider, "query_present": True, "read_only": True}))
-                await db.commit()
         except (Digistore24ProviderUnavailable, FlipkartProviderUnavailable):
-            await db.rollback()
-            connection.last_error_code = "provider_unavailable"
-            connection.last_checked_at = checked_at
             code = "provider_unavailable"
+            await record_failure(connection_id, provider, code, checked_at, degrade=False)
             failures += 1
-            summary["errors"].append({"connection_id": connection.id, "code": code})
+            summary["errors"].append({"connection_id": connection_id, "code": code})
             summary["status"] = "degraded"
-            with workspace_scope(workspace_id):
-                db.add(AuditLog(workspace_id=workspace_id, actor=actor,
-                    action="affiliate_research.marketplace_search", resource_type="provider_account_connection",
-                    resource_id=connection.id, outcome=code,
-                    details_json={"provider_id": provider, "query_present": True, "read_only": True}))
-                await db.commit()
 
     for summary in summaries.values():
         if summary["connected_accounts_found"] and summary["accounts_searched"] and summary["errors"]:

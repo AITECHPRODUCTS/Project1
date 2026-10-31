@@ -421,7 +421,7 @@ def test_real_registration_creates_workspace_and_authenticates_dashboard():
             context = browser.new_context(viewport={"width": 1440, "height": 900})
             registration = context.request.post(
                 f"{api_base}/api/auth/register",
-                data={"email": email, "password": password, "workspace_name": workspace_name},
+                data={"email": email, "password": password, "workspace_name": workspace_name, "account_type": "merchant_product_owner"},
             )
             assert registration.status == 201, registration.text()
             registered = registration.json()
@@ -653,7 +653,7 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
             context = browser.new_context(viewport={"width": 1440, "height": 900})
             registration = context.request.post(
                 api_base + "/api/auth/register",
-                data={"email": email, "password": password, "workspace_name": workspace_name},
+                data={"email": email, "password": password, "workspace_name": workspace_name, "account_type": "affiliate_publisher"},
             )
             assert registration.status == 201, registration.text()
             registered = registration.json()
@@ -713,6 +713,7 @@ def test_persisted_landing_page_requires_owner_approval_and_supports_unpublish()
                         "email": other_email,
                         "password": "Other-Landing-UAT-password-2026!",
                         "workspace_name": "Other Landing Workspace",
+                        "account_type": "affiliate_publisher",
                     },
                 )
                 assert other_registration.status == 201, other_registration.text()
@@ -835,7 +836,7 @@ def test_distribution_queue_is_persisted_review_gated_and_never_claims_sent():
             context = browser.new_context(viewport={"width": 1440, "height": 900})
             registration = context.request.post(
                 api_base + "/api/auth/register",
-                data={"email": email, "password": password, "workspace_name": "Distribution Queue UAT"},
+                data={"email": email, "password": password, "workspace_name": "Distribution Queue UAT", "account_type": "affiliate_publisher"},
             )
             assert registration.status == 201, registration.text()
             registered_session = registration.json()

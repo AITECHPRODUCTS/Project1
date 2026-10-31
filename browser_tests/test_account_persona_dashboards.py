@@ -76,7 +76,7 @@ def test_merchant_registration_redirects_to_merchant_dashboard():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/register", wait_until="domcontentloaded")
-            page.get_by_label("Merchant / Product Owner").check()
+            page.get_by_label("Merchant / Product Owner").check(force=True)
             page.get_by_label("Email address").fill("merchant@example.test")
             page.get_by_label("Password").fill("MerchantStrongPassword123")
             page.get_by_role("button", name="Create account").click()
@@ -169,7 +169,7 @@ def test_publisher_account_cannot_open_merchant_dashboard():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
-            page.get_by_role("alert").wait_for(state="visible")
+            page.locator("main [role=alert]").wait_for(state="visible")
             assert "only available to Merchant / Product Owner accounts" in page.locator("main [role=alert]").inner_text()
         finally:
             browser.close()

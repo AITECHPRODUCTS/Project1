@@ -13,8 +13,20 @@ type EvidenceRow = {
   commission_total: string;
   revenue_total: string;
 };
+type ProgramLink = {
+  id: string;
+  label: string;
+  destination_url: string;
+  campaign_id: string;
+  promotion_url: string;
+  status: string;
+  is_primary: boolean;
+  clicks_all_time: number;
+  conversion_entries: number;
+};
 type ProgramDetail = {
   id: string;
+  links?: ProgramLink[];
   merchant_offer_id: string;
   offer_name: string;
   status: string;
@@ -74,6 +86,9 @@ export default function PublisherProgramDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [linkLabel, setLinkLabel] = useState("Social profile link");
+  const [linkDestination, setLinkDestination] = useState("");
+  const [creatingLink, setCreatingLink] = useState(false);
 
   const load = useCallback(async () => {
     if (!applicationId) return;
@@ -109,6 +124,33 @@ export default function PublisherProgramDetailPage() {
       setNotice("Tracked referral link copied.");
     } catch {
       setError("Clipboard access was blocked. Select and copy the referral URL shown below.");
+    }
+  };
+
+  const createLink = async () => {
+    if (!applicationId || !linkLabel.trim()) return;
+    setCreatingLink(true);
+    setError("");
+    setNotice("");
+    try {
+      await apiFetch<ProgramLink>(
+        "/api/marketplace/applications/" + encodeURIComponent(applicationId) + "/links",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            label: linkLabel.trim(),
+            destination_url: linkDestination.trim() || null,
+          }),
+        }
+      );
+      setNotice("Additional tracked referral link created.");
+      setLinkLabel("");
+      setLinkDestination("");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The referral link could not be created.");
+    } finally {
+      setCreatingLink(false);
     }
   };
 
@@ -197,19 +239,65 @@ export default function PublisherProgramDetailPage() {
             )}
 
             {tab === "links" && (
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-black">Referral links</h2>
-                {activeLink ? (
-                  <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
-                    <p className="text-xs font-bold uppercase tracking-wider text-emerald-900">Primary tracked link · active</p>
-                    <a href={program.promotion_url!} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-sm font-semibold text-indigo-700 underline">{program.promotion_url}</a>
-                    <p className="mt-2 text-xs text-slate-600">Campaign reference: {program.promotion_campaign_id || "Not recorded"}</p>
-                    <button type="button" onClick={() => void copyLink()} className="mt-3 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700">Copy link</button>
+              <section className="mt-6 space-y-5">
+                <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black">Referral links</h2>
+                      <p className="mt-1 text-sm text-slate-500">Each link has its own campaign ID, click count and conversion evidence while remaining attached to this approved merchant program.</p>
+                    </div>
+                    <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">{(program.links?.length ?? (program.promotion_url ? 1 : 0))} / 20 links</span>
                   </div>
-                ) : (
-                  <p className="mt-4 rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-600">A tracked link is issued only after merchant approval and activation. Current status: {pretty(program.promotion_link_status || "not issued")}.</p>
+                  {(program.links && program.links.length > 0) ? (
+                    <div className="mt-4 space-y-3">
+                      {program.links.map(item => (
+                        <div key={item.id} className="rounded-xl border border-slate-200 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-bold text-slate-800">{item.label}{item.is_primary ? " · primary" : ""}</p>
+                            <span className={"rounded-full px-2.5 py-1 text-xs font-bold " + (item.status === "active" ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-600")}>{item.status}</span>
+                          </div>
+                          <a href={item.promotion_url} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-sm font-semibold text-indigo-700 underline">{item.promotion_url}</a>
+                          <p className="mt-2 break-all text-xs text-slate-500">Destination: {item.destination_url}</p>
+                          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600">
+                            <span><strong className="text-slate-900">{item.clicks_all_time}</strong> clicks</span>
+                            <span><strong className="text-slate-900">{item.conversion_entries}</strong> conversion entries</span>
+                          </div>
+                          <button type="button" onClick={() => { void navigator.clipboard.writeText(item.promotion_url).then(() => setNotice("Tracked referral link copied.")).catch(() => setError("Clipboard access was blocked. Select and copy the referral URL.")); }}
+                            className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">Copy link</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : program.promotion_url ? (
+                    <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-900">Primary tracked link · active</p>
+                      <a href={program.promotion_url} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-sm font-semibold text-indigo-700 underline">{program.promotion_url}</a>
+                      <p className="mt-2 text-xs text-slate-600">Campaign reference: {program.promotion_campaign_id || "Not recorded"}</p>
+                      <button type="button" onClick={() => void copyLink()} className="mt-3 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700">Copy link</button>
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-600">A tracked link is issued only after merchant approval and activation. Current status: {pretty(program.promotion_link_status || "not issued")}.</p>
+                  )}
+                </article>
+
+                {approved && (
+                  <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h3 className="text-base font-black">Create another referral link</h3>
+                    <p className="mt-1 text-sm text-slate-500">Use a distinct label for each channel or placement. Destinations must remain on the merchant's verified HTTPS domain.</p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <label className="text-xs font-bold text-slate-600">Link label
+                        <input value={linkLabel} onChange={event => setLinkLabel(event.target.value)} maxLength={120} placeholder="e.g. Instagram bio" className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal text-slate-800" />
+                      </label>
+                      <label className="text-xs font-bold text-slate-600">Destination URL (optional)
+                        <input value={linkDestination} onChange={event => setLinkDestination(event.target.value)} type="url" maxLength={2048} placeholder="https://merchant.example.com/pricing" className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal text-slate-800" />
+                      </label>
+                    </div>
+                    <button type="button" onClick={() => void createLink()} disabled={creatingLink || !linkLabel.trim() || (program.links?.length ?? 1) >= 20}
+                      className="mt-4 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                      {creatingLink ? "Creating link…" : "Create tracked link"}
+                    </button>
+                    <p className="mt-2 text-xs text-slate-500">Maximum 20 links per approved program. Each link is tracked separately and contributes to the program's merchant conversion and commission reporting.</p>
+                  </article>
                 )}
-                <p className="mt-4 text-xs leading-5 text-slate-500">The current release issues one primary tracked link per approved application. A multi-link builder with partner-created destination aliases is not available yet.</p>
               </section>
             )}
 

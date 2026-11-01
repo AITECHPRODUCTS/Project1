@@ -148,6 +148,7 @@ def test_merchant_dashboard_uses_workspace_offer_and_application_data():
             assert merchant_nav.get_by_role("link", name="Dashboard").get_attribute("href") == "/merchant"
             assert merchant_nav.get_by_role("link", name="Manage offers").get_attribute("href") == "/merchant/offers"
             assert merchant_nav.get_by_role("link", name="Review applications").get_attribute("href") == "/merchant/applications"
+            assert merchant_nav.get_by_role("link", name="Partner payout readiness").get_attribute("href") == "/merchant/payouts"
             assert page.get_by_role("button", name="Refresh workspace").is_visible()
         finally:
             browser.close()
@@ -212,5 +213,72 @@ def test_merchant_dashboard_surfaces_workspace_authorization_errors():
             page.locator("main [role=alert]").wait_for(state="visible")
             assert "403" in page.locator("main [role=alert]").inner_text()
             assert page.get_by_role("button", name="Retry").is_visible()
+        finally:
+            browser.close()
+
+
+def test_merchant_partner_payout_readiness_page_shows_hold_and_manual_review_status():
+    readiness = {
+        "count": 1,
+        "as_of": "2026-11-01T12:00:00+00:00",
+        "money_transferred": False,
+        "note": "Amounts come from signed conversion evidence. Eligibility is a review aid; no payout was confirmed and no transfer was initiated.",
+        "data": [{
+            "program_id": "program-creator-toolkit",
+            "program_name": "Creator toolkit",
+            "publisher_workspace_id": "publisher-workspace",
+            "publisher_email": "publisher@example.test",
+            "application_id": "application-approved",
+            "application_status": "approved",
+            "promotion_link_status": "active",
+            "currency": "USD",
+            "gross_commission": "50.000000",
+            "reversed_commission": "25.000000",
+            "net_commission": "25.000000",
+            "held_commission": "0.000000",
+            "eligible_commission": "25.000000",
+            "minimum_payout_amount": "20.00",
+            "threshold_reached": True,
+            "refund_hold_days": 15,
+            "next_eligible_at": None,
+            "payout_schedule": "monthly",
+            "conversion_count": 2,
+            "reversal_event_count": 1,
+            "held_event_count": 0,
+            "matured_event_count": 1,
+            "payout_state": "eligible_for_manual_review",
+            "payout_confirmed": False,
+            "transfers_initiated": False,
+        }],
+    }
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            requests: list[str] = []
+
+            def handle_api(route):
+                url = route.request.url
+                requests.append(url)
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
+                    return
+                if url.endswith("/api/merchant/payout-readiness"):
+                    _fulfill_json(route, readiness)
+                    return
+                _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/merchant/payouts", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Partner payout readiness").wait_for(state="visible")
+            assert page.get_by_text("Creator toolkit", exact=True).is_visible()
+            assert page.get_by_text("eligible for manual review", exact=True).is_visible()
+            assert page.get_by_text("publisher@example.test").is_visible()
+            assert page.get_by_text("$25.00").count() >= 2
+            assert "No automatic payment" in page.locator("main").inner_text()
+            assert "no payout was confirmed" in page.locator("main").inner_text()
+            assert any(url.endswith("/api/merchant/payout-readiness") for url in requests)
+            assert page.get_by_role("link", name="Merchant overview").get_attribute("href") == "/merchant"
         finally:
             browser.close()

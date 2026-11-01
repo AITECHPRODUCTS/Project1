@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantWebhookIntegrationCreateRequest,StripeWebhookIntegrationCreateRequest,StripeWebhookIntegrationSecretRequest,MerchantConversionWebhookEvent,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import AffiliateResearchSearchRequest,AffiliateProgramLinkCreateRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantWebhookIntegrationCreateRequest,StripeWebhookIntegrationCreateRequest,StripeWebhookIntegrationSecretRequest,MerchantConversionWebhookEvent,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -5473,6 +5473,7 @@ async def list_publisher_marketplace_applications(
             select(AffiliateProgramLink).where(
                 AffiliateProgramLink.workspace_id == workspace_id,
                 AffiliateProgramLink.application_id.in_([row.id for row in rows]),
+                AffiliateProgramLink.is_primary.is_(True),
             )
         )).all()) if rows else []
         link_by_application = {link.application_id: link for link in links}
@@ -5541,7 +5542,7 @@ async def get_publisher_marketplace_application_detail(
         link = await db.scalar(select(AffiliateProgramLink).where(
             AffiliateProgramLink.workspace_id == workspace_id,
             AffiliateProgramLink.application_id == row.id,
-        ))
+        ).order_by(AffiliateProgramLink.is_primary.desc(), AffiliateProgramLink.created_at.asc()))
         clicks = 0
         clicks_last_30_days = 0
         clicks_by_day: list[dict[str, Any]] = []
@@ -5719,6 +5720,7 @@ async def review_incoming_marketplace_application(
                 existing_link = await db.scalar(select(AffiliateProgramLink).where(
                     AffiliateProgramLink.workspace_id == publisher_workspace_id,
                     AffiliateProgramLink.application_id == row.id,
+                    AffiliateProgramLink.is_primary.is_(True),
                 ))
                 if existing_link is None:
                     campaign = Campaign(
@@ -5740,6 +5742,9 @@ async def review_incoming_marketplace_application(
                         merchant_offer_id=offer.id,
                         application_id=row.id,
                         campaign_id=campaign.id,
+                        link_label="Primary link",
+                        destination_url=offer.product_url,
+                        is_primary=True,
                         status="active",
                     )
                     db.add(link)
@@ -5770,6 +5775,7 @@ async def review_incoming_marketplace_application(
                 link = await db.scalar(select(AffiliateProgramLink).where(
                     AffiliateProgramLink.workspace_id == publisher_workspace_id,
                     AffiliateProgramLink.application_id == row.id,
+                    AffiliateProgramLink.is_primary.is_(True),
                 ))
     return _marketplace_application_dict(row, link=link)
 

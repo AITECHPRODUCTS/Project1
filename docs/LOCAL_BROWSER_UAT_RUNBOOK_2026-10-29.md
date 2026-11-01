@@ -35,7 +35,7 @@ Prerequisites: Git, Docker Desktop with Compose support, and a modern browser. F
 
     Copy-Item .env.example .env
 
-Edit .env locally. Set APP_ENV=development, APP_PUBLIC_URL=http://localhost:8000, CORS_ORIGINS=http://localhost:3000, and NEXT_PUBLIC_API_BASE_URL=http://localhost:8000. Generate distinct random values for APP_SESSION_SECRET, TRACKING_HMAC_SECRET, AFFILIATE_WEBHOOK_SECRET and POSTGRES_PASSWORD. For example, generate one value at a time with:
+Edit .env locally. Set APP_ENV=development, APP_PUBLIC_URL=http://localhost:8000, and NEXT_PUBLIC_API_BASE_URL=http://localhost:8000. Set UI_PORT=3001 when the browser UI should be available at http://localhost:3001 (the default is 3000). Leave CORS_ORIGINS blank so Docker Compose derives the allowed browser origin from UI_PORT; when setting an explicit CORS_ORIGINS value, make it match the browser origin exactly (for example, http://localhost:3001). Generate distinct random values for APP_SESSION_SECRET, TRACKING_HMAC_SECRET, AFFILIATE_WEBHOOK_SECRET and POSTGRES_PASSWORD. For example, generate one value at a time with:
 
     python -c "import secrets; print(secrets.token_urlsafe(48))"
 
@@ -68,7 +68,7 @@ Both health endpoints should return successful responses. The API readiness chec
     docker compose logs --tail 100 postgres
     docker compose logs --tail 100 redis
 
-Then open http://localhost:3000 in your local browser, sign in with the local initial-admin account configured above, and create/select a local test workspace if prompted.
+Then open http://localhost:3001 when UI_PORT=3001, or http://localhost:3000 when using the default port. Sign in with the local initial-admin account configured above, and create/select a local test workspace if prompted.
 
 ## 4. Hands-on acceptance checklist
 
@@ -97,7 +97,7 @@ Install the development test dependencies and Chromium in the same local Python 
 
     python -m pip install -r requirements-dev.txt
     python -m playwright install chromium
-    $env:BROWSER_BASE_URL = "http://127.0.0.1:3000"
+    $env:BROWSER_BASE_URL = "http://127.0.0.1:3001"  # use 3000 when UI_PORT is not overridden
     python -m pytest -q browser_tests
 
 Some browser tests intercept individual API contracts with test fixtures. Run them alongside—not instead of—the manual checks against your local API/database above.

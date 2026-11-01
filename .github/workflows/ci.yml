@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 concurrency:
-  # Keep one active run per event/branch and queue the next candidate instead of cancelling in-flight checks.
-  # GitHub may replace an older pending run when a newer run enters the same concurrency group.
-  group: affiliate-os-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  # A distinct group per commit preserves every push/PR verification run; newer commits
+  # must not replace a pending check and leave the branch without complete CI evidence.
+  group: affiliate-os-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -188,7 +188,29 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:3100/ > /tmp/omni-home.html
           echo "Pruned frontend production server smoke passed."
       - name: Build final frontend Docker image and inspect shipped runtime dependencies
-        run: docker build --tag omni-affiliate-os-frontend-ci:ci --file Dockerfile .
+        run: docker build --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 --tag omni-affiliate-os-frontend-ci:ci --file Dockerfile .
+      - name: Validate Docker Compose port and frontend API wiring
+        run: |
+          set -eu
+          export POSTGRES_PASSWORD=ci-compose-placeholder
+          export APP_SESSION_SECRET=ci-compose-placeholder
+          export TRACKING_HMAC_SECRET=ci-compose-placeholder
+          export AFFILIATE_WEBHOOK_SECRET=ci-compose-placeholder
+          export UI_PORT=3101
+          export CORS_ORIGINS=
+          docker compose config --format json > /tmp/omni-compose.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path("/tmp/omni-compose.json").read_text())
+          api_environment = config["services"]["api"]["environment"]
+          frontend_build_args = config["services"]["frontend"]["build"]["args"]
+          assert api_environment["CORS_ORIGINS"] == "http://localhost:3101", api_environment["CORS_ORIGINS"]
+          assert frontend_build_args["NEXT_PUBLIC_API_BASE_URL"] == "http://localhost:8000"
+          print("Docker Compose port-derived CORS and frontend API build argument verified.")
+          PY
+
       - name: Smoke test the final frontend Docker image
         run: |
           set -eu

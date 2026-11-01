@@ -38,7 +38,7 @@ services:
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       DATABASE_URL: postgresql+asyncpg://affiliate:${POSTGRES_PASSWORD}@postgres:5432/affiliate_os
       REDIS_URL: redis://redis:6379/0
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:${UI_PORT:-3000}}"
       # Uvicorn forwarded-header trust; never use * on public deployments.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
       EXECUTION_MODE: ${EXECUTION_MODE:-SEMI_AUTONOMOUS}

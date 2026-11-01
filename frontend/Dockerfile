@@ -1,5 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 COPY package.json package-lock.json* ./
 COPY . .
 # Install, build and prune in one layer so removed optional packages are not left

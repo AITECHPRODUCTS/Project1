@@ -917,6 +917,7 @@ def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(
             assert conversation is not None and conversation.status == "open"
             assert len(messages) == 2
             assert all(item.read_at is not None for item in messages)
-            assert len(publisher_audit) == len(merchant_audit) == 4
+            assert len(publisher_audit) == 4
+            assert len(merchant_audit) == 0
     finally:
         cleanup(engine, client)

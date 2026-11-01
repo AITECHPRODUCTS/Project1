@@ -13,6 +13,7 @@ type NavGroup = { label: string; items: NavItem[] };
 
 const publisherGroups: NavGroup[] = [
   { label: "Discover & Research", items: [
+    { label: "My programs", href: "/programs" },
     { label: "Publisher marketplace", href: "/marketplace" },
     { label: "Affiliate offer catalog", href: "/offers" },
     { label: "Affiliate research", href: "/affiliate-research" },

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 SENSITIVE = re.compile(r"(?<![a-z0-9])(bank|payouts?|tax|wire|withdrawal|withdraw|payment_method|routing_number|iban|swift)(?![a-z0-9])", re.I)
 # These are public program-policy terms, not payment instructions or recipient credentials.
 SAFE_PROGRAM_POLICY_FIELDS = {"minimum_payout_amount", "payout_schedule"}
-SAFE_READS = {"/api/finance/ledger", "/api/finance/thresholds"}
+SAFE_READS = {"/api/finance/ledger", "/api/finance/thresholds", "/api/merchant/payout-readiness"}
 SAFE_SYSTEM = {"/health", "/docs", "/openapi.json", "/redoc"}
 
 def _payload_has_sensitive_operation(value: Any) -> bool:

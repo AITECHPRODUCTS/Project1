@@ -18,6 +18,10 @@ def make_client() -> TestClient:
     async def payout_operation():
         return {"executed": True}
 
+    @app.get("/api/merchant/payout-readiness")
+    async def partner_payout_readiness():
+        return {"eligible_commission": "10.00", "transfers_initiated": False}
+
     return TestClient(app)
 
 
@@ -46,3 +50,13 @@ def test_financial_operations_and_recipient_fields_remain_blocked():
         response = client.post("/api/finance/payouts", json={})
         assert response.status_code == 403
         assert response.json()["code"] == "FINANCIAL_SANDBOX_BLOCK"
+
+
+def test_partner_payout_readiness_is_read_only_but_mutating_payout_paths_stay_blocked():
+    with make_client() as client:
+        report = client.get("/api/merchant/payout-readiness")
+        assert report.status_code == 200, report.text
+        assert report.json()["transfers_initiated"] is False
+        blocked = client.post("/api/merchant/payout-readiness", json={"action": "release payout"})
+        assert blocked.status_code == 403
+        assert blocked.json()["code"] == "FINANCIAL_SANDBOX_BLOCK"

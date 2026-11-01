@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -127,3 +128,45 @@ async def test_websocket_rejects_revoked_workspace_membership(monkeypatch):
         "reason": "Workspace membership is no longer active",
     }
     assert socket.accepted is False
+
+
+class _FakePubSub:
+    def __init__(self):
+        self.calls = 0
+
+    async def get_message(self, *, ignore_subscribe_messages: bool, timeout: float):
+        assert ignore_subscribe_messages is True
+        assert timeout == 1.0
+        self.calls += 1
+        if self.calls == 1:
+            return None
+        if self.calls == 2:
+            return {
+                "type": "message",
+                "data": json.dumps({
+                    "event": "WORKFLOW_STATUS",
+                    "workspace_id": "workspace-a",
+                    "session_id": "workflow-a",
+                }),
+            }
+        raise asyncio.CancelledError
+
+
+@pytest.mark.asyncio
+async def test_event_hub_listener_survives_idle_pubsub_interval(monkeypatch):
+    hub = EventHub()
+    hub.pubsub = _FakePubSub()
+    delivered = []
+
+    async def capture(payload, publish):
+        delivered.append((payload, publish))
+
+    monkeypatch.setattr(hub, "_deliver", capture)
+
+    with pytest.raises(asyncio.CancelledError):
+        await hub._listen()
+
+    assert hub.pubsub.calls == 3
+    assert len(delivered) == 1
+    assert delivered[0][0]["workspace_id"] == "workspace-a"
+    assert delivered[0][1] is False

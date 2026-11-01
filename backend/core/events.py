@@ -12,8 +12,10 @@ class EventHub:
   except Exception as exc:logger.warning("Redis event fanout disabled: %s",type(exc).__name__);return False
  async def _listen(self):
   try:
-   async for msg in self.pubsub.listen():
-    if msg.get("type")=="message":
+   # Poll below the Redis socket timeout so an idle channel cannot terminate fanout.
+   while True:
+    msg=await self.pubsub.get_message(ignore_subscribe_messages=True,timeout=1.0)
+    if msg and msg.get("type")=="message":
      try:await self._deliver(json.loads(msg["data"]),publish=False)
      except (ValueError,TypeError,KeyError):logger.warning("Malformed Redis event ignored")
   except asyncio.CancelledError:raise

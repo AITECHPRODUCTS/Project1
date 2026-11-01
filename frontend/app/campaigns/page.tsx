@@ -54,7 +54,7 @@ export default function CampaignTrackingPage(){
    <p className="text-xs font-black uppercase tracking-[.18em] text-indigo-600">Commission earner · Attribution</p>
    <h1 className="mt-2 text-3xl font-black tracking-tight">Campaign tracking links</h1>
    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Create workspace-owned redirect links that record a first-party click ID before sending a visitor to your affiliate destination.</p>
-  </div><a href="/" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold">Back to growth cockpit</a></header>
+  </div><a href="/dashboard" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold">← Workspace overview</a></header>
   {error&&<div role="alert" className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>}
   {notice&&<div role="status" className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{notice}</div>}
   <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">

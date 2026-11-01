@@ -111,17 +111,18 @@ export default function TenantLifecyclePage(){
     try{
       const identity=await apiFetch<{user?:{is_admin?:boolean;account_type?:string}}>("/api/auth/me");
       if(identity.user?.is_admin!==true||identity.user?.account_type!=="platform_admin"){
-        setAccessError("This console is only available to Platform Super Admin accounts.");
-        setAccessStatus("denied");
+        window.location.replace(identity.user?"/dashboard":"/login");
         return;
       }
       setAccessError("");
       setAccessStatus("allowed");
     }catch(err){
       const message=err instanceof Error?err.message:"Could not verify the signed-in account.";
-      setAccessError(message.includes("401")
-        ?"Sign in with your Platform Super Admin account to continue."
-        :"Platform administrator access could not be verified. "+message);
+      if(message.includes("401")){
+        window.location.replace("/login");
+        return;
+      }
+      setAccessError("Platform administrator access could not be verified. "+message);
       setAccessStatus("denied");
     }
   },[]);
@@ -319,7 +320,7 @@ export default function TenantLifecyclePage(){
       <p className="text-xs font-black uppercase tracking-[.2em] text-rose-600">OmniAffiliateOS · Restricted area</p>
       <h1 className="mt-3 text-xl font-black">Platform administrator access required</h1>
       <p className="mt-2 text-sm leading-6 text-slate-600">{accessError||"This console is only available to Platform Super Admin accounts."}</p>
-      <a href="/" className="mt-5 inline-flex rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">Return to sign in</a>
+      <a href="/dashboard" className="mt-5 inline-flex rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">Return to workspace overview</a>
     </section>
   </main>;
 
@@ -328,22 +329,38 @@ export default function TenantLifecyclePage(){
       <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <nav aria-label="Platform administrator navigation" className="flex flex-wrap gap-4 text-sm font-semibold">
-            <a href="/" className="text-indigo-600 hover:underline">← Growth command</a>
             <a href="#platform-operations-title" className="text-indigo-600 hover:underline">Operations overview</a>
+            <a href="#platform-incidents" className="text-indigo-600 hover:underline">Incidents &amp; audit</a>
             <a href="#tenant-lifecycle" className="text-indigo-600 hover:underline">Tenant lifecycle</a>
+            <a href="#platform-provider-write-pause" className="text-indigo-600 hover:underline">Emergency controls</a>
           </nav>
           <p className="mt-4 text-xs font-black uppercase tracking-[.2em] text-indigo-600">Platform Super Admin</p>
-          <h1 className="mt-1 text-3xl font-black tracking-tight">Tenant lifecycle console</h1>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Suspend or reinstate a workspace with a mandatory human reason and tenant-scoped audit evidence.</p>
+          <h1 className="mt-1 text-3xl font-black tracking-tight">Platform administration</h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Monitor platform activity, inspect workflow failures and incidents, review provider readiness, manage tenant workspaces, and operate audited emergency controls. Business-user features and workspace permissions remain separate from this global console.</p>
         </div>
         <button type="button" onClick={()=>void loadTenants()} disabled={loading||!!busyId} className={buttonClass+" border border-slate-200 bg-white text-slate-700"}>Refresh tenant inventory</button>
       </header>
+
+      <section aria-label="Admin task shortcuts" className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <a href="#platform-operations-title" className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-indigo-200 hover:shadow-sm">
+          <h2 className="font-extrabold text-slate-900">Monitor operations</h2><p className="mt-1 text-xs leading-5 text-slate-500">Review platform totals, runtime observations, workflow runs and queue records.</p>
+        </a>
+        <a href="#platform-incidents" className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-indigo-200 hover:shadow-sm">
+          <h2 className="font-extrabold text-slate-900">Incidents &amp; audit</h2><p className="mt-1 text-xs leading-5 text-slate-500">Acknowledge and resolve incidents, then inspect the recorded audit trail.</p>
+        </a>
+        <a href="#tenant-lifecycle" className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-indigo-200 hover:shadow-sm">
+          <h2 className="font-extrabold text-slate-900">Manage workspaces</h2><p className="mt-1 text-xs leading-5 text-slate-500">Review tenant status and perform audited suspend or reinstate actions.</p>
+        </a>
+        <a href="#platform-provider-write-pause" className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-indigo-200 hover:shadow-sm">
+          <h2 className="font-extrabold text-slate-900">Emergency controls</h2><p className="mt-1 text-xs leading-5 text-slate-500">Pause or resume eligible platform provider writes with an audit reason.</p>
+        </a>
+      </section>
 
       <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
         <strong>Safety boundary:</strong> a suspended workspace cannot start new authenticated API sessions, disappears from scheduled worker enumeration, and its workflow runner stops before another stage at a safe boundary. A provider request already in flight is not rolled back. Switch to a different active workspace before suspending the workspace used by this admin session.
       </div>
 
-      <section aria-label="Platform-wide provider-write pause" className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section id="platform-provider-write-pause" aria-label="Platform-wide provider-write pause" className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-[.16em] text-indigo-600">Global emergency control</p>
@@ -403,7 +420,7 @@ export default function TenantLifecyclePage(){
               <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">Runtime flags are observations, not proof of durable queue health or production deployment. {overview.release.note}</p>
             </section>
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-lg font-black">Affiliate provider readiness · {providers.length} entries</h3>
+              <h3 id="platform-provider-readiness" className="text-lg font-black">Affiliate provider readiness · {providers.length} entries</h3>
               <div className="mt-3 space-y-2">
                 {providers.slice(0,8).map(provider=><article key={provider.provider_id} data-testid={"provider-readiness-"+provider.provider_id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                   <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{provider.display_name}</strong><span className="text-xs font-bold">{provider.status.replace(/_/g," ")}</span></div>
@@ -450,7 +467,7 @@ export default function TenantLifecyclePage(){
                 {workflows.length===0&&<p className="text-sm text-slate-500">No persisted workflow runs.</p>}
               </div>
             </section>
-                        <section className="rounded-2xl border border-slate-200 bg-white p-5" data-testid="platform-incident-console">
+                        <section className="rounded-2xl border border-slate-200 bg-white p-5" id="platform-incidents" data-testid="platform-incident-console">
               <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-black">Platform incident records</h3><span className="text-xs font-bold text-slate-500">Open {operationSummary.incidents_open||0} · Acknowledged {operationSummary.incidents_acknowledged||0}</span></div>
               <p className="mt-1 text-xs leading-5 text-slate-500">Incidents are durable platform records. Acknowledgement and resolution are audited; resolving does not automatically retry a workflow or modify customer data.</p>
               <div className="mt-3 space-y-2">
@@ -487,7 +504,7 @@ export default function TenantLifecyclePage(){
             </section>
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-lg font-black">Recent platform audit events · read only</h3>
+                <h3 id="platform-audit-trail" className="text-lg font-black">Recent platform audit events · read only</h3>
                 <a href={API_BASE+"/api/admin/audit/export.csv?limit=500"} download className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-indigo-700" data-testid="platform-audit-export">Export latest 500 audit rows (CSV)</a>
               </div>
               <p className="mt-1 text-xs leading-5 text-slate-500">The export includes global audit metadata only, uses formula-safe CSV cells and records the export action itself.</p>

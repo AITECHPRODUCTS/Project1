@@ -347,7 +347,7 @@ export default function OfferCatalogPage() {
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
-            <a href="/" className="text-sm font-bold text-indigo-700">← Growth command center</a>
+            <a href="/dashboard" className="text-sm font-bold text-indigo-700">← Workspace overview</a>
             <p className="mt-6 text-xs font-black uppercase tracking-[.2em] text-indigo-600">S1 · Affiliate research</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Affiliate offer catalog</h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">

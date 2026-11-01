@@ -85,7 +85,7 @@ export default function ProviderOrderReconciliationPage(){
      <h1 className="mt-2 text-3xl font-black tracking-tight">ClickBank order evidence reconciliation</h1>
      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Review imported provider observations against existing, signed conversion-ledger entries. A candidate is never accepted automatically.</p>
     </div>
-    <a href="/" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold">Back to growth cockpit</a>
+    <a href="/dashboard" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold">← Workspace overview</a>
    </header>
 
    <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">

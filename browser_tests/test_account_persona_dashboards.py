@@ -359,3 +359,137 @@ def test_platform_admin_legacy_business_urls_return_to_protected_admin_console()
             assert not any(url.endswith("/api/status") for url in requests)
         finally:
             browser.close()
+
+
+def test_publisher_workspace_navigation_has_home_and_grouped_feature_links():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def respond(route):
+                path = route.request.url.split("?", 1)[0]
+                if path.endswith("/api/auth/me"):
+                    _json(route, {"user": {"email": "publisher@example.test", "account_type": "affiliate_publisher", "is_admin": False, "workspace_id": "workspace-1", "workspace_role": "owner"}})
+                elif path.endswith("/api/workspaces"):
+                    _json(route, {"active_workspace_id": "workspace-1", "data": [{"id": "workspace-1", "name": "Publisher workspace", "role": "owner", "lifecycle_state": "active", "is_active": True}]})
+                elif path.endswith("/api/status"):
+                    _json(route, {"clicks": 12, "conversion_events": 3})
+                elif path.endswith("/api/marketplace/offers"):
+                    _json(route, {"count": 4, "data": [{}, {}, {}, {}]})
+                elif path.endswith("/api/marketplace/applications"):
+                    _json(route, {"count": 1, "total_count": 1, "data": [{}]})
+                elif path.endswith("/api/campaigns"):
+                    _json(route, {"count": 2, "data": [{}, {}]})
+                else:
+                    _json(route, {})
+            page.route("**/api/**", respond)
+            page.goto(BASE_URL + "/dashboard", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+
+            navigation = page.get_by_role("navigation", name="Primary workspace navigation")
+            assert navigation.get_by_role("link", name="Home").get_attribute("href") == "/"
+            assert navigation.get_by_role("link", name="Workspace overview").get_attribute("href") == "/dashboard"
+
+            research_group = navigation.locator("details").filter(has_text="Discover & Research")
+            research_group.locator("summary").click()
+            assert research_group.get_by_role("link", name="Publisher marketplace").get_attribute("href") == "/marketplace"
+            assert research_group.get_by_role("link", name="Affiliate offer catalog").get_attribute("href") == "/offers"
+
+            assert navigation.get_by_role("link", name="Platform administration").count() == 0
+        finally:
+            browser.close()
+
+
+def test_merchant_workspace_navigation_only_exposes_merchant_program_tools():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def respond(route):
+                path = route.request.url.split("?", 1)[0]
+                if path.endswith("/api/auth/me"):
+                    _json(route, {"user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False, "workspace_id": "workspace-2", "workspace_role": "owner"}})
+                elif path.endswith("/api/workspaces"):
+                    _json(route, {"active_workspace_id": "workspace-2", "data": [{"id": "workspace-2", "name": "Brand workspace", "role": "owner", "lifecycle_state": "active", "is_active": True}]})
+                elif path.endswith("/api/merchant/offers"):
+                    _json(route, {"count": 0, "data": []})
+                elif path.endswith("/api/merchant/applications"):
+                    _json(route, {"count": 0, "total_count": 0, "data": []})
+                else:
+                    _json(route, {})
+            page.route("**/api/**", respond)
+            page.goto(BASE_URL + "/dashboard", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+
+            navigation = page.get_by_role("navigation", name="Primary workspace navigation")
+            assert navigation.get_by_role("link", name="Workspace overview").get_attribute("href") == "/dashboard"
+            program_group = navigation.locator("details").filter(has_text="Program management")
+            program_group.locator("summary").click()
+            assert program_group.get_by_role("link", name="Manage offers").get_attribute("href") == "/merchant/offers"
+            assert program_group.get_by_role("link", name="Partner applications").get_attribute("href") == "/merchant/applications"
+            assert navigation.get_by_role("link", name="Affiliate offer catalog").count() == 0
+        finally:
+            browser.close()
+
+
+def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            capability_requests = []
+
+            def respond(route):
+                path = route.request.url.split("?", 1)[0]
+                if path.endswith("/api/auth/me"):
+                    _json(route, {"user": {"email": "publisher@example.test", "account_type": "affiliate_publisher", "is_admin": False, "workspace_id": "workspace-1", "workspace_role": "owner"}})
+                elif path.endswith("/api/workspaces"):
+                    _json(route, {"active_workspace_id": "workspace-1", "data": []})
+                elif path.endswith("/api/status"):
+                    _json(route, {"app_name": "OmniAffiliateOS", "environment": "development", "execution_mode": "SEMI_AUTONOMOUS", "clicks": 0, "conversion_events": 0, "commission_recorded": 0})
+                elif path.endswith("/api/resource-budget"):
+                    _json(route, {"daily_budget_usd": 0, "daily_estimated_used_usd": 0, "daily_estimated_remaining_usd": 0, "niche_budget_usd": 0, "note": "No budget data"})
+                elif path.endswith("/api/integrations"):
+                    _json(route, {"total": 0, "counts": {}, "items": [], "verification_policy": "workspace scoped"})
+                elif path.endswith("/api/capabilities"):
+                    capability_requests.append(path)
+                    _json(route, {"detail": "Platform Super Admin permission required"}, 403)
+                else:
+                    _json(route, {})
+            page.route("**/api/**", respond)
+            page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Growth Studio", exact=False).wait_for(state="visible")
+            assert capability_requests == []
+            assert page.get_by_text("403: Platform Super Admin permission required", exact=True).count() == 0
+            assert page.get_by_text("Automation & Governance", exact=True).count() >= 1
+        finally:
+            browser.close()
+
+
+def test_non_admin_visiting_platform_console_is_returned_to_own_workspace():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def respond(route):
+                path = route.request.url.split("?", 1)[0]
+                if path.endswith("/api/auth/me"):
+                    _json(route, {"user": {"email": "publisher@example.test", "account_type": "affiliate_publisher", "is_admin": False, "workspace_id": "workspace-1", "workspace_role": "owner"}})
+                elif path.endswith("/api/workspaces"):
+                    _json(route, {"active_workspace_id": "workspace-1", "data": []})
+                elif path.endswith("/api/status"):
+                    _json(route, {"clicks": 0, "conversion_events": 0})
+                elif path.endswith("/api/marketplace/offers") or path.endswith("/api/marketplace/applications") or path.endswith("/api/campaigns"):
+                    _json(route, {"count": 0, "total_count": 0, "data": []})
+                else:
+                    _json(route, {})
+            page.route("**/api/**", respond)
+            page.goto(BASE_URL + "/admin", wait_until="domcontentloaded")
+            page.wait_for_url("**/dashboard")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+            assert page.get_by_text("Platform administrator access required", exact=True).count() == 0
+        finally:
+            browser.close()

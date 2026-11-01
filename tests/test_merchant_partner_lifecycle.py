@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from backend import main
 from backend.database import Base, get_session
 from backend.models import (
-    Campaign, ClickEvent, Conversion, ConversionLedgerEntry, MarketplaceApplication,
+    AuditLog, Campaign, ClickEvent, Conversion, ConversionLedgerEntry, MarketplaceApplication,
     MerchantOffer, MerchantWebhookIntegration, MerchantWebhookReceipt, PartnerConversation, PartnerMessage, Workspace,
 )
 from backend.tenancy import workspace_scope
@@ -839,6 +839,14 @@ def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(
             assert reply.status_code == 201, reply.text
             assert reply.json()["message"]["is_mine"] is True
 
+            publisher_activity = client.get(f"/api/partner/conversations/{conversation_id}/activity")
+            assert publisher_activity.status_code == 200, publisher_activity.text
+            publisher_events = publisher_activity.json()["data"]
+            assert len(publisher_events) == 3
+            assert sum(item["action"] == "partner.message.sent" for item in publisher_events) == 2
+            assert sum(item["action"] == "partner.messages.marked_read" for item in publisher_events) == 1
+            assert all("body" not in item["details"] for item in publisher_events)
+
             user.update(workspace_id=merchant_id, account_type="merchant_product_owner",
                         email="reviewer@merchant.example", workspace_role="owner")
             merchant_inbox = client.get("/api/partner/conversations")
@@ -853,6 +861,14 @@ def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(
             ]
             assert len(matching_replies) == 1, read_reply.text
             assert matching_replies[0]["is_read"] is True
+
+            merchant_activity = client.get(f"/api/partner/conversations/{conversation_id}/activity")
+            assert merchant_activity.status_code == 200, merchant_activity.text
+            merchant_events = merchant_activity.json()["data"]
+            assert len(merchant_events) == 4
+            assert sum(item["action"] == "partner.message.sent" for item in merchant_events) == 2
+            assert sum(item["action"] == "partner.messages.marked_read" for item in merchant_events) == 2
+            assert all("body" not in item["details"] for item in merchant_events)
 
             user["workspace_role"] = "viewer"
             viewer_message = client.post(
@@ -871,6 +887,7 @@ def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(
             user.update(workspace_id=unrelated_id, workspace_role="owner")
             assert client.get("/api/partner/conversations").json()["total_count"] == 0
             assert client.get(f"/api/partner/conversations/{conversation_id}/messages").status_code == 404
+            assert client.get(f"/api/partner/conversations/{conversation_id}/activity").status_code == 404
 
             async def inspect_persistence():
                 async with sessions() as db:
@@ -880,10 +897,26 @@ def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(
                             select(PartnerMessage).where(PartnerMessage.conversation_id == conversation_id)
                             .order_by(PartnerMessage.created_at.asc())
                         )).all())
-                    return conversation, messages
-            conversation, messages = asyncio.run(inspect_persistence())
+                        publisher_audit = list((await db.scalars(
+                            select(AuditLog).where(
+                                AuditLog.workspace_id == publisher_id,
+                                AuditLog.resource_type == "partner_conversation",
+                                AuditLog.resource_id == conversation_id,
+                            )
+                        )).all())
+                    with workspace_scope(merchant_id):
+                        merchant_audit = list((await db.scalars(
+                            select(AuditLog).where(
+                                AuditLog.workspace_id == merchant_id,
+                                AuditLog.resource_type == "partner_conversation",
+                                AuditLog.resource_id == conversation_id,
+                            )
+                        )).all())
+                    return conversation, messages, publisher_audit, merchant_audit
+            conversation, messages, publisher_audit, merchant_audit = asyncio.run(inspect_persistence())
             assert conversation is not None and conversation.status == "open"
             assert len(messages) == 2
             assert all(item.read_at is not None for item in messages)
+            assert len(publisher_audit) == len(merchant_audit) == 4
     finally:
         cleanup(engine, client)

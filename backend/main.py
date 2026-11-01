@@ -13502,29 +13502,24 @@ def _partner_message_payload(message: PartnerMessage, current_workspace_id: str)
     }
 
 
-def _partner_audit_entries(
+def _partner_audit_entry(
     conversation: PartnerConversation,
     user: dict[str, Any],
     *,
     action: str,
     outcome: str,
     details: dict[str, Any],
-) -> list[AuditLog]:
-    """Mirror metadata-only partner events into each participant's workspace audit trail."""
-    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
-    participant_workspace_ids = sorted({conversation.workspace_id, conversation.merchant_workspace_id})
-    return [
-        AuditLog(
-            workspace_id=participant_workspace_id,
-            actor=actor,
-            action=action,
-            resource_type="partner_conversation",
-            resource_id=conversation.id,
-            outcome=outcome,
-            details_json={**details, "application_id": conversation.application_id},
-        )
-        for participant_workspace_id in participant_workspace_ids
-    ]
+) -> AuditLog:
+    """Create one canonical metadata-only event in the publisher-owned conversation tenant."""
+    return AuditLog(
+        workspace_id=conversation.workspace_id,
+        actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+        action=action,
+        resource_type="partner_conversation",
+        resource_id=conversation.id,
+        outcome=outcome,
+        details_json={**details, "application_id": conversation.application_id},
+    )
 
 
 @api.get("/partner/messageable-applications")
@@ -13736,7 +13731,7 @@ async def create_or_message_partner_conversation(
     # Conversation content and audit metadata share the publisher-owned application tenant.
     with workspace_scope(conversation.workspace_id):
         db.add(message)
-        db.add_all(_partner_audit_entries(
+        db.add(_partner_audit_entry(
             conversation,
             user,
             action="partner.message.sent",
@@ -13796,7 +13791,7 @@ async def get_partner_conversation_messages(
             for item in unread:
                 item.read_at = now
                 item.read_by_workspace_id = workspace_id
-            db.add_all(_partner_audit_entries(
+            db.add(_partner_audit_entry(
                 conversation,
                 user,
                 action="partner.messages.marked_read",
@@ -13826,7 +13821,7 @@ async def get_partner_conversation_activity(
     user: dict[str, Any] = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Return metadata-only activity mirrored into the authenticated participant's tenant."""
+    """Return the canonical metadata-only event stream after verifying conversation participation."""
     account_type, workspace_id = _partner_messaging_identity(user)
     participant_filter = (
         PartnerConversation.workspace_id == workspace_id
@@ -13841,11 +13836,11 @@ async def get_partner_conversation_activity(
     if conversation is None:
         raise HTTPException(404, "Partner conversation was not found in the active workspace.")
 
-    with workspace_scope(workspace_id):
+    with workspace_scope(conversation.workspace_id):
         rows = list((await db.scalars(
             select(AuditLog)
             .where(
-                AuditLog.workspace_id == workspace_id,
+                AuditLog.workspace_id == conversation.workspace_id,
                 AuditLog.resource_type == "partner_conversation",
                 AuditLog.resource_id == conversation.id,
             )
@@ -13911,7 +13906,7 @@ async def send_partner_conversation_message(
     conversation.updated_at = now
     with workspace_scope(conversation.workspace_id):
         db.add(message)
-        db.add_all(_partner_audit_entries(
+        db.add(_partner_audit_entry(
             conversation,
             user,
             action="partner.message.sent",

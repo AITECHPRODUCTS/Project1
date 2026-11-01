@@ -13502,6 +13502,31 @@ def _partner_message_payload(message: PartnerMessage, current_workspace_id: str)
     }
 
 
+def _partner_audit_entries(
+    conversation: PartnerConversation,
+    user: dict[str, Any],
+    *,
+    action: str,
+    outcome: str,
+    details: dict[str, Any],
+) -> list[AuditLog]:
+    """Mirror metadata-only partner events into each participant's workspace audit trail."""
+    actor = str(user.get("email") or user.get("user_id") or "unknown")[:320]
+    participant_workspace_ids = sorted({conversation.workspace_id, conversation.merchant_workspace_id})
+    return [
+        AuditLog(
+            workspace_id=participant_workspace_id,
+            actor=actor,
+            action=action,
+            resource_type="partner_conversation",
+            resource_id=conversation.id,
+            outcome=outcome,
+            details_json={**details, "application_id": conversation.application_id},
+        )
+        for participant_workspace_id in participant_workspace_ids
+    ]
+
+
 @api.get("/partner/messageable-applications")
 async def list_partner_messageable_applications(
     response: Response,
@@ -13711,14 +13736,12 @@ async def create_or_message_partner_conversation(
     # Conversation content and audit metadata share the publisher-owned application tenant.
     with workspace_scope(conversation.workspace_id):
         db.add(message)
-        db.add(AuditLog(
-            workspace_id=conversation.workspace_id,
-            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+        db.add_all(_partner_audit_entries(
+            conversation,
+            user,
             action="partner.message.sent",
-            resource_type="partner_message",
-            resource_id=message.id,
             outcome="created",
-            details_json={"conversation_id": conversation.id, "application_id": application_id, "message_id": message.id},
+            details={"message_id": message.id, "sender_workspace_id": workspace_id},
         ))
         await db.commit()
     await db.refresh(message)
@@ -13773,14 +13796,12 @@ async def get_partner_conversation_messages(
             for item in unread:
                 item.read_at = now
                 item.read_by_workspace_id = workspace_id
-            db.add(AuditLog(
-                workspace_id=conversation.workspace_id,
-                actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            db.add_all(_partner_audit_entries(
+                conversation,
+                user,
                 action="partner.messages.marked_read",
-                resource_type="partner_conversation",
-                resource_id=conversation.id,
                 outcome="read",
-                details_json={"conversation_id": conversation.id, "message_count": len(unread)},
+                details={"message_count": len(unread), "reader_workspace_id": workspace_id},
             ))
             await db.commit()
 
@@ -13794,6 +13815,60 @@ async def get_partner_conversation_messages(
         "can_send": str(user.get("workspace_role") or "") != "viewer" and conversation.status == "open",
         "count": len(messages),
         "data": [_partner_message_payload(item, workspace_id) for item in messages],
+    }
+
+
+@api.get("/partner/conversations/{conversation_id}/activity")
+async def get_partner_conversation_activity(
+    conversation_id: str,
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return metadata-only activity mirrored into the authenticated participant's tenant."""
+    account_type, workspace_id = _partner_messaging_identity(user)
+    participant_filter = (
+        PartnerConversation.workspace_id == workspace_id
+        if account_type == "affiliate_publisher"
+        else PartnerConversation.merchant_workspace_id == workspace_id
+    )
+    with workspace_scope(None):
+        conversation = await db.scalar(select(PartnerConversation).where(
+            PartnerConversation.id == conversation_id,
+            participant_filter,
+        ))
+    if conversation is None:
+        raise HTTPException(404, "Partner conversation was not found in the active workspace.")
+
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(AuditLog)
+            .where(
+                AuditLog.workspace_id == workspace_id,
+                AuditLog.resource_type == "partner_conversation",
+                AuditLog.resource_id == conversation.id,
+            )
+            .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+            .limit(limit)
+        )).all())
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    return {
+        "conversation_id": conversation.id,
+        "count": len(rows),
+        "data": [
+            {
+                "id": item.id,
+                "actor": item.actor,
+                "action": item.action,
+                "outcome": item.outcome,
+                "details": item.details_json if isinstance(item.details_json, dict) else {},
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+            }
+            for item in rows
+        ],
     }
 
 
@@ -13836,14 +13911,12 @@ async def send_partner_conversation_message(
     conversation.updated_at = now
     with workspace_scope(conversation.workspace_id):
         db.add(message)
-        db.add(AuditLog(
-            workspace_id=conversation.workspace_id,
-            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+        db.add_all(_partner_audit_entries(
+            conversation,
+            user,
             action="partner.message.sent",
-            resource_type="partner_message",
-            resource_id=message.id,
             outcome="created",
-            details_json={"conversation_id": conversation.id, "application_id": conversation.application_id, "message_id": message.id},
+            details={"message_id": message.id, "sender_workspace_id": workspace_id},
         ))
         await db.commit()
     await db.refresh(message)

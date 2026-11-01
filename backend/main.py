@@ -1055,10 +1055,6 @@ def _provider_connection_payload(row: ProviderAccountConnection) -> dict[str, An
         "credential_present": bool(row.credential_ciphertext),
         "last_checked_at": row.last_checked_at.isoformat() if row.last_checked_at else None,
         "last_error_code": row.last_error_code,
-        "signing_secret_configured": not (
-            row.integration_type == "stripe_webhook"
-            and row.last_error_code == "stripe_secret_not_configured"
-        ),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -4923,6 +4919,10 @@ def _merchant_webhook_integration_dict(row: MerchantWebhookIntegration, offer_na
         "secret_fingerprint": row.secret_fingerprint,
         "last_event_at": row.last_event_at.isoformat() if row.last_event_at else None,
         "last_error_code": row.last_error_code,
+        "signing_secret_configured": not (
+            row.integration_type == "stripe_webhook"
+            and row.last_error_code == "stripe_secret_not_configured"
+        ),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 

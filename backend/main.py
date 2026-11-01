@@ -9944,6 +9944,190 @@ async def review_commission_evidence(
     }
 
 
+
+@api.get("/merchant/payout-readiness")
+async def merchant_partner_payout_readiness(
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Summarize evidence-backed partner earnings and refund-hold eligibility; never execute a transfer."""
+    merchant_workspace_id = str(user.get("workspace_id") or "").strip()
+    if not merchant_workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before viewing partner payout readiness")
+
+    with workspace_scope(None):
+        link_rows = list((await db.execute(
+            select(AffiliateProgramLink, MerchantOffer, MarketplaceApplication)
+            .select_from(AffiliateProgramLink)
+            .join(MerchantOffer, and_(
+                MerchantOffer.id == AffiliateProgramLink.merchant_offer_id,
+                MerchantOffer.workspace_id == merchant_workspace_id,
+            ))
+            .join(MarketplaceApplication, and_(
+                MarketplaceApplication.id == AffiliateProgramLink.application_id,
+                MarketplaceApplication.workspace_id == AffiliateProgramLink.workspace_id,
+            ))
+            .where(AffiliateProgramLink.merchant_workspace_id == merchant_workspace_id)
+            .order_by(AffiliateProgramLink.created_at.desc(), AffiliateProgramLink.id.desc())
+        )).all())
+
+        ledger_rows = list((await db.execute(
+            select(AffiliateProgramLink.id, ConversionLedgerEntry, Conversion)
+            .select_from(ConversionLedgerEntry)
+            .join(ClickEvent, and_(
+                ClickEvent.workspace_id == ConversionLedgerEntry.workspace_id,
+                ClickEvent.click_id == ConversionLedgerEntry.click_id,
+            ))
+            .join(AffiliateProgramLink, and_(
+                AffiliateProgramLink.workspace_id == ClickEvent.workspace_id,
+                AffiliateProgramLink.campaign_id == ClickEvent.campaign_id,
+            ))
+            .join(Conversion, and_(
+                Conversion.workspace_id == ConversionLedgerEntry.workspace_id,
+                Conversion.network == ConversionLedgerEntry.network,
+                Conversion.external_event_id == ConversionLedgerEntry.external_event_id,
+            ))
+            .where(
+                AffiliateProgramLink.merchant_workspace_id == merchant_workspace_id,
+                ConversionLedgerEntry.evidence_status == "merchant_signed_webhook_verified",
+            )
+            .order_by(ConversionLedgerEntry.observed_at.asc(), ConversionLedgerEntry.id.asc())
+        )).all())
+
+    entries_by_link: dict[str, list[tuple[ConversionLedgerEntry, Conversion]]] = {}
+    for link_id, ledger_entry, conversion in ledger_rows:
+        entries_by_link.setdefault(str(link_id), []).append((ledger_entry, conversion))
+
+    now = datetime.now(timezone.utc)
+
+    def utc_datetime(value: datetime | None) -> datetime:
+        if value is None:
+            return now
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    result_rows: list[dict[str, Any]] = []
+    for link, offer, application in link_rows:
+        link_entries = entries_by_link.get(str(link.id), [])
+        currencies = sorted({str(entry.currency).upper() for entry, _ in link_entries if entry.currency})
+        if not currencies:
+            currencies = [str(offer.commission_currency).upper()]
+
+        for currency in currencies:
+            base_events: dict[str, tuple[Decimal, datetime, str]] = {}
+            reversals_by_original: dict[str, Decimal] = {}
+            reversal_event_count = 0
+            unmatched_reversal_total = Decimal("0")
+            for entry, conversion in link_entries:
+                if str(entry.currency).upper() != currency:
+                    continue
+                amount = Decimal(str(entry.commission_amount))
+                if entry.entry_type == "reversal":
+                    reversal_event_count += 1
+                    if entry.original_event_id:
+                        reversals_by_original[str(entry.original_event_id)] = (
+                            reversals_by_original.get(str(entry.original_event_id), Decimal("0")) + amount
+                        )
+                    else:
+                        unmatched_reversal_total += amount
+                elif entry.entry_type == "conversion":
+                    base_events[str(entry.external_event_id)] = (
+                        amount,
+                        utc_datetime(conversion.occurred_at or entry.observed_at),
+                        str(conversion.status or entry.status),
+                    )
+
+            gross_commission = sum((amount for amount, _, _ in base_events.values()), Decimal("0"))
+            reversed_commission = -sum(reversals_by_original.values(), unmatched_reversal_total)
+            net_commission = unmatched_reversal_total
+            held_commission = Decimal("0")
+            eligible_commission = Decimal("0")
+            next_eligible_at: datetime | None = None
+            held_event_count = 0
+            matured_event_count = 0
+            has_negative_event = unmatched_reversal_total < 0
+
+            hold_days = int(offer.refund_hold_days or 0)
+            for event_id, (amount, occurred_at, event_status) in base_events.items():
+                event_net = amount + reversals_by_original.get(event_id, Decimal("0"))
+                net_commission += event_net
+                if event_net < 0:
+                    has_negative_event = True
+                    continue
+                if event_net == 0:
+                    continue
+                eligible_at = occurred_at + timedelta(days=hold_days)
+                if eligible_at <= now:
+                    eligible_commission += event_net
+                    matured_event_count += 1
+                else:
+                    held_commission += event_net
+                    held_event_count += 1
+                    if next_eligible_at is None or eligible_at < next_eligible_at:
+                        next_eligible_at = eligible_at
+
+            minimum_payout = Decimal(str(offer.minimum_payout_amount or 0))
+            threshold_reached = eligible_commission > 0 and eligible_commission >= minimum_payout
+            if has_negative_event or net_commission < 0:
+                payout_state = "needs_review"
+            elif threshold_reached:
+                payout_state = "eligible_for_manual_review"
+            elif held_commission > 0:
+                payout_state = "refund_hold"
+            elif net_commission > 0:
+                payout_state = "below_minimum"
+            else:
+                payout_state = "no_earnings"
+
+            result_rows.append({
+                "program_id": offer.id,
+                "program_name": offer.name,
+                "publisher_workspace_id": link.workspace_id,
+                "publisher_email": application.applicant_email,
+                "application_id": application.id,
+                "application_status": application.status,
+                "promotion_link_status": link.status,
+                "currency": currency,
+                "gross_commission": format(gross_commission.quantize(Decimal("0.000001")), "f"),
+                "reversed_commission": format(reversed_commission.quantize(Decimal("0.000001")), "f"),
+                "net_commission": format(net_commission.quantize(Decimal("0.000001")), "f"),
+                "held_commission": format(held_commission.quantize(Decimal("0.000001")), "f"),
+                "eligible_commission": format(eligible_commission.quantize(Decimal("0.000001")), "f"),
+                "minimum_payout_amount": format(minimum_payout.quantize(Decimal("0.01")), "f"),
+                "threshold_reached": threshold_reached,
+                "refund_hold_days": hold_days,
+                "next_eligible_at": next_eligible_at.isoformat() if next_eligible_at else None,
+                "payout_schedule": offer.payout_schedule,
+                "conversion_count": len(base_events),
+                "reversal_event_count": reversal_event_count,
+                "held_event_count": held_event_count,
+                "matured_event_count": matured_event_count,
+                "payout_state": payout_state,
+                "payout_confirmed": False,
+                "transfers_initiated": False,
+            })
+
+    result_rows.sort(
+        key=lambda row: (
+            row["payout_state"] == "eligible_for_manual_review",
+            Decimal(row["eligible_commission"]),
+            row["program_name"].casefold(),
+        ),
+        reverse=True,
+    )
+    return {
+        "count": len(result_rows),
+        "data": result_rows,
+        "as_of": now.isoformat(),
+        "note": (
+            "Amounts are derived from merchant-signed conversion evidence and the program's current refund-hold and minimum-payout terms. "
+            "Eligibility is a review aid, not merchant confirmation of funds due or paid. No payout was confirmed and no transfer was initiated."
+        ),
+        "money_transferred": False,
+    }
+
+
 @api.get("/finance/thresholds")
 async def thresholds(
     user: dict[str, Any] = Depends(require_auth),

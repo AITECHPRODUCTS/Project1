@@ -236,6 +236,36 @@ def test_merchant_approval_issues_partner_link_and_signed_events_create_and_reve
             assert saved_integration.last_event_at is not None
             assert len(receipts) == 3
             assert all(receipt.conversion_id for receipt in receipts)
+
+            held_report = client.get("/api/merchant/payout-readiness")
+            assert held_report.status_code == 200, held_report.text
+            held_item = held_report.json()["data"][0]
+            assert held_item["program_name"] == "Recurring creator platform"
+            assert held_item["currency"] == "USD"
+            assert held_item["gross_commission"] == "50.000000"
+            assert held_item["reversed_commission"] == "25.000000"
+            assert held_item["net_commission"] == "25.000000"
+            assert held_item["held_commission"] == "25.000000"
+            assert held_item["eligible_commission"] == "0.000000"
+            assert held_item["payout_state"] == "refund_hold"
+            assert held_item["payout_confirmed"] is False
+            assert held_item["transfers_initiated"] is False
+
+            async def release_refund_hold_for_test():
+                async with sessions() as db:
+                    with workspace_scope(merchant_id):
+                        merchant_offer = await db.get(MerchantOffer, offer_id)
+                        merchant_offer.refund_hold_days = 0
+                        await db.commit()
+            asyncio.run(release_refund_hold_for_test())
+            eligible_report = client.get("/api/merchant/payout-readiness")
+            assert eligible_report.status_code == 200, eligible_report.text
+            eligible_item = eligible_report.json()["data"][0]
+            assert eligible_item["eligible_commission"] == "25.000000"
+            assert eligible_item["threshold_reached"] is True
+            assert eligible_item["payout_state"] == "eligible_for_manual_review"
+            assert eligible_item["payout_confirmed"] is False
+            assert eligible_report.json()["money_transferred"] is False
     finally:
         cleanup(engine, client)
 

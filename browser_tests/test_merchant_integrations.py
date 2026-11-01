@@ -113,7 +113,7 @@ def test_merchant_can_create_and_configure_woocommerce_webhook_setup():
             assert page.get_by_text(
                 "https://omni.example.test/api/webhooks/merchant-integrations/integration-woo-1",
                 exact=True,
-            ).is_visible()
+            ).first.is_visible()
 
             page.get_by_role("button", name="I saved it — hide secret").click()
             assert not page.get_by_text(ONE_TIME_SECRET, exact=True).is_visible()

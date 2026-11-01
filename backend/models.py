@@ -1276,7 +1276,7 @@ class AffiliateProgramLink(TenantScopedMixin, Base):
     campaign_id: Mapped[str] = mapped_column(String(36), ForeignKey("campaigns.id", ondelete="RESTRICT"), nullable=False, index=True)
     link_label: Mapped[str] = mapped_column(String(120), default="Primary link", server_default="Primary link", nullable=False)
     destination_url: Mapped[str] = mapped_column(Text, nullable=False)
-    is_primary: Mapped[bool] = mapped_column(Boolean, default=True, server_default=false(), nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"), nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="active", server_default="'active'", nullable=False)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

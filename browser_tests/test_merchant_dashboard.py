@@ -276,7 +276,7 @@ def test_merchant_partner_payout_readiness_page_shows_hold_and_manual_review_sta
             assert page.get_by_text("eligible for manual review", exact=True).is_visible()
             assert page.get_by_text("publisher@example.test").is_visible()
             assert page.get_by_text("$25.00").count() >= 2
-            assert "No automatic payment" in page.locator("main").inner_text()
+            assert "no automatic payment" in page.locator("main").inner_text()
             assert "no payout was confirmed" in page.locator("main").inner_text()
             assert any(url.endswith("/api/merchant/payout-readiness") for url in requests)
             assert page.get_by_role("link", name="Merchant overview").get_attribute("href") == "/merchant"

@@ -5473,19 +5473,22 @@ async def list_publisher_marketplace_applications(
             select(AffiliateProgramLink).where(
                 AffiliateProgramLink.workspace_id == workspace_id,
                 AffiliateProgramLink.application_id.in_([row.id for row in rows]),
-                AffiliateProgramLink.is_primary.is_(True),
-            )
+            ).order_by(AffiliateProgramLink.is_primary.desc(), AffiliateProgramLink.created_at.asc())
         )).all()) if rows else []
-        link_by_application = {link.application_id: link for link in links}
+        links_by_application: dict[str, list[AffiliateProgramLink]] = {}
+        for item in links:
+            links_by_application.setdefault(item.application_id, []).append(item)
         result_rows = []
         for row in rows:
-            link = link_by_application.get(row.id)
+            application_links = links_by_application.get(row.id, [])
+            primary_link = next((item for item in application_links if item.is_primary), application_links[0] if application_links else None)
+            campaign_ids = [item.campaign_id for item in application_links if item.status == "active"]
             click_count = 0
             commission_rows: list[dict[str, str]] = []
-            if link is not None and link.status == "active":
+            if campaign_ids:
                 click_count = int(await db.scalar(select(func.count(ClickEvent.id)).where(
                     ClickEvent.workspace_id == workspace_id,
-                    ClickEvent.campaign_id == link.campaign_id,
+                    ClickEvent.campaign_id.in_(campaign_ids),
                 )) or 0)
                 ledger_groups = (await db.execute(
                     select(
@@ -5499,7 +5502,7 @@ async def list_publisher_marketplace_applications(
                     ))
                     .where(
                         ConversionLedgerEntry.workspace_id == workspace_id,
-                        ClickEvent.campaign_id == link.campaign_id,
+                        ClickEvent.campaign_id.in_(campaign_ids),
                     )
                     .group_by(ConversionLedgerEntry.currency, ConversionLedgerEntry.evidence_status)
                 )).all()
@@ -5512,7 +5515,7 @@ async def list_publisher_marketplace_applications(
                     for currency, evidence_status, total in ledger_groups
                 ]
             result_rows.append(_marketplace_application_dict(
-                row, link=link, clicks=click_count, commission_observations=commission_rows
+                row, link=primary_link, clicks=click_count, commission_observations=commission_rows
             ))
     return {"count": len(rows), "data": result_rows}
 

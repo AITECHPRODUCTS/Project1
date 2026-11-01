@@ -153,6 +153,7 @@ export default function DashboardPage() {
         }
         setActions([
           { title: "Connect affiliate accounts", detail: "Set up supported read-only accounts to research provider catalogues and import available reporting evidence.", href: "/integrations", icon: Plug, label: "Manage integrations" },
+          { title: "My programs", detail: "Review merchant application decisions, tracked referral links, recorded clicks and commission evidence by program.", href: "/programs", icon: BriefcaseBusiness, label: "Open my programs" },
           { title: "Explore the marketplace", detail: "Find offers reviewed and listed by OmniAffiliateOS merchants before applying.", href: "/marketplace", icon: Search, label: "Explore offers" },
           { title: "Research an opportunity", detail: "Search connected Digistore24 and Flipkart catalogues and compare provider-reported evidence.", href: "/affiliate-research", icon: Compass, label: "Start research" },
           { title: "Create organic content", detail: "Prepare article, comparison and SEO drafts for your audience; review facts and disclosures before publishing.", href: "/listicle-writer", icon: FileText, label: "Create content" },

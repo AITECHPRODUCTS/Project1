@@ -13,6 +13,7 @@ BASE_URL = os.environ.get("BROWSER_BASE_URL", "http://127.0.0.1:3100")
 def test_partner_messaging_inbox_starts_and_replies_to_a_program_conversation():
     conversations = []
     messages = []
+    activity = []
     applications = [{
         "application_id": "app-merchant-publisher-1",
         "offer_name": "Creator Analytics Suite",
@@ -67,8 +68,19 @@ def test_partner_messaging_inbox_starts_and_replies_to_a_program_conversation():
                     }
                     messages.append(created)
                     conversations.append(conversation)
+                    activity.append({
+                        "id": "activity-1", "actor": "publisher@example.test",
+                        "action": "partner.message.sent", "outcome": "created",
+                        "details": {"message_id": created["id"]},
+                        "created_at": "2026-11-01T12:05:00+00:00",
+                    })
                     route.fulfill(status=201, content_type="application/json", body=json.dumps({
                         "conversation_id": "conversation-1", "application_id": "app-merchant-publisher-1", "message": created,
+                    }))
+                    return
+                if path == "/api/partner/conversations/conversation-1/activity" and method == "GET":
+                    route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                        "conversation_id": "conversation-1", "count": len(activity), "data": activity,
                     }))
                     return
                 if path == "/api/partner/conversations/conversation-1/messages" and method == "GET":
@@ -86,6 +98,12 @@ def test_partner_messaging_inbox_starts_and_replies_to_a_program_conversation():
                         "is_mine": True, "is_read": False,
                     }
                     messages.append(created)
+                    activity.append({
+                        "id": "activity-2", "actor": "publisher@example.test",
+                        "action": "partner.message.sent", "outcome": "created",
+                        "details": {"message_id": created["id"]},
+                        "created_at": "2026-11-01T12:06:00+00:00",
+                    })
                     route.fulfill(status=201, content_type="application/json", body=json.dumps({
                         "conversation_id": "conversation-1", "message": created,
                     }))
@@ -104,6 +122,9 @@ def test_partner_messaging_inbox_starts_and_replies_to_a_program_conversation():
             expect(send_button).to_be_enabled(timeout=10000)
             send_button.click()
             page.get_by_text("Thank you. I will follow the published traffic terms.", exact=True).wait_for(state="visible")
+            page.get_by_text("Conversation activity", exact=True).wait_for(state="visible")
+            page.get_by_text("Message sent", exact=True).wait_for(state="visible")
             assert len(messages) == 2
+            assert len(activity) == 2
         finally:
             browser.close()

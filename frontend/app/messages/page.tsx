@@ -216,7 +216,8 @@ export default function PartnerMessagesPage() {
       setNotice("Message sent and saved to this program conversation.");
       const response = await apiFetch<ConversationResponse>("/api/partner/conversations");
       setConversations(Array.isArray(response.data) ? response.data : []);
-      if (activityConversationId) await loadActivity(activityConversationId);
+      // Activity is supplemental; do not keep the message composer locked while it refreshes.
+      if (activityConversationId) void loadActivity(activityConversationId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Message could not be sent.");
     } finally {

@@ -731,3 +731,68 @@ def test_publisher_program_detail_is_workspace_scoped_and_returns_only_recorded_
             assert cross_workspace.status_code == 404, cross_workspace.text
     finally:
         cleanup(engine, client)
+
+def test_publisher_can_create_additional_referral_links_with_separate_click_reporting(tmp_path):
+    engine, sessions, user, merchant_id, publisher_id, offer_id, application_id, client = setup_client(tmp_path)
+    try:
+        with client:
+            approved = client.post(
+                f"/api/merchant/applications/{application_id}/review",
+                json={"decision": "approve", "reviewer_notes": "Approved for tracked promotion."},
+            )
+            assert approved.status_code == 200, approved.text
+            user.update(workspace_id=publisher_id, account_type="affiliate_publisher", email="publisher@example.com")
+
+            created = client.post(
+                f"/api/marketplace/applications/{application_id}/links",
+                json={
+                    "label": "Instagram bio",
+                    "destination_url": "https://merchant.example.com/pricing",
+                },
+            )
+            assert created.status_code == 201, created.text
+            extra_link = created.json()
+            assert extra_link["label"] == "Instagram bio"
+            assert extra_link["destination_url"] == "https://merchant.example.com/pricing"
+            assert extra_link["promotion_url"].endswith("/r/" + extra_link["campaign_id"])
+            assert extra_link["is_primary"] is False
+
+            unsafe = client.post(
+                f"/api/marketplace/applications/{application_id}/links",
+                json={"label": "External redirect", "destination_url": "https://attacker.example/collect"},
+            )
+            assert unsafe.status_code == 422, unsafe.text
+
+            duplicate = client.post(
+                f"/api/marketplace/applications/{application_id}/links",
+                json={"label": "instagram bio"},
+            )
+            assert duplicate.status_code == 409, duplicate.text
+
+            async def seed_click():
+                async with sessions() as db:
+                    with workspace_scope(publisher_id):
+                        campaign = await db.get(Campaign, extra_link["campaign_id"])
+                        click = ClickEvent(
+                            workspace_id=publisher_id,
+                            campaign_id=campaign.id,
+                            destination_url=campaign.primary_destination,
+                            chosen_destination=campaign.primary_destination,
+                            status_code=302,
+                        )
+                        db.add(click)
+                        await db.commit()
+            asyncio.run(seed_click())
+
+            detail = client.get(f"/api/marketplace/applications/{application_id}")
+            assert detail.status_code == 200, detail.text
+            body = detail.json()
+            assert body["performance"]["clicks_all_time"] == 1
+            assert len(body["links"]) == 2
+            by_label = {item["label"]: item for item in body["links"]}
+            assert by_label["Primary link"]["is_primary"] is True
+            assert by_label["Primary link"]["clicks_all_time"] == 0
+            assert by_label["Instagram bio"]["clicks_all_time"] == 1
+            assert by_label["Instagram bio"]["conversion_entries"] == 0
+    finally:
+        cleanup(engine, client)

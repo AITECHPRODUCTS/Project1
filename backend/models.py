@@ -1262,7 +1262,7 @@ class AffiliateProgramLink(TenantScopedMixin, Base):
     """Publisher-owned tracking campaign issued only after a merchant approves an application."""
     __tablename__ = "affiliate_program_links"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "application_id", name="uq_affiliate_program_link_application"),
+        UniqueConstraint("workspace_id", "application_id", "link_label", name="uq_affiliate_program_link_label"),
         UniqueConstraint("campaign_id", name="uq_affiliate_program_link_campaign"),
         CheckConstraint("status IN ('active', 'suspended', 'disabled')", name="ck_affiliate_program_link_status"),
         Index("ix_affiliate_program_links_workspace_status", "workspace_id", "status"),
@@ -1274,6 +1274,9 @@ class AffiliateProgramLink(TenantScopedMixin, Base):
     merchant_offer_id: Mapped[str] = mapped_column(String(36), ForeignKey("merchant_offers.id", ondelete="RESTRICT"), nullable=False, index=True)
     application_id: Mapped[str] = mapped_column(String(36), ForeignKey("marketplace_applications.id", ondelete="RESTRICT"), nullable=False, index=True)
     campaign_id: Mapped[str] = mapped_column(String(36), ForeignKey("campaigns.id", ondelete="RESTRICT"), nullable=False, index=True)
+    link_label: Mapped[str] = mapped_column(String(120), default="Primary link", server_default="Primary link", nullable=False)
+    destination_url: Mapped[str] = mapped_column(Text, nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True, server_default=false(), nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="active", server_default="'active'", nullable=False)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

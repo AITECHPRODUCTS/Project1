@@ -1989,7 +1989,7 @@ def test_dashboard_switches_active_workspace_using_authorized_backend_membership
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("heading", name="Growth Studio.").wait_for(state="visible")
             selector = page.get_by_label("Active workspace")
             selector.wait_for(state="visible")
             assert selector.input_value() == "publisher-workspace"
@@ -2109,7 +2109,7 @@ def test_registered_user_can_create_workspace_and_dashboard_reloads_into_it():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("heading", name="Growth Studio.").wait_for(state="visible")
             page.get_by_role("button", name="New workspace").click()
             form = page.get_by_role("region", name="Create a workspace")
             page.get_by_label("Workspace name").fill("Merchant operations")
@@ -2260,7 +2260,7 @@ def test_dashboard_sidebar_opens_dedicated_bookmarkable_module_screens():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("heading", name="Growth Studio.").wait_for(state="visible")
             assert page.locator("main").get_attribute("data-current-view") == "overview"
 
             page.get_by_role("button", name="Infographic maker").click()

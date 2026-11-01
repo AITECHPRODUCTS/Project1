@@ -334,7 +334,7 @@ def test_webinar_agenda_splits_multiple_items_before_saving():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("heading", name="Growth Studio.").wait_for(state="visible")
             page.get_by_role("button", name="Webinars").click()
             page.locator("#webinars").wait_for(state="visible")
             page.locator("#webinar-title").fill("Browser regression webinar")

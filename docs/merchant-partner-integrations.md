@@ -26,6 +26,16 @@ The merchant's existing checkout setup must preserve the OmniAffiliateOS click r
 
 For sales and renewals, the normalized internal event identifier is the Stripe PaymentIntent ID. This lets a later full charge.refunded event link to the original commission without adding a second attribution identifier. The Stripe envelope event ID is also preserved in conversion evidence.
 
+## Native WooCommerce order webhooks
+
+WooCommerce signs the exact raw JSON request body with HMAC-SHA256 and sends the Base64 digest in `X-WC-Webhook-Signature`. The receiver also requires `X-WC-Webhook-Topic` and `X-WC-Webhook-Delivery-ID`. Configure active `order.created` and `order.updated` webhooks in WooCommerce → Settings → Advanced → Webhooks, using the endpoint URL and one-time secret displayed by OmniAffiliateOS. A valid signature alone does not mark the integration connected; a paid, attributed conversion must be accepted.
+
+A sale requires an order status of `processing` or `completed`, a positive `total`, a three-letter currency, a WooCommerce GMT paid timestamp, and order-level `omni_click_id` metadata. The adapter also recognizes `affiliate_click_id`, `click_id` and `subid`. The merchant checkout, theme or plugin must persist this value from the affiliate tracking URL; OmniAffiliateOS does not infer attribution from customer fields.
+
+A renewal order must include order-level `omni_original_order_id` metadata containing the original Woo order ID. This explicit relationship is required to attribute a renewal to the original approved affiliate conversion. The merchant's subscription extension or server-side hook must preserve this metadata.
+
+A full refund is reversed only when the Woo order status is `refunded` and the sum of the refund records equals the original order total exactly. Partial or inconsistent refunds, missing refund detail, and missing attribution/time evidence are stored for manual review rather than treated as full reversals. Repeated `order.updated` notifications use a stable order conversion identity and cannot create a second commission for the same order.
+
 ## Custom signed event relay
 
 For other checkout/billing systems, the merchant server can send normalized sale, recurring-renewal, refund or chargeback events to the merchant-specific endpoint. Sign the exact raw JSON request body with HMAC-SHA256 and send the hex digest in X-Omni-Signature with a sha256= prefix. Keep the generated secret only on the merchant server. Rotate it from the merchant integrations page if exposed or lost.
@@ -43,3 +53,11 @@ Sale requires event_id, event_type=sale, click_id (or subid), revenue and curren
 - Provider-native catalogue/terms synchronization and external affiliate-network applications/approval reconciliation are not included. Product details and affiliate terms remain merchant supplied and human reviewed.
 - The payout screen reports evidence-backed readiness after refund holds and minimum thresholds. It does not create payable balances, reconcile bank transfers or initiate money movement.
 - No integration sends ads, publishes content, changes merchant checkout settings or transfers money on the merchant's behalf.
+
+
+## WooCommerce release boundaries
+
+- This is a signed inbound order webhook receiver, not WooCommerce REST API authentication, programmatic webhook provisioning, catalogue/product import, merchant-program synchronization, inventory sync, customer data sync or checkout customization.
+- The adapter has not been validated against a live merchant store, payment gateway, custom order status or subscription plugin. Confirm actual payload and metadata behavior with test orders before production use.
+- WooCommerce's native delivery ID is required. The receiver does not invent a delivery timestamp or claim replay-window protection because the standard WooCommerce webhook signature does not contain a timestamp.
+- Partial refunds and inconsistent refund histories remain in a manual-review queue. The current operator view lists receipt IDs/outcomes but does not yet provide complete payload-detail inspection or commission-adjustment controls.

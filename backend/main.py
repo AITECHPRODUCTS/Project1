@@ -106,6 +106,7 @@ from backend.services.merchant_webhooks import (
     fingerprint_merchant_webhook_secret, verify_merchant_webhook_signature,
 )
 from backend.adapters.stripe_webhook import normalize_stripe_webhook_event, verify_stripe_webhook_signature
+from backend.adapters.woocommerce_webhook import normalize_woocommerce_webhook_event, verify_woocommerce_webhook_signature
 from backend.services.url_safety import open_public_http_response, read_limited_response, validate_public_http_url
 from backend.services.video_engine import render_vertical_video
 from backend.tools.affiliate_api import client as openaffiliate_client
@@ -4984,7 +4985,7 @@ async def create_merchant_webhook_integration(
             merchant_offer_id=offer.id,
             provider_name=payload.provider_name,
             display_name=payload.display_name,
-            integration_type="signed_webhook",
+            integration_type=("woocommerce_webhook" if payload.provider_name == "woocommerce" else "signed_webhook"),
             status="pending_authorization",
             secret_ciphertext=encrypt_merchant_webhook_secret(secret),
             secret_version=1,
@@ -5005,6 +5006,7 @@ async def create_merchant_webhook_integration(
         **_merchant_webhook_integration_dict(row, offer.name),
         "signing_secret_once": secret,
         "secret_display_policy": "This value is shown only in this response. Store it in the merchant checkout system and rotate it if lost.",
+        **({"setup_events": ["order.created", "order.updated"], "setup_note": "Create WooCommerce order.created and order.updated webhooks with this URL and one-time secret. The endpoint verifies X-WC-Webhook-Signature."} if row.integration_type == "woocommerce_webhook" else {}),
     }
 
 
@@ -13526,6 +13528,11 @@ async def receive_merchant_conversion_event(
             raise HTTPException(503, "Configure this endpoint's whsec_ signing secret before sending Stripe events")
         if not verify_stripe_webhook_signature(body, request.headers.get("Stripe-Signature", ""), secret):
             raise HTTPException(401, "Invalid Stripe webhook signature")
+    elif integration.integration_type == "woocommerce_webhook":
+        if integration.provider_name != "woocommerce":
+            raise HTTPException(409, "WooCommerce webhook integration provider configuration is inconsistent")
+        if not verify_woocommerce_webhook_signature(body, request.headers.get("X-WC-Webhook-Signature", ""), secret):
+            raise HTTPException(401, "Invalid WooCommerce webhook signature")
     else:
         if not verify_merchant_webhook_signature(body, request.headers.get("X-Omni-Signature", ""), secret):
             raise HTTPException(401, "Invalid merchant webhook signature")
@@ -13592,6 +13599,73 @@ async def receive_merchant_conversion_event(
                 "status": "ignored", "stored": False, "reason": ignored_reason,
             })
         decoded = normalized_event
+    elif integration.integration_type == "woocommerce_webhook":
+        normalized_event, ignored_reason = normalize_woocommerce_webhook_event(
+            decoded,
+            request.headers.get("X-WC-Webhook-Topic", ""),
+            request.headers.get("X-WC-Webhook-Delivery-ID", ""),
+        )
+        if normalized_event is None:
+            manual_review_reasons = {
+                "partial_refund_requires_reconciliation",
+                "refund_details_missing",
+                "refund_details_invalid",
+                "refund_total_inconsistent_requires_reconciliation",
+                "paid_order_zero_total_requires_review",
+                "paid_order_missing_utc_payment_time",
+                "missing_affiliate_click_reference",
+                "invalid_original_subscription_order",
+            }
+            if ignored_reason in manual_review_reasons:
+                delivery_id = str(request.headers.get("X-WC-Webhook-Delivery-ID") or "").strip()
+                if not delivery_id or len(delivery_id) > 200:
+                    raise HTTPException(422, "WooCommerce delivery ID is required for durable manual-review tracking")
+                manual_id = f"wc-delivery-{delivery_id}"
+                body_hash = hashlib.sha256(body).hexdigest()
+                with workspace_scope(None):
+                    prior_manual = await db.scalar(select(MerchantWebhookReceipt).where(
+                        MerchantWebhookReceipt.integration_id == integration.id,
+                        MerchantWebhookReceipt.provider_event_id == manual_id,
+                    ))
+                    if prior_manual is not None:
+                        if prior_manual.payload_sha256 != body_hash:
+                            raise HTTPException(409, "A different WooCommerce payload reused this delivery ID")
+                        return JSONResponse(status_code=200, content={
+                            "status": "duplicate_ignored", "stored": True,
+                            "manual_review_required": True, "receipt_id": prior_manual.id,
+                        })
+                    reason_outcomes = {
+                        "partial_refund_requires_reconciliation": "partial_refund_review",
+                        "missing_affiliate_click_reference": "attribution_review",
+                        "paid_order_missing_utc_payment_time": "attribution_review",
+                    }
+                    receipt = MerchantWebhookReceipt(
+                        integration_id=integration.id, provider_event_id=manual_id,
+                        payload_sha256=body_hash, outcome=reason_outcomes.get(ignored_reason, "manual_review"),
+                        conversion_id=None,
+                    )
+                    db.add(receipt)
+                    with workspace_scope(integration.workspace_id):
+                        db.add(AuditLog(
+                            workspace_id=integration.workspace_id, actor="woocommerce-webhook",
+                            action="merchant.woocommerce_webhook.manual_review",
+                            resource_type="merchant_webhook_integration", resource_id=integration.id,
+                            outcome="manual_review_required",
+                            details_json={
+                                "provider_delivery_id": delivery_id,
+                                "topic": str(request.headers.get("X-WC-Webhook-Topic") or "")[:100],
+                                "reason_code": ignored_reason,
+                            },
+                        ))
+                    await db.commit()
+                return JSONResponse(status_code=202, content={
+                    "status": "manual_review_required", "stored": True,
+                    "reason": ignored_reason, "receipt_id": receipt.id,
+                })
+            return JSONResponse(status_code=202, content={
+                "status": "ignored", "stored": False, "reason": ignored_reason,
+            })
+        decoded = normalized_event
     try:
         event = MerchantConversionWebhookEvent.model_validate(decoded)
     except ValidationError as exc:
@@ -13605,6 +13679,22 @@ async def receive_merchant_conversion_event(
         ))
     if receipt is not None:
         if receipt.payload_sha256 != payload_hash:
+            if integration.integration_type == "woocommerce_webhook":
+                with workspace_scope(None):
+                    prior_conversion = await db.scalar(select(Conversion).where(
+                        Conversion.network == f"merchant-{integration.id}",
+                        Conversion.external_event_id == event.event_id,
+                    ))
+                prior_delivery_id = (
+                    (prior_conversion.event_json or {}).get("source_provider_event_id")
+                    if prior_conversion is not None else None
+                )
+                if (
+                    prior_delivery_id
+                    and event.source_provider_event_id
+                    and prior_delivery_id != event.source_provider_event_id
+                ):
+                    return {"status": "duplicate_ignored", "stored": True, "reason": "WooCommerce order already recorded"}
             raise HTTPException(409, "This merchant event ID was already received with a different payload")
         return {"status": "duplicate_ignored", "stored": True}
 

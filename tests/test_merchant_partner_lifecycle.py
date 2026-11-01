@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -517,5 +518,141 @@ def test_disabled_custom_endpoint_can_be_reconfigured_as_native_stripe(tmp_path)
             assert stripe.json()["id"] == integration_id
             assert stripe.json()["integration_type"] == "stripe_webhook"
             assert stripe.json()["signing_secret_configured"] is False
+    finally:
+        cleanup(engine, client)
+
+
+
+def woocommerce_signed_headers(body: bytes, secret: str, delivery_id: str, topic: str = "order.updated") -> dict[str, str]:
+    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).digest()
+    return {
+        "X-WC-Webhook-Signature": base64.b64encode(digest).decode("ascii"),
+        "X-WC-Webhook-Topic": topic,
+        "X-WC-Webhook-Delivery-ID": delivery_id,
+        "Content-Type": "application/json",
+    }
+
+
+def test_native_woocommerce_webhook_records_one_paid_order_and_full_refund(tmp_path):
+    engine, sessions, user, merchant_id, publisher_id, offer_id, application_id, client = setup_client(tmp_path)
+    try:
+        with client:
+            approved = client.post(
+                f"/api/merchant/applications/{application_id}/review",
+                json={"decision": "approve", "reviewer_notes": "Reviewed publisher traffic and disclosures."},
+            )
+            assert approved.status_code == 200, approved.text
+
+            async def seed_click():
+                async with sessions() as db:
+                    with workspace_scope(publisher_id):
+                        campaign = await db.get(Campaign, approved.json()["promotion_campaign_id"])
+                        click = ClickEvent(
+                            workspace_id=publisher_id, campaign_id=campaign.id,
+                            destination_url=campaign.primary_destination,
+                            chosen_destination=campaign.primary_destination, status_code=302,
+                        )
+                        db.add(click)
+                        await db.commit()
+                        await db.refresh(click)
+                        return click.click_id
+            click_id = asyncio.run(seed_click())
+
+            user.update(workspace_id=merchant_id, account_type="merchant_product_owner", email="reviewer@merchant.example")
+            created = client.post(
+                f"/api/merchant/offers/{offer_id}/webhook-integration",
+                json={"provider_name": "woocommerce", "display_name": "WooCommerce store"},
+            )
+            assert created.status_code == 201, created.text
+            integration = created.json()
+            secret = integration["signing_secret_once"]
+            assert integration["integration_type"] == "woocommerce_webhook"
+            assert integration["setup_events"] == ["order.created", "order.updated"]
+
+            order = {
+                "id": 723, "status": "processing", "currency": "USD", "total": "100.00",
+                "date_paid_gmt": "2026-10-31T12:30:00",
+                "meta_data": [{"id": 1, "key": "omni_click_id", "value": click_id}],
+                "refunds": [],
+            }
+            raw = json.dumps(order, separators=(",", ":")).encode("utf-8")
+            invalid = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=raw, headers={
+                    **woocommerce_signed_headers(raw, secret, "delivery-invalid"),
+                    "X-WC-Webhook-Signature": "invalid",
+                },
+            )
+            assert invalid.status_code == 401
+
+            sale = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=raw, headers=woocommerce_signed_headers(raw, secret, "delivery-001"),
+            )
+            assert sale.status_code == 200, sale.text
+            assert sale.json()["status"] == "recorded"
+            assert sale.json()["commission"] == "25.000000"
+            assert sale.json()["payout_status"] == "not_confirmed"
+
+            duplicate = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=raw, headers=woocommerce_signed_headers(raw, secret, "delivery-001"),
+            )
+            assert duplicate.status_code == 200
+            assert duplicate.json()["status"] == "duplicate_ignored"
+
+            changed_order = {**order, "customer_note": "updated after payment"}
+            changed_raw = json.dumps(changed_order, separators=(",", ":")).encode("utf-8")
+            repeated = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=changed_raw, headers=woocommerce_signed_headers(changed_raw, secret, "delivery-002"),
+            )
+            assert repeated.status_code == 200
+            assert repeated.json()["status"] == "duplicate_ignored"
+
+            partial_order = {**order, "refunds": [{"id": 726, "total": "-25.00"}]}
+            partial_raw = json.dumps(partial_order, separators=(",", ":")).encode("utf-8")
+            partial = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=partial_raw, headers=woocommerce_signed_headers(partial_raw, secret, "delivery-003"),
+            )
+            assert partial.status_code == 202
+            assert partial.json()["status"] == "manual_review_required"
+            assert partial.json()["stored"] is True
+
+            full_order = {
+                **order, "status": "refunded", "refunds": [{"id": 726, "total": "-100.00"}],
+            }
+            full_raw = json.dumps(full_order, separators=(",", ":")).encode("utf-8")
+            full = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=full_raw, headers=woocommerce_signed_headers(full_raw, secret, "delivery-004"),
+            )
+            assert full.status_code == 200, full.text
+            assert full.json()["status"] == "reversed"
+
+            manual = client.get(f"/api/merchant/integrations/{integration['id']}/manual-review-events")
+            assert manual.status_code == 200
+            assert any(row["outcome"] == "partial_refund_review" for row in manual.json()["data"])
+
+            async def inspect():
+                async with sessions() as db:
+                    with workspace_scope(publisher_id):
+                        conversions = list((await db.scalars(select(Conversion).where(
+                            Conversion.network == "merchant-" + integration["id"]
+                        ))).all())
+                        ledger = list((await db.scalars(select(ConversionLedgerEntry).where(
+                            ConversionLedgerEntry.network == "merchant-" + integration["id"]
+                        ))).all())
+                    return conversions, ledger
+            conversions, ledger = asyncio.run(inspect())
+            assert len(conversions) == 2
+            assert len(ledger) == 2
+            sale_row = next(row for row in conversions if row.external_event_id == "wc-order-723")
+            refund_row = next(row for row in conversions if row.external_event_id == "wc-order-723-full-refund")
+            assert sale_row.status == "reversed"
+            assert refund_row.status == "reversed"
+            assert sale_row.event_json["source_provider"] == "woocommerce"
+            assert sale_row.event_json["source_provider_event_id"] == "delivery-001"
     finally:
         cleanup(engine, client)

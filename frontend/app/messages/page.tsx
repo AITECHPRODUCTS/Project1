@@ -163,8 +163,8 @@ export default function PartnerMessagesPage() {
       setActivityError("");
       return;
     }
-    void loadMessages(selectedConversationId);
-    void loadActivity(selectedConversationId);
+    // Load messages first because opening the thread may persist recipient read receipts.
+    void loadMessages(selectedConversationId).then(() => loadActivity(selectedConversationId));
   }, [selectedConversationId, loadMessages, loadActivity]);
 
   const selectApplication = (applicationId: string) => {

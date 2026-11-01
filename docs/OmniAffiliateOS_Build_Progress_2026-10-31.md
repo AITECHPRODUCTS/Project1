@@ -77,3 +77,11 @@ No claim is made of guaranteed earnings, 100% failproof operation, universal pro
 - Follow-up regression hardening: repointed two remaining legacy Growth Command browser journeys to /growth and explicitly declared their publisher persona fixtures; corrected the merchant dashboard financial-evidence destination to the existing /finance/provider-orders route.
 
 - Added the explicit authenticated persona to four legacy Growth Command browser fixtures (three Affiliate/Publisher sessions and one Platform Admin session), matching the new route gate without loosening runtime authorization.
+
+
+## 2026-11-01 — role-safe shared dashboard navigation
+- Updated the legacy Publisher and Merchant entry pages so an authenticated user who opens the other persona's old URL is returned to the same role-aware /dashboard entry, instead of seeing a dead-end authorization message. Unauthenticated requests are sent to /login.
+- Added a consistent Overview link back to /dashboard on both legacy workspace pages. No API authorization guard or account persona was weakened; server-side business APIs continue to deny the other persona.
+- Updated browser UAT to assert that a Merchant opening /publisher and a Publisher opening /merchant both arrive at their own correct dashboard with role-specific persisted API reads. Platform Admin visits to either business URL resolve to the protected /admin console and do not call business APIs.
+- The public homepage, signup choice, unified sign-in, dashboard hub, workspace switching and separate protected /admin surface from the 2026-10-31 increment are preserved. The data model still grants one business persona per account; a multi-persona account requires a separately designed, audited backend authorization model and is not simulated in the UI.
+- Verification for this increment must be read from the exact resulting commit's push and PR workflows; local Docker/browser acceptance remains a separate user-machine check.

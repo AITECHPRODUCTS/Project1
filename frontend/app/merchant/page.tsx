@@ -60,7 +60,8 @@ export default function MerchantDashboardPage() {
     try {
       const identity = await apiFetch<{ user?: { account_type?: string; is_admin?: boolean } }>("/api/auth/me");
       if (identity.user?.account_type !== "merchant_product_owner") {
-        throw new Error("This dashboard is only available to Merchant / Product Owner accounts.");
+        window.location.replace(identity.user?"/dashboard":"/login");
+        return;
       }
       const [offerResponse,pendingResponse,approvedResponse,rejectedResponse] = await Promise.all([
         apiFetch<OfferResponse>("/api/merchant/offers?limit=300"),
@@ -78,10 +79,13 @@ export default function MerchantDashboardPage() {
         recentPendingApplications: Array.isArray(pendingResponse.data) ? pendingResponse.data : [],
       });
     } catch (cause) {
-      setSnapshot(null);
-      setError(cause instanceof Error
-        ? cause.message
-        : "Could not load merchant data. Sign in to an authorized merchant workspace as an owner or admin.");
+      const message=cause instanceof Error?cause.message:"Could not load merchant data.";
+      if(message.startsWith("401:")){
+        window.location.replace("/login");
+      }else{
+        setSnapshot(null);
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -107,7 +111,7 @@ export default function MerchantDashboardPage() {
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <a href="/merchant" className="text-sm font-bold text-indigo-700">Merchant workspace</a>
+            <a href="/dashboard" className="text-sm font-bold text-indigo-700">← Workspace overview</a>
             <p className="mt-6 text-xs font-black uppercase tracking-[.2em] text-indigo-600">Merchant · Product publisher</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Merchant workspace</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
@@ -116,6 +120,7 @@ export default function MerchantDashboardPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <nav aria-label="Merchant dashboard navigation" className="flex flex-wrap gap-2">
+              <a className={secondaryLink} href="/dashboard">Overview</a>
               <a className={secondaryLink} href="/merchant" aria-current="page">Dashboard</a>
               <a className={secondaryLink} href="/merchant/offers">Manage offers</a>
               <a className={actionLink} href="/merchant/applications">Review applications</a>

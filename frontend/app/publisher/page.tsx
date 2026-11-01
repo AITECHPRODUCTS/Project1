@@ -25,13 +25,15 @@ export default function PublisherDashboardPage(){
   const [commissionError,setCommissionError]=useState("");
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
-  const [denied,setDenied]=useState(false);
 
   const load=useCallback(async()=>{
-    setLoading(true);setError("");setDenied(false);
+    setLoading(true);setError("");
     try{
       const identity=await apiFetch<Identity>("/api/auth/me");
-      if(identity.user?.account_type!=="affiliate_publisher"){setDenied(true);return;}
+      if(identity.user?.account_type!=="affiliate_publisher"){
+        window.location.replace(identity.user?"/dashboard":"/login");
+        return;
+      }
       setEmail(identity.user?.email||"");
       const [metrics,offers,applicationResponse,campaigns]=await Promise.all([
         apiFetch<Status>("/api/status"),
@@ -55,20 +57,12 @@ export default function PublisherDashboardPage(){
       }
     }catch(cause){
       const message=cause instanceof Error?cause.message:"Publisher dashboard could not be loaded.";
-      if(message.includes("401"))window.location.replace("/");
+      if(message.includes("401"))window.location.replace("/login");
       else setError(message);
     }finally{setLoading(false);}
   },[]);
 
   useEffect(()=>{void load();},[load]);
-
-  if(denied)return <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
-    <section className="max-w-lg rounded-2xl border border-slate-200 bg-white p-7 text-center">
-      <h1 className="text-xl font-black">Publisher access required</h1>
-      <p className="mt-2 text-sm text-slate-600">This dashboard is for accounts registered as Affiliate / Publisher.</p>
-      <a href="/" className="mt-4 inline-block font-bold text-indigo-700">Return to sign in</a>
-    </section>
-  </main>;
 
   return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10">
     <div className="mx-auto max-w-7xl">
@@ -81,6 +75,7 @@ export default function PublisherDashboardPage(){
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <nav aria-label="Publisher dashboard navigation" className="flex flex-wrap gap-2">
+            <a href="/dashboard" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold">Overview</a>
             <a href="#publisher-tools" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold">Publisher tools</a>
             <a href="/marketplace#my-applications" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold">My applications</a>
             <a href="/campaigns" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold">Campaigns</a>

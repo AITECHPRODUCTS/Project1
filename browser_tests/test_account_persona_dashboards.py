@@ -170,26 +170,43 @@ def test_publisher_dashboard_uses_publisher_identity_and_persisted_counts():
             browser.close()
 
 
-def test_merchant_account_cannot_open_publisher_dashboard():
+def test_merchant_opening_publisher_url_returns_to_the_shared_dashboard():
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
             page = browser.new_page()
-            page.route("**/api/auth/me", lambda route: _json(route, {
-                "authenticated": True,
-                "user": {
-                    "email": "merchant@example.test",
-                    "account_type": "merchant_product_owner",
-                    "is_admin": False,
-                },
-            }))
+
+            def handle_api(route):
+                path = route.request.url.split("?", 1)[0]
+                if path.endswith("/api/auth/me"):
+                    _json(route, {
+                        "authenticated": True,
+                        "user": {
+                            "email": "merchant@example.test",
+                            "account_type": "merchant_product_owner",
+                            "is_admin": False,
+                            "workspace_role": "owner",
+                        },
+                    })
+                elif path.endswith("/api/workspaces"):
+                    _json(route, {"active_workspace_id": "merchant-workspace", "data": []})
+                elif path.endswith("/api/merchant/offers"):
+                    _json(route, {"count": 0, "data": []})
+                elif path.endswith("/api/merchant/applications"):
+                    _json(route, {"count": 0, "total_count": 0, "data": []})
+                else:
+                    _json(route, {"detail": "Unexpected request"}, 404)
+
+            page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/publisher", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Publisher access required").wait_for(state="visible")
+            page.wait_for_url("**/dashboard")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+            assert page.get_by_text("Brand / Merchant workspace").is_visible()
         finally:
             browser.close()
 
 
-def test_publisher_account_cannot_open_merchant_dashboard():
+def test_publisher_opening_merchant_url_returns_to_the_shared_dashboard():
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
@@ -204,15 +221,27 @@ def test_publisher_account_cannot_open_merchant_dashboard():
                             "email": "publisher@example.test",
                             "account_type": "affiliate_publisher",
                             "is_admin": False,
+                            "workspace_role": "owner",
                         },
                     })
+                elif path.endswith("/api/workspaces"):
+                    _json(route, {"active_workspace_id": "publisher-workspace", "data": []})
+                elif path.endswith("/api/status"):
+                    _json(route, {"clicks": 0, "conversion_events": 0})
+                elif path.endswith("/api/marketplace/offers"):
+                    _json(route, {"count": 0, "data": []})
+                elif path.endswith("/api/marketplace/applications"):
+                    _json(route, {"count": 0, "total_count": 0, "data": []})
+                elif path.endswith("/api/campaigns"):
+                    _json(route, {"count": 0, "data": []})
                 else:
                     _json(route, {"detail": "Unexpected request"}, 404)
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
-            page.locator("main [role=alert]").wait_for(state="visible")
-            assert "only available to Merchant / Product Owner accounts" in page.locator("main [role=alert]").inner_text()
+            page.wait_for_url("**/dashboard")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+            assert page.get_by_text("Affiliate / Partner workspace").is_visible()
         finally:
             browser.close()
 
@@ -297,7 +326,7 @@ def test_public_homepage_query_does_not_open_the_legacy_growth_workspace():
 
 
 
-def test_platform_admin_identity_cannot_open_business_persona_dashboards():
+def test_platform_admin_legacy_business_urls_return_to_protected_admin_console():
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
@@ -320,13 +349,13 @@ def test_platform_admin_identity_cannot_open_business_persona_dashboards():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/publisher", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Publisher access required").wait_for(state="visible")
+            page.wait_for_url("**/admin")
+            page.get_by_role("heading", name="Tenant lifecycle console").wait_for(state="visible")
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
-            merchant_error = page.locator("main p[role='alert']")
-            merchant_error.wait_for(state="visible")
-            assert "only available to Merchant / Product Owner accounts" in merchant_error.inner_text()
-            assert sum(url.endswith("/api/auth/me") for url in requests) == 2
+            page.wait_for_url("**/admin")
+            page.get_by_role("heading", name="Tenant lifecycle console").wait_for(state="visible")
             assert not any("/api/merchant/" in url for url in requests)
-            assert not any("/api/status" in url for url in requests)
+            assert not any("/api/marketplace/" in url for url in requests)
+            assert not any(url.endswith("/api/status") for url in requests)
         finally:
             browser.close()

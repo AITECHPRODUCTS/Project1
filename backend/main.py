@@ -5525,7 +5525,7 @@ async def get_publisher_marketplace_application_detail(
     user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")),
     db: AsyncSession = Depends(get_session),
 ):
-    """Return one publisher-owned program workspace with scoped tracking evidence."""
+    """Return one publisher-owned program workspace with per-link tracking evidence."""
     workspace_id = str(user.get("workspace_id") or "").strip()
     if not workspace_id:
         raise HTTPException(403, "Select an authorized publisher workspace before viewing a program")
@@ -5536,22 +5536,26 @@ async def get_publisher_marketplace_application_detail(
             MarketplaceApplication.workspace_id == workspace_id,
         ))
         if row is None:
-            # Do not reveal whether an application exists in another workspace.
             raise HTTPException(404, "Program was not found in the active publisher workspace")
 
-        link = await db.scalar(select(AffiliateProgramLink).where(
-            AffiliateProgramLink.workspace_id == workspace_id,
-            AffiliateProgramLink.application_id == row.id,
-        ).order_by(AffiliateProgramLink.is_primary.desc(), AffiliateProgramLink.created_at.asc()))
+        program_links = list((await db.scalars(
+            select(AffiliateProgramLink).where(
+                AffiliateProgramLink.workspace_id == workspace_id,
+                AffiliateProgramLink.application_id == row.id,
+            ).order_by(AffiliateProgramLink.is_primary.desc(), AffiliateProgramLink.created_at.asc())
+        )).all())
+        link = next((item for item in program_links if item.is_primary), program_links[0] if program_links else None)
+        active_campaign_ids = [item.campaign_id for item in program_links if item.status == "active"]
+
         clicks = 0
         clicks_last_30_days = 0
         clicks_by_day: list[dict[str, Any]] = []
         commission_observations: list[dict[str, str]] = []
 
-        if link is not None and link.status == "active":
+        if active_campaign_ids:
             clicks = int(await db.scalar(select(func.count(ClickEvent.id)).where(
                 ClickEvent.workspace_id == workspace_id,
-                ClickEvent.campaign_id == link.campaign_id,
+                ClickEvent.campaign_id.in_(active_campaign_ids),
             )) or 0)
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=30)
@@ -5562,16 +5566,13 @@ async def get_publisher_marketplace_application_detail(
                 )
                 .where(
                     ClickEvent.workspace_id == workspace_id,
-                    ClickEvent.campaign_id == link.campaign_id,
+                    ClickEvent.campaign_id.in_(active_campaign_ids),
                     ClickEvent.created_at >= cutoff,
                 )
                 .group_by(func.date(ClickEvent.created_at))
                 .order_by(func.date(ClickEvent.created_at))
             )).all()
-            clicks_by_day = [
-                {"date": str(day), "clicks": int(count)}
-                for day, count in click_days
-            ]
+            clicks_by_day = [{"date": str(day), "clicks": int(count)} for day, count in click_days]
             clicks_last_30_days = sum(item["clicks"] for item in clicks_by_day)
 
             ledger_groups = (await db.execute(
@@ -5589,7 +5590,7 @@ async def get_publisher_marketplace_application_detail(
                 ))
                 .where(
                     ConversionLedgerEntry.workspace_id == workspace_id,
-                    ClickEvent.campaign_id == link.campaign_id,
+                    ClickEvent.campaign_id.in_(active_campaign_ids),
                 )
                 .group_by(
                     ConversionLedgerEntry.currency,
@@ -5614,6 +5615,36 @@ async def get_publisher_marketplace_application_detail(
                 for currency, evidence_status, entry_type, entry_count, commission_total, revenue_total in ledger_groups
             ]
 
+        link_rows: list[dict[str, Any]] = []
+        for item in program_links:
+            link_clicks = int(await db.scalar(select(func.count(ClickEvent.id)).where(
+                ClickEvent.workspace_id == workspace_id,
+                ClickEvent.campaign_id == item.campaign_id,
+            )) or 0)
+            link_conversions = int(await db.scalar(
+                select(func.count(ConversionLedgerEntry.id))
+                .join(ClickEvent, and_(
+                    ClickEvent.workspace_id == ConversionLedgerEntry.workspace_id,
+                    ClickEvent.click_id == ConversionLedgerEntry.click_id,
+                ))
+                .where(
+                    ConversionLedgerEntry.workspace_id == workspace_id,
+                    ConversionLedgerEntry.entry_type == "conversion",
+                    ClickEvent.campaign_id == item.campaign_id,
+                )
+            ) or 0)
+            link_rows.append({
+                "id": item.id,
+                "label": item.link_label,
+                "destination_url": item.destination_url,
+                "campaign_id": item.campaign_id,
+                "promotion_url": f"{settings.app_public_url.rstrip('/')}/r/{item.campaign_id}",
+                "status": item.status,
+                "is_primary": bool(item.is_primary),
+                "clicks_all_time": link_clicks,
+                "conversion_entries": link_conversions,
+            })
+
         response.headers["Cache-Control"] = "no-store"
         response.headers["Vary"] = "Cookie"
         result = _marketplace_application_dict(
@@ -5622,6 +5653,7 @@ async def get_publisher_marketplace_application_detail(
             clicks=clicks,
             commission_observations=commission_observations,
         )
+        result["links"] = link_rows
         result["performance"] = {
             "clicks_all_time": clicks,
             "clicks_last_30_days": clicks_last_30_days,
@@ -5632,10 +5664,133 @@ async def get_publisher_marketplace_application_detail(
             ),
         }
         result["performance_note"] = (
-            "Metrics are scoped to this publisher program. Clicks are first-party records; "
+            "Metrics include active referral links in this publisher program. Clicks are first-party records; "
             "conversion and commission rows are evidence observations, not confirmed payout or funds received."
         )
         return result
+
+
+@api.post("/marketplace/applications/{application_id}/links", status_code=201)
+async def create_publisher_marketplace_application_link(
+    application_id: str,
+    payload: AffiliateProgramLinkCreateRequest,
+    user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a separately attributed link for an approved program, restricted to the merchant's HTTPS host."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized publisher workspace before creating a referral link")
+
+    with workspace_scope(workspace_id):
+        application = await db.scalar(select(MarketplaceApplication).where(
+            MarketplaceApplication.id == application_id,
+            MarketplaceApplication.workspace_id == workspace_id,
+        ))
+        if application is None:
+            raise HTTPException(404, "Program was not found in the active publisher workspace")
+        if application.status != "approved":
+            raise HTTPException(409, "A merchant-approved program is required before creating additional referral links")
+
+    with workspace_scope(None):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == application.merchant_offer_id,
+            MerchantOffer.workspace_id == application.merchant_workspace_id,
+        ))
+    if offer is None or offer.status != "approved" or offer.activation_allowed is not True or offer.marketplace_listed is not True:
+        raise HTTPException(409, "The merchant offer is no longer approved and active for marketplace promotion")
+
+    destination_url = payload.destination_url or offer.product_url
+    try:
+        base = urlparse(offer.product_url)
+        destination = urlparse(destination_url)
+        safe_destination = (
+            base.scheme == "https"
+            and bool(base.hostname)
+            and destination.scheme == "https"
+            and destination.hostname is not None
+            and destination.hostname.lower() == base.hostname.lower()
+            and destination.username is None
+            and destination.password is None
+            and destination.fragment == ""
+            and destination.port in (None, 443)
+        )
+    except ValueError:
+        safe_destination = False
+    if not safe_destination:
+        raise HTTPException(
+            422,
+            "Referral destinations must use HTTPS on the merchant offer's verified host; external hosts and URL fragments are not allowed.",
+        )
+
+    with workspace_scope(workspace_id):
+        existing_count = int(await db.scalar(select(func.count(AffiliateProgramLink.id)).where(
+            AffiliateProgramLink.workspace_id == workspace_id,
+            AffiliateProgramLink.application_id == application.id,
+        )) or 0)
+        if existing_count >= 20:
+            raise HTTPException(409, "This program has reached the limit of 20 tracked referral links")
+        duplicate = await db.scalar(select(AffiliateProgramLink.id).where(
+            AffiliateProgramLink.workspace_id == workspace_id,
+            AffiliateProgramLink.application_id == application.id,
+            func.lower(AffiliateProgramLink.link_label) == payload.label.lower(),
+        ))
+        if duplicate:
+            raise HTTPException(409, "A referral link with this label already exists for the program")
+
+        campaign = Campaign(
+            workspace_id=workspace_id,
+            name=f"{offer.name} · {payload.label}"[:300],
+            niche=offer.category,
+            primary_destination=destination_url,
+            tracking_parameter="subid",
+            disclosure_text=offer.affiliate_disclosure,
+            auto_publish=False,
+            is_active=True,
+            max_daily_spend=0.0,
+        )
+        db.add(campaign)
+        await db.flush()
+        link = AffiliateProgramLink(
+            workspace_id=workspace_id,
+            merchant_workspace_id=application.merchant_workspace_id,
+            merchant_offer_id=application.merchant_offer_id,
+            application_id=application.id,
+            campaign_id=campaign.id,
+            link_label=payload.label,
+            destination_url=destination_url,
+            is_primary=False,
+            status="active",
+        )
+        db.add(link)
+        db.add(AuditLog(
+            workspace_id=workspace_id,
+            actor=str(user.get("email") or "unknown")[:320],
+            action="marketplace.publisher_link.created",
+            resource_type="affiliate_program_link",
+            resource_id=link.id,
+            outcome="created",
+            details_json={
+                "application_id": application.id,
+                "merchant_offer_id": application.merchant_offer_id,
+                "campaign_id": campaign.id,
+                "is_primary": False,
+            },
+        ))
+        await db.commit()
+        await db.refresh(link)
+
+    return {
+        "id": link.id,
+        "label": link.link_label,
+        "destination_url": link.destination_url,
+        "campaign_id": link.campaign_id,
+        "promotion_url": f"{settings.app_public_url.rstrip('/')}/r/{link.campaign_id}",
+        "status": link.status,
+        "is_primary": False,
+        "clicks_all_time": 0,
+        "conversion_entries": 0,
+    }
 
 
 @api.get("/merchant/applications")

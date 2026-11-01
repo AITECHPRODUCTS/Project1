@@ -123,6 +123,7 @@ def test_partner_messaging_inbox_starts_and_replies_to_a_program_conversation():
             send_button.click()
             page.get_by_text("Thank you. I will follow the published traffic terms.", exact=True).wait_for(state="visible")
             page.get_by_text("Conversation activity", exact=True).wait_for(state="visible")
+            page.get_by_text("2 events", exact=True).wait_for(state="visible")
             page.get_by_text("Message sent", exact=True).wait_for(state="visible")
             assert len(messages) == 2
             assert len(activity) == 2

@@ -441,11 +441,7 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
         try:
             page = browser.new_page()
             capability_requests = []
-            api_requests = []
             page_errors = []
-            page.on("request", lambda request: api_requests.append({
-                "method": request.method, "url": request.url
-            }) if "/api/" in request.url else None)
             page.on("pageerror", lambda error: page_errors.append(str(error)))
 
             def respond(route):
@@ -460,6 +456,20 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
                     _json(route, {"daily_budget_usd": 0, "daily_estimated_used_usd": 0, "daily_estimated_remaining_usd": 0, "niche_budget_usd": 0, "note": "No budget data"})
                 elif path.endswith("/api/integrations"):
                     _json(route, {"total": 0, "counts": {}, "items": [], "verification_policy": "workspace scoped"})
+                elif path.endswith("/api/flywheel/status"):
+                    _json(route, {
+                        "active_session": None,
+                        "stages": [
+                            {"id": "S1", "label": "Research & intelligence", "status": "idle"},
+                            {"id": "S2", "label": "Content & creative", "status": "idle"},
+                            {"id": "S3", "label": "SEO & affiliate blog", "status": "idle"},
+                            {"id": "S4", "label": "Offer & landing", "status": "idle"},
+                            {"id": "S5", "label": "Distribution & nurture", "status": "idle"},
+                            {"id": "S6", "label": "Attribution & testing", "status": "idle"},
+                            {"id": "S7", "label": "Budget & operations", "status": "idle"},
+                            {"id": "S8", "label": "Learning loop", "status": "idle"},
+                        ],
+                    })
                 elif path.endswith("/api/capabilities"):
                     capability_requests.append(path)
                     _json(route, {"detail": "Platform Super Admin permission required"}, 403)
@@ -470,27 +480,7 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
             page.get_by_role("heading", name="Growth Studio", exact=False).wait_for(state="visible")
             assert capability_requests == []
             assert page.get_by_text("403: Platform Super Admin permission required", exact=True).count() == 0
-            print("GROWTH_UAT_DIAGNOSTIC", {
-                "url": page.url,
-                "h1": page.locator("h1").all_inner_texts(),
-                "main_text": page.locator("main").first.inner_text()[:1800] if page.locator("main").count() else None,
-                "navs": page.locator("nav").evaluate_all("""els => els.map(el => ({
-                    aria: el.getAttribute("aria-label"),
-                    text: el.innerText,
-                    display: getComputedStyle(el).display,
-                    visibility: getComputedStyle(el).visibility,
-                    rect: (() => { const r = el.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })()
-                }))"""),
-                "dashboard_links": page.locator('a[href="/dashboard"]').evaluate_all("""els => els.map(el => ({
-                    text: el.innerText,
-                    aria: el.getAttribute("aria-label"),
-                    display: getComputedStyle(el).display,
-                    visibility: getComputedStyle(el).visibility,
-                    rect: (() => { const r = el.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })()
-                }))"""),
-                "api_requests": api_requests,
-                "page_errors": page_errors
-            })
+            assert page_errors == []
             workspace_navigation = page.get_by_role("navigation", name="Growth Studio workspace navigation")
             workspace_navigation.wait_for(state="visible")
             workspace_return = workspace_navigation.get_by_role("link", name="Workspace overview", exact=True)

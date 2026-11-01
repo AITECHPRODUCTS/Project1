@@ -120,30 +120,32 @@ export default function WorkspaceNavigation() {
           <span className="text-base font-black tracking-tight text-slate-950">OmniAffiliateOS</span>
         </Link>
         <nav aria-label="Primary workspace navigation" className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          {groups.map(group => (
-            <details key={group.label} className="group relative">
-              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200">
-                {group.label}<ChevronDown size={13} className="transition group-open:rotate-180"/>
-              </summary>
-              <div className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-                {group.items.map(item => (
-                  <Link key={item.href} href={item.href} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700">
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            </details>
-          ))}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {groups.map(group => (
+              <details key={group.label} className="group relative">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                  {group.label}<ChevronDown size={13} className="transition group-open:rotate-180"/>
+                </summary>
+                <div className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                  {group.items.map(item => (
+                    <Link key={item.href} href={item.href} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700">
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+            <span className="hidden rounded-full bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-600 md:inline-flex">{roleLabel}</span>
+            <Link href={overviewHref} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-700">
+              <Home size={14}/>Home
+            </Link>
+            <Link href={overviewHref} aria-current={pathname === overviewHref ? "page" : undefined} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700">
+              <LayoutDashboard size={14}/>{isAdmin ? "Admin overview" : "Workspace overview"}
+            </Link>
+          </div>
         </nav>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <span className="hidden rounded-full bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-600 md:inline-flex">{roleLabel}</span>
-          <Link href={overviewHref} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-700">
-            <Home size={14}/>Home
-          </Link>
-          <Link href={overviewHref} aria-current={pathname === overviewHref ? "page" : undefined} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700">
-            <LayoutDashboard size={14}/>{isAdmin ? "Admin overview" : "Workspace overview"}
-          </Link>
-        </div>
       </div>
     </header>
   );

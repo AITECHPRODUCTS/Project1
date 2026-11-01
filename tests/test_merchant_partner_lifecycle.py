@@ -847,7 +847,12 @@ def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(
             read_reply = client.get(f"/api/partner/conversations/{conversation_id}/messages")
             assert read_reply.status_code == 200, read_reply.text
             assert read_reply.json()["data"][-1]["is_read"] is True
-            assert "newsletter promotion is allowed" in read_reply.json()["data"][-1]["body"]
+            reply_row = next(
+                item for item in read_reply.json()["data"]
+                if "newsletter promotion is allowed" in item["body"]
+            )
+            assert reply_row["is_mine"] is False
+            assert reply_row["is_read"] is True
 
             user["workspace_role"] = "viewer"
             viewer_message = client.post(

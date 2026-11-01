@@ -261,7 +261,7 @@ export default function ProgramsPage() {
 
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs text-slate-500">Program workspace · evidence and tracking details</span>
-                    <Link href={\`/programs/\${encodeURIComponent(application.id)}\`}
+                    <Link href={"/programs/" + encodeURIComponent(application.id)}
                       className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800">
                       Open program workspace
                     </Link>

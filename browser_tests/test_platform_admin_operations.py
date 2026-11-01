@@ -147,7 +147,7 @@ def test_platform_admin_operations_console_renders_read_only_evidence():
             page.goto(BASE_URL + "/admin", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Platform operations overview").wait_for(state="visible")
             admin_nav = page.get_by_role("navigation", name="Platform administrator navigation")
-            assert admin_nav.get_by_role("link", name="Growth command").get_attribute("href") == "/"
+            assert admin_nav.get_by_role("link", name="Growth command").count() == 0
             assert admin_nav.get_by_role("link", name="Operations overview").get_attribute("href") == "#platform-operations-title"
             assert admin_nav.get_by_role("link", name="Tenant lifecycle").get_attribute("href") == "#tenant-lifecycle"
             audit_export = page.get_by_test_id("platform-audit-export")
@@ -204,7 +204,8 @@ def test_business_persona_cannot_load_platform_admin_console_data():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/admin", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Platform administrator access required").wait_for()
+            page.wait_for_url("**/dashboard")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
             assert not any("/api/admin/" in url for url in seen)
             assert not any("/api/capabilities" in url for url in seen)
             assert not any("/api/integrations" in url for url in seen)
@@ -237,8 +238,9 @@ def test_admin_flag_without_platform_admin_persona_cannot_open_admin_console():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/admin", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Platform administrator access required").wait_for(state="visible")
-            assert sum(url.endswith("/api/auth/me") for url in seen) == 1
+            page.wait_for_url("**/dashboard")
+            page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
+            assert sum(url.endswith("/api/auth/me") for url in seen) >= 1
             assert not any("/api/admin/" in url for url in seen)
             assert not any("/api/capabilities" in url for url in seen)
         finally:

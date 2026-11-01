@@ -160,7 +160,7 @@ def test_program_application_splits_multiple_evidence_urls_before_saving():
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("heading", name="Growth Studio.").wait_for(state="visible")
             page.get_by_role("button", name="Program applications").click()
             page.locator("#program-applications").wait_for(state="visible")
             page.locator("#program-app-provider").fill("Example Affiliate Network")

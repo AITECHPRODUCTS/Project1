@@ -115,7 +115,7 @@ def test_platform_admin_tenant_lifecycle_suspends_and_reinstates_with_reason():
 
             page.route("**/api/**", handle_api)
             page.goto(f"{BASE_URL}/admin", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Tenant lifecycle console").wait_for(state="visible")
+            page.get_by_role("heading", name="Platform administration").wait_for(state="visible")
             page.get_by_text("Current administrative workspace is protected from self-suspension.").wait_for(state="visible")
             page.get_by_role("heading", name="Platform-wide provider-write pause").wait_for(state="visible")
             page.get_by_label("Audit reason for platform-wide provider-write pause").fill("Security incident investigation is underway")

@@ -350,7 +350,7 @@ def test_platform_admin_legacy_business_urls_return_to_protected_admin_console()
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/publisher", wait_until="domcontentloaded")
             page.wait_for_url("**/admin")
-            page.get_by_role("heading", name="Tenant lifecycle console").wait_for(state="visible")
+            page.get_by_role("heading", name="Platform administration").wait_for(state="visible")
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
             page.wait_for_url("**/admin")
             page.get_by_role("heading", name="Tenant lifecycle console").wait_for(state="visible")
@@ -388,7 +388,8 @@ def test_publisher_workspace_navigation_has_home_and_grouped_feature_links():
             page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
 
             navigation = page.get_by_role("navigation", name="Primary workspace navigation")
-            assert navigation.get_by_role("link", name="Home").get_attribute("href") == "/"
+            navigation.wait_for(state="visible")
+            assert navigation.get_by_role("link", name="Home").get_attribute("href") == "/dashboard"
             assert navigation.get_by_role("link", name="Workspace overview").get_attribute("href") == "/dashboard"
 
             research_group = navigation.locator("details").filter(has_text="Discover & Research")
@@ -463,7 +464,9 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
             page.get_by_role("heading", name="Growth Studio", exact=False).wait_for(state="visible")
             assert capability_requests == []
             assert page.get_by_text("403: Platform Super Admin permission required", exact=True).count() == 0
-            assert page.get_by_text("Automation & Governance", exact=True).count() >= 1
+            workspace_navigation = page.get_by_role("navigation", name="Primary workspace navigation")
+            workspace_navigation.wait_for(state="visible")
+            assert workspace_navigation.get_by_text("Automation & Governance", exact=True).is_visible()
         finally:
             browser.close()
 

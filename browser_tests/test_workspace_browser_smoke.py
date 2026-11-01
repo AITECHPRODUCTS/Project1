@@ -1871,7 +1871,7 @@ def test_manual_override_submits_only_selected_stage_and_keeps_operator_selectio
 
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/growth", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Growth command center.").wait_for(state="visible")
+            page.get_by_role("heading", name="Growth Studio.").wait_for(state="visible")
             page.get_by_role("button", name="Flywheel").click()
             mode_select = page.get_by_label("Execution mode")
             mode_select.select_option("MANUAL_OVERRIDE")

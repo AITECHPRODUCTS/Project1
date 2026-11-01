@@ -90,11 +90,12 @@ const adminGroups: NavGroup[] = [
 export default function WorkspaceNavigation() {
   const pathname = usePathname();
   const [identity, setIdentity] = useState<Identity["user"] | null>(null);
-  const isAuthForm = pathname === "/login" || pathname === "/register" || pathname.startsWith("/webinar/");
+  const isAuthForm = pathname === "/login" || pathname === "/register";
+  const isPublicRoute = pathname === "/" || isAuthForm || pathname.startsWith("/webinar/");
 
   useEffect(() => {
     let active = true;
-    if (isAuthForm) {
+    if (isPublicRoute) {
       setIdentity(null);
       return () => { active = false; };
     }
@@ -102,9 +103,9 @@ export default function WorkspaceNavigation() {
       .then(response => { if (active) setIdentity(response.user || null); })
       .catch(() => { if (active) setIdentity(null); });
     return () => { active = false; };
-  }, [pathname, isAuthForm]);
+  }, [pathname, isPublicRoute]);
 
-  if (isAuthForm || !identity) return null;
+  if (isPublicRoute || !identity) return null;
   const isAdmin = identity.account_type === "platform_admin" && identity.is_admin === true;
   const isMerchant = identity.account_type === "merchant_product_owner";
   const roleLabel = isAdmin ? "Platform Super Admin" : isMerchant ? "Merchant / Brand" : "Affiliate / Partner";
@@ -114,7 +115,7 @@ export default function WorkspaceNavigation() {
   return (
     <header className="relative z-40 border-b border-slate-200 bg-white/95 text-slate-800 shadow-sm backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3 sm:px-6 lg:px-8">
-        <Link href="/" aria-label="OmniAffiliateOS home" className="inline-flex shrink-0 items-center gap-2.5">
+        <Link href={overviewHref} aria-label="OmniAffiliateOS workspace home" className="inline-flex shrink-0 items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-600 text-white"><Layers3 size={19}/></span>
           <span className="text-base font-black tracking-tight text-slate-950">OmniAffiliateOS</span>
         </Link>
@@ -136,7 +137,7 @@ export default function WorkspaceNavigation() {
         </nav>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <span className="hidden rounded-full bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-600 md:inline-flex">{roleLabel}</span>
-          <Link href="/" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-700">
+          <Link href={overviewHref} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-700">
             <Home size={14}/>Home
           </Link>
           <Link href={overviewHref} aria-current={pathname === overviewHref ? "page" : undefined} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700">

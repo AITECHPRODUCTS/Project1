@@ -15,7 +15,7 @@ type Metric={label:string;value:string;detail:string};
 type ActionCard={title:string;detail:string;href:string;icon:typeof Activity;label:string};
 function countOf(value:CountResponse|null){if(!value)return "—";if(typeof value.count==="number")return value.count.toLocaleString();if(typeof value.total_count==="number")return value.total_count.toLocaleString();return Array.isArray(value.data)?value.data.length.toLocaleString():"—";}
 function metricValue(value:unknown){return typeof value==="number"&&Number.isFinite(value)?value.toLocaleString():"—";}
-function Brand(){return <Link href="/" className="inline-flex items-center gap-2.5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 text-white"><Layers3 size={20}/></span><span className="text-lg font-black tracking-tight text-slate-950">OmniAffiliateOS</span></Link>}
+function Brand(){return <Link href="/dashboard" className="inline-flex items-center gap-2.5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 text-white"><Layers3 size={20}/></span><span className="text-lg font-black tracking-tight text-slate-950">OmniAffiliateOS</span></Link>}
 
 export default function DashboardPage(){
  const [loading,setLoading]=useState(true);const [refreshing,setRefreshing]=useState(false);const [user,setUser]=useState<{email:string;role:AccountType;workspaceRole:string}|null>(null);const [workspaces,setWorkspaces]=useState<Workspace[]>([]);const [activeWorkspace,setActiveWorkspace]=useState("");const [metrics,setMetrics]=useState<Metric[]>([]);const [actions,setActions]=useState<ActionCard[]>([]);const [notice,setNotice]=useState("");const [error,setError]=useState("");const [switching,setSwitching]=useState(false);

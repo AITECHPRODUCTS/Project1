@@ -121,7 +121,11 @@ def test_digistore24_connect_search_saved_marketplace_and_disconnect():
 
             page.get_by_role("button", name="Load saved Digistore24 marketplace").click()
             page.get_by_text("Practical AI Marketing Course").wait_for(state="visible")
-            page.get_by_role("button", name="Disconnect").click()
+            with page.expect_response(
+                lambda response: response.request.method == "DELETE"
+                and response.url.endswith("/api/provider-connections/ds-1")
+            ):
+                page.get_by_role("button", name="Disconnect").click()
             assert seen["disconnect"] is True
         finally:
             browser.close()

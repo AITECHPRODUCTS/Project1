@@ -386,7 +386,24 @@ def test_native_stripe_webhook_creates_conversion_and_full_refund_reversal(tmp_p
             )
             assert partial.status_code == 202
             assert partial.json()["status"] == "manual_review_required"
-            assert partial.json()["stored"] is False
+            assert partial.json()["stored"] is True
+            assert partial.json()["receipt_id"]
+
+            duplicate_partial = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=partial_raw, headers=stripe_signed_headers(partial_raw, secret),
+            )
+            assert duplicate_partial.status_code == 200
+            assert duplicate_partial.json()["status"] == "duplicate_ignored"
+            assert duplicate_partial.json()["receipt_id"] == partial.json()["receipt_id"]
+
+            manual_queue = client.get(
+                f"/api/merchant/integrations/{integration['id']}/manual-review-events"
+            )
+            assert manual_queue.status_code == 200, manual_queue.text
+            assert manual_queue.json()["count"] == 1
+            assert manual_queue.json()["data"][0]["provider_event_id"] == "evt_partial_refund"
+            assert manual_queue.json()["data"][0]["outcome"] == "partial_refund_review"
 
             dispute_envelope = {
                 "id": "evt_dispute", "object": "event", "type": "charge.dispute.created",
@@ -400,6 +417,15 @@ def test_native_stripe_webhook_creates_conversion_and_full_refund_reversal(tmp_p
             )
             assert dispute.status_code == 202
             assert dispute.json()["status"] == "manual_review_required"
+            assert dispute.json()["stored"] is True
+            updated_queue = client.get(
+                f"/api/merchant/integrations/{integration['id']}/manual-review-events"
+            )
+            assert updated_queue.status_code == 200, updated_queue.text
+            assert updated_queue.json()["count"] == 2
+            assert {row["outcome"] for row in updated_queue.json()["data"]} == {
+                "partial_refund_review", "dispute_review",
+            }
 
             refund_envelope = {
                 "id": "evt_full_refund", "object": "event", "type": "charge.refunded",

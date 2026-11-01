@@ -467,6 +467,8 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
             workspace_navigation = page.get_by_role("navigation", name="Primary workspace navigation")
             workspace_navigation.wait_for(state="visible")
             assert workspace_navigation.get_by_text("Automation & Governance", exact=True).is_visible()
+            assert page.get_by_role("link", name="← Workspace overview").get_attribute("href") == "/dashboard"
+            assert page.get_by_role("link", name="Merchant dashboard").count() == 0
         finally:
             browser.close()
 

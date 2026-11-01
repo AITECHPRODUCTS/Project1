@@ -1,3 +1,12 @@
+## 2026-11-01 — role-aware workspace navigation and Growth Studio cleanup (implementation candidate)
+
+- Updated the shared workspace header so authenticated Home and the OmniAffiliateOS brand return to the role-specific workspace overview; public landing, sign-in, registration and public webinar routes do not trigger a redundant `/api/auth/me` request from the shared navigation component.
+- Added a persistent Workspace overview return link to Growth Studio and made its sidebar brand link return to `/dashboard`. Removed the duplicate, crowded row of module shortcuts from the Growth Studio page header; module navigation remains available through the grouped shared navigation and grouped Growth Studio sidebar.
+- Removed merchant-only shortcuts from the affiliate Growth Studio header. Merchant and Platform Super Admin navigation remain role-scoped. The Growth Studio capability inventory remains requested only for a verified Platform Super Admin; publisher workspaces do not call the protected capability endpoint.
+- The current merchant dashboard already exposes offer lifecycle, internal vs external approval, evidence readiness, activation/listing and partner application summaries. The current Platform Administration console already exposes operations, incidents/audit, tenant lifecycle, provider readiness/capability status and the audited registry-gated provider-write pause. This increment preserves those screens and their API contracts rather than replacing them.
+- Updated Chromium browser assertions to match the current role-specific routes and page headings. The earlier exact-head run on `4f97bba1e442e85f1bc27356039cbfe2e4add304` had 15 browser UAT failures / 47 passes; the failures included stale page-heading/navigation assertions and the public homepage's unnecessary auth request. The navigation fix and test updates are committed on the existing build branch.
+- **Verification status:** the exact-head push and pull-request workflows for the current branch head must complete before this increment is marked verified. Do not treat browser UAT as passed while queued, running or failing. No live publishing, ad spend, provider write or payout behavior is enabled by this UI change.
+
 ## S1 connected affiliate-marketplace research — multi-account search candidate (31 October 2026)
 
 - Added authenticated POST /api/affiliate-research/search to search connected, read-only Digistore24 and Flipkart accounts from one bounded query (maximum 25 account connections; maximum 10 results per account).

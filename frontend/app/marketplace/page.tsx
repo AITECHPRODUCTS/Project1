@@ -15,6 +15,9 @@ type MarketplaceApplication={
   publisher_website_url:string;audience_description:string;traffic_sources:string[];intended_regions:string[];
   promotion_plan:string;terms_snapshot:Record<string,unknown>;reviewer_notes:string|null;
   provider_submission_status:string;affiliate_network_approved:boolean;
+  promotion_url:string|null;promotion_link_status:string|null;tracked_clicks:number;
+  commission_observations:{currency:string;evidence_status:string;commission_total:string}[];
+  earnings_note:string;
 };
 const inputClass="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm";
 const labelClass="block text-sm font-bold text-slate-700";
@@ -75,7 +78,7 @@ export default function MarketplacePage(){
     <div className="mx-auto max-w-6xl">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div><a href="/dashboard" className="text-sm font-bold text-indigo-700">← Workspace overview</a><p className="mt-6 text-xs font-black uppercase tracking-[.2em] text-indigo-600">S1 · Internal marketplace</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Publisher marketplace</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">Only merchant offers that were internally reviewed and deliberately listed here appear. Internal listing is not an affiliate-network connection or approval. Review the displayed terms and restrictions before you apply.</p></div>
-        <div className="flex flex-wrap gap-2"><a href="/offers" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Affiliate offer catalog</a><a href="/merchant/offers" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant offers</a><button onClick={()=>void load()} disabled={busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh</button></div>
+        <div className="flex flex-wrap gap-2"><a href="/offers" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Affiliate offer catalog</a><a href="/merchant/offers" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant offers</a><a href="/merchant/integrations" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant integrations</a><button onClick={()=>void load()} disabled={busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh</button></div>
       </header>
       {error&&<div role="alert" className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>}
       {notice&&<div role="status" className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{notice}</div>}
@@ -117,7 +120,18 @@ export default function MarketplacePage(){
       </section>}
       <section id="my-applications" aria-labelledby="my-marketplace-applications-title" className="mt-7 rounded-3xl border border-white bg-white p-5 shadow-sm sm:p-7"><h2 id="my-marketplace-applications-title" className="text-xl font-black">My marketplace applications</h2><p className="mt-1 text-sm text-slate-500">Internal application decisions do not imply approval by an external affiliate network.</p><div className="mt-4 grid gap-3">
         {applications.length===0&&<p className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">No marketplace applications submitted from this workspace.</p>}
-        {applications.map(application=><article key={application.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">{application.offer_name}</h3><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{application.status.replaceAll("_"," ")}</span></div><p className="mt-2 text-xs text-slate-500">Terms snapshot: {String(application.terms_snapshot.terms_version||"unknown")} · External network status: {application.provider_submission_status}</p>{application.reviewer_notes&&<p className="mt-2 text-sm text-slate-600">Reviewer notes: {application.reviewer_notes}</p>}</article>)}
+        {applications.map(application=><article key={application.id} className="rounded-xl border border-slate-200 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">{application.offer_name}</h3><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{application.status.replaceAll("_"," ")}</span></div>
+          <p className="mt-2 text-xs text-slate-500">Terms snapshot: {String(application.terms_snapshot.terms_version||"unknown")} · External network status: {application.provider_submission_status}</p>
+          {application.status==="approved"&&application.promotion_url&&<div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-emerald-900">Your promotion link</p>
+            <a href={application.promotion_url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-sm font-bold text-indigo-700 underline">{application.promotion_url}</a>
+            <div className="mt-2 flex flex-wrap items-center gap-3"><button type="button" onClick={()=>void navigator.clipboard?.writeText(application.promotion_url||"")} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700">Copy link</button><span className="text-xs text-slate-600">{application.tracked_clicks} tracked click(s)</span></div>
+            {application.commission_observations.length>0&&<div className="mt-3 space-y-1">{application.commission_observations.map((item,index)=><p key={item.currency+"-"+item.evidence_status+"-"+index} className="text-xs text-slate-700">Commission observed: {item.currency} {item.commission_total} · {item.evidence_status.replaceAll("_"," ")}</p>)}</div>}
+            <p className="mt-2 text-xs leading-5 text-slate-600">{application.earnings_note}</p>
+          </div>}
+          {application.reviewer_notes&&<p className="mt-2 text-sm text-slate-600">Reviewer notes: {application.reviewer_notes}</p>}
+        </article>)}
       </div></section>
     </div>
   </main>;

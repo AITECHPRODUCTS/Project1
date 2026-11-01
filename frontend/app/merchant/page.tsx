@@ -123,6 +123,7 @@ export default function MerchantDashboardPage() {
               <a className={secondaryLink} href="/dashboard">Overview</a>
               <a className={secondaryLink} href="/merchant" aria-current="page">Dashboard</a>
               <a className={secondaryLink} href="/merchant/offers">Manage offers</a>
+              <a className={secondaryLink} href="/merchant/integrations">Business integrations</a>
               <a className={actionLink} href="/merchant/applications">Review applications</a>
             </nav>
             <button type="button" onClick={() => void load()} disabled={loading} className={secondaryLink + " disabled:opacity-50"}>{loading ? "Refreshing…" : "Refresh workspace"}</button>

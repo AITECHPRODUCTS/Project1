@@ -6,6 +6,8 @@ import {apiFetch} from "@/lib/api";
 type MerchantOffer={
   id:string;name:string;product_url:string;description:string;category:string;
   commission_type:string;commission_value:string;commission_currency:string;terms_version:string;
+  cookie_days:number|null;attribution_window_days:number|null;refund_hold_days:number;
+  minimum_payout_amount:string;payout_schedule:string;
   commission_terms_url:string;seller_authorization_url:string;allowed_regions:string[];
   restricted_traffic_sources:string[];affiliate_disclosure:string;status:string;
   terms_verified:boolean;seller_authorization_verified:boolean;activation_allowed:boolean;
@@ -57,6 +59,11 @@ export default function MerchantOffersPage(){
   const [commissionType,setCommissionType]=useState("recurring_percentage");
   const [commissionValue,setCommissionValue]=useState("25");
   const [currency,setCurrency]=useState("USD");
+  const [cookieDays,setCookieDays]=useState("");
+  const [attributionWindowDays,setAttributionWindowDays]=useState("");
+  const [refundHoldDays,setRefundHoldDays]=useState("15");
+  const [minimumPayout,setMinimumPayout]=useState("20.00");
+  const [payoutSchedule,setPayoutSchedule]=useState("monthly");
   const [termsVersion,setTermsVersion]=useState("");
   const [termsUrl,setTermsUrl]=useState("");
   const [sellerUrl,setSellerUrl]=useState("");
@@ -198,7 +205,11 @@ export default function MerchantOffersPage(){
     e.preventDefault();
     await act("create","/api/merchant/offers",{
       name,product_url:productUrl,description,category,commission_type:commissionType,
-      commission_value:commissionValue,commission_currency:currency,terms_version:termsVersion,
+      commission_value:commissionValue,commission_currency:currency,
+      cookie_days:cookieDays.trim()?Number(cookieDays):null,
+      attribution_window_days:attributionWindowDays.trim()?Number(attributionWindowDays):null,
+      refund_hold_days:Number(refundHoldDays),minimum_payout_amount:minimumPayout,
+      payout_schedule:payoutSchedule,terms_version:termsVersion,
       commission_terms_url:termsUrl,seller_authorization_url:sellerUrl,
       allowed_regions:regions.split(",").map(x=>x.trim()).filter(Boolean),
       restricted_traffic_sources:trafficRestrictions.split(",").map(x=>x.trim()).filter(Boolean),
@@ -222,7 +233,7 @@ export default function MerchantOffersPage(){
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Merchant offers</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">Create an offer packet, submit it for a second-person review, and record explicit evidence checks before internal activation. Saving URLs is not independent verification and does not connect the offer to an affiliate network.</p>
         </div>
-        <div className="flex flex-wrap gap-2"><a href="/merchant" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant dashboard</a><a href="/merchant/applications" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher applications</a><a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Browse marketplace</a><button onClick={()=>void load()} disabled={!!busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh offers</button></div>
+        <div className="flex flex-wrap gap-2"><a href="/merchant" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Merchant dashboard</a><a href="/merchant/applications" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Publisher applications</a><a href="/merchant/integrations" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Business integrations</a><a href="/marketplace" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Browse marketplace</a><button onClick={()=>void load()} disabled={!!busy} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50">Refresh offers</button></div>
       </header>
 
       {error&&<div role="alert" className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>}
@@ -247,6 +258,11 @@ export default function MerchantOffersPage(){
           <div><label className={labelClass} htmlFor="merchant-commission-type">Commission model</label><select id="merchant-commission-type" className={inputClass} value={commissionType} onChange={e=>setCommissionType(e.target.value)}><option value="percentage">Percentage</option><option value="fixed">Fixed</option><option value="recurring_percentage">Recurring percentage</option><option value="recurring_fixed">Recurring fixed</option><option value="cpa">CPA</option><option value="cpl">CPL</option></select></div>
           <div><label className={labelClass} htmlFor="merchant-commission-value">Commission amount / rate</label><input id="merchant-commission-value" className={inputClass} type="number" min="0.0001" max="99999999" step="0.0001" value={commissionValue} onChange={e=>setCommissionValue(e.target.value)} required/></div>
           <div><label className={labelClass} htmlFor="merchant-currency">Currency (ISO 4217)</label><input id="merchant-currency" className={inputClass} value={currency} onChange={e=>setCurrency(e.target.value.toUpperCase())} minLength={3} maxLength={3} required/></div>
+          <div><label className={labelClass} htmlFor="merchant-cookie-days">Cookie window (days, optional)</label><input id="merchant-cookie-days" className={inputClass} type="number" min="0" max="3650" value={cookieDays} onChange={e=>setCookieDays(e.target.value)}/></div>
+          <div><label className={labelClass} htmlFor="merchant-attribution-days">Attribution window (days, optional)</label><input id="merchant-attribution-days" className={inputClass} type="number" min="0" max="3650" value={attributionWindowDays} onChange={e=>setAttributionWindowDays(e.target.value)}/></div>
+          <div><label className={labelClass} htmlFor="merchant-refund-hold">Refund hold (days)</label><input id="merchant-refund-hold" className={inputClass} type="number" min="0" max="365" value={refundHoldDays} onChange={e=>setRefundHoldDays(e.target.value)} required/></div>
+          <div><label className={labelClass} htmlFor="merchant-minimum-payout">Minimum payout ({currency})</label><input id="merchant-minimum-payout" className={inputClass} type="number" min="0" step="0.01" value={minimumPayout} onChange={e=>setMinimumPayout(e.target.value)} required/></div>
+          <div><label className={labelClass} htmlFor="merchant-payout-schedule">Payout schedule</label><select id="merchant-payout-schedule" className={inputClass} value={payoutSchedule} onChange={e=>setPayoutSchedule(e.target.value)}><option value="weekly">Weekly</option><option value="biweekly">Every two weeks</option><option value="monthly">Monthly</option><option value="manual">Manual review</option></select></div>
           <div><label className={labelClass} htmlFor="merchant-regions">Allowed regions (comma-separated)</label><input id="merchant-regions" className={inputClass} value={regions} onChange={e=>setRegions(e.target.value)} required/></div>
           <div><label className={labelClass} htmlFor="merchant-traffic">Restricted traffic sources (comma-separated)</label><input id="merchant-traffic" className={inputClass} value={trafficRestrictions} onChange={e=>setTrafficRestrictions(e.target.value)}/></div>
           <div className="lg:col-span-2"><label className={labelClass} htmlFor="merchant-disclosure">Required affiliate disclosure</label><textarea id="merchant-disclosure" className={inputClass} rows={2} value={disclosure} onChange={e=>setDisclosure(e.target.value)} minLength={12} maxLength={1200} required/></div>

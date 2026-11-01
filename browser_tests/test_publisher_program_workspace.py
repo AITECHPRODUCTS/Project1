@@ -99,6 +99,7 @@ def test_publisher_can_search_filter_and_review_program_evidence():
             page.locator('section[aria-label="Program summary"]').get_by_text("42", exact=True).wait_for(state="visible")
             assert page.locator('section[aria-label="Program summary"]').get_by_text("42", exact=True).is_visible()
             assert page.get_by_text("25.000000", exact=True).is_visible()
+            page.get_by_text("Program terms, restrictions and approval details", exact=True).click()
             assert page.get_by_text("Not configured / not verified", exact=True).is_visible()
             assert page.get_by_text("Signed merchant events are commission observations", exact=False).is_visible()
 

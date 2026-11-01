@@ -217,7 +217,7 @@ export default function MerchantOffersPage(){
     <div className="mx-auto max-w-6xl">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <a href="/" className="text-sm font-bold text-indigo-700">← Back to Growth command center</a>
+          <a href="/merchant" className="text-sm font-bold text-indigo-700">← Merchant dashboard</a>
           <p className="mt-6 text-xs font-black uppercase tracking-[.2em] text-indigo-600">Merchant · Offer governance</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Merchant offers</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">Create an offer packet, submit it for a second-person review, and record explicit evidence checks before internal activation. Saving URLs is not independent verification and does not connect the offer to an affiliate network.</p>

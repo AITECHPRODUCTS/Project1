@@ -1,3 +1,10 @@
+## 2026-11-01 — authenticated return navigation across module screens (implementation candidate)
+
+- A source audit found additional module headers still linking to `/` with labels such as “Growth command” or “Back to growth cockpit”. Since `/` is the public marketing page, these links made an authenticated user appear to have been signed out or taken out of their workspace.
+- Corrected the return destinations: publisher modules now return to `/dashboard` with a consistent “Workspace overview” label; merchant offer management returns to `/merchant` with “Merchant dashboard”. Updated screens include ad guardrails, bio links, commission calculator, compliance, email automation, leads, listicle writer, research brief, skill packages, product comparison, affiliate research and integrations.
+- The campaign tracking and publisher marketplace screens already use the workspace overview destination. Merchant application screens already link to the merchant dashboard.
+- This is navigation-only: existing API calls, role checks, saved records, approval gates and external-action safety boundaries are preserved. Exact-head push and pull-request CI/browser UAT are required before this increment is marked verified.
+
 ## 2026-11-01 — role-aware workspace navigation and Growth Studio cleanup (implementation candidate)
 
 - Updated the shared workspace header so authenticated Home and the OmniAffiliateOS brand return to the role-specific workspace overview; public landing, sign-in, registration and public webinar routes do not trigger a redundant `/api/auth/me` request from the shared navigation component.

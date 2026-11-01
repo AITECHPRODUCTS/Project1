@@ -261,7 +261,7 @@ export default function SkillPackagesPage(){
   return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10">
     <div className="mx-auto max-w-7xl">
       <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><a className="text-sm font-semibold text-indigo-600 hover:underline" href="/">← Growth command</a><h1 className="mt-2 text-3xl font-black tracking-tight">Governed skill packages</h1><p className="mt-1 max-w-3xl text-sm text-slate-600">Version declarative skill manifests, validate JSON input/output fixtures, and record workspace-scoped human review.</p></div>
+        <div><a className="text-sm font-semibold text-indigo-600 hover:underline" href="/dashboard">← Workspace overview</a><h1 className="mt-2 text-3xl font-black tracking-tight">Governed skill packages</h1><p className="mt-1 max-w-3xl text-sm text-slate-600">Version declarative skill manifests, validate JSON input/output fixtures, and record workspace-scoped human review.</p></div>
         <button type="button" onClick={()=>void load()} disabled={busy} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50">Refresh packages</button>
       </header>
       <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Execution boundary:</strong> package instructions are stored as text and are never executed. Fixture checks validate JSON contracts only—not skill behavior. Approval does not grant provider credentials, API scopes, publishing access, or authority to spend money.</div>

@@ -129,7 +129,7 @@ export default function ListicleWriterPage(){
 
  return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10"><div className="mx-auto max-w-7xl">
   <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
-   <div><div className="flex flex-wrap gap-4 text-sm font-semibold"><a href="/" className="text-indigo-600 hover:underline">← Growth command</a><a href="/comparison-post" className="text-indigo-600 hover:underline">Product comparison writer →</a></div>
+   <div><div className="flex flex-wrap gap-4 text-sm font-semibold"><a href="/dashboard" className="text-indigo-600 hover:underline">← Workspace overview</a><a href="/comparison-post" className="text-indigo-600 hover:underline">Product comparison writer →</a></div>
     <h1 className="mt-2 text-3xl font-black tracking-tight">Evidence-aware listicle writer</h1>
     <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Generate a workspace-persisted “best of” article from supplied product facts and optional bounded public-page snapshots, with a deterministic comparison table and a fact-by-fact evidence ledger.</p>
    </div><span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">Review-required draft · No publishing</span>

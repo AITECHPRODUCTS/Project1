@@ -212,8 +212,8 @@ export default function LeadsPage() {
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <a href="/" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-700 hover:text-indigo-900">
-            <ArrowLeft size={16} aria-hidden="true" /> Growth command center
+          <a href="/dashboard" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-700 hover:text-indigo-900">
+            <ArrowLeft size={16} aria-hidden="true" /> Workspace overview
           </a>
           <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-3xl">

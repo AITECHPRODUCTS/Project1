@@ -85,7 +85,7 @@ export default function CommissionCalculatorPage(){
  };
  return <main className="min-h-screen bg-slate-50 px-4 py-7 text-slate-900 sm:px-7 lg:px-10"><div className="mx-auto max-w-7xl">
   <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
-   <div><a href="/" className="text-sm font-semibold text-indigo-600 hover:underline">← Growth command</a><h1 className="mt-2 text-3xl font-black tracking-tight">Commission projection calculator</h1><p className="mt-1 max-w-3xl text-sm text-slate-600">Compare affiliate payout structures using your own traffic and conversion assumptions. Results are saved to your active workspace for review.</p></div>
+   <div><a href="/dashboard" className="text-sm font-semibold text-indigo-600 hover:underline">← Workspace overview</a><h1 className="mt-2 text-3xl font-black tracking-tight">Commission projection calculator</h1><p className="mt-1 max-w-3xl text-sm text-slate-600">Compare affiliate payout structures using your own traffic and conversion assumptions. Results are saved to your active workspace for review.</p></div>
    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">Assumptions only · No payout</span>
   </header>
   <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><strong>Evidence boundary:</strong> this calculator does not fetch provider metrics or verify network terms. Traffic, click-through rate and conversion rate are assumptions you enter. Recurring projections assume no churn/refunds and cannot guarantee earnings or confirm a payout.</div>

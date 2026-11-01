@@ -273,7 +273,7 @@ export default function EmailAutomationsPage(){
   <div className="mx-auto max-w-7xl">
    <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
     <div>
-     <a href="/" className="text-sm font-semibold text-indigo-600 hover:underline">← Growth command</a>
+     <a href="/dashboard" className="text-sm font-semibold text-indigo-600 hover:underline">← Workspace overview</a>
      <h1 className="mt-2 text-3xl font-black tracking-tight">Branching email automation</h1>
      <p className="mt-1 max-w-3xl text-sm text-slate-600">Design a visual, versioned email journey. Connect email steps, purchase/engagement decisions and terminal stops, then validate and simulate the actual branch paths.</p>
     </div>

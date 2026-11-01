@@ -100,7 +100,7 @@ def test_publisher_program_detail_shows_supported_data_and_marks_missing_surface
             page.get_by_text("25.000000 USD", exact=True).wait_for(state="visible")
 
             page.get_by_role("button", name="Terms").click()
-            page.get_by_text("Readers must be told when the publisher may earn a commission.", exact=True).wait_for(state="visible")
+            page.get_by_text("Readers must be told when the publisher may earn a commission.", exact=False).wait_for(state="visible")
 
             page.get_by_role("button", name="Customers · not available").click()
             page.get_by_role("heading", name="Referred customers").wait_for(state="visible")

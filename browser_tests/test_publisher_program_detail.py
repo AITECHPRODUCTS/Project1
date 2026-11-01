@@ -137,8 +137,10 @@ def test_publisher_program_detail_shows_supported_data_and_marks_missing_surface
             page.get_by_role("heading", name="Referred customers").wait_for(state="visible")
             page.get_by_text("Not implemented", exact=True).wait_for(state="visible")
 
-            page.get_by_role("button", name="Messages · not available").click()
-            page.get_by_role("heading", name="Merchant-partner messages").wait_for(state="visible")
+            page.get_by_role("button", name="Messages", exact=True).click()
+            page.get_by_role("heading", name="Merchant–partner conversation").wait_for(state="visible")
+            message_link = page.get_by_role("link", name="Open program messages")
+            assert message_link.get_attribute("href") == "/messages?applicationId=application-active-1"
 
             page.get_by_role("button", name="Payouts · not available").click()
             page.get_by_role("heading", name="Payout account and withdrawal history").wait_for(state="visible")

@@ -849,7 +849,7 @@ def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(
             assert read_reply.json()["data"][-1]["is_read"] is True
             reply_row = next(
                 item for item in read_reply.json()["data"]
-                if "newsletter promotion is allowed" in item["body"]
+                if "newsletter promotion is allowed" in item["body"].lower()
             )
             assert reply_row["is_mine"] is False
             assert reply_row["is_read"] is True

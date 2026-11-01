@@ -398,6 +398,16 @@ def test_publisher_workspace_navigation_has_home_and_grouped_feature_links():
             assert research_group.get_by_role("link", name="Affiliate offer catalog").get_attribute("href") == "/offers"
 
             assert navigation.get_by_role("link", name="Platform administration").count() == 0
+
+            # The shared authenticated header is the only navigation bar on the dashboard.
+            assert page.get_by_role("navigation", name="Workspace navigation").count() == 0
+            assert page.get_by_role("link", name="OmniAffiliateOS home").count() == 0
+            assert page.get_by_role("button", name="Sign out").is_visible()
+            page.get_by_role("heading", name="Your organic growth workflow").wait_for(state="visible")
+            assert page.get_by_role("link", name="Manage integrations").get_attribute("href") == "/integrations"
+            assert page.get_by_role("link", name="Open leads").get_attribute("href") == "/leads"
+            assert page.get_by_role("link", name="Create content").get_attribute("href") == "/listicle-writer"
+            assert page.get_by_role("link", name="Open campaigns").get_attribute("href") == "/campaigns"
         finally:
             browser.close()
 

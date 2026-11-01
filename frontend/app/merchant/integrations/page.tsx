@@ -7,6 +7,7 @@ type Offer={id:string;name:string;status:string;commission_currency:string};
 type Integration={
   id:string;merchant_offer_id:string;offer_name:string|null;provider_name:string;display_name:string;
   integration_type:string;status:string;webhook_url:string;secret_fingerprint:string;
+  signing_secret_configured:boolean;
   last_event_at:string|null;last_error_code:string|null;created_at:string|null;
 };
 type IntegrationCreated=Integration&{signing_secret_once:string;secret_display_policy:string};

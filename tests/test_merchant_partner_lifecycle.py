@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -571,7 +572,7 @@ def test_native_woocommerce_webhook_records_one_paid_order_and_full_refund(tmp_p
 
             order = {
                 "id": 723, "status": "processing", "currency": "USD", "total": "100.00",
-                "date_paid_gmt": "2026-10-31T12:30:00",
+                "date_paid_gmt": datetime.now(timezone.utc).isoformat(),
                 "meta_data": [{"id": 1, "key": "omni_click_id", "value": click_id}],
                 "refunds": [],
             }

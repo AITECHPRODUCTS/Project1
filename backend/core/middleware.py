@@ -7,6 +7,8 @@ from starlette.responses import JSONResponse, Response
 
 logger = logging.getLogger(__name__)
 SENSITIVE = re.compile(r"(?<![a-z0-9])(bank|payout|tax|wire|withdrawal|withdraw|payment_method|routing_number|iban|swift)(?![a-z0-9])", re.I)
+# These are public program-policy terms, not payment instructions or recipient credentials.
+SAFE_PROGRAM_POLICY_FIELDS = {"minimum_payout_amount", "payout_schedule"}
 SAFE_READS = {"/api/finance/ledger", "/api/finance/thresholds"}
 SAFE_SYSTEM = {"/health", "/docs", "/openapi.json", "/redoc"}
 
@@ -14,7 +16,7 @@ def _payload_has_sensitive_operation(value: Any) -> bool:
     if isinstance(value, dict):
         for key, child in value.items():
             normalized = str(key).replace("-", "_").lower()
-            if SENSITIVE.search(normalized): return True
+            if normalized not in SAFE_PROGRAM_POLICY_FIELDS and SENSITIVE.search(normalized): return True
             if normalized in {"action", "operation", "endpoint", "resource", "command"} and isinstance(child, str) and SENSITIVE.search(child): return True
             if _payload_has_sensitive_operation(child): return True
     elif isinstance(value, list): return any(_payload_has_sensitive_operation(item) for item in value)

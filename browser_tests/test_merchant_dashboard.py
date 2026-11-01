@@ -272,9 +272,9 @@ def test_merchant_partner_payout_readiness_page_shows_hold_and_manual_review_sta
             page.route("**/api/**", handle_api)
             page.goto(BASE_URL + "/merchant/payouts", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Partner payout readiness").wait_for(state="visible")
-            assert page.get_by_text("Creator toolkit", exact=True).is_visible()
-            assert page.get_by_text("eligible for manual review", exact=True).is_visible()
-            assert page.get_by_text("publisher@example.test").is_visible()
+            page.get_by_text("Creator toolkit", exact=True).wait_for(state="visible")
+            page.get_by_text("eligible for manual review", exact=True).wait_for(state="visible")
+            page.get_by_text("publisher@example.test").wait_for(state="visible")
             assert page.get_by_text("$25.00").count() >= 2
             assert "no automatic payment" in page.locator("main").inner_text()
             assert "no payout was confirmed" in page.locator("main").inner_text()

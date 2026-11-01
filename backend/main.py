@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderCatalogObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,PlatformIncident,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderCatalogObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,MerchantWebhookIntegration,AffiliateProgramLink,MerchantWebhookReceipt,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,PlatformIncident,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantWebhookIntegrationCreateRequest,MerchantConversionWebhookEvent,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -100,6 +100,11 @@ from backend.services.s4_s5_landing import email_drip_sequence,grand_slam_offer_
 from backend.services.utm_attribution import UTM_FIELD_LIMITS, lead_attribution_summary, normalize_utm_attribution
 from backend.services.s6_s8_analytics import self_improver_loop
 from backend.services.tracking_service import choose_destination,destination_healthy,record_click_and_resolve,verify_click_signature
+from backend.services.merchant_webhooks import (
+    MerchantWebhookCredentialError, calculate_merchant_commission,
+    decrypt_merchant_webhook_secret, encrypt_merchant_webhook_secret,
+    fingerprint_merchant_webhook_secret, verify_merchant_webhook_signature,
+)
 from backend.services.url_safety import open_public_http_response, read_limited_response, validate_public_http_url
 from backend.services.video_engine import render_vertical_video
 from backend.tools.affiliate_api import client as openaffiliate_client
@@ -4002,6 +4007,11 @@ def _merchant_offer_dict(row: MerchantOffer) -> dict[str, Any]:
         "commission_type": row.commission_type,
         "commission_value": format(Decimal(row.commission_value), "f"),
         "commission_currency": row.commission_currency,
+        "cookie_days": row.cookie_days,
+        "attribution_window_days": row.attribution_window_days,
+        "refund_hold_days": row.refund_hold_days,
+        "minimum_payout_amount": format(Decimal(row.minimum_payout_amount), "f"),
+        "payout_schedule": row.payout_schedule,
         "terms_version": row.terms_version,
         "commission_terms_url": row.commission_terms_url,
         "seller_authorization_url": row.seller_authorization_url,
@@ -4240,6 +4250,11 @@ async def create_merchant_offer(
             commission_type=payload.commission_type,
             commission_value=payload.commission_value,
             commission_currency=payload.commission_currency,
+            cookie_days=payload.cookie_days,
+            attribution_window_days=payload.attribution_window_days,
+            refund_hold_days=payload.refund_hold_days,
+            minimum_payout_amount=payload.minimum_payout_amount,
+            payout_schedule=payload.payout_schedule,
             terms_version=payload.terms_version,
             commission_terms_url=payload.commission_terms_url,
             seller_authorization_url=payload.seller_authorization_url,
@@ -4830,6 +4845,11 @@ def _marketplace_offer_public_dict(row: MerchantOffer) -> dict[str, Any]:
         "commission_type": row.commission_type,
         "commission_value": format(Decimal(row.commission_value), "f"),
         "commission_currency": row.commission_currency,
+        "cookie_days": row.cookie_days,
+        "attribution_window_days": row.attribution_window_days,
+        "refund_hold_days": row.refund_hold_days,
+        "minimum_payout_amount": format(Decimal(row.minimum_payout_amount), "f"),
+        "payout_schedule": row.payout_schedule,
         "terms_version": row.terms_version,
         "commission_terms_url": row.commission_terms_url,
         "allowed_regions": row.allowed_regions_json or [],
@@ -4843,8 +4863,14 @@ def _marketplace_offer_public_dict(row: MerchantOffer) -> dict[str, Any]:
     }
 
 
-def _marketplace_application_dict(row: MarketplaceApplication) -> dict[str, Any]:
+def _marketplace_application_dict(
+    row: MarketplaceApplication,
+    link: AffiliateProgramLink | None = None,
+    clicks: int = 0,
+    commission_observations: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     snapshot = row.terms_snapshot_json or {}
+    campaign_id = link.campaign_id if link and link.status == "active" else None
     return {
         "id": row.id,
         "merchant_offer_id": row.merchant_offer_id,
@@ -4868,7 +4894,188 @@ def _marketplace_application_dict(row: MarketplaceApplication) -> dict[str, Any]
         "provider_submission_status": "not_configured",
         "affiliate_network_approved": False,
         "provider_submission_performed": False,
+        "promotion_campaign_id": campaign_id,
+        "promotion_url": f"{settings.app_public_url.rstrip('/')}/r/{campaign_id}" if campaign_id else None,
+        "promotion_link_status": link.status if link else None,
+        "tracked_clicks": clicks,
+        "commission_observations": commission_observations or [],
+        "earnings_note": "Signed merchant events are commission observations, not proof of payout or funds received.",
     }
+
+
+
+
+def _merchant_webhook_integration_dict(row: MerchantWebhookIntegration, offer_name: str | None = None) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "merchant_offer_id": row.merchant_offer_id,
+        "offer_name": offer_name,
+        "provider_name": row.provider_name,
+        "display_name": row.display_name,
+        "integration_type": row.integration_type,
+        "status": row.status,
+        "webhook_url": f"{settings.app_public_url.rstrip('/')}/api/webhooks/merchant-integrations/{row.id}",
+        "secret_fingerprint": row.secret_fingerprint,
+        "last_event_at": row.last_event_at.isoformat() if row.last_event_at else None,
+        "last_error_code": row.last_error_code,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@api.get("/merchant/integrations")
+async def list_merchant_webhook_integrations(
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before listing integrations")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        rows = list((await db.scalars(
+            select(MerchantWebhookIntegration)
+            .where(MerchantWebhookIntegration.workspace_id == workspace_id)
+            .order_by(MerchantWebhookIntegration.created_at.desc())
+        )).all())
+        offers = {
+            offer.id: offer.name
+            for offer in (await db.scalars(
+                select(MerchantOffer).where(MerchantOffer.workspace_id == workspace_id)
+            )).all()
+        }
+    return {
+        "count": len(rows),
+        "data": [_merchant_webhook_integration_dict(row, offers.get(row.merchant_offer_id)) for row in rows],
+        "note": "Signed event delivery is supported. Product catalogue/API synchronization is not implied by a webhook connection.",
+    }
+
+
+@api.post("/merchant/offers/{offer_id}/webhook-integration", status_code=201)
+async def create_merchant_webhook_integration(
+    offer_id: str,
+    payload: MerchantWebhookIntegrationCreateRequest,
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before connecting a checkout webhook")
+    workspace_id = str(workspace_id)
+    secret = secrets.token_urlsafe(48)
+    with workspace_scope(workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id, MerchantOffer.workspace_id == workspace_id
+        ))
+        if offer is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        existing = await db.scalar(select(MerchantWebhookIntegration.id).where(
+            MerchantWebhookIntegration.workspace_id == workspace_id,
+            MerchantWebhookIntegration.merchant_offer_id == offer_id,
+        ))
+        if existing:
+            raise HTTPException(409, "This offer already has a webhook integration. Rotate its secret or disable it instead.")
+        row = MerchantWebhookIntegration(
+            workspace_id=workspace_id,
+            merchant_offer_id=offer.id,
+            provider_name=payload.provider_name,
+            display_name=payload.display_name,
+            integration_type="signed_webhook",
+            status="pending_authorization",
+            secret_ciphertext=encrypt_merchant_webhook_secret(secret),
+            secret_version=1,
+            secret_fingerprint=fingerprint_merchant_webhook_secret(secret),
+            created_by=str(user.get("email") or "unknown")[:320],
+        )
+        db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.webhook_integration.created", resource_type="merchant_webhook_integration",
+            resource_id=row.id, outcome="pending_authorization",
+            details_json={"merchant_offer_id": offer.id, "provider_name": row.provider_name, "secret_returned_once": True},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return {
+        **_merchant_webhook_integration_dict(row, offer.name),
+        "signing_secret_once": secret,
+        "secret_display_policy": "This value is shown only in this response. Store it in the merchant checkout system and rotate it if lost.",
+    }
+
+
+@api.post("/merchant/integrations/{integration_id}/rotate-secret")
+async def rotate_merchant_webhook_secret(
+    integration_id: str,
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before rotating an integration secret")
+    workspace_id = str(workspace_id)
+    secret = secrets.token_urlsafe(48)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MerchantWebhookIntegration).where(
+            MerchantWebhookIntegration.id == integration_id,
+            MerchantWebhookIntegration.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Merchant webhook integration not found in the active workspace")
+        if row.status == "disabled":
+            raise HTTPException(409, "Disabled integrations cannot be rotated; create a new integration after reviewing the offer")
+        row.secret_ciphertext = encrypt_merchant_webhook_secret(secret)
+        row.secret_version += 1
+        row.secret_fingerprint = fingerprint_merchant_webhook_secret(secret)
+        row.status = "pending_authorization"
+        row.last_error_code = None
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.webhook_integration.secret_rotated", resource_type="merchant_webhook_integration",
+            resource_id=row.id, outcome="pending_authorization",
+            details_json={"secret_version": row.secret_version, "old_secret_invalidated": True},
+        ))
+        await db.commit()
+        await db.refresh(row)
+        offer_name = await db.scalar(select(MerchantOffer.name).where(
+            MerchantOffer.id == row.merchant_offer_id, MerchantOffer.workspace_id == workspace_id
+        ))
+    return {
+        **_merchant_webhook_integration_dict(row, offer_name),
+        "signing_secret_once": secret,
+        "secret_display_policy": "This value is shown only in this response. The previous secret is invalid immediately.",
+    }
+
+
+@api.post("/merchant/integrations/{integration_id}/disable")
+async def disable_merchant_webhook_integration(
+    integration_id: str,
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before disabling an integration")
+    workspace_id = str(workspace_id)
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MerchantWebhookIntegration).where(
+            MerchantWebhookIntegration.id == integration_id,
+            MerchantWebhookIntegration.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Merchant webhook integration not found in the active workspace")
+        row.status = "disabled"
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.webhook_integration.disabled", resource_type="merchant_webhook_integration",
+            resource_id=row.id, outcome="disabled",
+            details_json={"future_event_delivery_blocked": True},
+        ))
+        await db.commit()
+        await db.refresh(row)
+        offer_name = await db.scalar(select(MerchantOffer.name).where(
+            MerchantOffer.id == row.merchant_offer_id, MerchantOffer.workspace_id == workspace_id
+        ))
+    return _merchant_webhook_integration_dict(row, offer_name)
 
 
 @api.post("/merchant/offers/{offer_id}/list")
@@ -5035,6 +5242,11 @@ async def create_marketplace_application(
             "commission_type": offer.commission_type,
             "commission_value": format(Decimal(offer.commission_value), "f"),
             "commission_currency": offer.commission_currency,
+            "cookie_days": offer.cookie_days,
+            "attribution_window_days": offer.attribution_window_days,
+            "refund_hold_days": offer.refund_hold_days,
+            "minimum_payout_amount": format(Decimal(offer.minimum_payout_amount), "f"),
+            "payout_schedule": offer.payout_schedule,
             "terms_version": offer.terms_version,
             "commission_terms_url": offer.commission_terms_url,
             "allowed_regions": list(offer.allowed_regions_json or []),
@@ -5105,7 +5317,51 @@ async def list_publisher_marketplace_applications(
             .order_by(MarketplaceApplication.created_at.desc())
             .limit(limit)
         )).all())
-    return {"count": len(rows), "data": [_marketplace_application_dict(row) for row in rows]}
+        links = list((await db.scalars(
+            select(AffiliateProgramLink).where(
+                AffiliateProgramLink.workspace_id == workspace_id,
+                AffiliateProgramLink.application_id.in_([row.id for row in rows]),
+            )
+        )).all()) if rows else []
+        link_by_application = {link.application_id: link for link in links}
+        result_rows = []
+        for row in rows:
+            link = link_by_application.get(row.id)
+            click_count = 0
+            commission_rows: list[dict[str, str]] = []
+            if link is not None and link.status == "active":
+                click_count = int(await db.scalar(select(func.count(ClickEvent.id)).where(
+                    ClickEvent.workspace_id == workspace_id,
+                    ClickEvent.campaign_id == link.campaign_id,
+                )) or 0)
+                ledger_groups = (await db.execute(
+                    select(
+                        ConversionLedgerEntry.currency,
+                        ConversionLedgerEntry.evidence_status,
+                        func.sum(ConversionLedgerEntry.commission_amount),
+                    )
+                    .join(ClickEvent, and_(
+                        ClickEvent.workspace_id == ConversionLedgerEntry.workspace_id,
+                        ClickEvent.click_id == ConversionLedgerEntry.click_id,
+                    ))
+                    .where(
+                        ConversionLedgerEntry.workspace_id == workspace_id,
+                        ClickEvent.campaign_id == link.campaign_id,
+                    )
+                    .group_by(ConversionLedgerEntry.currency, ConversionLedgerEntry.evidence_status)
+                )).all()
+                commission_rows = [
+                    {
+                        "currency": str(currency),
+                        "evidence_status": str(evidence_status),
+                        "commission_total": format(Decimal(str(total or 0)), "f"),
+                    }
+                    for currency, evidence_status, total in ledger_groups
+                ]
+            result_rows.append(_marketplace_application_dict(
+                row, link=link, clicks=click_count, commission_observations=commission_rows
+            ))
+    return {"count": len(rows), "data": result_rows}
 
 
 @api.get("/merchant/applications")
@@ -5164,6 +5420,7 @@ async def review_incoming_marketplace_application(
         raise HTTPException(403, "Select an authorized merchant workspace before reviewing applications")
     merchant_workspace_id = str(merchant_workspace_id)
     reviewer = str(user.get("email") or "unknown")[:320]
+    link: AffiliateProgramLink | None = None
     with workspace_scope(None):
         row = await db.scalar(select(MarketplaceApplication).where(
             MarketplaceApplication.id == application_id,
@@ -5174,6 +5431,48 @@ async def review_incoming_marketplace_application(
         if row.status != "pending_review":
             raise HTTPException(409, "Only pending marketplace applications can be reviewed")
         publisher_workspace_id = str(row.workspace_id)
+        if payload.decision == "approve":
+            with workspace_scope(merchant_workspace_id):
+                offer = await db.scalar(select(MerchantOffer).where(
+                    MerchantOffer.id == row.merchant_offer_id,
+                    MerchantOffer.workspace_id == merchant_workspace_id,
+                    MerchantOffer.status == "approved",
+                    MerchantOffer.activation_allowed.is_(True),
+                    MerchantOffer.marketplace_listed.is_(True),
+                ))
+            if offer is None:
+                raise HTTPException(409, "The merchant offer is no longer approved and listed; review its status before approving this publisher.")
+            with workspace_scope(publisher_workspace_id):
+                existing_link = await db.scalar(select(AffiliateProgramLink).where(
+                    AffiliateProgramLink.workspace_id == publisher_workspace_id,
+                    AffiliateProgramLink.application_id == row.id,
+                ))
+                if existing_link is None:
+                    campaign = Campaign(
+                        workspace_id=publisher_workspace_id,
+                        name=f"{offer.name} · partner promotion",
+                        niche=offer.category,
+                        primary_destination=offer.product_url,
+                        tracking_parameter="subid",
+                        disclosure_text=offer.affiliate_disclosure,
+                        auto_publish=False,
+                        is_active=True,
+                        max_daily_spend=0.0,
+                    )
+                    db.add(campaign)
+                    await db.flush()
+                    link = AffiliateProgramLink(
+                        workspace_id=publisher_workspace_id,
+                        merchant_workspace_id=merchant_workspace_id,
+                        merchant_offer_id=offer.id,
+                        application_id=row.id,
+                        campaign_id=campaign.id,
+                        status="active",
+                    )
+                    db.add(link)
+                    await db.flush()
+                else:
+                    link = existing_link
         with workspace_scope(publisher_workspace_id):
             row.status = "approved" if payload.decision == "approve" else "rejected"
             row.reviewer_notes = payload.reviewer_notes
@@ -5187,13 +5486,19 @@ async def review_incoming_marketplace_application(
                     "decision": payload.decision,
                     "merchant_workspace_id": merchant_workspace_id,
                     "merchant_offer_id": row.merchant_offer_id,
+                    "promotion_link_issued": bool(link),
                     "external_affiliate_network_approval": False,
                     "provider_submission_performed": False,
                 },
             ))
             await db.commit()
             await db.refresh(row)
-    return _marketplace_application_dict(row)
+            if payload.decision == "approve" and link is None:
+                link = await db.scalar(select(AffiliateProgramLink).where(
+                    AffiliateProgramLink.workspace_id == publisher_workspace_id,
+                    AffiliateProgramLink.application_id == row.id,
+                ))
+    return _marketplace_application_dict(row, link=link)
 
 def _program_application_readiness(evidence_urls: list[str], compliance_answers: dict[str, bool]) -> dict[str, Any]:
     required = {
@@ -12861,6 +13166,247 @@ async def receive_resend_email_delivery_event(
         raise HTTPException(422, str(exc)) from exc
 
 
+
+
+@app.post("/api/webhooks/merchant-integrations/{integration_id}", status_code=200)
+async def receive_merchant_conversion_event(
+    integration_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    body = await read_limited_webhook_body(request)
+    with workspace_scope(None):
+        integration = await db.scalar(select(MerchantWebhookIntegration).where(
+            MerchantWebhookIntegration.id == integration_id
+        ))
+    if integration is None:
+        raise HTTPException(404, "Merchant webhook integration not found")
+    if integration.status == "disabled":
+        raise HTTPException(410, "Merchant webhook integration is disabled")
+    try:
+        secret = decrypt_merchant_webhook_secret(integration.secret_ciphertext, integration.secret_version)
+    except MerchantWebhookCredentialError:
+        raise HTTPException(503, "Merchant webhook credential is unavailable; rotate the integration secret") from None
+    if not verify_merchant_webhook_signature(body, request.headers.get("X-Omni-Signature", ""), secret):
+        raise HTTPException(401, "Invalid merchant webhook signature")
+    try:
+        decoded = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(400, "Merchant webhook must contain valid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise HTTPException(422, "Merchant webhook must contain a JSON object")
+    try:
+        event = MerchantConversionWebhookEvent.model_validate(decoded)
+    except ValidationError as exc:
+        raise HTTPException(422, "Merchant event is missing required identifiers or contains invalid fields") from exc
+
+    payload_hash = hashlib.sha256(body).hexdigest()
+    with workspace_scope(None):
+        receipt = await db.scalar(select(MerchantWebhookReceipt).where(
+            MerchantWebhookReceipt.integration_id == integration.id,
+            MerchantWebhookReceipt.provider_event_id == event.event_id,
+        ))
+    if receipt is not None:
+        if receipt.payload_sha256 != payload_hash:
+            raise HTTPException(409, "This merchant event ID was already received with a different payload")
+        return {"status": "duplicate_ignored", "stored": True}
+
+    with workspace_scope(integration.workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == integration.merchant_offer_id,
+            MerchantOffer.workspace_id == integration.workspace_id,
+        ))
+    if offer is None:
+        raise HTTPException(409, "The integration's merchant offer no longer exists")
+    network = f"merchant-{integration.id}"
+    now = datetime.now(timezone.utc)
+    commission = Decimal("0")
+    revenue = Decimal("0")
+    currency = event.currency
+    reversal = event.event_type in {"refund", "chargeback"}
+    safe_event = {
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "click_id": event.click_id or event.subid,
+        "original_event_id": event.original_event_id,
+        "revenue": format(event.revenue, "f"),
+        "currency": currency,
+        "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
+    }
+
+    if reversal:
+        with workspace_scope(None):
+            parent = await db.scalar(select(Conversion).where(
+                Conversion.network == network,
+                Conversion.external_event_id == event.original_event_id,
+            ).with_for_update())
+        if parent is None or not parent.workspace_id or not parent.click_id:
+            return JSONResponse(status_code=202, content={
+                "status": "unmatched_quarantined", "stored": False,
+                "reason": "The original merchant conversion is not yet available for reconciliation.",
+            })
+        if parent.status == "reversed":
+            raise HTTPException(409, "The original merchant conversion has already been fully reversed")
+        conversion_click_id = parent.click_id
+        if event.click_id and event.click_id != conversion_click_id:
+            raise HTTPException(422, "Refund click_id does not match the original conversion")
+        if currency != str(parent.currency).upper():
+            raise HTTPException(422, "Refund currency must match the original conversion")
+        commission = -abs(Decimal(str(parent.commission or 0)))
+        revenue = -abs(Decimal(str(parent.revenue or 0)))
+        if commission == 0 and revenue == 0:
+            raise HTTPException(422, "The original conversion has no reversible commission or revenue")
+        publisher_workspace_id = str(parent.workspace_id)
+        with workspace_scope(publisher_workspace_id):
+            click = await db.scalar(select(ClickEvent).where(
+                ClickEvent.click_id == conversion_click_id,
+                ClickEvent.workspace_id == publisher_workspace_id,
+            ))
+            link = await db.scalar(select(AffiliateProgramLink).where(
+                AffiliateProgramLink.campaign_id == (click.campaign_id if click else ""),
+                AffiliateProgramLink.merchant_offer_id == integration.merchant_offer_id,
+                AffiliateProgramLink.merchant_workspace_id == integration.workspace_id,
+            )) if click else None
+            if link is None:
+                return JSONResponse(status_code=202, content={
+                    "status": "unmatched_quarantined", "stored": False,
+                    "reason": "The original click is not associated with this merchant offer.",
+                })
+            parent.status = "reversed"
+            row = Conversion(
+                workspace_id=publisher_workspace_id, network=network,
+                external_event_id=event.event_id, click_id=conversion_click_id,
+                revenue=float(revenue), commission=float(commission), currency=currency,
+                status="reversed", occurred_at=event.occurred_at or now,
+                event_json={**safe_event, "reversal": True, "original_event_id": event.original_event_id},
+            )
+            ledger = ConversionLedgerEntry(
+                workspace_id=publisher_workspace_id, network=network,
+                external_event_id=event.event_id, click_id=conversion_click_id,
+                entry_type="reversal", original_event_id=event.original_event_id,
+                commission_amount=commission, revenue_amount=revenue, currency=currency,
+                status="reversed", evidence_status="merchant_signed_webhook_verified",
+                source_event_json={**safe_event, "reversal": True, "original_event_id": event.original_event_id},
+                observed_at=now,
+            )
+            db.add_all([row, ledger, MerchantWebhookReceipt(
+                integration_id=integration.id, provider_event_id=event.event_id,
+                payload_sha256=payload_hash, outcome="reversal_recorded", conversion_id=row.id,
+            )])
+            db.add(AuditLog(
+                workspace_id=publisher_workspace_id, actor="merchant_signed_webhook",
+                action="merchant.conversion.reversed", resource_type="conversion",
+                resource_id=row.id, outcome="reversed",
+                details_json={"integration_id": integration.id, "merchant_offer_id": offer.id, "evidence_status": "merchant_signed_webhook_verified"},
+            ))
+            try:
+                await db.commit()
+            except IntegrityError as exc:
+                await db.rollback()
+                with workspace_scope(None):
+                    duplicate = await db.scalar(select(MerchantWebhookReceipt).where(
+                        MerchantWebhookReceipt.integration_id == integration.id,
+                        MerchantWebhookReceipt.provider_event_id == event.event_id,
+                    ))
+                if duplicate and duplicate.payload_sha256 == payload_hash:
+                    return {"status": "duplicate_ignored", "stored": True}
+                raise HTTPException(409, "Merchant reversal could not be persisted because of an integrity conflict") from exc
+        status = "reversed"
+    else:
+        click_id = str(event.click_id or event.subid or "").strip()
+        if not click_id or len(click_id) > 80:
+            raise HTTPException(422, "A valid first-party click_id (the subid from the promotion URL) is required")
+        if event.revenue <= 0 and offer.commission_type in {"percentage", "recurring_percentage"}:
+            raise HTTPException(422, "Percentage-based commissions require a positive sale amount")
+        if currency != offer.commission_currency:
+            raise HTTPException(422, "Sale currency must match the merchant program's configured commission currency")
+        if event.event_type == "subscription_renewal" and offer.commission_type not in {"recurring_percentage", "recurring_fixed"}:
+            raise HTTPException(422, "Subscription renewal events require a recurring commission program")
+        with workspace_scope(None):
+            click = await db.scalar(select(ClickEvent).where(ClickEvent.click_id == click_id))
+        if click is None or not click.workspace_id:
+            return JSONResponse(status_code=202, content={
+                "status": "unmatched_quarantined", "stored": False,
+                "reason": "The click ID cannot yet be mapped to a first-party publisher campaign.",
+            })
+        publisher_workspace_id = str(click.workspace_id)
+        with workspace_scope(publisher_workspace_id):
+            link = await db.scalar(select(AffiliateProgramLink).where(
+                AffiliateProgramLink.campaign_id == click.campaign_id,
+                AffiliateProgramLink.merchant_offer_id == integration.merchant_offer_id,
+                AffiliateProgramLink.merchant_workspace_id == integration.workspace_id,
+                AffiliateProgramLink.status == "active",
+            ))
+            application = await db.get(MarketplaceApplication, link.application_id) if link else None
+            if link is None or application is None or application.status != "approved":
+                return JSONResponse(status_code=202, content={
+                    "status": "unmatched_quarantined", "stored": False,
+                    "reason": "The click is not attached to an active, merchant-approved program application.",
+                })
+            revenue = event.revenue
+            commission = calculate_merchant_commission(offer.commission_type, offer.commission_value, revenue)
+            row = Conversion(
+                workspace_id=publisher_workspace_id, network=network,
+                external_event_id=event.event_id, click_id=click_id,
+                revenue=float(revenue), commission=float(commission), currency=currency,
+                status="pending", occurred_at=event.occurred_at or now,
+                event_json={**safe_event, "reversal": False, "commission_model": offer.commission_type},
+            )
+            ledger = ConversionLedgerEntry(
+                workspace_id=publisher_workspace_id, network=network,
+                external_event_id=event.event_id, click_id=click_id,
+                entry_type="conversion", original_event_id=None,
+                commission_amount=commission, revenue_amount=revenue, currency=currency,
+                status="pending", evidence_status="merchant_signed_webhook_verified",
+                source_event_json={**safe_event, "commission_model": offer.commission_type},
+                observed_at=now,
+            )
+            db.add_all([row, ledger, MerchantWebhookReceipt(
+                integration_id=integration.id, provider_event_id=event.event_id,
+                payload_sha256=payload_hash, outcome="conversion_recorded", conversion_id=row.id,
+            )])
+            db.add(AuditLog(
+                workspace_id=publisher_workspace_id, actor="merchant_signed_webhook",
+                action="merchant.conversion.received", resource_type="conversion",
+                resource_id=row.id, outcome="pending",
+                details_json={"integration_id": integration.id, "merchant_offer_id": offer.id, "evidence_status": "merchant_signed_webhook_verified"},
+            ))
+            try:
+                await db.commit()
+            except IntegrityError as exc:
+                await db.rollback()
+                with workspace_scope(None):
+                    duplicate = await db.scalar(select(MerchantWebhookReceipt).where(
+                        MerchantWebhookReceipt.integration_id == integration.id,
+                        MerchantWebhookReceipt.provider_event_id == event.event_id,
+                    ))
+                if duplicate and duplicate.payload_sha256 == payload_hash:
+                    return {"status": "duplicate_ignored", "stored": True}
+                raise HTTPException(409, "Merchant conversion could not be persisted because of an integrity conflict") from exc
+        status = "recorded"
+
+    # Mark the merchant integration connected only after a signed event has been accepted.
+    with workspace_scope(integration.workspace_id):
+        current_integration = await db.scalar(select(MerchantWebhookIntegration).where(
+            MerchantWebhookIntegration.id == integration.id,
+            MerchantWebhookIntegration.workspace_id == integration.workspace_id,
+        ).with_for_update())
+        if current_integration is not None:
+            current_integration.status = "connected_write"
+            current_integration.last_event_at = now
+            current_integration.last_error_code = None
+            await db.commit()
+    return {
+        "status": status,
+        "stored": True,
+        "commission": format(commission, "f"),
+        "revenue": format(revenue, "f"),
+        "currency": currency,
+        "evidence_status": "merchant_signed_webhook_verified",
+        "payout_status": "not_confirmed",
+    }
+
+
 @app.post("/api/webhooks/conversions/{network}")
 async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends(get_session)):
  net=network.strip().lower()
@@ -13006,7 +13552,14 @@ async def conversion_webhook(network:str,request:Request,db:AsyncSession=Depends
 async def redirect_campaign(campaign_id:str,request:Request,db:AsyncSession=Depends(get_session)):
  with workspace_scope(None):
   campaign=await db.get(Campaign,campaign_id)
+  affiliate_link=await db.scalar(select(AffiliateProgramLink).where(AffiliateProgramLink.campaign_id==campaign_id))
+  linked_offer=await db.get(MerchantOffer,affiliate_link.merchant_offer_id) if affiliate_link else None
  if not campaign or not campaign.is_active:raise HTTPException(404,"Campaign not found/inactive")
+ if affiliate_link and (
+  affiliate_link.status!="active" or linked_offer is None
+  or linked_offer.status!="approved" or linked_offer.activation_allowed is not True
+ ):
+  raise HTTPException(404,"Affiliate promotion link is no longer active")
  utm={k:v for k,v in request.query_params.items() if k.startswith("utm_") or k in {"gclid","fbclid","ref"}}
  if not campaign.workspace_id: raise HTTPException(404, "Campaign not found")
  with workspace_scope(campaign.workspace_id):

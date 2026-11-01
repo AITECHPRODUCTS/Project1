@@ -464,8 +464,9 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
             page.get_by_role("heading", name="Growth Studio", exact=False).wait_for(state="visible")
             assert capability_requests == []
             assert page.get_by_text("403: Platform Super Admin permission required", exact=True).count() == 0
-            workspace_return = page.get_by_role("link", name="← Workspace overview")
-            workspace_return.wait_for(state="visible")
+            workspace_navigation = page.get_by_role("navigation", name="Growth Studio workspace navigation")
+            workspace_navigation.wait_for(state="visible")
+            workspace_return = workspace_navigation.get_by_role("link", name="Workspace overview", exact=True)
             assert workspace_return.get_attribute("href") == "/dashboard"
             assert page.get_by_role("link", name="Merchant dashboard").count() == 0
         finally:

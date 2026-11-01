@@ -2363,6 +2363,32 @@ class MerchantWebhookIntegrationCreateRequest(BaseModel):
         return normalized
 
 
+class StripeWebhookIntegrationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str = Field(default="Stripe checkout webhooks", min_length=2, max_length=160)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_stripe_integration_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Integration name must contain at least two characters")
+        return normalized
+
+
+class StripeWebhookIntegrationSecretRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    webhook_signing_secret: SecretStr
+
+    @field_validator("webhook_signing_secret")
+    @classmethod
+    def validate_stripe_webhook_signing_secret(cls, value: SecretStr) -> SecretStr:
+        raw = value.get_secret_value().strip()
+        if not raw.startswith("whsec_") or not 24 <= len(raw) <= 255 or any(ord(char) < 33 or ord(char) > 126 for char in raw):
+            raise ValueError("Enter the webhook signing secret (whsec_...) shown by Stripe for this endpoint.")
+        return SecretStr(raw)
+
+
 class MerchantConversionWebhookEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")
     event_id: str = Field(min_length=1, max_length=255)
@@ -2372,9 +2398,10 @@ class MerchantConversionWebhookEvent(BaseModel):
     revenue: Decimal = Field(default=Decimal("0"), ge=0, max_digits=18, decimal_places=6)
     currency: str = Field(default="USD", min_length=3, max_length=3)
     original_event_id: str | None = Field(default=None, max_length=255)
+    source_provider_event_id: str | None = Field(default=None, max_length=255)
     occurred_at: datetime | None = None
 
-    @field_validator("event_id", "click_id", "subid", "original_event_id")
+    @field_validator("event_id", "click_id", "subid", "original_event_id", "source_provider_event_id")
     @classmethod
     def normalize_merchant_event_identifiers(cls, value: str | None) -> str | None:
         if value is None:

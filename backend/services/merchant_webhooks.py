@@ -35,8 +35,10 @@ def encrypt_merchant_webhook_secret(secret: str) -> str:
 
 
 def decrypt_merchant_webhook_secret(ciphertext: str, key_version: int = 1) -> str:
-    if key_version != 1:
-        raise MerchantWebhookCredentialError("Stored merchant webhook credential uses an unsupported encryption version.")
+    # This field versions the merchant signing secret, not the Fernet key derivation.
+    # A signing-secret rotation must not make the newly encrypted value undecryptable.
+    if not isinstance(key_version, int) or key_version < 1:
+        raise MerchantWebhookCredentialError("Stored merchant webhook credential version is invalid.")
     try:
         return _cipher().decrypt(ciphertext.encode("ascii")).decode("utf-8")
     except (InvalidToken, UnicodeError, ValueError):

@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantWebhookIntegrationCreateRequest,MerchantConversionWebhookEvent,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import AffiliateResearchSearchRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantWebhookIntegrationCreateRequest,StripeWebhookIntegrationCreateRequest,StripeWebhookIntegrationSecretRequest,MerchantConversionWebhookEvent,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -105,6 +105,7 @@ from backend.services.merchant_webhooks import (
     decrypt_merchant_webhook_secret, encrypt_merchant_webhook_secret,
     fingerprint_merchant_webhook_secret, verify_merchant_webhook_signature,
 )
+from backend.adapters.stripe_webhook import normalize_stripe_webhook_event, verify_stripe_webhook_signature
 from backend.services.url_safety import open_public_http_response, read_limited_response, validate_public_http_url
 from backend.services.video_engine import render_vertical_video
 from backend.tools.affiliate_api import client as openaffiliate_client
@@ -1054,6 +1055,10 @@ def _provider_connection_payload(row: ProviderAccountConnection) -> dict[str, An
         "credential_present": bool(row.credential_ciphertext),
         "last_checked_at": row.last_checked_at.isoformat() if row.last_checked_at else None,
         "last_error_code": row.last_error_code,
+        "signing_secret_configured": not (
+            row.integration_type == "stripe_webhook"
+            and row.last_error_code == "stripe_secret_not_configured"
+        ),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -5003,6 +5008,149 @@ async def create_merchant_webhook_integration(
     }
 
 
+@api.post("/merchant/offers/{offer_id}/stripe-integration", status_code=201)
+async def create_stripe_webhook_integration(
+    offer_id: str,
+    payload: StripeWebhookIntegrationCreateRequest,
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a Stripe-specific receiver; configure the endpoint signing secret separately."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before connecting Stripe")
+    placeholder_secret = secrets.token_urlsafe(48)
+    with workspace_scope(workspace_id):
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == offer_id, MerchantOffer.workspace_id == workspace_id
+        ))
+        if offer is None:
+            raise HTTPException(404, "Merchant offer not found in the active workspace")
+        existing = await db.scalar(select(MerchantWebhookIntegration).where(
+            MerchantWebhookIntegration.workspace_id == workspace_id,
+            MerchantWebhookIntegration.merchant_offer_id == offer_id,
+        ).with_for_update())
+        if existing is not None and existing.status != "disabled":
+            raise HTTPException(409, "This offer already has an active event endpoint. Disable the current endpoint before switching it to native Stripe.")
+        if existing is not None:
+            # The schema intentionally allows one merchant event endpoint per offer.
+            # Reuse a disabled custom endpoint rather than deleting historical receipts.
+            row = existing
+            row.provider_name = "stripe"
+            row.display_name = payload.display_name
+            row.integration_type = "stripe_webhook"
+            row.status = "pending_authorization"
+            row.secret_ciphertext = encrypt_merchant_webhook_secret(placeholder_secret)
+            row.secret_version += 1
+            row.secret_fingerprint = fingerprint_merchant_webhook_secret(placeholder_secret)
+            row.last_error_code = "stripe_secret_not_configured"
+            row.last_event_at = None
+        else:
+            row = MerchantWebhookIntegration(
+                workspace_id=workspace_id, merchant_offer_id=offer.id, provider_name="stripe",
+                display_name=payload.display_name, integration_type="stripe_webhook",
+                status="pending_authorization",
+                secret_ciphertext=encrypt_merchant_webhook_secret(placeholder_secret),
+                secret_version=1, secret_fingerprint=fingerprint_merchant_webhook_secret(placeholder_secret),
+                created_by=str(user.get("email") or "unknown")[:320],
+                last_error_code="stripe_secret_not_configured",
+            )
+            db.add(row)
+        await db.flush()
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.stripe_webhook.created", resource_type="merchant_webhook_integration",
+            resource_id=row.id, outcome="pending_secret_configuration",
+            details_json={"merchant_offer_id": offer.id, "provider_name": "stripe",
+                          "secret_returned": False, "native_signature_verification": True},
+        ))
+        await db.commit()
+        await db.refresh(row)
+    return {
+        **_merchant_webhook_integration_dict(row, offer.name),
+        "setup_events": ["payment_intent.succeeded", "invoice.paid", "charge.refunded", "charge.dispute.created"],
+        "setup_note": "Add this URL as a Stripe webhook endpoint, subscribe to the listed events, then save that endpoint's whsec_ signing secret here.",
+    }
+
+
+@api.post("/merchant/integrations/{integration_id}/stripe-secret")
+async def configure_stripe_webhook_secret(
+    integration_id: str,
+    payload: StripeWebhookIntegrationSecretRequest,
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before configuring Stripe")
+    secret = payload.webhook_signing_secret.get_secret_value()
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MerchantWebhookIntegration).where(
+            MerchantWebhookIntegration.id == integration_id,
+            MerchantWebhookIntegration.workspace_id == workspace_id,
+        ).with_for_update())
+        if row is None:
+            raise HTTPException(404, "Merchant integration not found in the active workspace")
+        if row.integration_type != "stripe_webhook" or row.provider_name != "stripe":
+            raise HTTPException(409, "This endpoint is not a native Stripe webhook integration")
+        if row.status == "disabled":
+            raise HTTPException(409, "Disabled Stripe endpoints cannot be reconfigured; create a new endpoint after reviewing the program")
+        row.secret_ciphertext = encrypt_merchant_webhook_secret(secret)
+        row.secret_version += 1
+        row.secret_fingerprint = fingerprint_merchant_webhook_secret(secret)
+        row.status = "pending_authorization"
+        row.last_error_code = None
+        db.add(AuditLog(
+            workspace_id=workspace_id, actor=str(user.get("email") or "unknown"),
+            action="merchant.stripe_webhook.secret_configured", resource_type="merchant_webhook_integration",
+            resource_id=row.id, outcome="pending_authorization",
+            details_json={"secret_version": row.secret_version, "secret_value_recorded": False},
+        ))
+        await db.commit()
+        await db.refresh(row)
+        offer_name = await db.scalar(select(MerchantOffer.name).where(
+            MerchantOffer.id == row.merchant_offer_id, MerchantOffer.workspace_id == workspace_id
+        ))
+    return _merchant_webhook_integration_dict(row, offer_name)
+
+
+@api.get("/merchant/integrations/{integration_id}/manual-review-events")
+async def list_merchant_integration_manual_review_events(
+    integration_id: str,
+    limit: int = 50,
+    user: dict[str, Any] = Depends(require_merchant_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized merchant workspace before viewing manual-review events")
+    limit = max(1, min(int(limit), 100))
+    with workspace_scope(workspace_id):
+        integration = await db.scalar(select(MerchantWebhookIntegration).where(
+            MerchantWebhookIntegration.id == integration_id,
+            MerchantWebhookIntegration.workspace_id == workspace_id,
+        ))
+    if integration is None:
+        raise HTTPException(404, "Merchant integration not found in the active workspace")
+    with workspace_scope(None):
+        rows = list((await db.scalars(select(MerchantWebhookReceipt).where(
+            MerchantWebhookReceipt.integration_id == integration_id,
+            MerchantWebhookReceipt.outcome.in_([
+                "partial_refund_review", "dispute_review", "out_of_band_review",
+                "attribution_review", "manual_review",
+            ]),
+        ).order_by(MerchantWebhookReceipt.received_at.desc()).limit(limit))).all())
+    return {
+        "count": len(rows),
+        "data": [{
+            "id": row.id, "provider_event_id": row.provider_event_id,
+            "outcome": row.outcome, "received_at": row.received_at.isoformat() if row.received_at else None,
+            "conversion_id": row.conversion_id,
+        } for row in rows],
+        "note": "These signed events were deliberately not used to change commission balances. Review the source event and reconcile it explicitly.",
+    }
+
+
 @api.post("/merchant/integrations/{integration_id}/rotate-secret")
 async def rotate_merchant_webhook_secret(
     integration_id: str,
@@ -5023,6 +5171,8 @@ async def rotate_merchant_webhook_secret(
             raise HTTPException(404, "Merchant webhook integration not found in the active workspace")
         if row.status == "disabled":
             raise HTTPException(409, "Disabled integrations cannot be rotated; create a new integration after reviewing the offer")
+        if row.integration_type == "stripe_webhook":
+            raise HTTPException(409, "Replace Stripe secrets with the current whsec_ value from Stripe Dashboard using the /stripe-secret endpoint")
         row.secret_ciphertext = encrypt_merchant_webhook_secret(secret)
         row.secret_version += 1
         row.secret_fingerprint = fingerprint_merchant_webhook_secret(secret)
@@ -13370,15 +13520,78 @@ async def receive_merchant_conversion_event(
     try:
         secret = decrypt_merchant_webhook_secret(integration.secret_ciphertext, integration.secret_version)
     except MerchantWebhookCredentialError:
-        raise HTTPException(503, "Merchant webhook credential is unavailable; rotate the integration secret") from None
-    if not verify_merchant_webhook_signature(body, request.headers.get("X-Omni-Signature", ""), secret):
-        raise HTTPException(401, "Invalid merchant webhook signature")
+        raise HTTPException(503, "Merchant webhook credential is unavailable; configure or rotate the integration secret") from None
+    if integration.integration_type == "stripe_webhook":
+        if integration.last_error_code == "stripe_secret_not_configured":
+            raise HTTPException(503, "Configure this endpoint's whsec_ signing secret before sending Stripe events")
+        if not verify_stripe_webhook_signature(body, request.headers.get("Stripe-Signature", ""), secret):
+            raise HTTPException(401, "Invalid Stripe webhook signature")
+    else:
+        if not verify_merchant_webhook_signature(body, request.headers.get("X-Omni-Signature", ""), secret):
+            raise HTTPException(401, "Invalid merchant webhook signature")
     try:
         decoded = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise HTTPException(400, "Merchant webhook must contain valid JSON") from exc
     if not isinstance(decoded, dict):
         raise HTTPException(422, "Merchant webhook must contain a JSON object")
+    if integration.integration_type == "stripe_webhook":
+        normalized_event, ignored_reason = normalize_stripe_webhook_event(decoded)
+        if normalized_event is None:
+            manual_review_reasons = {
+                "partial_refund_requires_reconciliation",
+                "chargeback_requires_manual_reconciliation",
+                "out_of_band_invoice_requires_manual_reconciliation",
+                "missing_affiliate_click_reference",
+                "missing_subscription_attribution_reference",
+            }
+            if ignored_reason in manual_review_reasons:
+                stripe_event_id = str(decoded.get("id") or "").strip()
+                if not stripe_event_id:
+                    raise HTTPException(422, "Stripe event ID is required for manual-review tracking")
+                body_hash = hashlib.sha256(body).hexdigest()
+                with workspace_scope(None):
+                    prior_manual = await db.scalar(select(MerchantWebhookReceipt).where(
+                        MerchantWebhookReceipt.integration_id == integration.id,
+                        MerchantWebhookReceipt.provider_event_id == stripe_event_id,
+                    ))
+                    if prior_manual is not None:
+                        if prior_manual.payload_sha256 != body_hash:
+                            raise HTTPException(409, "A different Stripe payload reused this event ID")
+                        return JSONResponse(status_code=200, content={
+                            "status": "duplicate_ignored", "stored": True,
+                            "manual_review_required": True, "receipt_id": prior_manual.id,
+                        })
+                    reason_outcomes = {
+                        "partial_refund_requires_reconciliation": "partial_refund_review",
+                        "chargeback_requires_manual_reconciliation": "dispute_review",
+                        "out_of_band_invoice_requires_manual_reconciliation": "out_of_band_review",
+                        "missing_affiliate_click_reference": "attribution_review",
+                        "missing_subscription_attribution_reference": "attribution_review",
+                    }
+                    receipt = MerchantWebhookReceipt(
+                        integration_id=integration.id, provider_event_id=stripe_event_id,
+                        payload_sha256=body_hash, outcome=reason_outcomes.get(ignored_reason, "manual_review"),
+                        conversion_id=None,
+                    )
+                    db.add(receipt)
+                    with workspace_scope(integration.workspace_id):
+                        db.add(AuditLog(
+                            workspace_id=integration.workspace_id, actor="stripe-webhook",
+                            action="merchant.stripe_webhook.manual_review",
+                            resource_type="merchant_webhook_integration", resource_id=integration.id,
+                            outcome="manual_review_required",
+                            details_json={"provider_event_id": stripe_event_id, "reason_code": ignored_reason},
+                        ))
+                    await db.commit()
+                return JSONResponse(status_code=202, content={
+                    "status": "manual_review_required", "stored": True,
+                    "reason": ignored_reason, "receipt_id": receipt.id,
+                })
+            return JSONResponse(status_code=202, content={
+                "status": "ignored", "stored": False, "reason": ignored_reason,
+            })
+        decoded = normalized_event
     try:
         event = MerchantConversionWebhookEvent.model_validate(decoded)
     except ValidationError as exc:
@@ -13413,6 +13626,8 @@ async def receive_merchant_conversion_event(
         "event_type": event.event_type,
         "click_id": event.click_id or event.subid,
         "original_event_id": event.original_event_id,
+        "source_provider": integration.provider_name,
+        "source_provider_event_id": event.source_provider_event_id,
         "revenue": format(event.revenue, "f"),
         "currency": currency,
         "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,

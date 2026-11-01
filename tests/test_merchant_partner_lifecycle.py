@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import time
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -280,5 +281,215 @@ def test_merchant_cannot_create_webhook_for_another_workspace_offer(tmp_path):
                 json={"provider_name": "custom", "display_name": "Unauthorized integration"},
             )
             assert response.status_code == 404
+    finally:
+        cleanup(engine, client)
+
+
+def stripe_signed_headers(body: bytes, secret: str) -> dict[str, str]:
+    timestamp = int(time.time())
+    digest = hmac.new(secret.encode("utf-8"), str(timestamp).encode("ascii") + b"." + body, hashlib.sha256).hexdigest()
+    return {"Stripe-Signature": f"t={timestamp},v1={digest}", "Content-Type": "application/json"}
+
+
+def test_native_stripe_webhook_creates_conversion_and_full_refund_reversal(tmp_path):
+    engine, sessions, user, merchant_id, publisher_id, offer_id, application_id, client = setup_client(tmp_path)
+    try:
+        with client:
+            approved = client.post(
+                f"/api/merchant/applications/{application_id}/review",
+                json={"decision": "approve", "reviewer_notes": "Reviewed publisher traffic and disclosures."},
+            )
+            assert approved.status_code == 200, approved.text
+
+            async def seed_click():
+                async with sessions() as db:
+                    with workspace_scope(publisher_id):
+                        campaign = await db.get(Campaign, approved.json()["promotion_campaign_id"])
+                        click = ClickEvent(
+                            workspace_id=publisher_id, campaign_id=campaign.id,
+                            destination_url=campaign.primary_destination,
+                            chosen_destination=campaign.primary_destination, status_code=302,
+                        )
+                        db.add(click)
+                        await db.commit()
+                        await db.refresh(click)
+                        return click.click_id
+            click_id = asyncio.run(seed_click())
+
+            user.update(workspace_id=merchant_id, account_type="merchant_product_owner", email="reviewer@merchant.example")
+            created = client.post(
+                f"/api/merchant/offers/{offer_id}/stripe-integration",
+                json={"display_name": "Stripe checkout endpoint"},
+            )
+            assert created.status_code == 201, created.text
+            integration = created.json()
+            assert integration["integration_type"] == "stripe_webhook"
+            assert integration["signing_secret_configured"] is False
+            assert "charge.dispute.created" in integration["setup_events"]
+
+            secret = "whsec_" + "t" * 40
+            configured = client.post(
+                f"/api/merchant/integrations/{integration['id']}/stripe-secret",
+                json={"webhook_signing_secret": secret},
+            )
+            assert configured.status_code == 200, configured.text
+            assert configured.json()["signing_secret_configured"] is True
+            assert configured.json()["secret_fingerprint"] != integration["secret_fingerprint"]
+            listing = client.get("/api/merchant/integrations")
+            assert listing.status_code == 200
+            assert secret not in listing.text
+            assert "secret_ciphertext" not in listing.text
+
+            envelope = {
+                "id": "evt_pi_success_1", "object": "event", "type": "payment_intent.succeeded",
+                "created": int(time.time()),
+                "data": {"object": {
+                    "id": "pi_affiliate_1", "object": "payment_intent", "status": "succeeded",
+                    "invoice": None, "amount_received": 10000, "currency": "usd",
+                    "metadata": {"omni_click_id": click_id},
+                }},
+            }
+            raw = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
+            invalid = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=raw, headers={"Stripe-Signature": "t=1,v1=" + "0" * 64},
+            )
+            assert invalid.status_code == 401
+            sale = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=raw, headers=stripe_signed_headers(raw, secret),
+            )
+            assert sale.status_code == 200, sale.text
+            assert sale.json()["status"] == "recorded"
+            assert sale.json()["commission"] == "25.000000"
+            assert sale.json()["payout_status"] == "not_confirmed"
+
+            duplicate = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=raw, headers=stripe_signed_headers(raw, secret),
+            )
+            assert duplicate.status_code == 200
+            assert duplicate.json()["status"] == "duplicate_ignored"
+
+            partial_envelope = {
+                "id": "evt_partial_refund", "object": "event", "type": "charge.refunded",
+                "created": int(time.time()),
+                "data": {"object": {
+                    "id": "ch_affiliate_1", "payment_intent": "pi_affiliate_1",
+                    "amount": 10000, "amount_refunded": 1500, "currency": "usd",
+                }},
+            }
+            partial_raw = json.dumps(partial_envelope, separators=(",", ":")).encode("utf-8")
+            partial = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=partial_raw, headers=stripe_signed_headers(partial_raw, secret),
+            )
+            assert partial.status_code == 202
+            assert partial.json()["status"] == "manual_review_required"
+            assert partial.json()["stored"] is False
+
+            dispute_envelope = {
+                "id": "evt_dispute", "object": "event", "type": "charge.dispute.created",
+                "created": int(time.time()),
+                "data": {"object": {"id": "dp_1", "amount": 10000, "currency": "usd"}},
+            }
+            dispute_raw = json.dumps(dispute_envelope, separators=(",", ":")).encode("utf-8")
+            dispute = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=dispute_raw, headers=stripe_signed_headers(dispute_raw, secret),
+            )
+            assert dispute.status_code == 202
+            assert dispute.json()["status"] == "manual_review_required"
+
+            refund_envelope = {
+                "id": "evt_full_refund", "object": "event", "type": "charge.refunded",
+                "created": int(time.time()),
+                "data": {"object": {
+                    "id": "ch_affiliate_1", "payment_intent": "pi_affiliate_1",
+                    "amount": 10000, "amount_refunded": 10000, "currency": "usd",
+                }},
+            }
+            refund_raw = json.dumps(refund_envelope, separators=(",", ":")).encode("utf-8")
+            refund = client.post(
+                f"/api/webhooks/merchant-integrations/{integration['id']}",
+                content=refund_raw, headers=stripe_signed_headers(refund_raw, secret),
+            )
+            assert refund.status_code == 200, refund.text
+            assert refund.json()["status"] == "reversed"
+            assert refund.json()["commission"] == "-25.000000"
+
+            async def inspect():
+                async with sessions() as db:
+                    with workspace_scope(publisher_id):
+                        conversions = list((await db.scalars(select(Conversion).where(
+                            Conversion.network == "merchant-" + integration["id"]
+                        ))).all())
+                        ledger = list((await db.scalars(select(ConversionLedgerEntry).where(
+                            ConversionLedgerEntry.network == "merchant-" + integration["id"]
+                        ))).all())
+                    with workspace_scope(merchant_id):
+                        saved = await db.get(MerchantWebhookIntegration, integration["id"])
+                    return conversions, ledger, saved
+            conversions, ledger, saved = asyncio.run(inspect())
+            assert len(conversions) == 2
+            assert len(ledger) == 2
+            original = next(row for row in conversions if row.external_event_id == "pi_affiliate_1")
+            assert original.status == "reversed"
+            assert original.event_json["source_provider"] == "stripe"
+            assert original.event_json["source_provider_event_id"] == "evt_pi_success_1"
+            assert saved.status == "connected_write"
+            assert saved.secret_version == 2
+            assert saved.last_error_code is None
+    finally:
+        cleanup(engine, client)
+
+
+def test_stripe_secret_required_and_generic_rotation_cannot_replace_it(tmp_path):
+    engine, sessions, user, merchant_id, publisher_id, offer_id, application_id, client = setup_client(tmp_path)
+    try:
+        with client:
+            created = client.post(
+                f"/api/merchant/offers/{offer_id}/stripe-integration",
+                json={"display_name": "Stripe checkout endpoint"},
+            )
+            assert created.status_code == 201, created.text
+            endpoint = created.json()
+            raw = json.dumps({"id": "evt_test", "type": "payment_intent.succeeded"}).encode()
+            response = client.post(
+                f"/api/webhooks/merchant-integrations/{endpoint['id']}",
+                content=raw, headers={"Stripe-Signature": "t=1,v1=" + "0" * 64},
+            )
+            assert response.status_code == 503
+            rotate = client.post(f"/api/merchant/integrations/{endpoint['id']}/rotate-secret")
+            assert rotate.status_code == 409
+            invalid_secret = client.post(
+                f"/api/merchant/integrations/{endpoint['id']}/stripe-secret",
+                json={"webhook_signing_secret": "sk_test_not_a_webhook_secret"},
+            )
+            assert invalid_secret.status_code == 422
+    finally:
+        cleanup(engine, client)
+
+
+def test_disabled_custom_endpoint_can_be_reconfigured_as_native_stripe(tmp_path):
+    engine, sessions, user, merchant_id, publisher_id, offer_id, application_id, client = setup_client(tmp_path)
+    try:
+        with client:
+            custom = client.post(
+                f"/api/merchant/offers/{offer_id}/webhook-integration",
+                json={"provider_name": "custom", "display_name": "Legacy custom relay"},
+            )
+            assert custom.status_code == 201, custom.text
+            integration_id = custom.json()["id"]
+            disabled = client.post(f"/api/merchant/integrations/{integration_id}/disable")
+            assert disabled.status_code == 200, disabled.text
+            stripe = client.post(
+                f"/api/merchant/offers/{offer_id}/stripe-integration",
+                json={"display_name": "Native Stripe"},
+            )
+            assert stripe.status_code == 201, stripe.text
+            assert stripe.json()["id"] == integration_id
+            assert stripe.json()["integration_type"] == "stripe_webhook"
+            assert stripe.json()["signing_secret_configured"] is False
     finally:
         cleanup(engine, client)

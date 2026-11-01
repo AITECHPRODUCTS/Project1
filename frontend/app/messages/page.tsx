@@ -44,6 +44,20 @@ type MessageResponse = {
   can_send: boolean;
   data: PartnerMessage[];
 };
+type PartnerActivity = {
+  id: string;
+  actor: string;
+  action: string;
+  outcome: string;
+  created_at: string | null;
+};
+type ActivityResponse = { count: number; data: PartnerActivity[] };
+
+function activityLabel(action: string): string {
+  if (action === "partner.message.sent") return "Message sent";
+  if (action === "partner.messages.marked_read") return "Messages marked as read";
+  return "Conversation activity recorded";
+}
 
 function dateTime(value: string | null): string {
   if (!value) return "No messages yet";
@@ -58,6 +72,9 @@ export default function PartnerMessagesPage() {
   const [selectedApplicationId, setSelectedApplicationId] = useState("");
   const [selectedConversationId, setSelectedConversationId] = useState("");
   const [messages, setMessages] = useState<PartnerMessage[]>([]);
+  const [activityEvents, setActivityEvents] = useState<PartnerActivity[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
+  const [activityError, setActivityError] = useState("");
   const [draft, setDraft] = useState("");
   const [canSend, setCanSend] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -122,14 +139,33 @@ export default function PartnerMessagesPage() {
     }
   }, []);
 
+  const loadActivity = useCallback(async (conversationId: string) => {
+    setLoadingActivity(true);
+    setActivityError("");
+    try {
+      const result = await apiFetch<ActivityResponse>(
+        "/api/partner/conversations/" + encodeURIComponent(conversationId) + "/activity"
+      );
+      setActivityEvents(Array.isArray(result.data) ? result.data : []);
+    } catch (cause) {
+      setActivityEvents([]);
+      setActivityError(cause instanceof Error ? cause.message : "Conversation activity could not be loaded.");
+    } finally {
+      setLoadingActivity(false);
+    }
+  }, []);
+
   useEffect(() => { void loadInbox(); }, [loadInbox]);
   useEffect(() => {
     if (!selectedConversationId) {
       setMessages([]);
+      setActivityEvents([]);
+      setActivityError("");
       return;
     }
     void loadMessages(selectedConversationId);
-  }, [selectedConversationId, loadMessages]);
+    void loadActivity(selectedConversationId);
+  }, [selectedConversationId, loadMessages, loadActivity]);
 
   const selectApplication = (applicationId: string) => {
     setSelectedApplicationId(applicationId);
@@ -156,6 +192,7 @@ export default function PartnerMessagesPage() {
     setSending(true);
     setError("");
     setNotice("");
+    let activityConversationId = selectedConversationId;
     try {
       if (selectedConversationId) {
         const result = await apiFetch<{ message: PartnerMessage }>(
@@ -171,6 +208,7 @@ export default function PartnerMessagesPage() {
             body: JSON.stringify({ application_id: selectedApplicationId, body }),
           }
         );
+        activityConversationId = result.conversation_id;
         setSelectedConversationId(result.conversation_id);
         setMessages([result.message]);
       }
@@ -178,6 +216,7 @@ export default function PartnerMessagesPage() {
       setNotice("Message sent and saved to this program conversation.");
       const response = await apiFetch<ConversationResponse>("/api/partner/conversations");
       setConversations(Array.isArray(response.data) ? response.data : []);
+      if (activityConversationId) await loadActivity(activityConversationId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Message could not be sent.");
     } finally {
@@ -259,6 +298,24 @@ export default function PartnerMessagesPage() {
                 </article>
               ))}
               {!loadingMessages && messages.length === 0 && <div className="mx-auto mt-12 max-w-md text-center"><h2 className="font-black text-slate-700">{selectedApplication ? "Start a program conversation" : "Choose a program"}</h2><p className="mt-2 text-sm leading-6 text-slate-500">Discuss program requirements, permitted promotion channels, tracking questions and partner support. Do not send passwords, payment credentials or sensitive customer data.</p></div>}
+              {selectedConversationId && (
+                <section aria-label="Conversation activity" className="mt-6 border-t border-slate-100 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Conversation activity</h3>
+                    <span className="text-[11px] text-slate-400">{loadingActivity ? "Loading…" : activityEvents.length + " events"}</span>
+                  </div>
+                  {activityError && <p role="status" className="mt-2 text-xs text-amber-700">{activityError}</p>}
+                  {!loadingActivity && !activityError && activityEvents.length === 0 && <p className="mt-2 text-xs text-slate-400">No activity has been recorded yet.</p>}
+                  <ol className="mt-3 space-y-2">
+                    {activityEvents.slice(-10).map(item => (
+                      <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                        <span className="text-xs font-semibold text-slate-700">{activityLabel(item.action)}</span>
+                        <span className="text-[10px] text-slate-500">{item.actor} · {dateTime(item.created_at)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
             </div>
 
             <div className="border-t border-slate-100 pt-4">

@@ -441,6 +441,12 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
         try:
             page = browser.new_page()
             capability_requests = []
+            api_requests = []
+            page_errors = []
+            page.on("request", lambda request: api_requests.append({
+                "method": request.method, "url": request.url
+            }) if "/api/" in request.url else None)
+            page.on("pageerror", lambda error: page_errors.append(str(error)))
 
             def respond(route):
                 path = route.request.url.split("?", 1)[0]
@@ -464,6 +470,27 @@ def test_growth_studio_does_not_request_super_admin_capabilities_for_publishers(
             page.get_by_role("heading", name="Growth Studio", exact=False).wait_for(state="visible")
             assert capability_requests == []
             assert page.get_by_text("403: Platform Super Admin permission required", exact=True).count() == 0
+            print("GROWTH_UAT_DIAGNOSTIC", {
+                "url": page.url,
+                "h1": page.locator("h1").all_inner_texts(),
+                "main_text": page.locator("main").first.inner_text()[:1800] if page.locator("main").count() else None,
+                "navs": page.locator("nav").evaluate_all("""els => els.map(el => ({
+                    aria: el.getAttribute("aria-label"),
+                    text: el.innerText,
+                    display: getComputedStyle(el).display,
+                    visibility: getComputedStyle(el).visibility,
+                    rect: (() => { const r = el.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })()
+                }))"""),
+                "dashboard_links": page.locator('a[href="/dashboard"]').evaluate_all("""els => els.map(el => ({
+                    text: el.innerText,
+                    aria: el.getAttribute("aria-label"),
+                    display: getComputedStyle(el).display,
+                    visibility: getComputedStyle(el).visibility,
+                    rect: (() => { const r = el.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })()
+                }))"""),
+                "api_requests": api_requests,
+                "page_errors": page_errors
+            })
             workspace_navigation = page.get_by_role("navigation", name="Growth Studio workspace navigation")
             workspace_navigation.wait_for(state="visible")
             workspace_return = workspace_navigation.get_by_role("link", name="Workspace overview", exact=True)

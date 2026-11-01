@@ -4,7 +4,7 @@ import json
 import os
 from urllib.parse import urlparse
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 BASE_URL = os.environ.get("BROWSER_BASE_URL", "http://127.0.0.1:3100")
@@ -100,7 +100,9 @@ def test_partner_messaging_inbox_starts_and_replies_to_a_program_conversation():
             page.get_by_role("button", name="Send message").click()
             page.get_by_text("Please confirm newsletter placements.", exact=True).wait_for(state="visible")
             page.get_by_label("Message").fill("Thank you. I will follow the published traffic terms.")
-            page.get_by_role("button", name="Send message").click()
+            send_button = page.get_by_role("button", name="Send message")
+            expect(send_button).to_be_enabled(timeout=10000)
+            send_button.click()
             page.get_by_text("Thank you. I will follow the published traffic terms.", exact=True).wait_for(state="visible")
             assert len(messages) == 2
         finally:

@@ -2331,6 +2331,32 @@ class MarketplaceApplicationCreateRequest(BaseModel):
         return value
 
 
+class AffiliateProgramLinkCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(min_length=2, max_length=120)
+    destination_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("label")
+    @classmethod
+    def normalize_affiliate_link_label(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Link label must contain at least two characters")
+        return normalized
+
+    @field_validator("destination_url")
+    @classmethod
+    def normalize_affiliate_link_destination(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if len(normalized) > 2048:
+            raise ValueError("Destination URL is too long")
+        return normalized
+
+
 class MarketplaceApplicationReviewRequest(BaseModel):
     decision: Literal["approve", "reject"]
     reviewer_notes: str = Field(default="", max_length=3000)

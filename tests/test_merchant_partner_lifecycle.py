@@ -657,3 +657,77 @@ def test_native_woocommerce_webhook_records_one_paid_order_and_full_refund(tmp_p
             assert sale_row.event_json["source_provider_event_id"] == "delivery-001"
     finally:
         cleanup(engine, client)
+
+
+def test_publisher_program_detail_is_workspace_scoped_and_returns_only_recorded_evidence(tmp_path):
+    engine, sessions, user, merchant_id, publisher_id, offer_id, application_id, client = setup_client(tmp_path)
+    try:
+        with client:
+            approved = client.post(
+                f"/api/merchant/applications/{application_id}/review",
+                json={"decision": "approve", "reviewer_notes": "Terms and publisher plan reviewed."},
+            )
+            assert approved.status_code == 200, approved.text
+            campaign_id = approved.json()["promotion_campaign_id"]
+
+            async def seed_click_and_commission():
+                async with sessions() as db:
+                    with workspace_scope(publisher_id):
+                        click = ClickEvent(
+                            workspace_id=publisher_id,
+                            campaign_id=campaign_id,
+                            destination_url="https://merchant.example.com/product",
+                            chosen_destination="https://merchant.example.com/product",
+                            status_code=302,
+                        )
+                        db.add(click)
+                        await db.flush()
+                        db.add(ConversionLedgerEntry(
+                            workspace_id=publisher_id,
+                            network="merchant-test",
+                            external_event_id="detail-sale-1",
+                            click_id=click.click_id,
+                            entry_type="conversion",
+                            original_event_id=None,
+                            commission_amount=Decimal("25.000000"),
+                            revenue_amount=Decimal("100.000000"),
+                            currency="USD",
+                            status="recorded",
+                            evidence_status="merchant_signed_webhook_verified",
+                            source_event_json={"test_fixture": True},
+                        ))
+                        await db.commit()
+            asyncio.run(seed_click_and_commission())
+
+            user.update(
+                workspace_id=publisher_id,
+                account_type="affiliate_publisher",
+                email="publisher@example.com",
+            )
+            detail = client.get(f"/api/marketplace/applications/{application_id}")
+            assert detail.status_code == 200, detail.text
+            body = detail.json()
+            assert body["id"] == application_id
+            assert body["status"] == "approved"
+            assert body["promotion_link_status"] == "active"
+            assert body["performance"]["clicks_all_time"] == 1
+            assert body["performance"]["clicks_last_30_days"] == 1
+            assert body["performance"]["conversion_entries"] == 1
+            assert len(body["performance"]["clicks_by_day"]) == 1
+            assert body["commission_observations"] == [{
+                "currency": "USD",
+                "evidence_status": "merchant_signed_webhook_verified",
+                "entry_type": "conversion",
+                "entry_count": "1",
+                "commission_total": "25.000000",
+                "revenue_total": "100.000000",
+            }]
+            assert body["performance_note"]
+            assert detail.headers["cache-control"] == "no-store"
+
+            # The same application ID is not disclosed to a different workspace.
+            user.update(workspace_id=merchant_id)
+            cross_workspace = client.get(f"/api/marketplace/applications/{application_id}")
+            assert cross_workspace.status_code == 404, cross_workspace.text
+    finally:
+        cleanup(engine, client)

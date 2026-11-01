@@ -5516,6 +5516,127 @@ async def list_publisher_marketplace_applications(
     return {"count": len(rows), "data": result_rows}
 
 
+
+@api.get("/marketplace/applications/{application_id}")
+async def get_publisher_marketplace_application_detail(
+    application_id: str,
+    response: Response,
+    user: dict[str, Any] = Depends(require_account_type("affiliate_publisher")),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return one publisher-owned program workspace with scoped tracking evidence."""
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized publisher workspace before viewing a program")
+
+    with workspace_scope(workspace_id):
+        row = await db.scalar(select(MarketplaceApplication).where(
+            MarketplaceApplication.id == application_id,
+            MarketplaceApplication.workspace_id == workspace_id,
+        ))
+        if row is None:
+            # Do not reveal whether an application exists in another workspace.
+            raise HTTPException(404, "Program was not found in the active publisher workspace")
+
+        link = await db.scalar(select(AffiliateProgramLink).where(
+            AffiliateProgramLink.workspace_id == workspace_id,
+            AffiliateProgramLink.application_id == row.id,
+        ))
+        clicks = 0
+        clicks_last_30_days = 0
+        clicks_by_day: list[dict[str, Any]] = []
+        commission_observations: list[dict[str, str]] = []
+
+        if link is not None and link.status == "active":
+            clicks = int(await db.scalar(select(func.count(ClickEvent.id)).where(
+                ClickEvent.workspace_id == workspace_id,
+                ClickEvent.campaign_id == link.campaign_id,
+            )) or 0)
+
+            cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+            click_days = (await db.execute(
+                select(
+                    func.date(ClickEvent.created_at).label("activity_day"),
+                    func.count(ClickEvent.id).label("click_count"),
+                )
+                .where(
+                    ClickEvent.workspace_id == workspace_id,
+                    ClickEvent.campaign_id == link.campaign_id,
+                    ClickEvent.created_at >= cutoff,
+                )
+                .group_by(func.date(ClickEvent.created_at))
+                .order_by(func.date(ClickEvent.created_at))
+            )).all()
+            clicks_by_day = [
+                {"date": str(day), "clicks": int(count)}
+                for day, count in click_days
+            ]
+            clicks_last_30_days = sum(item["clicks"] for item in clicks_by_day)
+
+            ledger_groups = (await db.execute(
+                select(
+                    ConversionLedgerEntry.currency,
+                    ConversionLedgerEntry.evidence_status,
+                    ConversionLedgerEntry.entry_type,
+                    func.count(ConversionLedgerEntry.id),
+                    func.sum(ConversionLedgerEntry.commission_amount),
+                    func.sum(ConversionLedgerEntry.revenue_amount),
+                )
+                .join(ClickEvent, and_(
+                    ClickEvent.workspace_id == ConversionLedgerEntry.workspace_id,
+                    ClickEvent.click_id == ConversionLedgerEntry.click_id,
+                ))
+                .where(
+                    ConversionLedgerEntry.workspace_id == workspace_id,
+                    ClickEvent.campaign_id == link.campaign_id,
+                )
+                .group_by(
+                    ConversionLedgerEntry.currency,
+                    ConversionLedgerEntry.evidence_status,
+                    ConversionLedgerEntry.entry_type,
+                )
+                .order_by(
+                    ConversionLedgerEntry.currency,
+                    ConversionLedgerEntry.evidence_status,
+                    ConversionLedgerEntry.entry_type,
+                )
+            )).all()
+            commission_observations = [
+                {
+                    "currency": str(currency),
+                    "evidence_status": str(evidence_status),
+                    "entry_type": str(entry_type),
+                    "entry_count": str(int(entry_count or 0)),
+                    "commission_total": format(Decimal(str(commission_total or 0)), "f"),
+                    "revenue_total": format(Decimal(str(revenue_total or 0)), "f"),
+                }
+                for currency, evidence_status, entry_type, entry_count, commission_total, revenue_total in ledger_groups
+            ]
+
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Vary"] = "Cookie"
+        result = _marketplace_application_dict(
+            row,
+            link=link,
+            clicks=clicks,
+            commission_observations=commission_observations,
+        )
+        result["performance"] = {
+            "clicks_all_time": clicks,
+            "clicks_last_30_days": clicks_last_30_days,
+            "clicks_by_day": clicks_by_day,
+            "conversion_entries": sum(
+                int(item["entry_count"]) for item in commission_observations
+                if item["entry_type"] == "conversion"
+            ),
+        }
+        result["performance_note"] = (
+            "Metrics are scoped to this publisher program. Clicks are first-party records; "
+            "conversion and commission rows are evidence observations, not confirmed payout or funds received."
+        )
+        return result
+
+
 @api.get("/merchant/applications")
 async def list_merchant_incoming_applications(
     response: Response,

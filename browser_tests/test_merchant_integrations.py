@@ -108,7 +108,7 @@ def test_merchant_can_create_and_configure_woocommerce_webhook_setup():
             ).is_visible()
             assert page.get_by_text("Order created", exact=False).is_visible()
             assert page.get_by_text("Order updated", exact=False).is_visible()
-            assert page.get_by_text("omni_click_id", exact=True).is_visible()
+            assert page.get_by_text("omni_click_id", exact=True).first.is_visible()
             assert page.get_by_text("omni_original_order_id", exact=True).is_visible()
             assert page.get_by_text(
                 "https://omni.example.test/api/webhooks/merchant-integrations/integration-woo-1",

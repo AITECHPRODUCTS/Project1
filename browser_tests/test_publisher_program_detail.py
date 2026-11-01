@@ -39,6 +39,17 @@ def test_publisher_program_detail_shows_supported_data_and_marks_missing_surface
         "promotion_url": "https://omni.example.test/r/campaign-1",
         "promotion_link_status": "active",
         "promotion_campaign_id": "campaign-1",
+        "links": [{
+            "id": "link-primary-1",
+            "label": "Primary link",
+            "destination_url": "https://omni.example.test/product",
+            "campaign_id": "campaign-1",
+            "promotion_url": "https://omni.example.test/r/campaign-1",
+            "status": "active",
+            "is_primary": True,
+            "clicks_all_time": 42,
+            "conversion_entries": 1,
+        }],
         "tracked_clicks": 42,
         "commission_observations": [{
             "currency": "USD",
@@ -80,6 +91,22 @@ def test_publisher_program_detail_shows_supported_data_and_marks_missing_surface
                         }),
                     )
                     return
+                if path == "/api/marketplace/applications/application-active-1/links" and route.request.method == "POST":
+                    payload = json.loads(route.request.post_data or "{}")
+                    created = {
+                        "id": "link-secondary-1",
+                        "label": payload["label"],
+                        "destination_url": payload.get("destination_url") or "https://omni.example.test/product",
+                        "campaign_id": "campaign-2",
+                        "promotion_url": "https://omni.example.test/r/campaign-2",
+                        "status": "active",
+                        "is_primary": False,
+                        "clicks_all_time": 0,
+                        "conversion_entries": 0,
+                    }
+                    detail["links"].append(created)
+                    route.fulfill(status=201, content_type="application/json", body=json.dumps(created))
+                    return
                 if path == "/api/marketplace/applications/application-active-1":
                     route.fulfill(status=200, content_type="application/json", body=json.dumps(detail))
                     return
@@ -92,8 +119,12 @@ def test_publisher_program_detail_shows_supported_data_and_marks_missing_surface
             assert page.get_by_text("25.000000 USD", exact=True).count() == 0
 
             page.get_by_role("button", name="Links").click()
-            page.get_by_text("Primary tracked link · active", exact=True).wait_for(state="visible")
+            page.get_by_text("Primary link · primary", exact=True).wait_for(state="visible")
             assert page.get_by_text("https://omni.example.test/r/campaign-1", exact=True).is_visible()
+            page.get_by_role("button", name="Create tracked link").click()
+            page.get_by_text("Social profile link", exact=True).wait_for(state="visible")
+            page.get_by_text("2 / 20 links", exact=True).wait_for(state="visible")
+            assert page.get_by_text("https://omni.example.test/r/campaign-2", exact=True).is_visible()
 
             page.get_by_role("button", name="Commissions").click()
             page.get_by_text("Merchant Signed Webhook Verified", exact=True).wait_for(state="visible")

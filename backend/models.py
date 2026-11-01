@@ -1083,6 +1083,11 @@ class MerchantOffer(TenantScopedMixin, Base):
     commission_type: Mapped[str] = mapped_column(String(40), nullable=False)
     commission_value: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
     commission_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    cookie_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attribution_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    refund_hold_days: Mapped[int] = mapped_column(Integer, default=15, server_default="15", nullable=False)
+    minimum_payout_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("20.00"), server_default="20.00", nullable=False)
+    payout_schedule: Mapped[str] = mapped_column(String(40), default="monthly", server_default="'monthly'", nullable=False)
     terms_version: Mapped[str] = mapped_column(String(120), nullable=False)
     commission_terms_url: Mapped[str] = mapped_column(Text, nullable=False)
     seller_authorization_url: Mapped[str] = mapped_column(Text, nullable=False)
@@ -1226,6 +1231,68 @@ class MarketplaceApplication(TenantScopedMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class MerchantWebhookIntegration(TenantScopedMixin, Base):
+    """Merchant-owned signed webhook endpoint for order and subscription events."""
+    __tablename__ = "merchant_webhook_integrations"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "merchant_offer_id", name="uq_merchant_webhook_offer"),
+        CheckConstraint("status IN ('pending_authorization', 'connected_write', 'degraded', 'disabled')", name="ck_merchant_webhook_integration_status"),
+        Index("ix_merchant_webhook_workspace_status", "workspace_id", "status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    merchant_offer_id: Mapped[str] = mapped_column(String(36), ForeignKey("merchant_offers.id", ondelete="RESTRICT"), nullable=False, index=True)
+    provider_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    integration_type: Mapped[str] = mapped_column(String(40), default="signed_webhook", server_default="'signed_webhook'", nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="pending_authorization", server_default="'pending_authorization'", nullable=False)
+    secret_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    secret_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class AffiliateProgramLink(TenantScopedMixin, Base):
+    """Publisher-owned tracking campaign issued only after a merchant approves an application."""
+    __tablename__ = "affiliate_program_links"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "application_id", name="uq_affiliate_program_link_application"),
+        UniqueConstraint("campaign_id", name="uq_affiliate_program_link_campaign"),
+        CheckConstraint("status IN ('active', 'suspended', 'disabled')", name="ck_affiliate_program_link_status"),
+        Index("ix_affiliate_program_links_workspace_status", "workspace_id", "status"),
+        Index("ix_affiliate_program_links_merchant_offer", "merchant_workspace_id", "merchant_offer_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    merchant_workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    merchant_offer_id: Mapped[str] = mapped_column(String(36), ForeignKey("merchant_offers.id", ondelete="RESTRICT"), nullable=False, index=True)
+    application_id: Mapped[str] = mapped_column(String(36), ForeignKey("marketplace_applications.id", ondelete="RESTRICT"), nullable=False, index=True)
+    campaign_id: Mapped[str] = mapped_column(String(36), ForeignKey("campaigns.id", ondelete="RESTRICT"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="active", server_default="'active'", nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class MerchantWebhookReceipt(Base):
+    """Global idempotency receipt for an event authenticated by one merchant integration."""
+    __tablename__ = "merchant_webhook_receipts"
+    __table_args__ = (
+        UniqueConstraint("integration_id", "provider_event_id", name="uq_merchant_webhook_event"),
+        Index("ix_merchant_webhook_receipts_integration_received", "integration_id", "received_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    integration_id: Mapped[str] = mapped_column(String(36), ForeignKey("merchant_webhook_integrations.id", ondelete="RESTRICT"), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(40), nullable=False)
+    conversion_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class DistributionQueueItem(TenantScopedMixin, Base):

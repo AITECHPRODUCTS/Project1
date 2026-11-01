@@ -2094,6 +2094,11 @@ class MerchantOfferCreateRequest(BaseModel):
     commission_type: Literal["percentage", "fixed", "recurring_percentage", "recurring_fixed", "cpa", "cpl"]
     commission_value: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
     commission_currency: str = Field(default="USD", min_length=3, max_length=3)
+    cookie_days: int | None = Field(default=None, ge=0, le=3650)
+    attribution_window_days: int | None = Field(default=None, ge=0, le=3650)
+    refund_hold_days: int = Field(default=15, ge=0, le=365)
+    minimum_payout_amount: Decimal = Field(default=Decimal("20.00"), ge=0, max_digits=12, decimal_places=2)
+    payout_schedule: Literal["weekly", "biweekly", "monthly", "manual"] = "monthly"
     terms_version: str = Field(min_length=1, max_length=120)
     commission_terms_url: str = Field(min_length=8, max_length=2048)
     seller_authorization_url: str = Field(min_length=8, max_length=2048)
@@ -2334,6 +2339,73 @@ class MarketplaceApplicationReviewRequest(BaseModel):
     @classmethod
     def normalize_marketplace_review_notes(cls, value: str) -> str:
         return value.strip()
+
+
+class MerchantWebhookIntegrationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider_name: str = Field(default="custom", min_length=2, max_length=100)
+    display_name: str = Field(min_length=2, max_length=160)
+
+    @field_validator("provider_name")
+    @classmethod
+    def normalize_merchant_provider_name(cls, value: str) -> str:
+        normalized = re.sub(r"[^a-z0-9_-]+", "-", value.strip().lower()).strip("-")
+        if not normalized:
+            raise ValueError("Provide a supported provider identifier")
+        return normalized
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_merchant_integration_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Integration name must contain at least two characters")
+        return normalized
+
+
+class MerchantConversionWebhookEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    event_id: str = Field(min_length=1, max_length=255)
+    event_type: Literal["sale", "subscription_renewal", "refund", "chargeback"]
+    click_id: str | None = Field(default=None, max_length=80)
+    subid: str | None = Field(default=None, max_length=80)
+    revenue: Decimal = Field(default=Decimal("0"), ge=0, max_digits=18, decimal_places=6)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    original_event_id: str | None = Field(default=None, max_length=255)
+    occurred_at: datetime | None = None
+
+    @field_validator("event_id", "click_id", "subid", "original_event_id")
+    @classmethod
+    def normalize_merchant_event_identifiers(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Event identifiers cannot be blank")
+        return normalized
+
+    @field_validator("currency")
+    @classmethod
+    def normalize_merchant_event_currency(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", normalized):
+            raise ValueError("Currency must be a three-letter ISO currency code")
+        return normalized
+
+    @field_validator("occurred_at")
+    @classmethod
+    def require_aware_merchant_event_time(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("occurred_at must include a timezone")
+        return value
+
+    @model_validator(mode="after")
+    def validate_merchant_event_reference(self):
+        if self.event_type in {"refund", "chargeback"} and not self.original_event_id:
+            raise ValueError("Refunds and chargebacks must reference original_event_id")
+        if self.event_type in {"sale", "subscription_renewal"} and not (self.click_id or self.subid):
+            raise ValueError("Sales and subscription renewals must include the original click_id or subid")
+        return self
 
 
 class AdBudgetGuardrailCreateRequest(BaseModel):

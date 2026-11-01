@@ -82,7 +82,7 @@ def test_merchant_registration_redirects_to_merchant_dashboard():
             page.get_by_role("button", name="Create account").click()
             page.wait_for_url("**/dashboard")
             page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
-            assert page.get_by_text("Brand / Merchant workspace").is_visible()
+            assert page.get_by_text("Merchant / Brand").is_visible()
             assert ("POST", "http://127.0.0.1:8000/api/auth/register") in calls
             assert any(path.endswith("/api/merchant/offers") for _, path in calls)
         finally:
@@ -201,7 +201,7 @@ def test_merchant_opening_publisher_url_returns_to_the_shared_dashboard():
             page.goto(BASE_URL + "/publisher", wait_until="domcontentloaded")
             page.wait_for_url("**/dashboard")
             page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
-            assert page.get_by_text("Brand / Merchant workspace").is_visible()
+            assert page.get_by_text("Merchant / Brand").is_visible()
         finally:
             browser.close()
 
@@ -241,7 +241,7 @@ def test_publisher_opening_merchant_url_returns_to_the_shared_dashboard():
             page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
             page.wait_for_url("**/dashboard")
             page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
-            assert page.get_by_text("Affiliate / Partner workspace").is_visible()
+            assert page.get_by_text("Affiliate / Partner").is_visible()
         finally:
             browser.close()
 
@@ -304,7 +304,7 @@ def test_publisher_registration_redirects_to_publisher_dashboard():
             page.get_by_role("button", name="Create account").click()
             page.wait_for_url("**/dashboard")
             page.get_by_role("heading", name="Your workspace, at a glance.").wait_for(state="visible")
-            assert page.get_by_text("Affiliate / Partner workspace").is_visible()
+            assert page.get_by_text("Affiliate / Partner").is_visible()
             assert ("POST", "http://127.0.0.1:8000/api/auth/register") in calls
             assert any(path.endswith("/api/marketplace/offers") for _, path in calls)
         finally:
@@ -400,7 +400,7 @@ def test_publisher_workspace_navigation_has_home_and_grouped_feature_links():
             assert navigation.get_by_role("link", name="Platform administration").count() == 0
 
             # The shared authenticated header is the only navigation bar on the dashboard.
-            assert page.get_by_role("navigation", name="Workspace navigation").count() == 0
+            assert page.get_by_role("navigation", name="Workspace navigation", exact=True).count() == 0
             assert page.get_by_role("link", name="OmniAffiliateOS home").count() == 0
             assert page.get_by_role("button", name="Sign out").is_visible()
             page.get_by_role("heading", name="Your organic growth workflow").wait_for(state="visible")

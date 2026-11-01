@@ -28,6 +28,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_AI_PROFILE: ${INSTALL_AI_PROFILE:-1}
+        INSTALL_VIDEO_PROFILE: ${INSTALL_VIDEO_PROFILE:-1}
+        INSTALL_LOCAL_MODEL: ${INSTALL_LOCAL_MODEL:-0}
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_NAME: ${APP_NAME:-Omnichannel Affiliate OS}

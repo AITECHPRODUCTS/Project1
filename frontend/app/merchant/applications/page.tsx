@@ -103,6 +103,9 @@ export default function MerchantApplicationsPage(){
             <p className="mt-3 text-sm leading-6 text-slate-600">{app.audience_description}</p>
             <div className="mt-3 rounded-xl border border-slate-200 p-3"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Promotion plan</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{app.promotion_plan}</p></div>
             <p className="mt-3 text-xs leading-5 text-slate-500">Terms version snapshot: {String(app.terms_snapshot.terms_version||"unknown")} · External network submission: {app.provider_submission_status} · Affiliate network approved: no</p>
+            <div className="mt-4">
+              <a href={"/messages?applicationId="+encodeURIComponent(app.id)} className="inline-flex rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm font-bold text-indigo-800 hover:bg-indigo-100">Message this publisher</a>
+            </div>
             {app.reviewer_notes&&<p className="mt-2 text-sm text-slate-600">Previous review note: {app.reviewer_notes}</p>}
             {app.status==="pending_review"&&<div className="mt-4 space-y-3">
               <label className="block text-sm font-bold" htmlFor={"merchant-review-note-"+app.id}>Review note for this application

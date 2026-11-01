@@ -1233,6 +1233,49 @@ class MarketplaceApplication(TenantScopedMixin, Base):
     )
 
 
+
+class PartnerConversation(TenantScopedMixin, Base):
+    """Persistent private conversation between a publisher and merchant for one application."""
+    __tablename__ = "partner_conversations"
+    __table_args__ = (
+        UniqueConstraint("application_id", name="uq_partner_conversation_application"),
+        CheckConstraint("status IN ('open', 'closed')", name="ck_partner_conversations_status"),
+        CheckConstraint("workspace_id <> merchant_workspace_id", name="ck_partner_conversations_distinct_parties"),
+        Index("ix_partner_conversations_publisher_last_message", "workspace_id", "last_message_at"),
+        Index("ix_partner_conversations_merchant_last_message", "merchant_workspace_id", "last_message_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    merchant_workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    application_id: Mapped[str] = mapped_column(String(36), ForeignKey("marketplace_applications.id", ondelete="RESTRICT"), nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(String(160), nullable=False, default="Program discussion")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", server_default="'open'")
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class PartnerMessage(TenantScopedMixin, Base):
+    """Persisted message and read receipt; workspace_id always matches its publisher-owned thread."""
+    __tablename__ = "partner_messages"
+    __table_args__ = (
+        CheckConstraint("length(trim(body)) > 0 AND length(body) <= 5000", name="ck_partner_messages_body_length"),
+        Index("ix_partner_messages_conversation_created", "conversation_id", "created_at"),
+        Index("ix_partner_messages_workspace_created", "workspace_id", "created_at"),
+        Index("ix_partner_messages_conversation_unread", "conversation_id", "read_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    conversation_id: Mapped[str] = mapped_column(String(36), ForeignKey("partner_conversations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    sender_workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    sender_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sender_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    read_by_workspace_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class MerchantWebhookIntegration(TenantScopedMixin, Base):
     """Merchant-owned signed webhook endpoint for order and subscription events."""
     __tablename__ = "merchant_webhook_integrations"

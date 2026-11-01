@@ -32,6 +32,22 @@ The base `requirements.txt` installs the FastAPI/database/security runtime witho
 The Docker image enables the AI/RAG and video profiles by default. Set the corresponding `INSTALL_*_PROFILE` build arguments to opt out; local-model dependencies are disabled by default. GitHub Actions validates core behavior and checks AI/RAG imports in a separate CPU-only job.
 
 
+### Docker image profiles and size management
+
+The API Dockerfile installs the AI/RAG and video profiles by default to preserve the current feature set. The AI profile includes CPU PyTorch, Sentence Transformers, LangChain and hosted-model client dependencies; these packages are substantially larger than the FastAPI/PostgreSQL core. The optional local-model profile adds Transformers/Accelerate/PEFT and should be enabled only on a suitably provisioned host.
+
+The Compose build exposes the Dockerfile switches through the project `.env` file:
+
+- `INSTALL_AI_PROFILE=1` (default): retain local embedding/RAG and hosted-model dependencies. Set to `0` for a smaller core API image; features requiring those optional packages will not be available in that deployment.
+- `INSTALL_VIDEO_PROFILE=1` (default): retain optional video rendering and text-to-speech dependencies. Set to `0` when these features are not part of the deployment.
+- `INSTALL_LOCAL_MODEL=0` (default): keep Transformer/LoRA runtime dependencies out of the image. Enable only when a local model runtime is intentionally deployed.
+
+Image size can increase when dependencies or operating-system packages are added. Rebuilding also leaves old unreferenced image layers and build cache on the local machine until Docker prunes them. Database files, uploaded media and vector indexes in named volumes are **not** part of the image and must not be deleted as an image cleanup step.
+
+Inspect usage before cleanup with `docker system df -v` and `docker image ls`. After confirming old images are not used by another project or rollback plan, remove dangling images/build cache with `docker image prune` and `docker builder prune`. Do not run `docker compose down -v` or `docker volume prune` as routine image-size cleanup; those commands can destroy persistent application data.
+
+Keep the default profile values when all current capabilities are required. A lean profile is a deliberate feature trade-off, not a free optimization that preserves optional AI/video capabilities.
+
 ### Signed ad performance collector
 
 See docs/SIGNED_AD_PERFORMANCE_INGESTION.md. A per-workspace/per-platform HMAC key authenticates a trusted collector-provided normalized daily report. The collector must independently verify the underlying ad-platform source before signing. The endpoint does not establish a native provider account connection and does not execute ad changes.

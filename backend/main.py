@@ -29,7 +29,7 @@ from backend.core.events import hub
 from backend.core.middleware import CSRFMiddleware, FinancialSandboxMiddleware
 from backend.core.state_machine import runner
 from backend.database import SessionLocal,close_db,get_session,init_db
-from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderCatalogObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,MerchantWebhookIntegration,AffiliateProgramLink,MerchantWebhookReceipt,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,PlatformIncident,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
+from backend.models import ProviderOrderReconciliationReview,ProviderOrderObservation,ProviderCatalogObservation,ProviderAccountConnection,ExternalAction,SkillPackage,AdBudgetGuardrail,JurisdictionComplianceAssessment,MarketplaceApplication,MerchantOffer,MerchantOfferTermSnapshot,MerchantOfferTermEvidenceFetch,MerchantWebhookIntegration,AffiliateProgramLink,MerchantWebhookReceipt,PartnerConversation,PartnerMessage,AffiliateProgramApplication,AdCampaignPlanRecord,AdPerformanceObservation,AuditLog,Campaign,ClickEvent,ContentAsset,Conversion,ConversionLedgerEntry,EmailConsentConfirmation,EmailDeliveryEvent,ExperimentAssignment,ExperimentEvent,Lead,LeadConsentEvent,MailCommission,Offer,PayoutThreshold,PausedSession,PlatformExecutionControl,ScheduledEmail,UserAccount,WorkflowRun,PlatformIncident,WebinarEvent,WebinarRegistration,Workspace,WorkspaceMembership,WorkspaceInvitation,DistributionQueueItem,OfferShortlist,OfferShortlistItem,OfferQualificationReview
 from backend.adapters.webhook import AggregatorWebhookAdapter
 from backend.adapters.ad_performance_webhook import AdPerformanceWebhookAdapter
 from backend.services.resend_email_events import (
@@ -40,7 +40,7 @@ from backend.services.resend_email_events import (
     process_resend_email_event,
     verify_resend_webhook_signature,
 )
-from backend.schemas import AffiliateResearchSearchRequest,AffiliateProgramLinkCreateRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantWebhookIntegrationCreateRequest,StripeWebhookIntegrationCreateRequest,StripeWebhookIntegrationSecretRequest,MerchantConversionWebhookEvent,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
+from backend.schemas import AffiliateResearchSearchRequest,AffiliateProgramLinkCreateRequest,PartnerConversationCreateRequest,PartnerMessageCreateRequest,Digistore24ConnectionCreateRequest,Digistore24MarketplaceSearchRequest,FlipkartConnectionCreateRequest,FlipkartProductSearchRequest,FlipkartOffersRequest,ClickBankOrderImportRequest,ClickBankConnectionCreateRequest,EmailAutomationCreateRequest,EmailAutomationReviewRequest,EmailAutomationSimulationRequest,GitHubPagesDeployRequest,BioLinkPageCreateRequest,BioLinkPublishRequest,SkillPackageCreateRequest,SkillPackageExecuteRequest,SkillPackageReviewRequest,AdBudgetGuardrailCreateRequest,AdGuardrailResetRequest,JurisdictionComplianceAssessmentCreateRequest,JurisdictionComplianceAssessmentReviewRequest,MarketplaceApplicationCreateRequest,MarketplaceApplicationReviewRequest,MerchantOfferCreateRequest,MerchantOfferReviewRequest,MerchantWebhookIntegrationCreateRequest,StripeWebhookIntegrationCreateRequest,StripeWebhookIntegrationSecretRequest,MerchantConversionWebhookEvent,MerchantOfferTermSnapshotCreateRequest,MerchantOfferTermEvidenceReviewRequest,ProgramApplicationCreateRequest,ProgramApplicationReviewRequest,ABTestAssignmentRequest,AdCampaignPlanRequest,AdPerformanceObservationRequest,SignedAdPerformanceWebhookPayload,BlogRequest,ComparisonPostRequest,ListiclePostRequest,ComparisonPostReviewRequest,ContentResearchBriefRequest,CampaignCreateRequest,CMSPublishRequest,CompetitorRequest,CommissionEvidenceReviewRequest,ProviderOrderReconciliationReviewRequest,CommissionCalculatorRequest,ContentAngleRankRequest,ContentAtomizeRequest,SEOAuditRequest,InternalLinkingRequest,InfographicRequest,GuaranteeDraftRequest,CategoryDesignRequest,ContentDecayRequest,ContentMoatRequest,TrafficAnalysisRequest,MultiProgramManagerRequest,PurpleCowAuditRequest,ConversionRequest,ExperimentEventRequest,FundsReceivedRequest,LandingPageRequest,LandingPagePublishRequest,LeadCaptureRequest,LoginRequest,RegisterRequest,WorkspaceCreateRequest,WorkspaceInvitationCreateRequest,WorkspaceInvitationAcceptRequest,WorkflowOperatorRetryRequest,PlatformIncidentResolveRequest,WorkspaceLifecycleActionRequest,PlatformExecutionControlChangeRequest,NicheFinderRequest,PayoutThresholdCreateRequest,ProprietaryDatasetRequest,WebinarCreateRequest,WebinarRegistrationRequest,ResumeRequest,SocialPostRequest,TrendRequest,VideoRequest,WorkflowStartRequest,DistributionQueueCreateRequest,DistributionQueueApproveRequest,DistributionQueueCancelRequest,OfferShortlistCreateRequest,OfferShortlistItemCreateRequest,OfferQualificationReviewRequest
 from backend.services.analytics_utils import ab_test_generator,conversion_tracker
 from backend.services.ad_manager import evaluate_roas
 from backend.services.ad_planner import generate_ad_campaign_plan
@@ -13476,6 +13476,383 @@ async def platform_admin_audit(
             for row in rows
         ],
     }
+
+
+
+def _partner_messaging_identity(user: dict[str, Any]) -> tuple[str, str]:
+    account_type = str(user.get("account_type") or "")
+    if account_type not in {"affiliate_publisher", "merchant_product_owner"}:
+        raise HTTPException(403, "Partner messaging is available only to merchant and affiliate workspaces.")
+    workspace_id = str(user.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise HTTPException(403, "Select an authorized workspace before using partner messaging.")
+    return account_type, workspace_id
+
+
+def _partner_message_payload(message: PartnerMessage, current_workspace_id: str) -> dict[str, Any]:
+    return {
+        "id": message.id,
+        "sender_workspace_id": message.sender_workspace_id,
+        "sender_email": message.sender_email,
+        "body": message.body,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+        "read_at": message.read_at.isoformat() if message.read_at else None,
+        "is_mine": message.sender_workspace_id == current_workspace_id,
+        "is_read": message.read_at is not None,
+    }
+
+
+@api.get("/partner/messageable-applications")
+async def list_partner_messageable_applications(
+    response: Response,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """List program applications where the active workspace is one of the participants."""
+    account_type, workspace_id = _partner_messaging_identity(user)
+    with workspace_scope(None):
+        if account_type == "affiliate_publisher":
+            rows = (await db.execute(
+                select(MarketplaceApplication, MerchantOffer.name, Workspace.name)
+                .join(MerchantOffer, and_(
+                    MerchantOffer.id == MarketplaceApplication.merchant_offer_id,
+                    MerchantOffer.workspace_id == MarketplaceApplication.merchant_workspace_id,
+                ))
+                .join(Workspace, Workspace.id == MarketplaceApplication.merchant_workspace_id)
+                .where(MarketplaceApplication.workspace_id == workspace_id)
+                .order_by(MarketplaceApplication.updated_at.desc(), MarketplaceApplication.id.desc())
+                .limit(200)
+            )).all()
+        else:
+            rows = (await db.execute(
+                select(MarketplaceApplication, MerchantOffer.name, Workspace.name)
+                .join(MerchantOffer, and_(
+                    MerchantOffer.id == MarketplaceApplication.merchant_offer_id,
+                    MerchantOffer.workspace_id == MarketplaceApplication.merchant_workspace_id,
+                ))
+                .join(Workspace, Workspace.id == MarketplaceApplication.workspace_id)
+                .where(MarketplaceApplication.merchant_workspace_id == workspace_id)
+                .order_by(MarketplaceApplication.updated_at.desc(), MarketplaceApplication.id.desc())
+                .limit(200)
+            )).all()
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    return {
+        "count": len(rows),
+        "data": [
+            {
+                "application_id": application.id,
+                "offer_name": str(offer_name),
+                "application_status": application.status,
+                "counterparty_name": str(counterparty_name),
+                "updated_at": application.updated_at.isoformat() if application.updated_at else None,
+            }
+            for application, offer_name, counterparty_name in rows
+        ],
+    }
+
+
+@api.get("/partner/conversations")
+async def list_partner_conversations(
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """List the authenticated participant's inbox, including unread counts and last-message previews."""
+    account_type, workspace_id = _partner_messaging_identity(user)
+    participant_filter = (
+        PartnerConversation.workspace_id == workspace_id
+        if account_type == "affiliate_publisher"
+        else PartnerConversation.merchant_workspace_id == workspace_id
+    )
+    counterparty_workspace = (
+        PartnerConversation.merchant_workspace_id
+        if account_type == "affiliate_publisher"
+        else PartnerConversation.workspace_id
+    )
+    latest_body = (
+        select(PartnerMessage.body)
+        .where(PartnerMessage.conversation_id == PartnerConversation.id)
+        .order_by(PartnerMessage.created_at.desc(), PartnerMessage.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    with workspace_scope(None):
+        total = int(await db.scalar(select(func.count(PartnerConversation.id)).where(participant_filter)) or 0)
+        rows = (await db.execute(
+            select(PartnerConversation, MerchantOffer.name, Workspace.name, latest_body)
+            .join(MarketplaceApplication, MarketplaceApplication.id == PartnerConversation.application_id)
+            .join(MerchantOffer, and_(
+                MerchantOffer.id == MarketplaceApplication.merchant_offer_id,
+                MerchantOffer.workspace_id == MarketplaceApplication.merchant_workspace_id,
+            ))
+            .join(Workspace, Workspace.id == counterparty_workspace)
+            .where(participant_filter)
+            .order_by(PartnerConversation.last_message_at.desc(), PartnerConversation.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )).all()
+        conversation_ids = [item[0].id for item in rows]
+        unread_counts: dict[str, int] = {}
+        if conversation_ids:
+            counts = (await db.execute(
+                select(PartnerMessage.conversation_id, func.count(PartnerMessage.id))
+                .where(
+                    PartnerMessage.conversation_id.in_(conversation_ids),
+                    PartnerMessage.sender_workspace_id != workspace_id,
+                    PartnerMessage.read_at.is_(None),
+                )
+                .group_by(PartnerMessage.conversation_id)
+            )).all()
+            unread_counts = {str(conversation_id): int(count) for conversation_id, count in counts}
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    return {
+        "count": len(rows),
+        "total_count": total,
+        "limit": limit,
+        "offset": offset,
+        "can_send": str(user.get("workspace_role") or "") != "viewer",
+        "data": [
+            {
+                "id": conversation.id,
+                "application_id": conversation.application_id,
+                "subject": conversation.subject,
+                "offer_name": str(offer_name),
+                "counterparty_name": str(counterparty_name),
+                "status": conversation.status,
+                "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+                "last_message_preview": str(preview or "").replace("\\n", " ")[:180],
+                "unread_count": unread_counts.get(conversation.id, 0),
+            }
+            for conversation, offer_name, counterparty_name, preview in rows
+        ],
+    }
+
+
+@api.post("/partner/conversations", status_code=201)
+async def create_or_message_partner_conversation(
+    payload: PartnerConversationCreateRequest,
+    response: Response,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create the persistent program conversation on first contact, or append its first message."""
+    account_type, workspace_id = _partner_messaging_identity(user)
+    if str(user.get("workspace_role") or "") == "viewer":
+        raise HTTPException(403, "Viewer workspace members can read partner messages but cannot send them.")
+
+    with workspace_scope(None):
+        application = await db.scalar(select(MarketplaceApplication).where(
+            MarketplaceApplication.id == payload.application_id,
+            (
+                MarketplaceApplication.workspace_id == workspace_id
+                if account_type == "affiliate_publisher"
+                else MarketplaceApplication.merchant_workspace_id == workspace_id
+            ),
+        ))
+        if application is None:
+            raise HTTPException(404, "Program application was not found in the active workspace.")
+        publisher_workspace_id = application.workspace_id
+        merchant_workspace_id = application.merchant_workspace_id
+        application_id = application.id
+        offer = await db.scalar(select(MerchantOffer).where(
+            MerchantOffer.id == application.merchant_offer_id,
+            MerchantOffer.workspace_id == merchant_workspace_id,
+        ))
+        if offer is None:
+            raise HTTPException(404, "The merchant program associated with this application is unavailable.")
+        conversation = await db.scalar(select(PartnerConversation).where(
+            PartnerConversation.application_id == application_id,
+            PartnerConversation.workspace_id == publisher_workspace_id,
+            PartnerConversation.merchant_workspace_id == merchant_workspace_id,
+        ))
+
+    if conversation is None:
+        conversation = PartnerConversation(
+            workspace_id=publisher_workspace_id,
+            merchant_workspace_id=merchant_workspace_id,
+            application_id=application_id,
+            subject=payload.subject or (str(offer.name)[:140] + " · partner discussion")[:160],
+            status="open",
+        )
+        try:
+            with workspace_scope(publisher_workspace_id):
+                db.add(conversation)
+                await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            with workspace_scope(None):
+                conversation = await db.scalar(select(PartnerConversation).where(
+                    PartnerConversation.application_id == application_id,
+                    PartnerConversation.workspace_id == publisher_workspace_id,
+                    PartnerConversation.merchant_workspace_id == merchant_workspace_id,
+                ))
+            if conversation is None:
+                raise HTTPException(409, "The partner conversation could not be created; refresh and try again.")
+
+    if conversation.status != "open":
+        raise HTTPException(409, "This partner conversation is closed and cannot receive new messages.")
+
+    now = datetime.now(timezone.utc)
+    message = PartnerMessage(
+        workspace_id=conversation.workspace_id,
+        conversation_id=conversation.id,
+        sender_workspace_id=workspace_id,
+        sender_user_id=str(user.get("user_id") or "")[:36] or None,
+        sender_email=str(user.get("email") or "unknown")[:320],
+        body=payload.body,
+    )
+    conversation.last_message_at = now
+    conversation.updated_at = now
+    # Conversation content and audit metadata share the publisher-owned application tenant.
+    with workspace_scope(conversation.workspace_id):
+        db.add(message)
+        db.add(AuditLog(
+            workspace_id=conversation.workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="partner.message.sent",
+            resource_type="partner_message",
+            resource_id=message.id,
+            outcome="created",
+            details_json={"conversation_id": conversation.id, "application_id": application_id, "message_id": message.id},
+        ))
+        await db.commit()
+    await db.refresh(message)
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "conversation_id": conversation.id,
+        "application_id": application_id,
+        "message": _partner_message_payload(message, workspace_id),
+    }
+
+
+@api.get("/partner/conversations/{conversation_id}/messages")
+async def get_partner_conversation_messages(
+    conversation_id: str,
+    response: Response,
+    limit: int = Query(default=100, ge=1, le=200),
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Read recent messages and persist recipient-side read receipts."""
+    account_type, workspace_id = _partner_messaging_identity(user)
+    participant_filter = (
+        PartnerConversation.workspace_id == workspace_id
+        if account_type == "affiliate_publisher"
+        else PartnerConversation.merchant_workspace_id == workspace_id
+    )
+    with workspace_scope(None):
+        conversation = await db.scalar(select(PartnerConversation).where(
+            PartnerConversation.id == conversation_id,
+            participant_filter,
+        ))
+        if conversation is None:
+            raise HTTPException(404, "Partner conversation was not found in the active workspace.")
+        messages = list((await db.scalars(
+            select(PartnerMessage)
+            .where(PartnerMessage.conversation_id == conversation.id, PartnerMessage.workspace_id == conversation.workspace_id)
+            .order_by(PartnerMessage.created_at.desc(), PartnerMessage.id.desc())
+            .limit(limit)
+        )).all())
+
+    # Update message rows and audit metadata inside the publisher-owned tenant.
+    with workspace_scope(conversation.workspace_id):
+        unread = list((await db.scalars(
+            select(PartnerMessage).where(
+                PartnerMessage.conversation_id == conversation.id,
+                PartnerMessage.sender_workspace_id != workspace_id,
+                PartnerMessage.read_at.is_(None),
+            )
+        )).all())
+        if unread:
+            now = datetime.now(timezone.utc)
+            for item in unread:
+                item.read_at = now
+                item.read_by_workspace_id = workspace_id
+            db.add(AuditLog(
+                workspace_id=conversation.workspace_id,
+                actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+                action="partner.messages.marked_read",
+                resource_type="partner_conversation",
+                resource_id=conversation.id,
+                outcome="read",
+                details_json={"conversation_id": conversation.id, "message_count": len(unread)},
+            ))
+            await db.commit()
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    messages.reverse()
+    return {
+        "conversation_id": conversation.id,
+        "application_id": conversation.application_id,
+        "status": conversation.status,
+        "can_send": str(user.get("workspace_role") or "") != "viewer" and conversation.status == "open",
+        "count": len(messages),
+        "data": [_partner_message_payload(item, workspace_id) for item in messages],
+    }
+
+
+@api.post("/partner/conversations/{conversation_id}/messages", status_code=201)
+async def send_partner_conversation_message(
+    conversation_id: str,
+    payload: PartnerMessageCreateRequest,
+    response: Response,
+    user: dict[str, Any] = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    account_type, workspace_id = _partner_messaging_identity(user)
+    if str(user.get("workspace_role") or "") == "viewer":
+        raise HTTPException(403, "Viewer workspace members can read partner messages but cannot send them.")
+    participant_filter = (
+        PartnerConversation.workspace_id == workspace_id
+        if account_type == "affiliate_publisher"
+        else PartnerConversation.merchant_workspace_id == workspace_id
+    )
+    with workspace_scope(None):
+        conversation = await db.scalar(select(PartnerConversation).where(
+            PartnerConversation.id == conversation_id,
+            participant_filter,
+        ))
+        if conversation is None:
+            raise HTTPException(404, "Partner conversation was not found in the active workspace.")
+        if conversation.status != "open":
+            raise HTTPException(409, "This partner conversation is closed and cannot receive new messages.")
+
+    now = datetime.now(timezone.utc)
+    message = PartnerMessage(
+        workspace_id=conversation.workspace_id,
+        conversation_id=conversation.id,
+        sender_workspace_id=workspace_id,
+        sender_user_id=str(user.get("user_id") or "")[:36] or None,
+        sender_email=str(user.get("email") or "unknown")[:320],
+        body=payload.body,
+    )
+    conversation.last_message_at = now
+    conversation.updated_at = now
+    with workspace_scope(conversation.workspace_id):
+        db.add(message)
+        db.add(AuditLog(
+            workspace_id=conversation.workspace_id,
+            actor=str(user.get("email") or user.get("user_id") or "unknown")[:320],
+            action="partner.message.sent",
+            resource_type="partner_message",
+            resource_id=message.id,
+            outcome="created",
+            details_json={"conversation_id": conversation.id, "application_id": conversation.application_id, "message_id": message.id},
+        ))
+        await db.commit()
+    await db.refresh(message)
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "conversation_id": conversation.id,
+        "message": _partner_message_payload(message, workspace_id),
+    }
+
 
 
 app.include_router(api)

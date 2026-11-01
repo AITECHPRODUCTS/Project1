@@ -14,6 +14,7 @@ type NavGroup = { label: string; items: NavItem[] };
 const publisherGroups: NavGroup[] = [
   { label: "Discover & Research", items: [
     { label: "My programs", href: "/programs" },
+    { label: "Partner messages", href: "/messages" },
     { label: "Publisher marketplace", href: "/marketplace" },
     { label: "Affiliate offer catalog", href: "/offers" },
     { label: "Affiliate research", href: "/affiliate-research" },
@@ -73,7 +74,8 @@ const merchantGroups: NavGroup[] = [
   ]},
   { label: "Program management", items: [
     { label: "Manage offers", href: "/merchant/offers" },
-    { label: "Partner applications", href: "/merchant/applications" }
+    { label: "Partner applications", href: "/merchant/applications" },
+    { label: "Partner messages", href: "/messages" }
   ]}
 ];
 

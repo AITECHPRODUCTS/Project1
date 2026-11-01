@@ -17,7 +17,7 @@ from backend import main
 from backend.database import Base, get_session
 from backend.models import (
     Campaign, ClickEvent, Conversion, ConversionLedgerEntry, MarketplaceApplication,
-    MerchantOffer, MerchantWebhookIntegration, MerchantWebhookReceipt, Workspace,
+    MerchantOffer, MerchantWebhookIntegration, MerchantWebhookReceipt, PartnerConversation, PartnerMessage, Workspace,
 )
 from backend.tenancy import workspace_scope
 
@@ -794,5 +794,91 @@ def test_publisher_can_create_additional_referral_links_with_separate_click_repo
             assert by_label["Primary link"]["clicks_all_time"] == 0
             assert by_label["Instagram bio"]["clicks_all_time"] == 1
             assert by_label["Instagram bio"]["conversion_entries"] == 0
+    finally:
+        cleanup(engine, client)
+
+def test_partner_messaging_is_persistent_role_scoped_and_tracks_unread_receipts(tmp_path):
+    engine, sessions, user, merchant_id, publisher_id, offer_id, application_id, client = setup_client(tmp_path)
+    try:
+        with client:
+            initial = client.post(
+                "/api/partner/conversations",
+                json={
+                    "application_id": application_id,
+                    "subject": "Promotion terms",
+                    "body": "Could you confirm whether newsletter placements are permitted?",
+                },
+            )
+            assert initial.status_code == 201, initial.text
+            conversation_id = initial.json()["conversation_id"]
+            assert initial.json()["message"]["is_mine"] is True
+
+            merchant_inbox = client.get("/api/partner/conversations")
+            assert merchant_inbox.status_code == 200, merchant_inbox.text
+            assert merchant_inbox.json()["total_count"] == 1
+            assert merchant_inbox.json()["data"][0]["unread_count"] == 0
+            assert merchant_inbox.json()["data"][0]["subject"] == "Promotion terms"
+
+            user.update(workspace_id=publisher_id, account_type="affiliate_publisher",
+                        email="publisher@example.com", user_id="publisher-user")
+            publisher_inbox = client.get("/api/partner/conversations")
+            assert publisher_inbox.status_code == 200, publisher_inbox.text
+            assert publisher_inbox.json()["data"][0]["unread_count"] == 1
+
+            read_initial = client.get(f"/api/partner/conversations/{conversation_id}/messages")
+            assert read_initial.status_code == 200, read_initial.text
+            assert read_initial.json()["data"][0]["body"].startswith("Could you confirm")
+            assert read_initial.json()["data"][0]["is_mine"] is False
+            assert read_initial.json()["data"][0]["is_read"] is True
+            assert client.get("/api/partner/conversations").json()["data"][0]["unread_count"] == 0
+
+            reply = client.post(
+                f"/api/partner/conversations/{conversation_id}/messages",
+                json={"body": "Yes. Newsletter promotion is allowed under the current program terms."},
+            )
+            assert reply.status_code == 201, reply.text
+            assert reply.json()["message"]["is_mine"] is True
+
+            user.update(workspace_id=merchant_id, account_type="merchant_product_owner",
+                        email="reviewer@merchant.example", workspace_role="owner")
+            merchant_inbox = client.get("/api/partner/conversations")
+            assert merchant_inbox.status_code == 200, merchant_inbox.text
+            assert merchant_inbox.json()["data"][0]["unread_count"] == 1
+            read_reply = client.get(f"/api/partner/conversations/{conversation_id}/messages")
+            assert read_reply.status_code == 200, read_reply.text
+            assert read_reply.json()["data"][-1]["is_read"] is True
+            assert "newsletter promotion is allowed" in read_reply.json()["data"][-1]["body"]
+
+            user["workspace_role"] = "viewer"
+            viewer_message = client.post(
+                f"/api/partner/conversations/{conversation_id}/messages",
+                json={"body": "A viewer must not be allowed to send this."},
+            )
+            assert viewer_message.status_code == 403
+
+            async def create_unrelated_workspace():
+                async with sessions() as db:
+                    unrelated = Workspace(name="Unrelated workspace", slug="unrelated-partner-workspace")
+                    db.add(unrelated)
+                    await db.commit()
+                    return unrelated.id
+            unrelated_id = asyncio.run(create_unrelated_workspace())
+            user.update(workspace_id=unrelated_id, workspace_role="owner")
+            assert client.get("/api/partner/conversations").json()["total_count"] == 0
+            assert client.get(f"/api/partner/conversations/{conversation_id}/messages").status_code == 404
+
+            async def inspect_persistence():
+                async with sessions() as db:
+                    with workspace_scope(publisher_id):
+                        conversation = await db.get(PartnerConversation, conversation_id)
+                        messages = list((await db.scalars(
+                            select(PartnerMessage).where(PartnerMessage.conversation_id == conversation_id)
+                            .order_by(PartnerMessage.created_at.asc())
+                        )).all())
+                    return conversation, messages
+            conversation, messages = asyncio.run(inspect_persistence())
+            assert conversation is not None and conversation.status == "open"
+            assert len(messages) == 2
+            assert all(item.read_at is not None for item in messages)
     finally:
         cleanup(engine, client)

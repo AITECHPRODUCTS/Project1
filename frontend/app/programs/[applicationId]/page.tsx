@@ -57,7 +57,7 @@ const tabs: { id: Tab; label: string; available: boolean }[] = [
   { id: "commissions", label: "Commissions", available: true },
   { id: "terms", label: "Terms", available: true },
   { id: "customers", label: "Customers · not available", available: false },
-  { id: "messages", label: "Messages · not available", available: false },
+  { id: "messages", label: "Messages", available: true },
   { id: "payouts", label: "Payouts · not available", available: false },
 ];
 
@@ -347,7 +347,11 @@ export default function PublisherProgramDetailPage() {
               <Unavailable title="Referred customers" reason="The current merchant-partner data model does not provide a publisher-scoped customer directory with consented masked identities, signup dates, last purchase and lifetime value. OmniAffiliateOS does not invent or expose customer identities from click or commission evidence." />
             )}
             {tab === "messages" && (
-              <Unavailable title="Merchant-partner messages" reason="Persistent program conversations, inbox delivery and read receipts are not implemented yet. Merchant review notes are not a substitute for two-way partner messaging." />
+              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-black">Merchant–partner conversation</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Use the persistent inbox to discuss this program with its merchant. Messages are stored against this application, visible only to its merchant and publisher workspaces, and include unread and read status.</p>
+                <Link href={"/messages?applicationId=" + encodeURIComponent(applicationId)} className="mt-4 inline-flex rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700">Open program messages</Link>
+              </section>
             )}
             {tab === "payouts" && (
               <Unavailable title="Payout account and withdrawal history" reason="The current affiliate workspace does not yet provide payout-account onboarding, a publisher withdrawal request, or payout transaction history. Commission evidence and merchant payout-readiness are not proof that funds were paid." />

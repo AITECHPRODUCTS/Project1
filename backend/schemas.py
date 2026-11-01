@@ -2357,6 +2357,59 @@ class AffiliateProgramLinkCreateRequest(BaseModel):
         return normalized
 
 
+
+class PartnerConversationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    application_id: str = Field(min_length=1, max_length=36)
+    subject: str | None = Field(default=None, min_length=2, max_length=160)
+    body: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("application_id")
+    @classmethod
+    def normalize_partner_application_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Select a valid program application.")
+        return normalized
+
+    @field_validator("subject")
+    @classmethod
+    def normalize_partner_subject(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if len(normalized) < 2:
+            raise ValueError("Conversation subject must contain at least two characters.")
+        return normalized
+
+    @field_validator("body")
+    @classmethod
+    def normalize_partner_conversation_body(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Message cannot be empty.")
+        if len(normalized) > 5000 or "\x00" in normalized:
+            raise ValueError("Message must be at most 5,000 characters and contain valid text.")
+        return normalized
+
+
+class PartnerMessageCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    body: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("body")
+    @classmethod
+    def normalize_partner_message_body(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Message cannot be empty.")
+        if len(normalized) > 5000 or "\x00" in normalized:
+            raise ValueError("Message must be at most 5,000 characters and contain valid text.")
+        return normalized
+
+
 class MarketplaceApplicationReviewRequest(BaseModel):
     decision: Literal["approve", "reject"]
     reviewer_notes: str = Field(default="", max_length=3000)

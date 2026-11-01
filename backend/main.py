@@ -13236,10 +13236,13 @@ async def receive_merchant_conversion_event(
 
     if reversal:
         with workspace_scope(None):
-            parent = await db.scalar(select(Conversion).where(
-                Conversion.network == network,
-                Conversion.external_event_id == event.original_event_id,
-            ).with_for_update())
+            original_receipt = await db.scalar(select(MerchantWebhookReceipt).where(
+                MerchantWebhookReceipt.integration_id == integration.id,
+                MerchantWebhookReceipt.provider_event_id == event.original_event_id,
+            ))
+            parent = await db.get(Conversion, original_receipt.conversion_id) if original_receipt and original_receipt.conversion_id else None
+            if parent is not None:
+                await db.refresh(parent, with_for_update=True)
         if parent is None or not parent.workspace_id or not parent.click_id:
             return JSONResponse(status_code=202, content={
                 "status": "unmatched_quarantined", "stored": False,
@@ -13289,10 +13292,12 @@ async def receive_merchant_conversion_event(
                 source_event_json={**safe_event, "reversal": True, "original_event_id": event.original_event_id},
                 observed_at=now,
             )
-            db.add_all([row, ledger, MerchantWebhookReceipt(
+            db.add_all([row, ledger])
+            await db.flush()
+            db.add(MerchantWebhookReceipt(
                 integration_id=integration.id, provider_event_id=event.event_id,
                 payload_sha256=payload_hash, outcome="reversal_recorded", conversion_id=row.id,
-            )])
+            ))
             db.add(AuditLog(
                 workspace_id=publisher_workspace_id, actor="merchant_signed_webhook",
                 action="merchant.conversion.reversed", resource_type="conversion",
@@ -13314,8 +13319,25 @@ async def receive_merchant_conversion_event(
         status = "reversed"
     else:
         click_id = str(event.click_id or event.subid or "").strip()
+        if event.event_type == "subscription_renewal" and event.original_event_id:
+            with workspace_scope(None):
+                subscription_receipt = await db.scalar(select(MerchantWebhookReceipt).where(
+                    MerchantWebhookReceipt.integration_id == integration.id,
+                    MerchantWebhookReceipt.provider_event_id == event.original_event_id,
+                ))
+                subscription_parent = await db.get(Conversion, subscription_receipt.conversion_id) if subscription_receipt and subscription_receipt.conversion_id else None
+            if subscription_parent is None or subscription_parent.network != network or not subscription_parent.click_id:
+                return JSONResponse(status_code=202, content={
+                    "status": "unmatched_quarantined", "stored": False,
+                    "reason": "The original subscription event is not yet available for attribution.",
+                })
+            if subscription_parent.status == "reversed":
+                raise HTTPException(409, "The original subscription conversion has been reversed")
+            if click_id and click_id != subscription_parent.click_id:
+                raise HTTPException(422, "Renewal click_id does not match the original subscription conversion")
+            click_id = subscription_parent.click_id
         if not click_id or len(click_id) > 80:
-            raise HTTPException(422, "A valid first-party click_id (the subid from the promotion URL) is required")
+            raise HTTPException(422, "A valid first-party click_id or original subscription event is required")
         if event.revenue <= 0 and offer.commission_type in {"percentage", "recurring_percentage"}:
             raise HTTPException(422, "Percentage-based commissions require a positive sale amount")
         if currency != offer.commission_currency:
@@ -13343,6 +13365,22 @@ async def receive_merchant_conversion_event(
                     "status": "unmatched_quarantined", "stored": False,
                     "reason": "The click is not attached to an active, merchant-approved program application.",
                 })
+            event_time = event.occurred_at or now
+            if (event_time - now).total_seconds() > 300:
+                raise HTTPException(422, "Merchant event time cannot be more than five minutes in the future")
+            click_time = click.created_at
+            if click_time is not None and click_time.tzinfo is None:
+                click_time = click_time.replace(tzinfo=timezone.utc)
+            if event.event_type == "sale" and click_time is not None:
+                elapsed_seconds = (event_time - click_time).total_seconds()
+                if elapsed_seconds < 0:
+                    raise HTTPException(422, "Sale event time cannot precede its first-party click")
+                attribution_days = offer.attribution_window_days if offer.attribution_window_days is not None else offer.cookie_days
+                if attribution_days is not None and elapsed_seconds > int(attribution_days) * 86400:
+                    return JSONResponse(status_code=202, content={
+                        "status": "unmatched_quarantined", "stored": False,
+                        "reason": "The first-party click is outside the merchant's configured attribution window.",
+                    })
             revenue = event.revenue
             commission = calculate_merchant_commission(offer.commission_type, offer.commission_value, revenue)
             row = Conversion(
@@ -13361,10 +13399,12 @@ async def receive_merchant_conversion_event(
                 source_event_json={**safe_event, "commission_model": offer.commission_type},
                 observed_at=now,
             )
-            db.add_all([row, ledger, MerchantWebhookReceipt(
+            db.add_all([row, ledger])
+            await db.flush()
+            db.add(MerchantWebhookReceipt(
                 integration_id=integration.id, provider_event_id=event.event_id,
                 payload_sha256=payload_hash, outcome="conversion_recorded", conversion_id=row.id,
-            )])
+            ))
             db.add(AuditLog(
                 workspace_id=publisher_workspace_id, actor="merchant_signed_webhook",
                 action="merchant.conversion.received", resource_type="conversion",
@@ -13399,8 +13439,8 @@ async def receive_merchant_conversion_event(
     return {
         "status": status,
         "stored": True,
-        "commission": format(commission, "f"),
-        "revenue": format(revenue, "f"),
+        "commission": format(commission.quantize(Decimal("0.000001")), "f"),
+        "revenue": format(revenue.quantize(Decimal("0.000001")), "f"),
         "currency": currency,
         "evidence_status": "merchant_signed_webhook_verified",
         "payout_status": "not_confirmed",
@@ -13558,6 +13598,7 @@ async def redirect_campaign(campaign_id:str,request:Request,db:AsyncSession=Depe
  if affiliate_link and (
   affiliate_link.status!="active" or linked_offer is None
   or linked_offer.status!="approved" or linked_offer.activation_allowed is not True
+  or linked_offer.marketplace_listed is not True
  ):
   raise HTTPException(404,"Affiliate promotion link is no longer active")
  utm={k:v for k,v in request.query_params.items() if k.startswith("utm_") or k in {"gclid","fbclid","ref"}}

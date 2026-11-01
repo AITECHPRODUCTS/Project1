@@ -173,6 +173,22 @@ def test_merchant_approval_issues_partner_link_and_signed_events_create_and_reve
             assert duplicate.status_code == 200
             assert duplicate.json()["status"] == "duplicate_ignored"
 
+            renewal = {
+                "event_id": "renewal-2026-001",
+                "event_type": "subscription_renewal",
+                "original_event_id": "order-2026-001",
+                "revenue": "100.00",
+                "currency": "USD",
+            }
+            raw_renewal = json.dumps(renewal, separators=(",", ":")).encode("utf-8")
+            renewed = client.post(
+                "/api/webhooks/merchant-integrations/" + integration["id"],
+                content=raw_renewal, headers=signed_headers(raw_renewal, secret),
+            )
+            assert renewed.status_code == 200, renewed.text
+            assert renewed.json()["status"] == "recorded"
+            assert renewed.json()["commission"] == "25.000000"
+
             conflicting_sale = {**sale, "revenue": "120.00"}
             conflicting_raw = json.dumps(conflicting_sale, separators=(",", ":")).encode("utf-8")
             conflicting = client.post(
@@ -210,14 +226,16 @@ def test_merchant_approval_issues_partner_link_and_signed_events_create_and_reve
                     return ledger, conversions, saved_integration, receipts
 
             ledger, conversions, saved_integration, receipts = asyncio.run(inspect())
-            assert len(ledger) == 2
-            assert sum((row.commission_amount for row in ledger), Decimal("0")) == Decimal("0.000000")
+            assert len(ledger) == 3
+            assert sum((row.commission_amount for row in ledger), Decimal("0")) == Decimal("25.000000")
             assert {row.evidence_status for row in ledger} == {"merchant_signed_webhook_verified"}
-            assert len(conversions) == 2
+            assert len(conversions) == 3
             assert next(row for row in conversions if row.external_event_id == "order-2026-001").status == "reversed"
+            assert next(row for row in conversions if row.external_event_id == "renewal-2026-001").status == "pending"
             assert saved_integration.status == "connected_write"
             assert saved_integration.last_event_at is not None
-            assert len(receipts) == 2
+            assert len(receipts) == 3
+            assert all(receipt.conversion_id for receipt in receipts)
     finally:
         cleanup(engine, client)
 

@@ -2403,8 +2403,10 @@ class MerchantConversionWebhookEvent(BaseModel):
     def validate_merchant_event_reference(self):
         if self.event_type in {"refund", "chargeback"} and not self.original_event_id:
             raise ValueError("Refunds and chargebacks must reference original_event_id")
-        if self.event_type in {"sale", "subscription_renewal"} and not (self.click_id or self.subid):
-            raise ValueError("Sales and subscription renewals must include the original click_id or subid")
+        if self.event_type == "sale" and not (self.click_id or self.subid):
+            raise ValueError("Sales must include the original click_id or subid")
+        if self.event_type == "subscription_renewal" and not (self.click_id or self.subid or self.original_event_id):
+            raise ValueError("Subscription renewals must include a click_id or original_event_id")
         return self
 
 

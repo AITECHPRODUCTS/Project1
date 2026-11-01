@@ -180,7 +180,7 @@ def test_merchant_subpages_link_back_to_dashboard():
             ):
                 page.goto(BASE_URL + path, wait_until="domcontentloaded")
                 page.get_by_role("heading", name=heading).wait_for(state="visible")
-                dashboard_link = page.get_by_role("link", name="Merchant dashboard")
+                dashboard_link = page.get_by_role("link", name="Merchant dashboard", exact=True)
                 assert dashboard_link.is_visible()
                 assert dashboard_link.get_attribute("href") == "/merchant"
         finally:

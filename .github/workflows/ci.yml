@@ -205,10 +205,14 @@ jobs:
 
           config = json.loads(Path("/tmp/omni-compose.json").read_text())
           api_environment = config["services"]["api"]["environment"]
+          api_build_args = config["services"]["api"]["build"]["args"]
           frontend_build_args = config["services"]["frontend"]["build"]["args"]
           assert api_environment["CORS_ORIGINS"] == "http://localhost:3101", api_environment["CORS_ORIGINS"]
+          assert api_build_args["INSTALL_AI_PROFILE"] == "1", api_build_args
+          assert api_build_args["INSTALL_VIDEO_PROFILE"] == "1", api_build_args
+          assert api_build_args["INSTALL_LOCAL_MODEL"] == "0", api_build_args
           assert frontend_build_args["NEXT_PUBLIC_API_BASE_URL"] == "http://localhost:8000"
-          print("Docker Compose port-derived CORS and frontend API build argument verified.")
+          print("Docker Compose API profiles, port-derived CORS and frontend API build argument verified.")
           PY
 
       - name: Smoke test the final frontend Docker image
@@ -231,6 +235,52 @@ jobs:
           grep -q "Ad budget guardrails" /tmp/omni-docker-guardrails.html
           echo "Final frontend image production smoke passed."
 
+
+  api-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build lean production API image (AI/video/local-model profiles disabled)
+        run: |
+          set -eu
+          docker build \
+            --build-arg INSTALL_AI_PROFILE=0 \
+            --build-arg INSTALL_VIDEO_PROFILE=0 \
+            --build-arg INSTALL_LOCAL_MODEL=0 \
+            --tag omni-affiliate-os-api-ci:core \
+            --file Dockerfile .
+          size="$(docker image inspect --format='{{.Size}}' omni-affiliate-os-api-ci:core)"
+          echo "Lean API image uncompressed size: $size bytes"
+      - name: Smoke test API startup, migrations and database readiness
+        run: |
+          set -eu
+          docker run --detach --name omni-affiliate-os-api-ci \
+            --publish 127.0.0.1:3800:8000 \
+            --env APP_ENV=test \
+            --env APP_PUBLIC_URL=http://127.0.0.1:3800 \
+            --env APP_SESSION_SECRET=ci-api-image-session-secret-which-is-not-for-deployment \
+            --env TRACKING_HMAC_SECRET=ci-api-image-tracking-hmac-secret-not-for-deployment \
+            --env AFFILIATE_WEBHOOK_SECRET=ci-api-image-webhook-secret-not-for-deployment \
+            --env DATABASE_URL=sqlite+aiosqlite:////app/storage/api-image-ci.db \
+            --env LLM_BACKEND=offline \
+            omni-affiliate-os-api-ci:core
+          cleanup() { docker rm --force omni-affiliate-os-api-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ready=false
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error http://127.0.0.1:3800/health/ready > /tmp/omni-api-image-ready.json 2>/dev/null; then
+              ready=true
+              break
+            fi
+            if [ "$(docker inspect --format='{{.State.Running}}' omni-affiliate-os-api-ci)" != true ]; then docker logs omni-affiliate-os-api-ci; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs omni-affiliate-os-api-ci; exit 1; fi
+          grep -q '"status":"ready"' /tmp/omni-api-image-ready.json
+          docker exec omni-affiliate-os-api-ci alembic current
+          docker exec omni-affiliate-os-api-ci python -c "from backend.models import PartnerConversation, PartnerMessage; print('Partner messaging models loaded in API image')"
+          echo "Lean API Docker image startup, migration and readiness smoke passed."
 
   browser-uat:
     needs: frontend

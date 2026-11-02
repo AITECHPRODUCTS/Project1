@@ -10,7 +10,8 @@ def test_compose_passes_workspace_scoped_signed_ad_collector_secrets_to_api():
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     api_environment = compose["services"]["api"]["environment"]
 
-    assert api_environment["AD_PERFORMANCE_WEBHOOK_SECRETS"] == "${AD_PERFORMANCE_WEBHOOK_SECRETS:-}"
+    assert api_environment["AFFILIATE_WEBHOOK_SECRETS"] == "${AFFILIATE_WEBHOOK_SECRETS:-null}"
+    assert api_environment["AD_PERFORMANCE_WEBHOOK_SECRETS"] == "${AD_PERFORMANCE_WEBHOOK_SECRETS:-null}"
 
 
 def test_env_example_documents_signed_ad_collector_map_without_committing_secrets():

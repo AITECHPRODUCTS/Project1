@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root{color-scheme:light;--canvas:#f8fafc;--surface:#fff;--ink:#1e293b;--accent:#6366f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth;background:var(--canvas)}body{min-height:100vh;margin:0;background:radial-gradient(ellipse at 8% 0%,rgba(199,210,254,.4),transparent 35%),radial-gradient(ellipse at 95% 20%,rgba(186,230,253,.28),transparent 33%),var(--canvas);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}button,input,textarea,select{font:inherit}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #818cf8;outline-offset:2px}.glass-panel{border:1px solid rgba(255,255,255,.9);background:rgba(255,255,255,.78);backdrop-filter:blur(16px);box-shadow:0 16px 48px rgba(148,163,184,.1),inset 0 1px 0 rgba(255,255,255,.95)}.neu-card{background:linear-gradient(145deg,rgba(255,255,255,.99),rgba(247,250,255,.96));box-shadow:8px 8px 16px #d1d9e6,-8px -8px 16px #fff;border:1px solid rgba(255,255,255,.9)}.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12)}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* Dedicated dashboard screens: only the selected module is visible. */
+main[data-current-view="overview"] [data-nav-view]:not([data-nav-view="overview"]){display:none!important}
+main[data-current-view="flywheel"] [data-nav-view]:not([data-nav-view="flywheel"]){display:none!important}
+main[data-current-view="ai-knowledge"] [data-nav-view]:not([data-nav-view="ai-knowledge"]){display:none!important}
+main[data-current-view="content-studio"] [data-nav-view]:not([data-nav-view="content-studio"]){display:none!important}
+main[data-current-view="infographic-maker"] [data-nav-view]:not([data-nav-view="infographic-maker"]){display:none!important}
+main[data-current-view="content-angles"] [data-nav-view]:not([data-nav-view="content-angles"]){display:none!important}
+main[data-current-view="x-thread-draft"] [data-nav-view]:not([data-nav-view="x-thread-draft"]){display:none!important}
+main[data-current-view="differentiation-audit"] [data-nav-view]:not([data-nav-view="differentiation-audit"]){display:none!important}
+main[data-current-view="seo-audit"] [data-nav-view]:not([data-nav-view="seo-audit"]){display:none!important}
+main[data-current-view="content-moat"] [data-nav-view]:not([data-nav-view="content-moat"]){display:none!important}
+main[data-current-view="traffic-analyzer"] [data-nav-view]:not([data-nav-view="traffic-analyzer"]){display:none!important}
+main[data-current-view="multi-program-manager"] [data-nav-view]:not([data-nav-view="multi-program-manager"]){display:none!important}
+main[data-current-view="content-decay"] [data-nav-view]:not([data-nav-view="content-decay"]){display:none!important}
+main[data-current-view="internal-links"] [data-nav-view]:not([data-nav-view="internal-links"]){display:none!important}
+main[data-current-view="guarantee-draft"] [data-nav-view]:not([data-nav-view="guarantee-draft"]){display:none!important}
+main[data-current-view="ad-studio"] [data-nav-view]:not([data-nav-view="ad-studio"]){display:none!important}
+main[data-current-view="operations"] [data-nav-view]:not([data-nav-view="operations"]){display:none!important}
+main[data-current-view="integrations"] [data-nav-view]:not([data-nav-view="integrations"]){display:none!important}
+main[data-current-view="capabilities"] [data-nav-view]:not([data-nav-view="capabilities"]){display:none!important}
+main[data-current-view="skill-finder"] [data-nav-view]:not([data-nav-view="skill-finder"]){display:none!important}
+main[data-current-view="category-designer"] [data-nav-view]:not([data-nav-view="category-designer"]){display:none!important}
+main[data-current-view="measurement"] [data-nav-view]:not([data-nav-view="measurement"]){display:none!important}
+main[data-current-view="experiments"] [data-nav-view]:not([data-nav-view="experiments"]){display:none!important}
+main[data-current-view="learning-dataset"] [data-nav-view]:not([data-nav-view="learning-dataset"]){display:none!important}
+main[data-current-view="webinars"] [data-nav-view]:not([data-nav-view="webinars"]){display:none!important}
+main[data-current-view="program-applications"] [data-nav-view]:not([data-nav-view="program-applications"]){display:none!important}
+main[data-current-view]:not([data-current-view="ai-knowledge"]):not([data-current-view="measurement"]) [data-nav-container="studio-tools"]{display:none!important}
+main[data-current-view="ai-knowledge"] [data-nav-container="studio-tools"],main[data-current-view="measurement"] [data-nav-container="studio-tools"]{grid-template-columns:minmax(0,1fr)!important}

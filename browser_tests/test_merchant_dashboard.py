@@ -1,0 +1,284 @@
+from __future__ import annotations
+
+import json
+import os
+
+from playwright.sync_api import sync_playwright
+
+
+BASE_URL = os.environ.get("BROWSER_BASE_URL", "http://127.0.0.1:3100")
+
+
+def _fulfill_json(route, payload: dict, status: int = 200) -> None:
+    route.fulfill(
+        status=status,
+        content_type="application/json",
+        headers={
+            "access-control-allow-origin": "http://127.0.0.1:3100",
+            "access-control-allow-credentials": "true",
+        },
+        body=json.dumps(payload),
+    )
+
+
+def test_merchant_dashboard_uses_workspace_offer_and_application_data():
+    offers = {
+        "count": 4,
+        "data": [
+            {
+                "id": "offer-draft-1",
+                "name": "Draft analytics course",
+                "status": "draft",
+                "affiliate_network_approval_status": "not_submitted",
+                "affiliate_network_approved": False,
+                "terms_verified": False,
+                "seller_authorization_verified": False,
+                "activation_allowed": False,
+                "marketplace_listed": False,
+                "created_at": "2026-10-30T08:00:00+00:00",
+            },
+            {
+                "id": "offer-review-1",
+                "name": "Creator toolkit",
+                "status": "submitted_for_review",
+                "affiliate_network_approval_status": "pending",
+                "affiliate_network_approved": False,
+                "terms_verified": True,
+                "seller_authorization_verified": False,
+                "activation_allowed": False,
+                "marketplace_listed": False,
+                "created_at": "2026-10-29T08:00:00+00:00",
+            },
+            {
+                "id": "offer-approved-1",
+                "name": "Approved writing platform",
+                "status": "approved",
+                "affiliate_network_approval_status": "approved",
+                "affiliate_network_approved": True,
+                "terms_verified": True,
+                "seller_authorization_verified": True,
+                "activation_allowed": True,
+                "marketplace_listed": True,
+                "created_at": "2026-10-28T08:00:00+00:00",
+            },
+            {
+                "id": "offer-internal-only",
+                "name": "Merchant-approved course",
+                "status": "approved",
+                "affiliate_network_approval_status": "pending",
+                "affiliate_network_approved": False,
+                "terms_verified": True,
+                "seller_authorization_verified": True,
+                "activation_allowed": True,
+                "marketplace_listed": False,
+                "created_at": "2026-10-27T08:00:00+00:00",
+            },
+        ],
+    }
+    pending_applications = {
+        "count": 1,
+        "total_count": 4,
+        "limit": 5,
+        "offset": 0,
+        "status_filter": "pending_review",
+        "data": [{
+            "id": "application-pending-1",
+            "offer_name": "Creator toolkit",
+            "status": "pending_review",
+            "applicant_email": "publisher@example.test",
+            "created_at": "2026-10-30T09:00:00+00:00",
+        }],
+    }
+    approved_applications = {"count": 1, "total_count": 3, "limit": 1, "offset": 0, "status_filter": "approved", "data": []}
+    rejected_applications = {"count": 1, "total_count": 1, "limit": 1, "offset": 0, "status_filter": "rejected", "data": []}
+    requests: list[str] = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                url = route.request.url
+                requests.append(url)
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
+                    return
+                if "/api/merchant/offers?" in url:
+                    _fulfill_json(route, offers)
+                    return
+                if "/api/merchant/applications?" in url:
+                    if "status=approved" in url:
+                        _fulfill_json(route, approved_applications)
+                    elif "status=rejected" in url:
+                        _fulfill_json(route, rejected_applications)
+                    else:
+                        _fulfill_json(route, pending_applications)
+                    return
+                _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Merchant workspace").wait_for(state="visible")
+
+            assert page.get_by_test_id("merchant-stat-offers").inner_text() == "4"
+            assert page.get_by_test_id("merchant-stat-drafts").inner_text() == "1"
+            assert page.get_by_test_id("merchant-stat-review").inner_text() == "1"
+            assert page.get_by_test_id("merchant-stat-applications").inner_text() == "4"
+            assert page.get_by_test_id("merchant-stat-internal-approved").inner_text() == "2"
+            assert page.get_by_test_id("merchant-stat-network-approved").inner_text() == "1"
+            assert page.get_by_test_id("merchant-stat-terms-verified").inner_text() == "3"
+            assert page.get_by_test_id("merchant-stat-seller-verified").inner_text() == "2"
+            assert page.get_by_test_id("merchant-stat-activation-ready").inner_text() == "2"
+            assert page.get_by_test_id("merchant-stat-marketplace-listed").inner_text() == "1"
+            assert page.get_by_test_id("merchant-stat-evidence-gaps").inner_text() == "2"
+            assert page.get_by_test_id("merchant-stat-applications-approved").inner_text() == "3"
+            assert page.get_by_test_id("merchant-stat-applications-rejected").inner_text() == "1"
+            assert page.get_by_text("publisher@example.test").is_visible()
+            assert page.get_by_text("Internal merchant status: submitted for review").is_visible()
+            pending_network_status = page.get_by_text("Affiliate-network status: pending", exact=True)
+            assert pending_network_status.count() == 2
+            assert pending_network_status.first.is_visible()
+            assert page.get_by_role("link", name="Manage offers").is_visible()
+            assert page.get_by_role("link", name="Review applications").is_visible()
+            assert any("/api/merchant/offers?" in url for url in requests)
+            assert any("/api/merchant/applications?" in url for url in requests)
+            assert "does not infer network approval" in page.locator("main").inner_text()
+            merchant_nav = page.get_by_role("navigation", name="Merchant dashboard navigation")
+            assert merchant_nav.get_by_role("link", name="Dashboard").get_attribute("href") == "/merchant"
+            assert merchant_nav.get_by_role("link", name="Manage offers").get_attribute("href") == "/merchant/offers"
+            assert merchant_nav.get_by_role("link", name="Review applications").get_attribute("href") == "/merchant/applications"
+            assert merchant_nav.get_by_role("link", name="Partner payout readiness").get_attribute("href") == "/merchant/payouts"
+            assert page.get_by_role("button", name="Refresh workspace").is_visible()
+        finally:
+            browser.close()
+
+
+def test_merchant_subpages_link_back_to_dashboard():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                url = route.request.url
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
+                elif "/api/merchant/offers" in url:
+                    _fulfill_json(route, {"count": 0, "data": []})
+                elif "/api/merchant/applications" in url:
+                    _fulfill_json(route, {
+                        "count": 0, "total_count": 0, "limit": 25, "offset": 0,
+                        "status_filter": "all", "data": [],
+                    })
+                else:
+                    _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
+
+            page.route("**/api/**", handle_api)
+            for path, heading in (
+                ("/merchant/offers", "Merchant offers"),
+                ("/merchant/applications", "Publisher applications"),
+            ):
+                page.goto(BASE_URL + path, wait_until="domcontentloaded")
+                page.get_by_role("heading", name=heading).wait_for(state="visible")
+                dashboard_link = page.get_by_role("link", name="Merchant dashboard", exact=True)
+                assert dashboard_link.is_visible()
+                assert dashboard_link.get_attribute("href") == "/merchant"
+        finally:
+            browser.close()
+
+
+def test_merchant_dashboard_surfaces_workspace_authorization_errors():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+
+            def handle_api(route):
+                url = route.request.url
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
+                    return
+                if "/api/merchant/offers?" in url:
+                    _fulfill_json(route, {"count": 0, "data": []})
+                    return
+                if "/api/merchant/applications?" in url:
+                    _fulfill_json(route, {"detail": "Merchant owner/admin access required"}, status=403)
+                    return
+                _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/merchant", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Merchant workspace").wait_for(state="visible")
+            page.locator("main [role=alert]").wait_for(state="visible")
+            assert "403" in page.locator("main [role=alert]").inner_text()
+            assert page.get_by_role("button", name="Retry").is_visible()
+        finally:
+            browser.close()
+
+
+def test_merchant_partner_payout_readiness_page_shows_hold_and_manual_review_status():
+    readiness = {
+        "count": 1,
+        "as_of": "2026-11-01T12:00:00+00:00",
+        "money_transferred": False,
+        "note": "Amounts come from signed conversion evidence. Eligibility is a review aid; no payout was confirmed and no transfer was initiated.",
+        "data": [{
+            "program_id": "program-creator-toolkit",
+            "program_name": "Creator toolkit",
+            "publisher_workspace_id": "publisher-workspace",
+            "publisher_email": "publisher@example.test",
+            "application_id": "application-approved",
+            "application_status": "approved",
+            "promotion_link_status": "active",
+            "currency": "USD",
+            "gross_commission": "50.000000",
+            "reversed_commission": "25.000000",
+            "net_commission": "25.000000",
+            "held_commission": "0.000000",
+            "eligible_commission": "25.000000",
+            "minimum_payout_amount": "20.00",
+            "threshold_reached": True,
+            "refund_hold_days": 15,
+            "next_eligible_at": None,
+            "payout_schedule": "monthly",
+            "conversion_count": 2,
+            "reversal_event_count": 1,
+            "held_event_count": 0,
+            "matured_event_count": 1,
+            "payout_state": "eligible_for_manual_review",
+            "payout_confirmed": False,
+            "transfers_initiated": False,
+        }],
+    }
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            requests: list[str] = []
+
+            def handle_api(route):
+                url = route.request.url
+                requests.append(url)
+                if url.endswith("/api/auth/me"):
+                    _fulfill_json(route, {"authenticated": True, "user": {"email": "merchant@example.test", "account_type": "merchant_product_owner", "is_admin": False}})
+                    return
+                if url.endswith("/api/merchant/payout-readiness"):
+                    _fulfill_json(route, readiness)
+                    return
+                _fulfill_json(route, {"detail": "Unexpected request"}, status=404)
+
+            page.route("**/api/**", handle_api)
+            page.goto(BASE_URL + "/merchant/payouts", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Partner payout readiness").wait_for(state="visible")
+            page.get_by_text("Creator toolkit", exact=True).wait_for(state="visible")
+            page.get_by_text("eligible for manual review", exact=True).wait_for(state="visible")
+            page.get_by_text("publisher@example.test").wait_for(state="visible")
+            assert page.get_by_text("$25.00").count() >= 2
+            assert "no automatic payment" in page.locator("main").inner_text()
+            assert "no payout was confirmed" in page.locator("main").inner_text()
+            assert any(url.endswith("/api/merchant/payout-readiness") for url in requests)
+            assert page.get_by_role("link", name="Merchant overview").get_attribute("href") == "/merchant"
+        finally:
+            browser.close()

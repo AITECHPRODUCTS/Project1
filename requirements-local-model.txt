@@ -1,0 +1,4 @@
+# Optional local Transformers/LoRA runtime. Install CPU or CUDA PyTorch separately first.
+transformers>=4.45,<6.0
+accelerate>=0.34,<2.0
+peft>=0.13,<1.0

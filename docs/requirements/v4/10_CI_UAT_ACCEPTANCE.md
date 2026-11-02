@@ -1,0 +1,325 @@
+# CI, UAT and acceptance gates
+
+## GitHub workflow
+`.github/workflows/ci.yml` runs on pushes to main/build/**, pull requests to main and manual dispatch. Python verification, Alembic empty SQLite upgrade/drift check, compilation and tests are the backend checks; the frontend uses the committed npm lockfile and `npm ci`, followed by TypeScript typecheck and Next.js production build. A separate `security-audit` job runs `pip-audit` on core/test and optional AI/RAG requirements plus `npm audit --audit-level=high`; its findings must be remediated rather than waived without documented review.
+
+## Required full release gates
+- Exact candidate SHA has clean backend test run, front-end typecheck/build, migration graph/upgrade/drift, and dedicated PostgreSQL integration tests.
+- API tests cover auth, positive/negative permission, cross-tenant denials, consent, error paths, idempotency and webhook state transitions.
+- RAG gold-query/retrieval and generated claim/evidence metrics meet thresholds; prompt injection/poisoned source tests pass.
+- Provider tests use authorized sandboxes/accounts, never fake successful connection responses.
+- Browser UAT at all specified viewports; accessibility, keyboard/screen reader, performance and responsive table checks.
+- Security, dependency licenses, SBOM, secret scan, backup/restore, rollback and staging smoke tests pass.
+- Attach actual commit SHA, workflow links/artifacts and result. Missing/no run is `NOT RUN`, not PASS.
+
+
+## Last verified dependency baseline
+- Exact candidate SHA: `e6e6eb4e552b4887da252db0df172dd25ee79561`.
+- Push: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213802242 (success).
+- Pull request: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40213808545 (success).
+- The successful candidate's regular frontend job used `npm ci`, passed typecheck and production build, and the push-only lockfile sync job passed. Security-audit was added after this checkpoint and needs fresh exact-SHA CI evidence.
+
+
+## Dependency audit findings — remediation required
+- Initial scan of candidate `f129ecf4576f1d35229525669613ecebcf17d65b` reported Pillow 12.3.0 advisories fixed in 13.0.0 and pytest 8.4.2 advisory fixed in 9.0.3. The repository now requires Pillow 13.0.0+ and pytest 9.0.3+; this is not considered resolved until the full Python regression suite and all audit profiles pass on the new exact SHA.
+- Because the first Python audit failed early, it did not complete the optional AI/RAG scan or npm audit. Those outcomes must come from a subsequent full run; do not infer a clean result.
+
+- Follow-up dependency resolver finding: the repository previously restricted pytest-asyncio to `<1.0`, which conflicts with the fixed pytest 9.0.3 range. The declared plugin range is now `>=1.3.0,<2.0`; verify installation, test compatibility and audit results on the next candidate SHA.
+
+
+## AI/RAG dependency-audit exception
+- The current ChromaDB 1.5.9 advisory records identify four unpatched IDs and no fixed PyPI release at the time of review. The only permitted temporary CI exception is enumerated in `docs/SECURITY_EXCEPTIONS.md` and is conditional on `scripts/verify_chroma_security_boundary.py` passing. This is not a clean dependency scan or production approval. Replace Chroma or remove the exception after an upstream fix, then rerun audits and full RAG retrieval evaluation.
+
+
+## 2026-10-26 exact-SHA full matrix
+- Candidate `668b33670ea11e30f97ccc3c6e50180124609207`: push run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264037056 and PR run https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264040473 both passed.
+- Confirmed: repository guard/53-skill parity, Python suite, SQLite migration/drift, PostgreSQL migration/concurrency, AI/RAG imports, frontend `npm ci`/typecheck/build, core/test and AI/RAG audits, frontend `npm audit --audit-level=high`, and lockfile sync.
+- The ChromaDB temporary exception remains a release blocker; these successful runs must not be presented as complete production release approval.
+
+## 2026-10-26 CI runtime maintenance
+- Workflow actions were using old releases with Node 20 runtime warnings. Node 20 was removed from GitHub-hosted Actions on 23 September 2026; action releases must support Node 24. This checkpoint updates those action versions; validate the exact updated workflow before advancing.
+
+
+## 2026-10-26 CI runtime update verified
+- Exact SHA `70dd041a8c27607467f8605d1eabad09f815d2bf`: https://github.com/AITECHPRODUCTS/Project1/actions/runs/40264278741 — success using Node 24-compatible `checkout@v7`, `setup-python@v7`, `setup-node@v7`, `upload-artifact@v7`, and `download-artifact@v8`.
+- Next: the newly added auth/tenancy regression tests are not yet verified; require full CI on their commit. The Chroma exception remains a production security blocker.
+
+
+## 2026-10-26 WebSocket tenancy P0 regression gate
+- Require passing tests showing workflow/HITL events reach only sockets registered to the matching workspace, scope-less event payloads reach no client, and a connection using a revoked workspace membership is rejected.
+- This candidate source fix and tests are not complete until the full Python, PostgreSQL, AI/RAG, frontend, repository guard and security-audit jobs pass on the exact new commit SHA.
+
+
+## 2026-10-26 WebSocket tenant isolation — exact-SHA verification
+- Verified fix and tests on `65a5a884acf0195a2720cb6de76a5279fd4e5dde`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265255592 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265259440 both passed.
+- Required test assertions include workspace-matched event delivery only, scope-less event dropping, workflow emitter scope propagation, and denied connection for revoked membership.
+- Next: workflow run status/pause/resume/retry/cancel must verify actor and workspace ownership, with negative cross-tenant tests.
+
+
+## 2026-10-26 workflow lifecycle ownership — verified
+- Candidate SHA 16eee55a6935e9afa1d5f2b020c867713754aa67: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265845238 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40265848400 both completed successfully.
+- Checks include Python suite with workflow/tenant tests, PostgreSQL migrations and concurrent reversal test, AI/RAG imports, frontend checks/build, 53-skill source guard, audits and lockfile verification.
+- Remaining conditional exception: four documented ChromaDB advisories still prevent a clean AI/RAG security result and production approval.
+- Next P0 review: gate shared knowledge-index ingestion to platform operations and remove internal absolute path leakage.
+
+
+## 2026-10-26 shared knowledge-index permission — verified
+- Exact SHA `743e404e63b7c3a54423a18b1cf17af1338c5abf`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266330644 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40266336192 both succeeded.
+- Checks include the new knowledge-index admin/path tests; Python suite, PostgreSQL migration/concurrency, AI/RAG imports, frontend checks/build, repository source and skill parity guard, security audit, and lockfile reproducibility.
+- Keep production release blocked by the four documented ChromaDB advisory exceptions and outstanding provider authorization, browser/UAT, SBOM/license/secret scanning, deployment smoke, and backup/restore gates.
+- Next: verify resource-budget and learning aggregate scoping under tenant and scheduled execution.
+
+## 2026-10-26 campaign/conversion workspace binding — verified
+- Candidate SHA `4becae03e155fedc361e5b9fcdfc9fde66602f75`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268073324 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40268078547 both passed.
+- Tests prove unscoped users are denied campaign and conversion routes; workspace A cannot see or operate on workspace B's campaign; conversion idempotency is per workspace; and Conversion plus immutable ledger entries use the selected workspace.
+- Continue source audit of remaining tenant-owned asset, lead, scheduled-email and public-capture routes before release. The four documented ChromaDB advisory exceptions remain a separate P0 production blocker.
+
+
+## 2026-10-26 blog/lead/email workspace boundary — verified
+- Candidate SHA `929035b6429f4a1fa9a0c9c31cbc35834ab72dc9`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269971909 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40269976725 both passed.
+- The Python job passed the six new tenant-boundary tests. PostgreSQL, SQLite migration/drift, AI/RAG, frontend, dependency security audit, 53-skill parity and lockfile checks also passed.
+- Next release gate: explicit authorization and approval coverage for social publishing/other external side effects, plus the documented ChromaDB advisory exception and broader production UAT/deployment/backup evidence.
+
+
+
+## 2026-10-26 external publishing authorization — candidate
+- Base `31826a37d7494050457606c963aefba3421dceb9` passed push [40270284075](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270284075) and PR [40270289947](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270289947).
+- Candidate regressions cover missing authentication, workspace-admin denial for global credentials, live-confirmation enforcement, audit persistence and explicit workspace binding for landing tokens. The candidate is not verified until its own push and PR runs both pass.
+
+
+## 2026-10-26 external-publishing authorization — verified
+- Exact SHA `6f3994096e502911b23fb54e8cb94c3f2181a16d`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270795625 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40270800499 both passed.
+- Six new route tests prove authentication and role restriction for global social/CMS provider credentials, explicit workspace binding for landing token issuance, live confirmation, and workspace-scoped audit persistence.
+- Existing `PUBLISHING_DRY_RUN=true` default and `CMS_PUBLISH_EXECUTE=false` default remain in force; live operations additionally require the explicit request confirmation.
+- Next: review workflow step execution and remaining provider mutation endpoints. The four ChromaDB advisory exceptions, broader provider UAT, deployment smoke and backup/restore remain open release gates.
+
+## 2026-10-26 workflow-stage side-effect boundary — verified
+- Based on `ccbd4a821707f7d95b9a7cce3911dfa2735d3138`, where the previous auth/token/publishing hardening had passed CI. The verified change adds five tests covering S5 live side-effect authorization, audit events, S6 tenant dedup, and missing workspace denial.
+- Verified corrected SHA `64a2d30af5dddb79150428936993ef1811b4419f`: push [40275131255](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275131255) and PR [40275135461](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40275135461) both passed. Python 255 passed/2 skipped, SQLite and PostgreSQL migration checks/concurrency, AI/RAG 9 imports, frontend production build, dependency/security audit, repo guard and push lockfile reproducibility passed.
+## 2026-10-26 scheduled-email delivery idempotency — verified
+- Exact SHA `fedd1f74dbaa33e210b0587c774bc2ad63d92b8d`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276085004 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40276090006 both passed.
+- Alembic revision `0008_scheduled_email_delivery_claims` adds a nullable claim timestamp and workspace/status/claim index. Conditional update claims ensure only one worker transitions a due row from scheduled/retry into sending. Provider requests use stable idempotency keys and stored unsubscribe links.
+- Python passed 258 tests with 2 skipped; PostgreSQL migration/concurrency, SQLite migration/drift, AI/RAG 9 imports, frontend build, security audit, repo guard and push lockfile sync passed. Stale ambiguous sends outside the 23-hour automatic retry window require manual reconciliation.
+
+## 2026-10-26 workflow side-effect retry safety — verified
+- Exact SHA `3dc01b9b954bf0ec392aafed522c4ec968faffa9`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277040070 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40277047842 both passed.
+- Python 260 passed/2 skipped, SQLite and PostgreSQL migrations/drift/concurrency passed, AI/RAG 9 imports, frontend production build, dependency audit, repository guard and push lockfile sync passed.
+- Regression test verifies a side-effecting S5 timeout/connection failure is attempted once, produces the durable `workflow.side_effect_outcome_unknown` audit event, and instructs reconciliation. A read-only stage still retries transient connection failures per configuration.
+- Production remains blocked by documented ChromaDB advisory exceptions and outstanding comprehensive provider UAT, SBOM/license/secret checks, deployment smoke, and backup/restore evidence.
+
+## 2026-10-26 external-action idempotency — candidate
+- Validate migration 0009, database idempotency key uniqueness, payload fingerprint mismatch conflicts, completed-response replay, 428 for missing live-write key, and ambiguous-result quarantine under same and alternate keys.
+- Do not mark verified until exact-SHA push/PR Python, SQLite/PostgreSQL migration/drift/concurrency, AI/RAG, frontend, security, repo guard and lockfile jobs pass.
+
+
+## Provider-write idempotency candidate — CI correction
+- Corrected an existing live-social authorization test to supply `Idempotency-Key`, which is now required for live external provider writes. The initial candidate run failed only this fixture expectation (1 failed, 263 passed, 2 skipped); exact-SHA CI rerun pending.
+
+
+## 2026-10-26 provider-write idempotency — verified
+- SHA `1cc839bbf80d1a66e35b9e36f244b4fa13cb68af`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278503530 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40278508177 both passed.
+- Four idempotency regressions passed; total Python suite 264 passed, 2 skipped. Migration 0009, PostgreSQL migration/concurrency, SQLite drift, AI/RAG 9 imports, front-end build, security audit, repository guard and lockfile sync all passed.
+- Next: include S5 workflow provider writes in the durable registry; verify manual workflow resubmissions cannot bypass direct-route idempotency.
+
+
+## 2026-10-26 workflow S5 request idempotency — verified
+- Exact implementation SHA `e7ca02df933c3028489e8c3ba1abbfba3d82ae90`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279412060 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279416167 both passed.
+- Python 267 passed/2 skipped; PostgreSQL migration/concurrency, SQLite drift, AI/RAG 9 imports, frontend build, dependency audit, 53-skill guard and push lockfile sync all passed.
+- S5 shares the tenant-scoped ExternalAction registry, requires live workflow keys at both API and service boundaries, derives stable per-item keys, replays completed actions and blocks unknown outcomes until reconciliation.
+
+
+## 2026-10-26 global offer sync authorization — verified
+- Exact SHA `498c0b595a8dd158b06eae2924f87d3897a8525b`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279967742 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40279972611 both passed.
+- Four route tests verify ordinary workspace members and platform admins lacking an active workspace cannot trigger the upstream sync, successful sync updates the global catalog and audits the actor's workspace, and provider failure is audited with a 502 response.
+- Python 271 passed/2 skipped; SQLite, PostgreSQL migration/concurrency, AI/RAG profile, frontend production build, dependency audit, repository guard, and push lockfile sync passed.
+
+## 2026-10-26 OpenAffiliate outbound URL validation — verified
+- Exact SHA `49043acd6e71841c7d365a97a9d8ca31168cc8da`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280504806 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40280508646 both passed.
+- Two new URL-safety tests passed. Python 273 passed/2 skipped; frontend, security, repository guard, SQLite/PostgreSQL migration/concurrency, AI/RAG and push lockfile jobs all passed.
+- The OpenAffiliate client validates its composed URL before opening an HTTP client on cache misses and retains redirects disabled. Four ChromaDB advisory exceptions and production release gates remain open.
+
+
+
+## 2026-10-26 shared IMAP commission import — candidate
+- The endpoint uses global IMAP credentials; workspace-admin access is too broad because it can trigger reads from the shared mailbox and tenant-bound persistence.
+- Candidate requires Platform Super Admin, selected workspace, and workspace-scoped audit of success/failure. Four tests pending exact-SHA CI.
+
+
+## 2026-10-26 shared IMAP commission import — verified
+- Implementation SHA `0ea1735648ce408fb831abc51179544facd3ed69`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281363532 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40281370173 passed.
+- Four regression tests prove the global mailbox operation is Platform Super Admin-only, requires a workspace for accountability, and audits success/failure without mailbox contents. Python 277 passed/2 skipped; other required gates all passed.
+- Next: inspect remaining global provider/configuration and integration routes for role, workspace, audit and rate-limit gates. ChromaDB advisory exceptions and release evidence remain open.
+
+
+## 2026-10-26 global integration readiness confidentiality — candidate
+- Restrict global provider and capability summaries to Platform Super Admin plus a selected workspace; leave their existing status classifications unchanged.
+- Require tests for anonymous/workspace-admin denials, no-workspace denial, and ensure no raw sentinel secret values are present in either endpoint response.
+- Candidate remains pending until full push and PR workflows pass.
+
+
+## 2026-10-26 global provider configuration confidentiality — verified
+- Exact SHA `a0bb0ff23f86b29e7e4a9072d2109e77d0328d40`; push [40282793722](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282793722) and PR [40282799345](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40282799345) succeeded.
+- Four tests cover auth denial, workspace-admin denial, missing selected workspace, and secret redaction from authorized responses. Existing global readiness semantics are preserved.
+- Python 281 passed/2 skipped, SQLite/PostgreSQL, AI/RAG, frontend, security audit, repository parity and push lockfile sync passed.
+- Next P0: review public route abuse controls; the four ChromaDB advisories and remaining production release gates remain unresolved.
+
+
+## 2026-10-26 public-route abuse controls — candidate
+- Require Redis-backed distributed rate limiting for production public sign-up/login/lead capture. Redis unavailability denies the operation with 503, never silently falling back to a per-process limit.
+- LLM-backed post/script/offer/value-ladder and video rendering require authenticated workspace context and are quota-limited. Keyword clustering, public capture body and stateless tracking input have explicit bounds.
+- New regression tests must pass on the resulting push SHA and PR head before marking verified.
+
+
+## 2026-10-26 public abuse-control and generation quotas — verified
+- Implementation SHA `e3fb2fd8e159bae71f84fdd1bb3c4df50bc9d96a`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283974722 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40283978789 both passed.
+- Eight regressions passed: expensive route auth, missing workspace denial, workspace context and rate-limit integration, strict video quotas, atomic Redis quota behaviour, production Redis outage returning 503 without local fallback, development fallback behaviour, and keyword input bounds.
+- Python 289 passed/2 skipped; SQLite/PostgreSQL, AI/RAG, frontend, security audit, repository guard and push lockfile gates passed.
+- Next: source-audit outbound fetch and media rendering for DNS/IP pinning, redirect revalidation, payload/time limits and trusted-proxy assumptions.
+
+
+## 2026-10-26 outbound fetch/video hardening — verified
+- Exact SHA `f2d232f7ce5efaea2e3d1abca8a6ba7e47cf339c`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288412469 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288420524 both passed.
+- Regression suite: Python 301 passed, 2 skipped. Confirmed URL pinning/Host/SNI preservation, no redirect/proxy-env, body caps, MIME and Pexels media caps, 180-second durations and output-path/size limits; competitor route authorization and per-workspace quota also passed.
+- The repository does not configure a trusted-proxy CIDR; use only exact Uvicorn forwarded-header trust values after ingress sanitizes forwarded headers. Staging validation remains pending. ChromaDB advisory exceptions and remaining external release evidence remain blockers.
+
+
+## 2026-10-26 CMS configured-host transport — candidate
+- The verified outbound-fetch base is `910ab73fe7a0cef8fcd507fda27e30a7b3e85598` (push [40288954753](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288954753), PR [40288959578](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40288959578)).
+- CMS provider calls still needed one more source-level change: authenticated WordPress/Ghost writes must use the same pinned transport rather than validate then open a separate client.
+- Four new CMS transport tests are pending the full push/PR CI matrix.
+
+
+## 2026-10-26 CMS configured-host DNS pinning — verified
+- Exact implementation SHA `13ec393d0897c4ba75ed83ba6bed8ce8690f7c06`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290026088 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290033400 both passed.
+- Regression suite passed (305 passed, 2 skipped), with PostgreSQL migration/concurrency, AI/RAG imports, frontend build, dependency audits, repository/53-skill guard and push lockfile sync green.
+- Four CMS tests verify WordPress/Ghost transport, redirect rejection and response-size cap. This does not certify live CMS authorization/UAT; `CMS_PUBLISH_EXECUTE` is still required for actual publishing.
+- Next: inspect remaining direct HTTP integrations and verify trusted-proxy configuration in staging.
+
+
+## 2026-10-26 fixed credentialed provider HTTP — candidate
+- Base checkpoint `e79b4bad6f067e537306fc6aff4c0b94629cf847` passed push [40290480101](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290480101) and PR [40290486273](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40290486273).
+- Candidate migrates Resend, Reddit/X, Pinterest/Reddit and Meta pause fixed endpoints to the shared pinned helper, adds bounded JSON/form POST request support, and retains existing idempotency/dry-run/execute gates. Verification pending on the candidate SHA.
+
+
+## 2026-10-26 final configurable provider transport regression gate
+- New acceptance check: `ConfiguredJSONAdapter` must use the shared pinned `request_public_json` transport, enforce HTTPS, deny loopback/private/reserved targets before network I/O, disable redirects/environment proxies, and enforce a bounded JSON response.
+- Full push and PR CI must pass after the candidate code/test update. Separately, trusted-proxy behavior must be tested through the actual staging ingress; current tests validate only config syntax/Compose wiring.
+
+
+## 2026-10-26 final configurable provider transport — verified
+- Exact SHA `aa3a0e175c09df3572f077b1c76d565ec2776207`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301426819 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40301436060 passed all required checks.
+- Python 321 passed, 2 skipped; PostgreSQL migration/concurrency, AI/RAG imports (9), frontend, dependency audits, skill parity and push lockfile reproducibility passed.
+- Generic configured affiliate adapter requests use the shared pinned public HTTP transport with no redirects/ambient proxies and a 2 MiB JSON cap.
+- Current CI cannot substitute for actual trusted-proxy staging verification, authorized live-provider UAT, SBOM/license/secret scans, deployment smoke or backup/restore.
+
+
+## 2026-10-26 RAG security remediation — candidate gate
+- Candidate removes ChromaDB and LangChain Chroma integration from the optional AI profile, routes ingestion/query to a local SQLite vector store, and removes the four `pip-audit` ignores.
+- Acceptance before closure: full push + PR CI; clean `pip-audit -r requirements-ai.txt`; local vector index persistence/upsert/delete/ranking/collection/model-identity tests; AI import-profile pass; smoke test re-ingesting a representative skills/reference corpus and verifying source paths in retrieval.
+- Storage compatibility: `CHROMA_PERSIST_DIR` remains an env alias to avoid breaking deployment configuration, but it now contains `local_vectors.sqlite3`; existing Chroma index data is not automatically migrated. Re-ingest and validate before switching a live environment.
+- Candidate status remains pending until exact-SHA hosted jobs pass; production remains blocked by staging ingress, provider UAT, SBOM/license/secret scans, deployment smoke and backup/restore.
+
+
+## 2026-10-26 ChromaDB replacement — exact-SHA CI verified
+- Commit `3ba90e4cb2fcb72494c0fda71e1d535398229c22`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304270245 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40304278972 both passed.
+- Required evidence: SQLite vector persistence/ranking/isolation tests, static guard against Chroma reintroduction, clean `pip-audit -r requirements-ai.txt` without ignored findings, and 10 AI/RAG imports. All full-matrix jobs passed.
+- Rollout remains gated on preserving old data, rebuilding the index from authorized sources, validating source/count/retrieval coverage in staging, and completing separate provider/security/deployment/restore release checks.
+
+
+## 2026-10-26 workflow lease/restart recovery — verified
+- Candidate SHA `03d967e97b1993b80f853cc2fec72cf9e6b5f392`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306591424 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40306596350 succeeded.
+- Python: 330 passed, 3 skipped. PostgreSQL migration/drift gate passed through migration 0010 upgrade/downgrade/re-upgrade; all three Postgres integration tests passed, including concurrent workflow lease claiming.
+- CI gates cover expired read-only checkpoint recovery, active lease non-stealing, paused-session recovery, live side-effect outcome-unknown safety, and concurrent Postgres claim. Full workflows passed.
+- Limitation: HITL response is not persisted; users may need to resubmit after crash. Multi-replica resume, durable outbox, stress/fault recovery, staging deployment and backup/restore are still open.
+
+
+## 2026-10-26 durable HITL response persistence — exact-SHA verification
+- Implementation SHA `92af1c5d06544e4870c8c550176fd19a25084d06`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333566763 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40333573375 both succeeded.
+- Added migration 0011 for encrypted HITL responses; lease-owner polling supports resume delivery across replicas, and recovery consumes a persisted response following restart. Responses are cleared after the stage checkpoint, not on HTTP acknowledgement.
+- Full required matrix passed, including SQLite/PostgreSQL migrations/drift/concurrency, Python tests, 10 AI/RAG imports, frontend production build/typecheck, 53-skill parity, core/AI/frontend audits, and push lockfile sync.
+- Core dependency audit initially failed because `cryptography>=44,<47` selected 46.0.7. The dependency was updated to `cryptography>=50,<51`; follow-up push/PR audit passed without suppressing advisories.
+- Operational constraint: replicas must share a stable `APP_SESSION_SECRET`. Production deployment and provider/UAT/security-evidence gates remain outstanding.
+
+
+## 2026-10-26 outbound HTTP transport boundary — candidate
+- Gate the repository against raw provider clients outside `backend/services/url_safety.py`. The allowed helper owns DNS admission and actual socket pinning, disables redirect following and ambient proxy configuration, preserves TLS SNI, and bounds response bodies.
+- Candidate adds `scripts/verify_outbound_transport_boundary.py`, runs it in `repo-guard`, and tests HTTPX/requests/aiohttp/urllib/urllib3 alias detection. Await new exact-SHA push/PR CI.
+- Staging trust proxy gate remains open until spoofed `Forwarded`/`X-Forwarded-For` tests are run through the real proxy and sanitized source IP, deployment SHA/image and timestamps are recorded.
+
+
+## 2026-10-26 outbound HTTP transport boundary — verified
+- Exact SHA `1725afcfc17acc8b890d8ccbc4bf04114638458d`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338107674 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40338115729 both passed.
+- Static AST guard prevents new raw HTTP client call sites outside the sole DNS-pinned outbound transport. Six targeted tests passed, along with the full CI matrix (Python 338 passed/3 skipped, PostgreSQL integration/concurrency, AI/RAG 10 imports, frontend, dependency audit, repo guard and push lockfile sync).
+- Release gate still open: test proxy spoofing and allowlisted/non-allowlisted client IP behavior through the actual staging ingress. Record sanitized evidence; do not replace with config-unit-test claims.
+
+## 2026-10-26 trusted-proxy middleware regression gate — verified
+- Require uvicorn[standard]>=0.31,<1.0 for CIDR trusted-proxy parsing and tests against the actual ProxyHeadersMiddleware.
+- Test that spoofed X-Forwarded-For and X-Forwarded-Proto from a non-allowlisted peer do not change client identity or scheme, and that a trusted CIDR peer can supply forwarding data.
+- Verified exact SHA `da36211099ba27732510706189a267e9860b090e`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341045895 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40341061656 both passed all required jobs. This is not a substitute for a live staging ingress test.
+
+
+## Release-evidence automation backlog — next action
+- Add deterministic software bill of materials (SBOM) output for Python runtime/test/AI profiles and frontend lockfile, with the candidate SHA recorded alongside results.
+- Add license report/policy check and repository secret scan to push + pull-request CI. Scans must not print detected secret contents; failing reports should identify only file/line or rule metadata.
+- Keep proxy staging, live provider authorization/UAT, deployment smoke, operational monitoring and database backup/restore as explicit external acceptance evidence.
+
+
+## 2026-10-26 supply-chain automation — candidate
+- CI candidate generates CycloneDX SBOMs and package license inventories for Python core/test, optional AI/RAG and frontend packages, applies a scriptable license-policy gate, and scans full Git history for secrets using pinned Gitleaks with report redaction.
+- Reports are uploaded as artifacts with the candidate commit SHA and 30-day retention. The scan is not complete until the exact-SHA push/PR checks pass; false-positive handling must use narrow, reviewed exceptions, never blanket path exclusions.
+
+
+## 2026-10-26 supply-chain scanner first-run result and correction — verified
+- Initial code candidate `4331d2c5f848d5580dc93990191fc01a7c80b2cb`: push [40346076313](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40346076313), PR [40346091684](https://github.com/AITECHPRODUCTS/Project1/actions/runs/40346091684). Core/test Python license report passed (76 packages), but the new Gitleaks job found one historical false positive in preserved skill wording and the frontend license gate found two transitive LGPL libvips components.
+- Candidate correction suppresses only the exact Gitleaks fingerprint associated with “conversational tone” at the cited historical line; a regression test constrains the file to that single fingerprint.
+- License-policy exception file matches only the two exact @img/sharp-libvips package names, version 1.3.4 and license LGPL-3.0-or-later. Expiry is 2026-11-02. License reports explicitly set `release_approved=false` when these exceptions are used. This is not production/legal clearance.
+- Verified on `f254ec0d998fa6541fba8415d0ed059fda7e4a23`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348612494 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348624953 both passed. Gitleaks reported zero findings; report artifacts were inspected. The frontend license artifact explicitly includes two time-bound exceptions and `release_approved=false`.
+
+
+## 2026-10-26 SBOM/license/secret scan CI gate — verified
+- Exact SHA `f254ec0d998fa6541fba8415d0ed059fda7e4a23`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348612494 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40348624953 both passed. Python 361 passed/3 skipped/1 warning; PostgreSQL, AI/RAG, frontend, dependency audits, repo guard and lockfile sync passed.
+- Core/test Python 76 packages and AI/RAG 90 packages each have zero license findings. Frontend CycloneDX covers 109 packages and has no unreviewed findings. It uses two exact LGPL-3.0-or-later libvips CI-inventory exceptions through 2026-11-02; the report explicitly sets `release_approved=false`.
+- Full-history Gitleaks scan passed with zero findings; its only ignore is the exact historical false-positive fingerprint guarded by a test. Reports are linked from `docs/IMPLEMENTATION_STATUS.md`.
+- The CI tooling task is complete; legal review for the two LGPL packages and actual staging/provider/deployment/restore acceptance remain blockers to production release.
+
+
+## 2026-10-26 provider SDK transport acceptance gate — pending
+- The OpenAI-compatible LangChain SDK must be instantiated with an `http_async_client` backed by `PinnedPublicAsyncTransport`, not its implicit default network client.
+- Tests must prove the SDK transport pins the connection to a validated public IP while preserving Host/TLS SNI, rejects plain HTTP, disables redirects and does not honor ambient proxy variables. Static CI must fail SDK constructors that omit the required safe client.
+- This is a code/CI gate only. It does not close real staging trusted-proxy verification, provider account authorization/live UAT, license exception resolution or deployment/restore evidence.
+
+
+## 2026-10-26 hosted LLM SDK transport acceptance — verified
+- Exact SHA `337e31ed9a964a7cdfcde56abb9ee9d379400265`; push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360698617 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40360704559 both passed.
+- ChatOpenAI instances must supply both pinned sync and async clients; the static guard catches a missing client. Sync/async transports enforce HTTPS, DNS/public-IP validation, connection IP pinning, Host/TLS SNI preservation, redirects disabled and ambient proxy ignored.
+- Python 368 passed, 3 skipped, one existing Starlette/httpx warning. Remaining independent gates are actual staging/proxy behavior, authorized live provider/model UAT, LGPL legal resolution or component replacement, deployment smoke, monitoring/SLO and backup/restore.
+
+## P0 model-artifact loading acceptance — candidate
+- `HuggingFaceEmbeddings`, `AutoTokenizer.from_pretrained`, `AutoModelForCausalLM.from_pretrained`, and `PeftModel.from_pretrained` must explicitly use local-only loading. Static CI fails if any runtime model loader omits this.
+- Production Hub-based embedding IDs require an immutable 40-character revision SHA. The revision is part of the SQLite index identity; changing the model revision requires deliberate re-ingestion into a new or empty index before cutover. No database schema change is expected.
+- CI acceptance: helper argument tests; mutable/short revision rejection; production setting validation; static transport/model-loader guard; full Python suite; SQLite/PostgreSQL migration/concurrency; AI/RAG profile/SBOM; frontend build; dependency/license audit; secret scan; skill parity and lockfile sync. Staged model artifacts, license review and deployed retrieval behavior remain release gates.
+
+
+## 2026-10-26 model-artifact local-only — verified CI gate
+- Exact SHA `393e12760762993e70a862af9b4c3ab61d308739`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364123382 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40364131533 passed. Python 377 passed/3 skipped; PostgreSQL migration/concurrency, AI/RAG imports + SBOM/license, frontend typecheck/build, dependency/license audits, secret scan, repo guard and lockfile sync all passed.
+- Staged artifacts, license/provenance, cache-only runtime load, RAG re-ingestion and retrieval golden tests are still production evidence gates and are not verified by CI.
+
+
+## 2026-10-26 proprietary experiment dataset gate — verified
+- Exact SHA `a9eebf989704b7d7d347ee9021572bd2d5ea4f03`: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365898032 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40365904286 both passed. Python reported 385 passed, 3 skipped, 1 existing warning.
+- Regression gates prove A/B pairing, event deduplication, low-sample exclusions, inconsistent snapshot handling, privacy (synthetic visitor identifier values absent), workspace persistence/audit and skill parity (53 rows: 48 partial, 5 not implemented).
+- This feature produces review-required candidates only; it does not attest ground truth or train/promote a model. Next: staged artifact provenance and cache-only model-load gates.
+
+
+## 2026-10-26 staged model manifest release acceptance — candidate
+- Deployment promotion must run `python scripts/verify_model_artifact_manifest.py --manifest ... --artifact-root ... --application-sha "$APPLICATION_GIT_SHA" --report-out ...` on the staged model directory. A non-zero result blocks promotion.
+- Require matching application SHA, pinned immutable Hub revision where applicable, directory-tree digest, symlink/path containment checks, approved license + acquisition provenance with timezone-aware timestamps, local-only loading and `trust_remote_code=false`.
+- Unit fixtures do not substitute for actual artifact provenance, license review, cache-only load from the release image or retrieval-golden tests. Exact-SHA hosted CI is pending.
+
+
+
+## 2026-10-26 staged model artifact manifest gate — source/CI verified
+- Exact SHA a3c2627d26a765ac88e4ef3c164b86e850a7c40c: push https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367360162 and PR https://github.com/AITECHPRODUCTS/Project1/actions/runs/40367367483 both passed.
+- Test result: Python 396 passed, 3 skipped, 1 existing warning; all required push jobs passed including PostgreSQL, AI/RAG SBOM/license, security/license audit, secret scan, frontend build, 53-skill guard and lockfile sync.
+- Before promotion, run scripts/verify_model_artifact_manifest.py against the release manifest and staged artifact root. Require matching app SHA, immutable Hub revision, tree digest, path/symlink safety, approved license/acquisition metadata and local-only loading flags.
+- Separate approval remains mandatory for the real artifact and license; the current CI uses test fixtures only and does not prove deployed cache-only loading or RAG retrieval quality.

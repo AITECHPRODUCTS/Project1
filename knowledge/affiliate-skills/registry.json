@@ -1,0 +1,8 @@
+{
+  "name": "OmniAffiliateOS reference skills",
+  "source": "User-supplied affiliate-skill materials; upstream attribution preserved in LICENSE",
+  "runtime_parity_source": "docs/skill-parity-matrix.csv",
+  "policy": "Skill documentation is reference material and does not grant provider authorization.",
+  "stages": ["S1 Research", "S2 Content", "S3 SEO", "S4 Offers/Landing", "S5 Distribution", "S6 Measurement", "S7 Operations", "S8 Learning"],
+  "required_review": true
+}

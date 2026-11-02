@@ -282,6 +282,105 @@ jobs:
           docker exec omni-affiliate-os-api-ci python -c "from backend.models import PartnerConversation, PartnerMessage; print('Partner messaging models loaded in API image')"
           echo "Lean API Docker image startup, migration and readiness smoke passed."
 
+  compose-smoke:
+    needs: [api-docker, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      COMPOSE_PROJECT_NAME: omni-affiliate-os-ci
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create isolated full-profile Compose environment
+        run: |
+          set -eu
+          umask 077
+          cat > .env.compose-ci <<'EOF'
+          POSTGRES_PASSWORD=ci-compose-postgres-password-not-for-deployment
+          APP_SESSION_SECRET=ci-compose-session-secret-not-for-deployment-32chars
+          TRACKING_HMAC_SECRET=ci-compose-tracking-secret-not-for-deployment-32chars
+          AFFILIATE_WEBHOOK_SECRET=ci-compose-webhook-secret-not-for-deployment-32chars
+          APP_ENV=test
+          APP_PUBLIC_URL=http://localhost:18000
+          LLM_BACKEND=offline
+          INSTALL_AI_PROFILE=1
+          INSTALL_VIDEO_PROFILE=1
+          INSTALL_LOCAL_MODEL=0
+          API_BIND_ADDRESS=127.0.0.1
+          API_PORT=18000
+          UI_BIND_ADDRESS=127.0.0.1
+          UI_PORT=13000
+          NEXT_PUBLIC_API_BASE_URL=http://localhost:18000
+          CORS_ORIGINS=http://localhost:13000
+          EOF
+          docker compose --env-file .env.compose-ci config --quiet
+      - name: Build and start PostgreSQL, Redis, API and frontend together
+        run: |
+          set -eu
+          if ! docker compose --env-file .env.compose-ci up --build --detach --wait --wait-timeout 480; then
+            docker compose --env-file .env.compose-ci ps --all
+            docker compose --env-file .env.compose-ci logs --no-color
+            exit 1
+          fi
+          docker compose --env-file .env.compose-ci ps
+      - name: Verify live HTTP readiness and application/database/cache connectivity
+        run: |
+          set -eu
+          api_ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/health/ready > /tmp/omni-compose-ready.json 2>/dev/null; then
+              api_ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$api_ready" != true ]; then
+            docker compose --env-file .env.compose-ci logs --no-color api
+            exit 1
+          fi
+          grep -q '"status":"ready"' /tmp/omni-compose-ready.json
+          curl --fail --silent --show-error http://127.0.0.1:13000/ads/guardrails > /tmp/omni-compose-frontend.html
+          grep -q "Ad budget guardrails" /tmp/omni-compose-frontend.html
+          docker compose --env-file .env.compose-ci exec -T postgres pg_isready -U affiliate -d affiliate_os
+          docker compose --env-file .env.compose-ci exec -T redis redis-cli ping | grep -q PONG
+          docker compose --env-file .env.compose-ci exec -T api alembic current
+          docker compose --env-file .env.compose-ci exec -T api python - <<'PY'
+          import asyncio
+          import os
+
+          from redis.asyncio import Redis
+          from sqlalchemy import inspect, text
+          from sqlalchemy.ext.asyncio import create_async_engine
+
+          async def main():
+              engine = create_async_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
+              redis = Redis.from_url(os.environ["REDIS_URL"])
+              try:
+                  async with engine.connect() as connection:
+                      await connection.execute(text("SELECT 1"))
+                      tables = await connection.run_sync(lambda sync_connection: set(inspect(sync_connection).get_table_names()))
+                      required = {"alembic_version", "partner_conversations", "partner_messages"}
+                      missing = required - tables
+                      if missing:
+                          raise RuntimeError(f"Expected migrated application tables are missing: {sorted(missing)}")
+                  if not await redis.ping():
+                      raise RuntimeError("Redis ping returned false")
+                  print("Compose integration verified: PostgreSQL query/migrations, partner messaging tables and Redis connectivity.")
+              finally:
+                  await redis.aclose()
+                  await engine.dispose()
+
+          asyncio.run(main())
+          PY
+          echo "Full-profile Docker Compose stack smoke test passed."
+      - name: Collect Compose diagnostics on failure
+        if: failure()
+        run: docker compose --env-file .env.compose-ci ps --all && docker compose --env-file .env.compose-ci logs --no-color
+      - name: Stop Compose services without deleting named volumes
+        if: always()
+        run: |
+          docker compose --env-file .env.compose-ci down --remove-orphans || true
+          rm -f .env.compose-ci
+
   browser-uat:
     needs: frontend
     runs-on: ubuntu-latest
